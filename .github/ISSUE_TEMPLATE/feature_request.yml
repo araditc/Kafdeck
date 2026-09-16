@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a capability or product improvement
+title: "feat: "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the operator/developer problem, not only the requested implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired behavior and user outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Kafka safety and security impact
+      description: Note expected cluster load, data access, mutation risk, permissions, or audit implications.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope acknowledgement
+      options:
+        - label: I understand material architecture/security changes may require an RFC or ADR before implementation.
+          required: true

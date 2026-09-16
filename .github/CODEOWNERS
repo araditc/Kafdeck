@@ -1,0 +1,10 @@
+# Default ownership. Expand to module-specific teams as the maintainer group grows.
+* @ammarheidari
+
+# Governance and security-sensitive areas require explicit owner review.
+/.github/ @ammarheidari
+/SECURITY.md @ammarheidari
+/GOVERNANCE.md @ammarheidari
+/docs/architecture/ @ammarheidari
+/docs/adr/ @ammarheidari
+/docs/decisions/ @ammarheidari
