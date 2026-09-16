@@ -3,6 +3,7 @@ using Kafdeck.Core;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Topics;
+using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
 
