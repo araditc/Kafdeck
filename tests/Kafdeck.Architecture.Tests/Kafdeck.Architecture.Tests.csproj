@@ -6,6 +6,9 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
@@ -17,5 +20,7 @@
     <ProjectReference Include="../../src/backend/Kafdeck.Core/Kafdeck.Core.csproj" />
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Clusters/Kafdeck.Modules.Clusters.csproj" />
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />
+    <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
+    <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj" />
   </ItemGroup>
 </Project>

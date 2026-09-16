@@ -41,3 +41,31 @@ For every new trust boundary or security-sensitive subsystem, document:
 7. security tests/observability.
 
 STRIDE may be used as a checklist but is not mandatory notation.
+
+## v0.1 W02 implementation delta — configuration and deployment access
+
+### Assets and entry points
+
+W02 introduces immutable operator-defined cluster profiles, external secret references, process startup validation, and the minimum browser-to-Kafdeck deployment access-token boundary. The relevant entry points are application configuration, mounted secret files/environment variables, the HTTP listener, and the `X-Kafdeck-Access-Token` request header.
+
+### Implemented mitigations
+
+- loopback-only HTTP binding is the default;
+- any non-loopback binding fails startup validation unless an `env:` or absolute mounted `file:` access-token reference is configured;
+- secret reference locators are not publicly serializable and secret values expose no serializable value property;
+- startup diagnostics contain only safe structural metadata and never secret locators or resolved secret material;
+- deployment-token comparison uses `CryptographicOperations.FixedTimeEquals`;
+- failed deployment-token attempts are bounded per remote client with a bounded in-memory tracker and return `429` after the configured failure window is exhausted;
+- rejected requests never echo expected or supplied access tokens;
+- TLS-backed Kafka profiles cannot disable server-certificate verification;
+- mTLS profiles require certificate/key references as a pair;
+- SASL and TLS configuration must agree with the selected transport/security protocol;
+- insecure Kafka transport profiles remain explicit and generate a startup warning rather than being silently inferred or downgraded.
+
+### Residual risk
+
+The v0.1 deployment token is a deployment boundary, not user identity or fine-grained authorization. Distributed/shared rate limiting, OIDC, RBAC, session management, audit policy, and richer credential-provider integrations remain later-roadmap controls. Operators must still protect process environment access, mounted secret files, reverse-proxy logs, and the network path to remote HTTP listeners.
+
+### Verification
+
+Automated tests cover remote-bind fail-closed behavior, invalid secret references, secret/redaction serialization, exact token comparison, bounded failed attempts, response non-disclosure, and rejection of TLS verification downgrade.
