@@ -1,7 +1,8 @@
 # Kafdeck Consolidated Capability Map
 
-Status: **PROPOSED — Gate 2**  
+Status: **ACCEPTED — Gate 2**  
 Review date: **2026-09-16**
+Acceptance date: **2026-09-16**
 
 This document consolidates the requested feature inventory into a product-safe target model. It preserves the intended capabilities while explicitly marking features that require reframing, sequencing or exclusion.
 
@@ -20,7 +21,7 @@ Legend:
 - **REFRAME:** Azure Event Hubs receives its own limited Kafka-compatible provider profile because it does not expose every Apache Kafka administration capability.
 - **TARGET:** KRaft-era Kafka is primary.
 - **REFRAME:** ZooKeeper-mode clusters may be supported through normal Kafka broker/client APIs when tested; Kafdeck never connects directly to ZooKeeper.
-- **TARGET:** PLAINTEXT, TLS/SSL, mTLS, SASL_PLAIN and SASL_SCRAM.
+- **TARGET:** Kafka connection transports: PLAINTEXT, SSL/TLS, SASL_PLAINTEXT and SASL_SSL. Supported SASL mechanisms are modeled separately, beginning with PLAIN, SCRAM-SHA-256 and SCRAM-SHA-512; mTLS is supported through SSL/TLS client certificates.
 - **DEFER:** SASL/OAUTHBEARER, GSSAPI/Kerberos and cloud-native authentication adapters such as AWS MSK IAM.
 - **TARGET:** Schema Registry, Kafka Connect and ksqlDB integrations behind independent adapters.
 - **TARGET:** air-gapped/on-premise operation with no cloud dependency.
