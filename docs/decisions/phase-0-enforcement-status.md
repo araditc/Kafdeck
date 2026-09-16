@@ -1,39 +1,45 @@
 # Phase 0 Repository and CI Enforcement Status
 
 **Date:** 2026-09-16  
-**State:** IMPLEMENTATION IN PROGRESS
+**State:** COMPLETE — IMPLEMENTATION START GATE OPEN
 
-This status record tracks implementation of the repository enforcement controls already authorized by Gate 0. It is not a new architecture decision.
+This status record tracks implementation of the repository enforcement controls authorized by Gate 0. It is not a new architecture decision.
 
-## Implemented in the Phase 0 enforcement change
+## Repository controls in place
 
 - CODEOWNERS baseline
 - structured bug/feature/security issue routing
 - Dependabot for GitHub Actions
 - immutable-SHA pinned GitHub Actions
-- always-on quality gate
+- always-on `quality-gate`
 - Conventional Commit validation
 - DCO validation
-- backend/frontend CI activation hooks
+- backend/frontend source-aware CI
 - CodeQL configuration for C# and JavaScript/TypeScript
-- dependency review policy check
+- dependency-review workflow
 - local/CI Apache Kafka 4.3.1 KRaft smoke environment
 - editor, Git normalization, ignore and .NET SDK baselines
 - repository enforcement, CI/security, dependency and local-development documentation
 
-## Exact-head validation findings
+## Administrative verification
 
-Initial CI on PR #2 established the following behavior:
+On 2026-09-16, the Project Owner enabled the repository administrative controls tracked by Issue #3.
 
-- `quality-gate`: passed on the initial enforcement head,
-- `kafka-smoke`: passed against Apache Kafka 4.3.1,
-- CodeQL: intentionally dormant until actual C#/JavaScript/TypeScript source exists; running SAST against an empty repository produces configuration/no-source failures and is not a meaningful security signal,
-- dependency review: GitHub Dependency Graph is currently disabled; the workflow now detects this condition explicitly and defers the action while keeping Phase 0 open.
+Verified directly from GitHub:
 
-## External repository-setting gate
+- repository ruleset `Protect main` is active and targets the default branch;
+- branch deletion and non-fast-forward/force-push changes are restricted;
+- pull requests require one approval;
+- stale approvals are dismissed on new pushes;
+- Code Owner review and review-thread resolution are required;
+- `quality-gate` is a strict required status check with the branch required to be current;
+- no ruleset bypass actor is configured;
+- `delete_branch_on_merge=true` is enabled.
 
-A GitHub `main` ruleset/branch-protection configuration remains required. GitHub Dependency Graph and the security-analysis settings referenced in `docs/development/repository-enforcement.md` must also be enabled where supported.
+The Project Owner also confirmed that the requested dependency/security analysis settings were enabled where available. The connected automation surface cannot independently introspect every Advanced Security administrative flag.
 
-The connected automation surface can read repository rulesets but does not expose an administrative write action for creating/updating them. Issue #3 tracks this administrator action.
+## Implementation start decision
 
-Phase 0 is not considered fully closed until the ruleset and dependency/security repository settings are enabled and their required checks are verified against an exact PR head.
+Issue #3 is closed. Phase 0 no longer blocks product source implementation.
+
+Actual product source activates the previously dormant source-dependent controls, including backend/frontend build and test execution and CodeQL analysis. Each implementation PR must satisfy its exact-head required checks and the active repository ruleset before merge.
