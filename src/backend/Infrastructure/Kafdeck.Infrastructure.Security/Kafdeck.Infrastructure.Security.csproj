@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Infrastructure.Security</AssemblyName>
+    <RootNamespace>Kafdeck.Infrastructure.Security</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
+  </ItemGroup>
+</Project>

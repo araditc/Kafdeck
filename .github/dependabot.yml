@@ -11,5 +11,24 @@ updates:
     commit-message:
       prefix: "chore(deps)"
 
-# NuGet and npm ecosystems are enabled when their manifests are introduced.
-# This avoids failing/no-op update jobs before implementation scaffolds exist.
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:15"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: "npm"
+    directory: "/src/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"

@@ -15,5 +15,5 @@ fi
 npm ci --ignore-scripts
 npm run lint
 npm run typecheck
-npm test -- --run
+npm test
 npm run build

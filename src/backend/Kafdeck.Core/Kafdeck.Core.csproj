@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Core</AssemblyName>
+    <RootNamespace>Kafdeck.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

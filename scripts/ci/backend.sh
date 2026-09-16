@@ -7,7 +7,6 @@ if [[ ${#projects[@]} -eq 0 ]]; then
   exit 0
 fi
 
-# Once a solution is added, prefer it to keep restore/build/test graph deterministic.
 solution="$(find . -maxdepth 2 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
 if [[ -n "$solution" ]]; then
   dotnet restore "$solution" --locked-mode
