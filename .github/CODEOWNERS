@@ -2,9 +2,9 @@
 * @ammarheidari @akhiabanchian
 
 # Governance and security-sensitive areas require explicit owner review.
-/.github/ @ammarheidari
-/SECURITY.md @ammarheidari
-/GOVERNANCE.md @ammarheidari
-/docs/architecture/ @ammarheidari
-/docs/adr/ @ammarheidari
-/docs/decisions/ @ammarheidari
+/.github/ @ammarheidari @akhiabanchian
+/SECURITY.md @ammarheidari @akhiabanchian
+/GOVERNANCE.md @ammarheidari @akhiabanchian
+/docs/architecture/ @ammarheidari @akhiabanchian
+/docs/adr/ @ammarheidari @akhiabanchian
+/docs/decisions/ @ammarheidari @akhiabanchian
