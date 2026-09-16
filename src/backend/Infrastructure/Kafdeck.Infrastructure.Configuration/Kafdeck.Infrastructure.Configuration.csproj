@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Infrastructure.Configuration</AssemblyName>
+    <RootNamespace>Kafdeck.Infrastructure.Configuration</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Modules.Topics</AssemblyName>
+    <RootNamespace>Kafdeck.Modules.Topics</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
+  </ItemGroup>
+</Project>
