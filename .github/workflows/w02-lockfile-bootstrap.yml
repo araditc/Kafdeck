@@ -1,0 +1,41 @@
+name: w02-lockfile-bootstrap
+
+on:
+  push:
+    branches: [feat/v0.1-w02-config-security]
+    paths:
+      - .github/workflows/w02-lockfile-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Refresh architecture-test lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --force-evaluate
+          if git diff --quiet -- tests/Kafdeck.Architecture.Tests/packages.lock.json; then
+            echo "Architecture test lockfile is already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/Kafdeck.Architecture.Tests/packages.lock.json
+          git commit -m "chore(test): refresh architecture test lockfile" -m "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git push origin HEAD:feat/v0.1-w02-config-security
