@@ -1,5 +1,5 @@
 # Default ownership. Expand to module-specific teams as the maintainer group grows.
-* @ammarheidari
+* @ammarheidari @akhiabanchian
 
 # Governance and security-sensitive areas require explicit owner review.
 /.github/ @ammarheidari
