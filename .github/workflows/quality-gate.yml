@@ -1,0 +1,62 @@
+name: quality-gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Validate repository structure and workflow pinning
+        run: bash scripts/ci/validate-repository.sh
+
+      - name: Validate PR commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/ci/validate-pr-commits.sh
+
+      - name: Detect implementation scaffolds
+        id: detect
+        shell: bash
+        run: |
+          if find src tests -type f -name '*.csproj' -print -quit 2>/dev/null | grep -q .; then echo "backend=true" >> "$GITHUB_OUTPUT"; else echo "backend=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f src/frontend/package.json ]; then echo "frontend=true" >> "$GITHUB_OUTPUT"; else echo "frontend=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Setup .NET
+        if: steps.detect.outputs.backend == 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Backend build and tests
+        if: steps.detect.outputs.backend == 'true'
+        run: bash scripts/ci/backend.sh
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.frontend == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.x'
+
+      - name: Frontend build and tests
+        if: steps.detect.outputs.frontend == 'true'
+        run: bash scripts/ci/frontend.sh

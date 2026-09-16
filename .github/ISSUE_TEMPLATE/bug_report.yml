@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a reproducible defect in Kafdeck
+title: "bug: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Kafdeck. Do not include credentials, tokens, private keys, or sensitive Kafka record payloads.
+  - type: input
+    id: version
+    attributes:
+      label: Kafdeck version or commit
+      placeholder: v0.x.y or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: kafka
+    attributes:
+      label: Kafka distribution and version
+      placeholder: Apache Kafka 4.3.1
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: Provide the smallest safe reproduction you can.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics
+      description: Remove secrets, credentials, personal data, and Kafka payloads before posting.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, credentials, personal data, and sensitive Kafka record contents.
+          required: true

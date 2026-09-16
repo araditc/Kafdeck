@@ -1,0 +1,30 @@
+name: kafka-smoke
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/dev/**'
+      - 'scripts/ci/kafka-smoke.sh'
+      - '.github/workflows/kafka-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/dev/**'
+      - 'scripts/ci/kafka-smoke.sh'
+      - '.github/workflows/kafka-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  kafka-smoke:
+    name: kafka-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Start Kafka and verify admin operations
+        run: bash scripts/ci/kafka-smoke.sh
