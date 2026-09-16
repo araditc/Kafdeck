@@ -96,6 +96,18 @@
       "kafdeck.core": {
         "type": "Project"
       },
+      "kafdeck.infrastructure.configuration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[1.0.0, )"
+        }
+      },
+      "kafdeck.infrastructure.security": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[1.0.0, )"
+        }
+      },
       "kafdeck.modules.clusters": {
         "type": "Project",
         "dependencies": {
