@@ -1,8 +1,9 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0/Gate 1 accepted; capability expansion proposed for Gate 2**  
+Status: **Gate 0, Gate 1 and Gate 2 accepted**  
 Baseline approval: **Gate 0 — 2026-09-16**  
-v0.1 design approval: **Gate 1 — 2026-09-16**
+v0.1 design approval: **Gate 1 — 2026-09-16**  
+Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
 
 Kafdeck is developed as an Apache-2.0, vendor-neutral, operations-first Kafka control plane. The roadmap is capability-driven rather than calendar-driven: a phase exits only when its quality, security, compatibility and governance gates are satisfied.
 
