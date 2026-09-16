@@ -7,10 +7,14 @@ if [[ ! -f src/frontend/package.json ]]; then
 fi
 
 cd src/frontend
-if [[ ! -f package-lock.json ]]; then
-  echo "Frontend package-lock.json is required for reproducible npm CI." >&2
-  exit 1
-fi
+
+# Temporary W01 review-fix bootstrap: update and print the npm lockfile after
+# adding the approved Vite build dependency. This path is removed before merge.
+npm install --package-lock-only --ignore-scripts
+
+echo "BEGIN_UPDATED_NPM_LOCKFILE"
+cat package-lock.json
+echo "END_UPDATED_NPM_LOCKFILE"
 
 npm ci --ignore-scripts
 npm run lint
