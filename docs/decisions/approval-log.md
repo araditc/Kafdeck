@@ -66,3 +66,36 @@ No Gate 0 decision remains open. Implementation-level details that do not alter 
 - RFC-0001 and the v0.1 design package are accepted.
 - Kafka mutation features remain excluded from v0.1.
 - Implementation may begin only after the remaining Phase 0 administrative repository controls are closed.
+
+## Gate 2 — Long-Term Capability Map and Roadmap
+
+- **Date:** 2026-09-16
+- **Status:** ACCEPTED
+- **Authority:** Project Owner
+- **Scope:** v0.2+ capability map, roadmap sequencing, market positioning and architecture/security boundaries
+
+### Accepted decisions
+
+1. Governed Apache-2.0 control plane without a mandatory data-plane proxy.
+2. Stateless where possible; SQLite standalone default and PostgreSQL optional; no mandatory Kafka internal state topics.
+3. Identity/RBAC/Masking/Audit precede general Kafka mutation capabilities.
+4. Provider compatibility is capability-profile based; KRaft first; no direct ZooKeeper integration.
+5. Server-side Kafdeck masking is the core model; any future wire-path Gateway requires a separate RFC.
+6. Search uses bounded scans with regex/CEL/jq-style deterministic filters plus ksqlDB integration; no arbitrary server-side JavaScript.
+7. No unrestricted embedded web shell; Kafdeck CLI/API explorer/safe command tooling instead.
+8. REST/CLI/Terraform/MCP share the same identity, RBAC, risk, approval and audit controls.
+9. Auto-remediation is bounded and opt-in; chaos/fault injection belongs to controlled test/lab environments.
+10. Resource targets are measured and published; no unproven `<100 MB` guarantee.
+11. Internal stable extension ports come first; a public runtime plugin SDK is deferred until trust/versioning/sandbox policy matures.
+12. API-first is continuous; CLI follows API contracts and Terraform follows stable declarative mutation contracts.
+
+### Owner approval
+
+> **Gate 2 — Long-Term Capability Map and Roadmap با Decisions 1–12 و گزینه‌های پیشنهادی تأیید است.**
+
+### Consequences
+
+- The consolidated 13-axis capability map becomes the authoritative long-term product target.
+- The accepted v0.1 Gate 1 contract is unchanged.
+- Roadmap sequencing is v0.1 Cluster Explorer → v0.2 Safe Data Explorer → v0.3 Consumers/Schemas/Ecosystem Read Views → v0.4 Identity/Policy/Masking/Audit → v0.5 Safe Administration → v0.6 Fleet/Kafka Security → v0.7 Developer/Streaming Ecosystem → v0.8 Observability/Automation/Platform APIs → v0.9 Governance/Hardening → v1.0 Stable.
+- Material departures from these boundaries require a new RFC/approval gate.
