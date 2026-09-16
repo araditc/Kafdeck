@@ -6,14 +6,12 @@ on:
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
-      - '.github/workflows/codeql.yml'
   push:
     branches: [main]
     paths:
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
-      - '.github/workflows/codeql.yml'
 
 permissions:
   contents: read

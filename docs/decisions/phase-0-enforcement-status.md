@@ -21,8 +21,19 @@ This status record tracks implementation of the repository enforcement controls 
 - editor, Git normalization, ignore and .NET SDK baselines
 - repository enforcement, CI/security, dependency and local-development documentation
 
+## Exact-head validation findings
+
+Initial CI on PR #2 established the following behavior:
+
+- `quality-gate`: passed on the initial enforcement head,
+- `kafka-smoke`: passed against Apache Kafka 4.3.1,
+- CodeQL: intentionally dormant until actual C#/JavaScript/TypeScript source exists; running SAST against an empty repository produces configuration/no-source failures and is not a meaningful security signal,
+- dependency review: GitHub Dependency Graph is currently disabled; the workflow now detects this condition explicitly and defers the action while keeping Phase 0 open.
+
 ## External repository-setting gate
 
-A GitHub `main` ruleset/branch-protection configuration remains required. The connected automation surface can read repository rulesets but does not expose an administrative write action for creating/updating them. The required settings are specified in `docs/development/repository-enforcement.md`.
+A GitHub `main` ruleset/branch-protection configuration remains required. GitHub Dependency Graph and the security-analysis settings referenced in `docs/development/repository-enforcement.md` must also be enabled where supported.
 
-Phase 0 is not considered fully closed until the ruleset is enabled and its required checks are verified against an exact PR head.
+The connected automation surface can read repository rulesets but does not expose an administrative write action for creating/updating them. Issue #3 tracks this administrator action.
+
+Phase 0 is not considered fully closed until the ruleset and dependency/security repository settings are enabled and their required checks are verified against an exact PR head.
