@@ -2,6 +2,7 @@ using System.Text.Json;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
+using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
 
