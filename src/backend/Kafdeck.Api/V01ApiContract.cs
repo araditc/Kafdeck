@@ -1,0 +1,173 @@
+namespace Kafdeck.Api;
+
+public sealed record ApiRouteDefinition(
+    string Method,
+    string Pattern,
+    string Name);
+
+public static class V01ApiContract
+{
+    public const string BasePath = "/api/v1";
+
+    public static readonly IReadOnlyList<ApiRouteDefinition> ProductRoutes =
+    [
+        new("GET", "/api/v1/system/info", "v01-system-info"),
+        new("GET", "/api/v1/system/health", "v01-system-health"),
+        new("GET", "/api/v1/clusters", "v01-clusters-list"),
+        new("GET", "/api/v1/clusters/{clusterId}", "v01-clusters-detail"),
+        new("GET", "/api/v1/clusters/{clusterId}/health", "v01-clusters-health"),
+        new("GET", "/api/v1/clusters/{clusterId}/capabilities", "v01-clusters-capabilities"),
+        new("GET", "/api/v1/clusters/{clusterId}/brokers", "v01-brokers-list"),
+        new("GET", "/api/v1/clusters/{clusterId}/brokers/{brokerId}", "v01-brokers-detail"),
+        new("GET", "/api/v1/clusters/{clusterId}/brokers/{brokerId}/configuration", "v01-brokers-configuration"),
+        new("GET", "/api/v1/clusters/{clusterId}/topics", "v01-topics-list"),
+        new("GET", "/api/v1/clusters/{clusterId}/topics/{topicName}", "v01-topics-detail"),
+        new("GET", "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions", "v01-topics-partitions"),
+        new("GET", "/api/v1/clusters/{clusterId}/topics/{topicName}/configuration", "v01-topics-configuration"),
+    ];
+
+    public const string OpenApiJson = """
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kafdeck Cluster Explorer API",
+    "version": "0.1.0",
+    "description": "Read-only Kafka Cluster Explorer API. No Kafka mutation route is permitted in v0.1."
+  },
+  "paths": {
+    "/api/v1/system/info": {
+      "get": {
+        "operationId": "v01-system-info",
+        "responses": { "200": { "description": "Kafdeck runtime information" } }
+      }
+    },
+    "/api/v1/system/health": {
+      "get": {
+        "operationId": "v01-system-health",
+        "responses": { "200": { "description": "Safe runtime health" } }
+      }
+    },
+    "/api/v1/clusters": {
+      "get": {
+        "operationId": "v01-clusters-list",
+        "responses": { "200": { "description": "Configured cluster projections" } }
+      }
+    },
+    "/api/v1/clusters/{clusterId}": {
+      "get": {
+        "operationId": "v01-clusters-detail",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Cluster projection" },
+          "404": { "description": "Cluster ID is not configured" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/health": {
+      "get": {
+        "operationId": "v01-clusters-health",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Explainable cluster health" } }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/capabilities": {
+      "get": {
+        "operationId": "v01-clusters-capabilities",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Capability evidence" } }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/brokers": {
+      "get": {
+        "operationId": "v01-brokers-list",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Broker projections" } }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/brokers/{brokerId}": {
+      "get": {
+        "operationId": "v01-brokers-detail",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "brokerId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32", "minimum": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Broker projection" },
+          "404": { "description": "Broker not observed in current cluster projection" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/brokers/{brokerId}/configuration": {
+      "get": {
+        "operationId": "v01-brokers-configuration",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "brokerId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32", "minimum": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Broker configuration entries" },
+          "403": { "description": "Broker configuration authorization denied" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics": {
+      "get": {
+        "operationId": "v01-topics-list",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "pageSize", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Bounded topic page" },
+          "400": { "description": "Invalid page size or cursor" },
+          "409": { "description": "Cursor no longer matches active topic snapshot" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}": {
+      "get": {
+        "operationId": "v01-topics-detail",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Topic and partition projection" } }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions": {
+      "get": {
+        "operationId": "v01-topics-partitions",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Partition leader, replica, ISR and anomaly projections" } }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/configuration": {
+      "get": {
+        "operationId": "v01-topics-configuration",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Topic configuration entries" },
+          "403": { "description": "Topic configuration authorization denied" }
+        }
+      }
+    }
+  }
+}
+""";
+}
