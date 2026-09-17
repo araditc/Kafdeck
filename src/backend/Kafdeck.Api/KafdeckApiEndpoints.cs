@@ -210,7 +210,7 @@ public static class KafdeckApiEndpoints
                     return ApiResults.Problem(ApiProblemMapper.FromKafka(result.Failure!));
                 }
 
-                var data = result.Value.Select(ToConfigurationEntry).ToArray();
+                var data = result.Value.Select(ApiConfigurationMapper.Create).ToArray();
                 return Results.Ok(new ApiEnvelope<IReadOnlyList<ConfigurationEntryData>>(
                     data,
                     ApiObservationMapper.Create(result.Observation, false),
@@ -340,7 +340,7 @@ public static class KafdeckApiEndpoints
                     return ApiResults.Problem(ApiProblemMapper.FromKafka(result.Failure!));
                 }
 
-                var data = result.Value.Select(ToConfigurationEntry).ToArray();
+                var data = result.Value.Select(ApiConfigurationMapper.Create).ToArray();
                 return Results.Ok(new ApiEnvelope<IReadOnlyList<ConfigurationEntryData>>(
                     data,
                     ApiObservationMapper.Create(result.Observation, false),
@@ -368,13 +368,6 @@ public static class KafdeckApiEndpoints
             ApiObservationMapper.Create(projection.Observation, limitations.Count > 0),
             limitations);
     }
-
-    private static ConfigurationEntryData ToConfigurationEntry(KafkaConfigurationEntry entry) => new(
-        entry.Name,
-        entry.IsSensitive ? null : entry.Value,
-        entry.IsSensitive,
-        entry.IsReadOnly,
-        entry.Source);
 
     private static bool IsConfiguredCluster(KafdeckOptions options, string clusterId) =>
         options.Clusters.Any(cluster => string.Equals(cluster.Id, clusterId, StringComparison.Ordinal));
@@ -416,11 +409,4 @@ public static class KafdeckApiEndpoints
         int OfflinePartitionCount,
         int UnderReplicatedPartitionCount,
         TopicAnomalyState AnomalyState);
-
-    public sealed record ConfigurationEntryData(
-        string Name,
-        string? Value,
-        bool IsSensitive,
-        bool IsReadOnly,
-        string? Source);
 }
