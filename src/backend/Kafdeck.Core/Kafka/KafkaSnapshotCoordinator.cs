@@ -33,7 +33,7 @@ public sealed class KafkaSnapshotCoordinator
 
         var key = new SnapshotKey(clusterId, resourceKey, typeof(T));
         var now = DateTimeOffset.UtcNow;
-        if (TryGetFresh(key, now, out KafkaResult<T>? fresh)) return fresh;
+        if (TryGetFresh(key, now, out KafkaResult<T> fresh)) return fresh;
 
         var refresh = _refreshes.GetOrAdd(key, _ => new Lazy<Task<object>>(
             () => RefreshAsync(key, clusterId, ttl, read, cancellationToken),
@@ -50,7 +50,7 @@ public sealed class KafkaSnapshotCoordinator
         }
     }
 
-    private bool TryGetFresh<T>(SnapshotKey key, DateTimeOffset now, out KafkaResult<T>? result)
+    private bool TryGetFresh<T>(SnapshotKey key, DateTimeOffset now, out KafkaResult<T> result)
     {
         if (_snapshots.TryGetValue(key, out var entry) && entry.FreshUntilUtc >= now)
         {
@@ -59,7 +59,7 @@ public sealed class KafkaSnapshotCoordinator
             return true;
         }
 
-        result = null;
+        result = null!;
         return false;
     }
 
@@ -93,7 +93,7 @@ public sealed class KafkaSnapshotCoordinator
                         observedAt, freshUntil, staleAfter, ObservationSource.Live));
                 }
 
-                if (live.Failure?.IsRetryable == true && TryGetStale(key, DateTimeOffset.UtcNow, out KafkaResult<T>? stale))
+                if (live.Failure?.IsRetryable == true && TryGetStale(key, DateTimeOffset.UtcNow, out KafkaResult<T> stale))
                     return stale;
 
                 return live;
@@ -109,7 +109,7 @@ public sealed class KafkaSnapshotCoordinator
         }
     }
 
-    private bool TryGetStale<T>(SnapshotKey key, DateTimeOffset now, out KafkaResult<T>? result)
+    private bool TryGetStale<T>(SnapshotKey key, DateTimeOffset now, out KafkaResult<T> result)
     {
         if (_snapshots.TryGetValue(key, out var entry) && entry.FreshUntilUtc < now && entry.StaleAfterUtc >= now)
         {
@@ -118,7 +118,7 @@ public sealed class KafkaSnapshotCoordinator
             return true;
         }
 
-        result = null;
+        result = null!;
         return false;
     }
 
