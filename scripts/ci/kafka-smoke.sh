@@ -28,6 +28,14 @@ printf '%s' 'kafdeck-scram256' > "$secrets_dir/scram256.username"
 printf '%s' "$KAFDECK_SCRAM256_PASSWORD" > "$secrets_dir/scram256.password"
 printf '%s' 'kafdeck-scram512' > "$secrets_dir/scram512.username"
 printf '%s' "$KAFDECK_SCRAM512_PASSWORD" > "$secrets_dir/scram512.password"
+cat > "$secrets_dir/broker_jaas.conf" <<EOF
+KafkaServer {
+  org.apache.kafka.common.security.plain.PlainLoginModule required
+  username="admin"
+  password="$KAFDECK_BROKER_PASSWORD"
+  user_kafdeck="$KAFDECK_PLAIN_PASSWORD";
+};
+EOF
 
 openssl req -x509 -newkey rsa:2048 -nodes \
   -keyout "$secrets_dir/ca.key" \
