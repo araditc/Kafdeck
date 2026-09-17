@@ -26,6 +26,13 @@ fi
 kafka_topics='/opt/kafka/bin/kafka-topics.sh'
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --create --topic kafdeck-ci-smoke --partitions 1 --replication-factor 1
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --describe --topic kafdeck-ci-smoke
+
+KAFDECK_RUN_KAFKA_INTEGRATION=1 \
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj \
+  --configuration Release \
+  --no-restore \
+  --filter FullyQualifiedName~KafkaAdapterIntegrationTests
+
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke
 
-echo "Kafka 4.3.1 KRaft smoke test passed."
+echo "Kafka 4.3.1 KRaft CLI and Kafdeck adapter smoke test passed."
