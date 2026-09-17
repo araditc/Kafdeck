@@ -19,12 +19,34 @@ public sealed record ApiLimitation(
     string State,
     string? Reason);
 
+public sealed record ConfigurationEntryData(
+    string Name,
+    string? Value,
+    bool IsSensitive,
+    bool IsReadOnly,
+    string? Source);
+
 public sealed record ApiProblemDefinition(
     int Status,
     string Type,
     string Title,
     string Detail,
     string Code);
+
+public static class ApiConfigurationMapper
+{
+    public static ConfigurationEntryData Create(KafkaConfigurationEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        return new ConfigurationEntryData(
+            entry.Name,
+            entry.IsSensitive ? null : entry.Value,
+            entry.IsSensitive,
+            entry.IsReadOnly,
+            entry.Source);
+    }
+}
 
 public static class ApiObservationMapper
 {
