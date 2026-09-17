@@ -64,7 +64,7 @@ public sealed class ConfluentKafkaAdministrationAdapter : IKafkaAdministrationPo
         string clusterId,
         KafkaOperationContext operation,
         CancellationToken cancellationToken) =>
-        ExecuteAsync(
+        ExecuteAsync<IReadOnlyList<TopicSummary>>(
             clusterId,
             operation,
             cancellationToken,
@@ -261,7 +261,7 @@ public sealed class ConfluentKafkaAdministrationAdapter : IKafkaAdministrationPo
         ConfigResource resource,
         KafkaOperationContext operation,
         CancellationToken cancellationToken) =>
-        ExecuteAsync(
+        ExecuteAsync<IReadOnlyList<KafkaConfigurationEntry>>(
             clusterId,
             operation,
             cancellationToken,
