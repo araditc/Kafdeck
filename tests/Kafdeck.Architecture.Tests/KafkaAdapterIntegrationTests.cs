@@ -8,6 +8,72 @@ namespace Kafdeck.Architecture.Tests;
 public sealed class KafkaAdapterIntegrationTests
 {
     [Fact]
+    public async Task Unknown_cluster_fails_as_invalid_configuration_without_network_access()
+    {
+        using var adapter = new ConfluentKafkaAdministrationAdapter([], new SecretResolver());
+
+        var result = await adapter.GetClusterMetadataAsync(
+            "missing",
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
+            CancellationToken.None);
+
+        AssertFailure(result, KafkaFailureCategory.InvalidConfiguration, "cluster_not_configured");
+    }
+
+    [Fact]
+    public async Task Expired_deadline_fails_before_creating_a_Kafka_client()
+    {
+        using var adapter = CreatePlaintextAdapter();
+
+        var result = await adapter.GetClusterMetadataAsync(
+            "preflight",
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(-1)),
+            CancellationToken.None);
+
+        AssertFailure(result, KafkaFailureCategory.Timeout, "deadline_exceeded");
+    }
+
+    [Fact]
+    public async Task Cancelled_operation_fails_before_creating_a_Kafka_client()
+    {
+        using var adapter = CreatePlaintextAdapter();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var result = await adapter.GetClusterMetadataAsync(
+            "preflight",
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
+            cancellation.Token);
+
+        AssertFailure(result, KafkaFailureCategory.Cancelled, "operation_cancelled");
+    }
+
+    [Fact]
+    public async Task Invalid_secret_reference_is_normalized_without_exposing_the_secret_locator()
+    {
+        var missingPath = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-missing-secret-{Guid.NewGuid():N}");
+        var missingSecret = SecretReference.Parse($"file:{missingPath}");
+        var profile = new ClusterProfile(
+            "invalid-secret",
+            ["localhost:1"],
+            KafkaSecurityProtocol.SaslPlaintext,
+            null,
+            new SaslProfile(SaslMechanism.Plain, missingSecret, missingSecret));
+
+        using var adapter = new ConfluentKafkaAdministrationAdapter([profile], new SecretResolver());
+
+        var result = await adapter.GetClusterMetadataAsync(
+            profile.Id,
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
+            CancellationToken.None);
+
+        AssertFailure(result, KafkaFailureCategory.InvalidConfiguration, "invalid_configuration");
+        Assert.DoesNotContain(missingPath, result.Failure!.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Accepted_connection_modes_support_read_only_administration()
     {
         if (!string.Equals(
@@ -144,6 +210,17 @@ public sealed class KafkaAdapterIntegrationTests
                     item.State == KafkaCapabilityState.Available);
     }
 
+    private static ConfluentKafkaAdministrationAdapter CreatePlaintextAdapter()
+    {
+        var profile = new ClusterProfile(
+            "preflight",
+            ["localhost:1"],
+            KafkaSecurityProtocol.Plaintext,
+            null,
+            null);
+        return new ConfluentKafkaAdministrationAdapter([profile], new SecretResolver());
+    }
+
     private static SecretReference FileReference(string directory, string fileName) =>
         SecretReference.Parse($"file:{Path.Combine(directory, fileName)}");
 
@@ -151,4 +228,15 @@ public sealed class KafkaAdapterIntegrationTests
         Assert.True(
             result.IsSuccess,
             $"{profileId}: {result.Failure?.Category} / {result.Failure?.Code} / {result.Failure?.SafeMessage}");
+
+    private static void AssertFailure<T>(
+        KafkaResult<T> result,
+        KafkaFailureCategory category,
+        string code)
+    {
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(category, result.Failure.Category);
+        Assert.Equal(code, result.Failure.Code);
+    }
 }
