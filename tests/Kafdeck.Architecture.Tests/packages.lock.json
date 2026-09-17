@@ -29,6 +29,11 @@
         "resolved": "3.1.5",
         "contentHash": "tKi7dSTwP4m5m9eXPM2Ime4Kn7xNf4x4zT9sdLO/G4hZVnQCRiMTWoSZqI/pYTVeI27oPPqHBKYI/DjJ9GsYgA=="
       },
+      "librdkafka.redist": {
+        "type": "Transitive",
+        "resolved": "2.15.1",
+        "contentHash": "fhRs/2fY80isR9zqrCkDdEhrp5Vi4Lxetg6yjhBl2uNiQs9Z2StA/Q8WqkJmj5OqmG8BQaP6OXvzbGngqXid+w=="
+      },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
         "resolved": "17.14.1",
@@ -102,6 +107,14 @@
           "Kafdeck.Core": "[1.0.0, )"
         }
       },
+      "kafdeck.infrastructure.kafka": {
+        "type": "Project",
+        "dependencies": {
+          "Confluent.Kafka": "[2.15.1, )",
+          "Kafdeck.Core": "[1.0.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[1.0.0, )"
+        }
+      },
       "kafdeck.infrastructure.security": {
         "type": "Project",
         "dependencies": {
@@ -118,6 +131,15 @@
         "type": "Project",
         "dependencies": {
           "Kafdeck.Core": "[1.0.0, )"
+        }
+      },
+      "Confluent.Kafka": {
+        "type": "CentralTransitive",
+        "requested": "[2.15.1, )",
+        "resolved": "2.15.1",
+        "contentHash": "II/gcWsptqKp3UJ4f7zFug7S4xfND1IdYsrNlIJSRRG8WHmP/NfSXiiLWhKGzTUlZwfkL1mcdU71eo1eKf04pA==",
+        "dependencies": {
+          "librdkafka.redist": "2.15.1"
         }
       }
     }
