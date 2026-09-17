@@ -81,8 +81,23 @@ public sealed class KafkaSnapshotCoordinator
             await clusterBulkhead.WaitAsync(deadline.Token).ConfigureAwait(false);
             try
             {
-                var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + _policy.OperationDeadline);
-                var live = await read(operation, deadline.Token).ConfigureAwait(false);
+                KafkaResult<T>? live = null;
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + _policy.OperationDeadline);
+                    live = await read(operation, deadline.Token).ConfigureAwait(false);
+                    if (live.IsSuccess || live.Failure?.IsRetryable != true || attempt == 2)
+                        break;
+
+                    var exponentialMilliseconds = 50 * (1 << attempt);
+                    var jitterMilliseconds = Random.Shared.Next(0, 26);
+                    await Task.Delay(TimeSpan.FromMilliseconds(exponentialMilliseconds + jitterMilliseconds), deadline.Token)
+                        .ConfigureAwait(false);
+                }
+
+                if (live is null)
+                    throw new InvalidOperationException("Snapshot refresh completed without a Kafka result.");
+
                 if (live.IsSuccess && live.Value is not null)
                 {
                     var observedAt = live.Observation.ObservedAtUtc;
