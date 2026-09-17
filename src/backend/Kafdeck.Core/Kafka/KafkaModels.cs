@@ -16,7 +16,9 @@ public sealed record BrokerMetadata(
 public sealed record TopicSummary(
     string Name,
     int PartitionCount,
-    bool IsInternal);
+    bool IsInternal,
+    int? OfflinePartitionCount = null,
+    int? UnderReplicatedPartitionCount = null);
 
 public sealed record TopicMetadata(
     string Name,

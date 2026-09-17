@@ -95,10 +95,20 @@ public sealed class ConfluentKafkaAdministrationAdapter : IKafkaAdministrationPo
 
                 return described.TopicDescriptions
                     .OrderBy(topic => topic.Name, StringComparer.Ordinal)
-                    .Select(topic => new TopicSummary(
-                        topic.Name,
-                        topic.Partitions.Count,
-                        topic.IsInternal))
+                    .Select(topic =>
+                    {
+                        var offlinePartitions = topic.Partitions.Count(partition =>
+                            partition.Leader is null || partition.Leader.Id < 0);
+                        var underReplicatedPartitions = topic.Partitions.Count(partition =>
+                            partition.ISR.Count < partition.Replicas.Count);
+
+                        return new TopicSummary(
+                            topic.Name,
+                            topic.Partitions.Count,
+                            topic.IsInternal,
+                            offlinePartitions,
+                            underReplicatedPartitions);
+                    })
                     .ToArray();
             });
 
