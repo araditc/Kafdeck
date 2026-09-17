@@ -2,6 +2,11 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "librdkafka.redist": {
+        "type": "Transitive",
+        "resolved": "2.15.1",
+        "contentHash": "fhRs/2fY80isR9zqrCkDdEhrp5Vi4Lxetg6yjhBl2uNiQs9Z2StA/Q8WqkJmj5OqmG8BQaP6OXvzbGngqXid+w=="
+      },
       "kafdeck.core": {
         "type": "Project"
       },
@@ -14,7 +19,9 @@
       "kafdeck.infrastructure.kafka": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0, )"
+          "Confluent.Kafka": "[2.15.1, )",
+          "Kafdeck.Core": "[1.0.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[1.0.0, )"
         }
       },
       "kafdeck.infrastructure.security": {
@@ -33,6 +40,15 @@
         "type": "Project",
         "dependencies": {
           "Kafdeck.Core": "[1.0.0, )"
+        }
+      },
+      "Confluent.Kafka": {
+        "type": "CentralTransitive",
+        "requested": "[2.15.1, )",
+        "resolved": "2.15.1",
+        "contentHash": "II/gcWsptqKp3UJ4f7zFug7S4xfND1IdYsrNlIJSRRG8WHmP/NfSXiiLWhKGzTUlZwfkL1mcdU71eo1eKf04pA==",
+        "dependencies": {
+          "librdkafka.redist": "2.15.1"
         }
       }
     }

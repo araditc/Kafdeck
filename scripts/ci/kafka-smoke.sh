@@ -1,11 +1,110 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-compose_file="deploy/dev/docker-compose.kafka.yml"
+compose_file="deploy/dev/docker-compose.kafka-w04-matrix.yml"
+secrets_dir="deploy/dev/.generated/kafka-secrets"
+
 cleanup() {
   docker compose -f "$compose_file" down -v --remove-orphans >/dev/null 2>&1 || true
+  rm -rf "deploy/dev/.generated"
 }
 trap cleanup EXIT
+
+rm -rf "$secrets_dir"
+mkdir -p "$secrets_dir"
+
+export KAFDECK_STORE_PASSWORD="$(openssl rand -hex 24)"
+export KAFDECK_BROKER_PASSWORD="$(openssl rand -hex 24)"
+export KAFDECK_PLAIN_PASSWORD="$(openssl rand -hex 24)"
+export KAFDECK_SCRAM256_PASSWORD="$(openssl rand -hex 24)"
+export KAFDECK_SCRAM512_PASSWORD="$(openssl rand -hex 24)"
+
+printf '%s' "$KAFDECK_STORE_PASSWORD" > "$secrets_dir/kafka_keystore_creds"
+printf '%s' "$KAFDECK_STORE_PASSWORD" > "$secrets_dir/kafka_ssl_key_creds"
+printf '%s' "$KAFDECK_STORE_PASSWORD" > "$secrets_dir/kafka_truststore_creds"
+printf '%s' 'kafdeck' > "$secrets_dir/plain.username"
+printf '%s' "$KAFDECK_PLAIN_PASSWORD" > "$secrets_dir/plain.password"
+printf '%s' 'kafdeck-scram256' > "$secrets_dir/scram256.username"
+printf '%s' "$KAFDECK_SCRAM256_PASSWORD" > "$secrets_dir/scram256.password"
+printf '%s' 'kafdeck-scram512' > "$secrets_dir/scram512.username"
+printf '%s' "$KAFDECK_SCRAM512_PASSWORD" > "$secrets_dir/scram512.password"
+cat > "$secrets_dir/broker_jaas.conf" <<EOF
+KafkaServer {
+  org.apache.kafka.common.security.plain.PlainLoginModule required
+  username="admin"
+  password="$KAFDECK_BROKER_PASSWORD"
+  user_kafdeck="$KAFDECK_PLAIN_PASSWORD";
+};
+EOF
+
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout "$secrets_dir/ca.key" \
+  -out "$secrets_dir/ca.crt" \
+  -subj '/CN=Kafdeck W04 Test CA' \
+  -days 1 \
+  -sha256 >/dev/null 2>&1
+
+openssl req -newkey rsa:2048 -nodes \
+  -keyout "$secrets_dir/server.key" \
+  -out "$secrets_dir/server.csr" \
+  -subj '/CN=localhost' >/dev/null 2>&1
+cat > "$secrets_dir/server.ext" <<'EOF'
+subjectAltName=DNS:localhost,IP:127.0.0.1
+extendedKeyUsage=serverAuth
+EOF
+openssl x509 -req \
+  -in "$secrets_dir/server.csr" \
+  -CA "$secrets_dir/ca.crt" \
+  -CAkey "$secrets_dir/ca.key" \
+  -CAcreateserial \
+  -out "$secrets_dir/server.crt" \
+  -days 1 \
+  -sha256 \
+  -extfile "$secrets_dir/server.ext" >/dev/null 2>&1
+
+openssl req -newkey rsa:2048 -nodes \
+  -keyout "$secrets_dir/client.key" \
+  -out "$secrets_dir/client.csr" \
+  -subj '/CN=kafdeck-client' >/dev/null 2>&1
+cat > "$secrets_dir/client.ext" <<'EOF'
+extendedKeyUsage=clientAuth
+EOF
+openssl x509 -req \
+  -in "$secrets_dir/client.csr" \
+  -CA "$secrets_dir/ca.crt" \
+  -CAkey "$secrets_dir/ca.key" \
+  -CAcreateserial \
+  -out "$secrets_dir/client.crt" \
+  -days 1 \
+  -sha256 \
+  -extfile "$secrets_dir/client.ext" >/dev/null 2>&1
+
+openssl pkcs12 -export \
+  -in "$secrets_dir/server.crt" \
+  -inkey "$secrets_dir/server.key" \
+  -certfile "$secrets_dir/ca.crt" \
+  -name kafka \
+  -out "$secrets_dir/kafka.keystore.p12" \
+  -passout "pass:$KAFDECK_STORE_PASSWORD" >/dev/null 2>&1
+
+keytool -importkeystore \
+  -srckeystore "$secrets_dir/kafka.keystore.p12" \
+  -srcstoretype PKCS12 \
+  -srcstorepass "$KAFDECK_STORE_PASSWORD" \
+  -destkeystore "$secrets_dir/kafka.keystore.jks" \
+  -deststoretype JKS \
+  -deststorepass "$KAFDECK_STORE_PASSWORD" \
+  -destkeypass "$KAFDECK_STORE_PASSWORD" \
+  -noprompt >/dev/null 2>&1
+
+keytool -importcert \
+  -alias kafdeck-test-ca \
+  -file "$secrets_dir/ca.crt" \
+  -keystore "$secrets_dir/kafka.truststore.jks" \
+  -storepass "$KAFDECK_STORE_PASSWORD" \
+  -noprompt >/dev/null 2>&1
+
+chmod -R a+rX "$secrets_dir"
 
 docker compose -f "$compose_file" up -d
 
@@ -19,13 +118,49 @@ done
 
 if [[ "$(docker inspect --format='{{.State.Health.Status}}' kafdeck-kafka 2>/dev/null || true)" != "healthy" ]]; then
   docker compose -f "$compose_file" logs kafka
-  echo "Kafka did not become healthy." >&2
+  echo "Kafka W04 connection-matrix broker did not become healthy." >&2
   exit 1
 fi
 
 kafka_topics='/opt/kafka/bin/kafka-topics.sh'
-docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --create --topic kafdeck-ci-smoke --partitions 1 --replication-factor 1
-docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --describe --topic kafdeck-ci-smoke
-docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke
+kafka_configs='/opt/kafka/bin/kafka-configs.sh'
 
-echo "Kafka 4.3.1 KRaft smoke test passed."
+docker exec kafdeck-kafka "$kafka_topics" \
+  --bootstrap-server localhost:9092 \
+  --create \
+  --topic kafdeck-ci-smoke \
+  --partitions 1 \
+  --replication-factor 1
+
+docker exec kafdeck-kafka "$kafka_topics" \
+  --bootstrap-server localhost:9092 \
+  --describe \
+  --topic kafdeck-ci-smoke
+
+docker exec kafdeck-kafka "$kafka_configs" \
+  --bootstrap-server localhost:9092 \
+  --alter \
+  --add-config "SCRAM-SHA-256=[iterations=4096,password=${KAFDECK_SCRAM256_PASSWORD}]" \
+  --entity-type users \
+  --entity-name kafdeck-scram256 >/dev/null
+
+docker exec kafdeck-kafka "$kafka_configs" \
+  --bootstrap-server localhost:9092 \
+  --alter \
+  --add-config "SCRAM-SHA-512=[iterations=4096,password=${KAFDECK_SCRAM512_PASSWORD}]" \
+  --entity-type users \
+  --entity-name kafdeck-scram512 >/dev/null
+
+KAFDECK_RUN_KAFKA_INTEGRATION=1 \
+KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj \
+  --configuration Release \
+  --no-restore \
+  --filter FullyQualifiedName~KafkaAdapterIntegrationTests
+
+docker exec kafdeck-kafka "$kafka_topics" \
+  --bootstrap-server localhost:9092 \
+  --delete \
+  --topic kafdeck-ci-smoke
+
+echo "Kafka 4.3.1 W04 PLAINTEXT, mTLS, SASL_PLAINTEXT and SASL_SSL matrix passed."
