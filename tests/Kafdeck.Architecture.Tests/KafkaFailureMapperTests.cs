@@ -25,7 +25,7 @@ public sealed class KafkaFailureMapperTests
         var failure = KafkaFailureMapper.FromKafka(new Error(errorCode));
 
         Assert.Equal(expectedCategory, failure.Category);
-        Assert.Equal(expectedRetryable, failure.Retryable);
+        Assert.Equal(expectedRetryable, failure.IsRetryable);
         Assert.StartsWith("kafka_", failure.Code, StringComparison.Ordinal);
         Assert.False(string.IsNullOrWhiteSpace(failure.SafeMessage));
     }
@@ -35,7 +35,7 @@ public sealed class KafkaFailureMapperTests
     {
         const string sensitiveBrokerReason = "credential-bearing broker diagnostic";
         var failure = KafkaFailureMapper.FromKafka(
-            new Error(ErrorCode.UnknownServerError, sensitiveBrokerReason));
+            new Error(ErrorCode.OffsetOutOfRange, sensitiveBrokerReason));
 
         Assert.Equal(KafkaFailureCategory.ProtocolError, failure.Category);
         Assert.DoesNotContain(sensitiveBrokerReason, failure.SafeMessage, StringComparison.Ordinal);
