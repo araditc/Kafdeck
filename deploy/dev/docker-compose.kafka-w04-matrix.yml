@@ -1,0 +1,64 @@
+services:
+  kafka:
+    image: apache/kafka:4.3.1
+    hostname: kafka
+    container_name: kafdeck-kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+      - "9094:9094"
+      - "9095:9095"
+    volumes:
+      - ./.generated/kafka-secrets:/etc/kafka/secrets:ro
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL"
+      KAFKA_LISTENERS: "CONTROLLER://:29093,INTERNAL://:19092,PLAINTEXT://:9092,SSL://:9093,SASL_PLAINTEXT://:9094,SASL_SSL://:9095"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:19092,PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_PLAINTEXT://localhost:9094,SASL_SSL://localhost:9095"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      CLUSTER_ID: "4L6g3nShT-eMCtK--X86sw"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+
+      KAFKA_SSL_KEYSTORE_FILENAME: "kafka.keystore.jks"
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: "kafka_keystore_creds"
+      KAFKA_SSL_KEY_CREDENTIALS: "kafka_ssl_key_creds"
+      KAFKA_SSL_TRUSTSTORE_FILENAME: "kafka.truststore.jks"
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: "kafka_truststore_creds"
+      KAFKA_LISTENER_NAME_SSL_SSL_CLIENT_AUTH: "required"
+
+      KAFKA_SASL_ENABLED_MECHANISMS: "PLAIN,SCRAM-SHA-256,SCRAM-SHA-512"
+      KAFKA_LISTENER_NAME_SASL__PLAINTEXT_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="admin" password="${KAFDECK_BROKER_PASSWORD}"
+        user_kafdeck="${KAFDECK_PLAIN_PASSWORD}";
+      KAFKA_LISTENER_NAME_SASL__SSL_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="admin" password="${KAFDECK_BROKER_PASSWORD}"
+        user_kafdeck="${KAFDECK_PLAIN_PASSWORD}";
+      KAFKA_LISTENER_NAME_SASL__PLAINTEXT_SCRAM___SHA___256_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="admin" password="${KAFDECK_BROKER_PASSWORD}";
+      KAFKA_LISTENER_NAME_SASL__SSL_SCRAM___SHA___256_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="admin" password="${KAFDECK_BROKER_PASSWORD}";
+      KAFKA_LISTENER_NAME_SASL__PLAINTEXT_SCRAM___SHA___512_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="admin" password="${KAFDECK_BROKER_PASSWORD}";
+      KAFKA_LISTENER_NAME_SASL__SSL_SCRAM___SHA___512_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="admin" password="${KAFDECK_BROKER_PASSWORD}";
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
