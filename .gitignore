@@ -23,6 +23,7 @@ Thumbs.db
 *.pfx
 *.p12
 *.key
+deploy/dev/.generated/
 
 # Test output
 TestResults/

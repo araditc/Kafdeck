@@ -8,7 +8,7 @@ namespace Kafdeck.Architecture.Tests;
 public sealed class KafkaAdapterIntegrationTests
 {
     [Fact]
-    public async Task Plaintext_adapter_reads_cluster_topic_configuration_and_capabilities()
+    public async Task Accepted_connection_modes_support_read_only_administration()
     {
         if (!string.Equals(
                 Environment.GetEnvironmentVariable("KAFDECK_RUN_KAFKA_INTEGRATION"),
@@ -18,56 +18,124 @@ public sealed class KafkaAdapterIntegrationTests
             return;
         }
 
-        var profile = new ClusterProfile(
-            "ci",
-            ["localhost:9092"],
-            KafkaSecurityProtocol.Plaintext,
-            null,
-            null);
+        var secretsDirectory = Environment.GetEnvironmentVariable("KAFDECK_TEST_SECRETS_DIR");
+        Assert.False(string.IsNullOrWhiteSpace(secretsDirectory));
+        Assert.True(Path.IsPathFullyQualified(secretsDirectory));
+
+        var ca = FileReference(secretsDirectory, "ca.crt");
+        var clientCertificate = FileReference(secretsDirectory, "client.crt");
+        var clientKey = FileReference(secretsDirectory, "client.key");
+        var plainUsername = FileReference(secretsDirectory, "plain.username");
+        var plainPassword = FileReference(secretsDirectory, "plain.password");
+        var scram256Username = FileReference(secretsDirectory, "scram256.username");
+        var scram256Password = FileReference(secretsDirectory, "scram256.password");
+        var scram512Username = FileReference(secretsDirectory, "scram512.username");
+        var scram512Password = FileReference(secretsDirectory, "scram512.password");
+
+        var serverTls = new TlsProfile(true, ca, null, null);
+        var mutualTls = new TlsProfile(true, ca, clientCertificate, clientKey);
+
+        var profiles = new[]
+        {
+            new ClusterProfile(
+                "plaintext",
+                ["localhost:9092"],
+                KafkaSecurityProtocol.Plaintext,
+                null,
+                null),
+            new ClusterProfile(
+                "mtls",
+                ["localhost:9093"],
+                KafkaSecurityProtocol.Ssl,
+                mutualTls,
+                null),
+            new ClusterProfile(
+                "sasl-plaintext-plain",
+                ["localhost:9094"],
+                KafkaSecurityProtocol.SaslPlaintext,
+                null,
+                new SaslProfile(SaslMechanism.Plain, plainUsername, plainPassword)),
+            new ClusterProfile(
+                "sasl-plaintext-scram256",
+                ["localhost:9094"],
+                KafkaSecurityProtocol.SaslPlaintext,
+                null,
+                new SaslProfile(SaslMechanism.ScramSha256, scram256Username, scram256Password)),
+            new ClusterProfile(
+                "sasl-plaintext-scram512",
+                ["localhost:9094"],
+                KafkaSecurityProtocol.SaslPlaintext,
+                null,
+                new SaslProfile(SaslMechanism.ScramSha512, scram512Username, scram512Password)),
+            new ClusterProfile(
+                "sasl-ssl-plain",
+                ["localhost:9095"],
+                KafkaSecurityProtocol.SaslSsl,
+                serverTls,
+                new SaslProfile(SaslMechanism.Plain, plainUsername, plainPassword)),
+            new ClusterProfile(
+                "sasl-ssl-scram256",
+                ["localhost:9095"],
+                KafkaSecurityProtocol.SaslSsl,
+                serverTls,
+                new SaslProfile(SaslMechanism.ScramSha256, scram256Username, scram256Password)),
+            new ClusterProfile(
+                "sasl-ssl-scram512",
+                ["localhost:9095"],
+                KafkaSecurityProtocol.SaslSsl,
+                serverTls,
+                new SaslProfile(SaslMechanism.ScramSha512, scram512Username, scram512Password)),
+        };
 
         using var adapter = new ConfluentKafkaAdministrationAdapter(
-            [profile],
+            profiles,
             new SecretResolver());
 
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var operation = new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(20));
+        foreach (var profile in profiles)
+        {
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var operation = new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(20));
 
-        var cluster = await adapter.GetClusterMetadataAsync("ci", operation, cancellation.Token);
-        Assert.True(cluster.IsSuccess);
-        Assert.NotNull(cluster.Value);
-        Assert.NotEmpty(cluster.Value.Brokers);
+            var cluster = await adapter.GetClusterMetadataAsync(profile.Id, operation, cancellation.Token);
+            AssertSuccess(profile.Id, cluster);
+            Assert.NotEmpty(cluster.Value!.Brokers);
 
-        var topics = await adapter.ListTopicsAsync("ci", operation, cancellation.Token);
-        Assert.True(topics.IsSuccess);
-        Assert.NotNull(topics.Value);
-        Assert.Contains(topics.Value, topic => topic.Name == "kafdeck-ci-smoke");
+            var topics = await adapter.ListTopicsAsync(profile.Id, operation, cancellation.Token);
+            AssertSuccess(profile.Id, topics);
+            Assert.Contains(topics.Value!, topic => topic.Name == "kafdeck-ci-smoke");
 
-        var topic = await adapter.GetTopicMetadataAsync(
-            "ci",
-            "kafdeck-ci-smoke",
-            operation,
-            cancellation.Token);
-        Assert.True(topic.IsSuccess);
-        Assert.NotNull(topic.Value);
-        Assert.Single(topic.Value.Partitions);
+            var topic = await adapter.GetTopicMetadataAsync(
+                profile.Id,
+                "kafdeck-ci-smoke",
+                operation,
+                cancellation.Token);
+            AssertSuccess(profile.Id, topic);
+            Assert.Single(topic.Value!.Partitions);
 
-        var configuration = await adapter.GetTopicConfigurationAsync(
-            "ci",
-            "kafdeck-ci-smoke",
-            operation,
-            cancellation.Token);
-        Assert.True(configuration.IsSuccess);
-        Assert.NotNull(configuration.Value);
-        Assert.NotEmpty(configuration.Value);
+            var configuration = await adapter.GetTopicConfigurationAsync(
+                profile.Id,
+                "kafdeck-ci-smoke",
+                operation,
+                cancellation.Token);
+            AssertSuccess(profile.Id, configuration);
+            Assert.NotEmpty(configuration.Value!);
+
+            var brokerConfiguration = await adapter.GetBrokerConfigurationAsync(
+                profile.Id,
+                cluster.Value.ControllerBrokerId ?? cluster.Value.Brokers[0].BrokerId,
+                operation,
+                cancellation.Token);
+            AssertSuccess(profile.Id, brokerConfiguration);
+            Assert.NotEmpty(brokerConfiguration.Value!);
+        }
 
         var capabilities = await adapter.GetCapabilitiesAsync(
-            "ci",
-            operation,
-            cancellation.Token);
-        Assert.True(capabilities.IsSuccess);
-        Assert.NotNull(capabilities.Value);
+            "plaintext",
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(20)),
+            CancellationToken.None);
+        AssertSuccess("plaintext", capabilities);
         Assert.Contains(
-            capabilities.Value.Items,
+            capabilities.Value!.Items,
             item => item.Capability == KafkaCapabilityKind.ClusterMetadata &&
                     item.State == KafkaCapabilityState.Available);
         Assert.Contains(
@@ -75,4 +143,12 @@ public sealed class KafkaAdapterIntegrationTests
             item => item.Capability == KafkaCapabilityKind.TopicMetadata &&
                     item.State == KafkaCapabilityState.Available);
     }
+
+    private static SecretReference FileReference(string directory, string fileName) =>
+        SecretReference.Parse($"file:{Path.Combine(directory, fileName)}");
+
+    private static void AssertSuccess<T>(string profileId, KafkaResult<T> result) =>
+        Assert.True(
+            result.IsSuccess,
+            $"{profileId}: {result.Failure?.Category} / {result.Failure?.Code} / {result.Failure?.SafeMessage}");
 }
