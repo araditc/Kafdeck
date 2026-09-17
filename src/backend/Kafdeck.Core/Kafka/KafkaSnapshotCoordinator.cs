@@ -73,18 +73,22 @@ public sealed class KafkaSnapshotCoordinator
         var clusterBulkhead = _clusterBulkheads.GetOrAdd(clusterId, _ =>
             new SemaphoreSlim(_policy.PerClusterConcurrency, _policy.PerClusterConcurrency));
 
+        var deadlineAtUtc = DateTimeOffset.UtcNow + _policy.OperationDeadline;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(callerCancellation);
         deadline.CancelAfter(_policy.OperationDeadline);
-        await _globalBulkhead.WaitAsync(deadline.Token).ConfigureAwait(false);
+
+        // Acquire the per-cluster bulkhead before the global bulkhead. A slow cluster must
+        // never consume global capacity while merely waiting for its own cluster slot.
+        await clusterBulkhead.WaitAsync(deadline.Token).ConfigureAwait(false);
         try
         {
-            await clusterBulkhead.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await _globalBulkhead.WaitAsync(deadline.Token).ConfigureAwait(false);
             try
             {
                 KafkaResult<T>? live = null;
                 for (var attempt = 0; attempt < 3; attempt++)
                 {
-                    var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + _policy.OperationDeadline);
+                    var operation = new KafkaOperationContext(deadlineAtUtc);
                     live = await read(operation, deadline.Token).ConfigureAwait(false);
                     if (live.IsSuccess || live.Failure?.IsRetryable != true || attempt == 2)
                         break;
@@ -115,12 +119,12 @@ public sealed class KafkaSnapshotCoordinator
             }
             finally
             {
-                clusterBulkhead.Release();
+                _globalBulkhead.Release();
             }
         }
         finally
         {
-            _globalBulkhead.Release();
+            clusterBulkhead.Release();
         }
     }
 
