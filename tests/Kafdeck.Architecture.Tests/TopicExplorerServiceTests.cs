@@ -14,8 +14,8 @@ public sealed class TopicExplorerServiceTests
         var topics = Enumerable.Range(0, 1000)
             .Select(index => new TopicSummary(
                 $"topic-{index:D4}",
-                partitionCount: 12,
-                isInternal: false,
+                PartitionCount: 12,
+                IsInternal: false,
                 OfflinePartitionCount: index % 100 == 0 ? 1 : 0,
                 UnderReplicatedPartitionCount: index % 50 == 0 ? 1 : 0))
             .ToArray();
