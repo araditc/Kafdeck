@@ -17,8 +17,8 @@ public sealed record TopicSummary(
     string Name,
     int PartitionCount,
     bool IsInternal,
-    int OfflinePartitionCount = 0,
-    int UnderReplicatedPartitionCount = 0);
+    int? OfflinePartitionCount = null,
+    int? UnderReplicatedPartitionCount = null);
 
 public sealed record TopicMetadata(
     string Name,
