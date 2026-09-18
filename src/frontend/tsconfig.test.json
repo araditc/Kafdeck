@@ -7,5 +7,5 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["src/app/AppShell.tsx", "src/shared/product.ts"]
+  "include": ["src/app/**/*.tsx", "src/app/**/*.ts", "src/shared/**/*.ts"]
 }
