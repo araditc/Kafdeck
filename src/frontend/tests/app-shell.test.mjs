@@ -3,7 +3,7 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AppShell } from '../dist/test-source/app/AppShell.js';
-import { describeObservation, selectCluster } from '../dist/test-source/app/operatorState.js';
+import { describeObservation, selectCluster, shouldAutoRefresh, visibleRefreshIntervalMs } from '../dist/test-source/app/operatorState.js';
 
 test('AppShell exposes product identity and accessible operator landmarks', () => {
   const markup = renderToStaticMarkup(React.createElement(AppShell));
@@ -35,4 +35,10 @@ test('observation labels never hide stale or partial state', () => {
   assert.equal(describeObservation({ freshness: 'stale', partial: false }), 'Stale');
   assert.equal(describeObservation({ freshness: 'fresh', partial: true }), 'Partial');
   assert.equal(describeObservation({ freshness: 'stale', partial: true }), 'Partial · stale');
+});
+
+test('automatic refresh is bounded and pauses while the page is hidden', () => {
+  assert.equal(visibleRefreshIntervalMs, 10_000);
+  assert.equal(shouldAutoRefresh('visible'), true);
+  assert.equal(shouldAutoRefresh('hidden'), false);
 });
