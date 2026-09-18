@@ -163,4 +163,4 @@ docker exec kafdeck-kafka "$kafka_topics" \
   --delete \
   --topic kafdeck-ci-smoke
 
-echo "Kafka 4.3.1 W04 PLAINTEXT, mTLS, SASL_PLAINTEXT and SASL_SSL matrix passed."
+echo "Kafka ${KAFDECK_KAFKA_VERSION:-4.3.1} W10 PLAINTEXT, mTLS, SASL_PLAINTEXT and SASL_SSL matrix passed."
