@@ -31,3 +31,9 @@ export function describeObservation(observation: { freshness: string; partial: b
   if (observation.freshness === 'stale') return 'Stale';
   return 'Current';
 }
+
+export const visibleRefreshIntervalMs = 10_000;
+
+export function shouldAutoRefresh(visibilityState: DocumentVisibilityState): boolean {
+  return visibilityState === 'visible';
+}
