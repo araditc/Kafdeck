@@ -1,0 +1,57 @@
+name: kafka-compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/dev/**'
+      - 'scripts/ci/kafka-smoke.sh'
+      - 'src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/**'
+      - 'src/backend/Kafdeck.Core/Kafka/**'
+      - 'tests/Kafdeck.Architecture.Tests/Kafka*.cs'
+      - 'Directory.Packages.props'
+      - '.github/workflows/kafka-compatibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kafka-compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    name: kafka-${{ matrix.kafka-version }}-${{ matrix.tier }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kafka-version: '4.3.1'
+            tier: tier1
+          - kafka-version: '4.2.1'
+            tier: tier1
+          - kafka-version: '4.1.2'
+            tier: tier1
+          - kafka-version: '3.9.2'
+            tier: tier2
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore backend dependencies
+        run: dotnet restore Kafdeck.slnx --locked-mode
+
+      - name: Run read-only Kafka security and compatibility matrix
+        env:
+          KAFDECK_KAFKA_VERSION: ${{ matrix.kafka-version }}
+        run: bash scripts/ci/kafka-smoke.sh
