@@ -7,11 +7,13 @@ namespace Kafdeck.Core.Kafka;
 /// </summary>
 public sealed class KafkaSnapshotCoordinator
 {
+    private const int SnapshotSweepInterval = 256;
     private readonly KafkaSnapshotPolicy _policy;
     private readonly SemaphoreSlim _globalBulkhead;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _clusterBulkheads = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<SnapshotKey, SnapshotEntry> _snapshots = new();
     private readonly ConcurrentDictionary<SnapshotKey, Lazy<Task<object>>> _refreshes = new();
+    private int _observationsSinceSweep;
 
     public KafkaSnapshotCoordinator(KafkaSnapshotPolicy? policy = null)
     {
@@ -31,8 +33,9 @@ public sealed class KafkaSnapshotCoordinator
         ArgumentNullException.ThrowIfNull(read);
         if (ttl <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(ttl));
 
-        var key = new SnapshotKey(clusterId, resourceKey, typeof(T));
         var now = DateTimeOffset.UtcNow;
+        SweepExpiredSnapshotsIfDue(now);
+        var key = new SnapshotKey(clusterId, resourceKey, typeof(T));
         if (TryGetFresh(key, now, out KafkaResult<T> fresh)) return fresh;
 
         var refresh = _refreshes.GetOrAdd(key, _ => new Lazy<Task<object>>(
@@ -47,6 +50,21 @@ public sealed class KafkaSnapshotCoordinator
         {
             if (refresh.IsValueCreated && refresh.Value.IsCompleted)
                 _refreshes.TryRemove(new KeyValuePair<SnapshotKey, Lazy<Task<object>>>(key, refresh));
+        }
+    }
+
+    private void SweepExpiredSnapshotsIfDue(DateTimeOffset now)
+    {
+        if (Interlocked.Increment(ref _observationsSinceSweep) < SnapshotSweepInterval)
+            return;
+
+        if (Interlocked.Exchange(ref _observationsSinceSweep, 0) < SnapshotSweepInterval)
+            return;
+
+        foreach (var snapshot in _snapshots)
+        {
+            if (snapshot.Value.StaleAfterUtc < now)
+                _snapshots.TryRemove(snapshot);
         }
     }
 
