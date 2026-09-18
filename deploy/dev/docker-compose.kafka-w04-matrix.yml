@@ -28,6 +28,10 @@ services:
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
       KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
 
+      KAFKA_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+      KAFKA_SUPER_USERS: "User:ANONYMOUS;User:kafdeck;User:kafdeck-scram256;User:kafdeck-scram512;User:CN=kafdeck-client"
+
       KAFKA_SSL_KEYSTORE_FILENAME: "kafka.keystore.jks"
       KAFKA_SSL_KEYSTORE_CREDENTIALS: "kafka_keystore_creds"
       KAFKA_SSL_KEY_CREDENTIALS: "kafka_ssl_key_creds"
@@ -41,11 +45,13 @@ services:
       KAFKA_LISTENER_NAME_SASL__PLAINTEXT_PLAIN_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.plain.PlainLoginModule required
         username="admin" password="${KAFDECK_BROKER_PASSWORD}"
-        user_kafdeck="${KAFDECK_PLAIN_PASSWORD}";
+        user_kafdeck="${KAFDECK_PLAIN_PASSWORD}"
+        user_kafdeck-restricted="${KAFDECK_RESTRICTED_PASSWORD}";
       KAFKA_LISTENER_NAME_SASL__SSL_PLAIN_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.plain.PlainLoginModule required
         username="admin" password="${KAFDECK_BROKER_PASSWORD}"
-        user_kafdeck="${KAFDECK_PLAIN_PASSWORD}";
+        user_kafdeck="${KAFDECK_PLAIN_PASSWORD}"
+        user_kafdeck-restricted="${KAFDECK_RESTRICTED_PASSWORD}";
       KAFKA_LISTENER_NAME_SASL__PLAINTEXT_SCRAM___SHA___256_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.scram.ScramLoginModule required
         username="admin" password="${KAFDECK_BROKER_PASSWORD}";
