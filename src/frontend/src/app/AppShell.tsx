@@ -9,7 +9,7 @@ import {
   type TopicListItem,
 } from '../shared/api.js';
 import { productDescription, productName } from '../shared/product.js';
-import { describeObservation } from './operatorState.js';
+import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 
 function observationText(envelope: ApiEnvelope<unknown>) {
   const observed = new Date(envelope.observation.observedAt);
@@ -33,6 +33,8 @@ export function AppShell() {
   const [selected, setSelected] = useState<ApiEnvelope<ClusterData> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [brokerConfiguration, setBrokerConfiguration] = useState<{ brokerId: number; entries: ConfigurationEntryData[] } | null>(null);
+  const [brokerError, setBrokerError] = useState<string | null>(null);
   const [topicQuery, setTopicQuery] = useState('');
   const [topics, setTopics] = useState<TopicListItem[]>([]);
   const [topicCursor, setTopicCursor] = useState<string | null>(null);
@@ -88,16 +90,48 @@ export function AppShell() {
     return () => controller.abort();
   }, [loadTopics, selectedClusterId, topicQuery]);
 
+  useEffect(() => {
+    if (!selectedClusterId) return;
+    let controller: AbortController | null = null;
+    const refresh = () => {
+      if (!shouldAutoRefresh(document.visibilityState)) return;
+      controller?.abort();
+      controller = new AbortController();
+      void loadClusters(controller.signal);
+      void loadTopics(selectedClusterId, topicQuery, null, false, controller.signal);
+    };
+    const timer = window.setInterval(refresh, visibleRefreshIntervalMs);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      controller?.abort();
+    };
+  }, [loadClusters, loadTopics, selectedClusterId, topicQuery]);
+
   const selectCluster = (clusterId: string) => {
     setSelectedClusterId(clusterId);
     setSelected(clusters.find(item => item.data.clusterId === clusterId) ?? null);
     setError(null);
+    setBrokerConfiguration(null);
+    setBrokerError(null);
     setTopicQuery('');
     setTopics([]);
     setTopicCursor(null);
     setTopicDetail(null);
     setTopicConfiguration(null);
     setTopicDetailError(null);
+  };
+
+  const openBroker = async (brokerId: number) => {
+    setBrokerConfiguration(null);
+    setBrokerError(null);
+    try {
+      const configuration = await kafdeckApi.getBrokerConfiguration(selectedClusterId, brokerId);
+      setBrokerConfiguration({ brokerId, entries: configuration.data });
+    } catch (reason) {
+      setBrokerError(problemText(reason));
+    }
   };
 
   const openTopic = async (topicName: string) => {
@@ -124,7 +158,7 @@ export function AppShell() {
     {loading && <p role="status">Loading cluster observations…</p>}{error && <p role="alert">{error}</p>}{!loading && !error && clusters.length === 0 && <p role="status">No clusters are configured.</p>}
     {selected && <>
       <section id="overview" aria-labelledby="overview-title"><h2 id="overview-title">Cluster overview</h2><p><strong>{selected.data.clusterId}</strong> · {observationText(selected)}</p><dl><dt>Kafka cluster ID</dt><dd>{selected.data.kafkaClusterId ?? 'Not observed'}</dd><dt>Health</dt><dd>{String(selected.data.health)}</dd><dt>Controller</dt><dd>{selected.data.controllerBrokerId ?? 'Not observed'}</dd><dt>Brokers</dt><dd>{selected.data.brokers.length}</dd></dl>{selected.limitations.length > 0 && <aside aria-label="Cluster limitations"><h3>Limitations</h3><ul>{selected.limitations.map((item, index) => <li key={`${item.capability}-${index}`}>{item.capability ?? 'cluster'}: {item.state}{item.reason ? ` — ${item.reason}` : ''}</li>)}</ul></aside>}</section>
-      <section id="brokers" aria-labelledby="brokers-title"><h2 id="brokers-title">Brokers</h2>{selected.data.brokers.length === 0 ? <p>No broker metadata is currently observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Host</th><th scope="col">Port</th><th scope="col">Role</th></tr></thead><tbody>{selected.data.brokers.map(broker => <tr key={broker.brokerId}><th scope="row">{broker.brokerId}</th><td>{broker.host}</td><td>{broker.port}</td><td>{broker.isController ? 'Controller' : 'Broker'}</td></tr>)}</tbody></table>}</section>
+      <section id="brokers" aria-labelledby="brokers-title"><h2 id="brokers-title">Brokers</h2>{selected.data.brokers.length === 0 ? <p>No broker metadata is currently observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Host</th><th scope="col">Port</th><th scope="col">Role</th><th scope="col">Configuration</th></tr></thead><tbody>{selected.data.brokers.map(broker => <tr key={broker.brokerId}><th scope="row">{broker.brokerId}</th><td>{broker.host}</td><td>{broker.port}</td><td>{broker.isController ? 'Controller' : 'Broker'}</td><td><button type="button" onClick={() => void openBroker(broker.brokerId)}>View configuration</button></td></tr>)}</tbody></table>}{brokerError && <p role="alert">{brokerError}</p>}{brokerConfiguration && <article aria-labelledby="broker-config-title"><h3 id="broker-config-title">Broker {brokerConfiguration.brokerId} configuration</h3><ConfigurationView entries={brokerConfiguration.entries} /></article>}</section>
       <section id="topics" aria-labelledby="topics-title"><h2 id="topics-title">Topics</h2><label htmlFor="topic-search">Search topics</label>{' '}<input id="topic-search" type="search" value={topicQuery} onChange={event => setTopicQuery(event.target.value)} />
         {topicsLoading && topics.length === 0 && <p role="status">Loading topics…</p>}{topicsError && <p role="alert">{topicsError}</p>}{!topicsLoading && !topicsError && topics.length === 0 && <p>No topics match the current search.</p>}
         {topics.length > 0 && <table><thead><tr><th scope="col">Topic</th><th scope="col">Partitions</th><th scope="col">Offline</th><th scope="col">Under replicated</th><th scope="col">State</th></tr></thead><tbody>{topics.map(topic => <tr key={topic.name}><th scope="row"><button type="button" onClick={() => void openTopic(topic.name)}>{topic.name}</button></th><td>{topic.partitionCount}</td><td>{topic.offlinePartitionCount ?? 'Unknown'}</td><td>{topic.underReplicatedPartitionCount ?? 'Unknown'}</td><td>{String(topic.anomalyState)}</td></tr>)}</tbody></table>}
