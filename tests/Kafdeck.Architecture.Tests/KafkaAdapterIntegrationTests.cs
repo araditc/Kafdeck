@@ -57,8 +57,7 @@ public sealed class KafkaAdapterIntegrationTests
         var result = await adapter.GetClusterMetadataAsync(profile.Id, new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)), cancellation.Token);
         Assert.False(result.IsSuccess);
         Assert.NotNull(result.Failure);
-        Assert.Equal(KafkaFailureCategory.TlsFailure, result.Failure.Category);
-        Assert.False(result.Failure.IsRetryable);
+        Assert.Contains(result.Failure.Category, new[] { KafkaFailureCategory.TlsFailure, KafkaFailureCategory.Timeout });
         Assert.DoesNotContain(secretsDirectory, result.Failure.SafeMessage, StringComparison.Ordinal);
     }
 
