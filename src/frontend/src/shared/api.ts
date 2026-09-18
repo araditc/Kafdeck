@@ -40,14 +40,42 @@ export interface ClusterData {
 export interface TopicListItem {
   name: string;
   partitionCount: number;
-  offlinePartitionCount: number;
-  underReplicatedPartitionCount: number;
+  isInternal: boolean;
+  offlinePartitionCount: number | null;
+  underReplicatedPartitionCount: number | null;
   anomalyState: string | number;
 }
 
 export interface TopicPageData {
   items: TopicListItem[];
   nextCursor: string | null;
+}
+
+export interface PartitionProjection {
+  partitionId: number;
+  leaderBrokerId: number | null;
+  replicaBrokerIds: number[];
+  inSyncReplicaBrokerIds: number[];
+  outOfSyncReplicaBrokerIds: number[];
+  health: string | number;
+  healthReasons: string[];
+}
+
+export interface TopicDetailData {
+  name: string;
+  isInternal: boolean;
+  partitions: PartitionProjection[];
+  offlinePartitionCount: number;
+  underReplicatedPartitionCount: number;
+  anomalyState: string | number;
+}
+
+export interface ConfigurationEntryData {
+  name: string;
+  value: string | null;
+  isSensitive: boolean;
+  isReadOnly: boolean;
+  source: string | null;
 }
 
 export class ApiProblem extends Error {
@@ -74,17 +102,34 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return payload as T;
 }
 
+function clusterPath(clusterId: string) {
+  return `/api/v1/clusters/${encodeURIComponent(clusterId)}`;
+}
+
+function topicPath(clusterId: string, topicName: string) {
+  return `${clusterPath(clusterId)}/topics/${encodeURIComponent(topicName)}`;
+}
+
 export const kafdeckApi = {
   listClusters(signal?: AbortSignal) {
     return readJson<{ data: ApiEnvelope<ClusterData>[] }>('/api/v1/clusters', signal);
   },
   getCluster(clusterId: string, signal?: AbortSignal) {
-    return readJson<ApiEnvelope<ClusterData>>(`/api/v1/clusters/${encodeURIComponent(clusterId)}`, signal);
+    return readJson<ApiEnvelope<ClusterData>>(clusterPath(clusterId), signal);
   },
   listTopics(clusterId: string, query: string, cursor: string | null, signal?: AbortSignal) {
     const params = new URLSearchParams({ pageSize: '50' });
     if (query.trim()) params.set('q', query.trim());
     if (cursor) params.set('cursor', cursor);
-    return readJson<ApiEnvelope<TopicPageData>>(`/api/v1/clusters/${encodeURIComponent(clusterId)}/topics?${params}`, signal);
+    return readJson<ApiEnvelope<TopicPageData>>(`${clusterPath(clusterId)}/topics?${params}`, signal);
+  },
+  getTopic(clusterId: string, topicName: string, signal?: AbortSignal) {
+    return readJson<ApiEnvelope<TopicDetailData>>(topicPath(clusterId, topicName), signal);
+  },
+  getTopicConfiguration(clusterId: string, topicName: string, signal?: AbortSignal) {
+    return readJson<ApiEnvelope<ConfigurationEntryData[]>>(`${topicPath(clusterId, topicName)}/configuration`, signal);
+  },
+  getBrokerConfiguration(clusterId: string, brokerId: number, signal?: AbortSignal) {
+    return readJson<ApiEnvelope<ConfigurationEntryData[]>>(`${clusterPath(clusterId)}/brokers/${brokerId}/configuration`, signal);
   },
 };
