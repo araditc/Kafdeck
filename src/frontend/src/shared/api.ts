@@ -63,7 +63,9 @@ export class ApiProblem extends Error {
 }
 
 async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+  const init: RequestInit = { method: 'GET', headers: { Accept: 'application/json' } };
+  if (signal !== undefined) init.signal = signal;
+  const response = await fetch(path, init);
   const payload = (await response.json()) as unknown;
   if (!response.ok) {
     const problem = payload as { detail?: string; title?: string; code?: string };
