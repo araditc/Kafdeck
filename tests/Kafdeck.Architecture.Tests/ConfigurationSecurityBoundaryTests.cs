@@ -58,6 +58,26 @@ public sealed class ConfigurationSecurityBoundaryTests
     }
 
     [Fact]
+    public void Loader_preserves_v01_token_mode_when_access_mode_is_omitted()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Kafdeck:Deployment:ListenUrl"] = "http://0.0.0.0:8080",
+            ["Kafdeck:Deployment:AccessToken"] = "env:KAFDECK_DEPLOYMENT_TOKEN",
+        };
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var options = KafdeckConfigurationLoader.Load(configuration);
+
+        Assert.Equal(AccessMode.Token, options.Deployment.Mode);
+        Assert.NotNull(options.Deployment.AccessToken);
+        KafdeckConfigurationValidator.ValidateAndThrow(options);
+    }
+
+    [Fact]
     public void Loader_parses_oidc_contract_but_activation_fails_closed_until_w13()
     {
         var values = new Dictionary<string, string?>
