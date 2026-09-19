@@ -125,11 +125,19 @@ jobs:
           title="$(jq -r '.title' .github/release/release.json)"
           notes="$(jq -r '.notes' .github/release/release.json)"
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          source_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            provenance="mode=max"
+          else
+            provenance="false"
+          fi
           {
             echo "version=$version"
             echo "title=$title"
             echo "notes=$notes"
             echo "image=$image"
+            echo "source_sha=$source_sha"
+            echo "provenance=$provenance"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Buildx
@@ -150,10 +158,10 @@ jobs:
           context: .
           load: ${{ github.event_name == 'pull_request' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          provenance: mode=max
+          provenance: ${{ steps.manifest.outputs.provenance }}
           tags: |
             ${{ steps.manifest.outputs.image }}:${{ steps.manifest.outputs.version }}
-            ${{ steps.manifest.outputs.image }}:sha-${{ github.sha }}
+            ${{ steps.manifest.outputs.image }}:sha-${{ steps.manifest.outputs.source_sha }}
 
       - name: Select exact candidate reference
         shell: bash
@@ -186,7 +194,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-evidence-${{ github.sha }}
+          name: release-evidence-${{ steps.manifest.outputs.source_sha }}
           path: |
             sbom.spdx.json
             trivy-results.sarif
