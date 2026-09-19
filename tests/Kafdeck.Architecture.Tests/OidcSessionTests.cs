@@ -177,11 +177,57 @@ public sealed class OidcSessionTests
         Assert.False(oidc.SaveTokens);
         Assert.False(oidc.GetClaimsFromUserInfoEndpoint);
         Assert.Equal("code", oidc.ResponseType);
+        Assert.Equal("query", oidc.ResponseMode);
+        Assert.True(oidc.ProtocolValidator.RequireStateValidation);
+        Assert.True(oidc.ProtocolValidator.RequireNonce);
         Assert.True(oidc.TokenValidationParameters.ValidateIssuer);
         Assert.True(oidc.TokenValidationParameters.ValidateAudience);
         Assert.NotNull(cookie.SessionStore);
         Assert.True(cookie.Cookie.HttpOnly);
         Assert.Equal(SameSiteMode.Strict, cookie.Cookie.SameSite);
+        Assert.Equal(CookieSecurePolicy.Always, cookie.Cookie.SecurePolicy);
+        Assert.Equal(SameSiteMode.None, oidc.CorrelationCookie.SameSite);
+        Assert.Equal(CookieSecurePolicy.Always, oidc.CorrelationCookie.SecurePolicy);
+        Assert.Equal(SameSiteMode.None, oidc.NonceCookie.SameSite);
+        Assert.Equal(CookieSecurePolicy.Always, oidc.NonceCookie.SecurePolicy);
         Assert.False(cookie.SlidingExpiration);
+    }
+
+    [Fact]
+    public void Loopback_http_oidc_uses_query_response_and_lax_protocol_cookies()
+    {
+        var deployment = new DeploymentOptions(
+            "http://127.0.0.1:8080",
+            null,
+            AccessMode.Oidc,
+            new OidcProfile(
+                "http://127.0.0.1:9000",
+                "kafdeck",
+                null,
+                null,
+                new[] { "openid" }));
+
+        KafdeckConfigurationValidator.ValidateAndThrow(
+            new KafdeckOptions(deployment, Array.Empty<ClusterProfile>()));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddKafdeckOidc(deployment, new SecretResolver());
+
+        using var provider = services.BuildServiceProvider();
+        var oidc = provider
+            .GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>()
+            .Get(KafdeckOidcDefaults.OidcScheme);
+        var cookie = provider
+            .GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(KafdeckOidcDefaults.CookieScheme);
+
+        Assert.False(oidc.RequireHttpsMetadata);
+        Assert.Equal("query", oidc.ResponseMode);
+        Assert.Equal(SameSiteMode.Lax, oidc.CorrelationCookie.SameSite);
+        Assert.Equal(CookieSecurePolicy.SameAsRequest, oidc.CorrelationCookie.SecurePolicy);
+        Assert.Equal(SameSiteMode.Lax, oidc.NonceCookie.SameSite);
+        Assert.Equal(CookieSecurePolicy.SameAsRequest, oidc.NonceCookie.SecurePolicy);
+        Assert.Equal(CookieSecurePolicy.SameAsRequest, cookie.Cookie.SecurePolicy);
     }
 }
