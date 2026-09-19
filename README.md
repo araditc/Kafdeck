@@ -4,7 +4,7 @@
 
 Kafdeck is a secure, vendor-neutral, operations-first control plane for Apache Kafka.
 
-The accepted **v0.1 Cluster Explorer implementation is complete** and the repository is in final release-readiness validation. v0.1 is intentionally read-only: it exposes Kafka metadata, health, broker/topic/partition information and configuration reads without Kafka mutation controls or payload browsing.
+**v0.1 Cluster Explorer is released.** v0.1 is intentionally read-only: it exposes Kafka metadata, health, broker/topic/partition information and configuration reads without Kafka mutation controls or payload browsing.
 
 ## v0.1 highlights
 
@@ -18,7 +18,7 @@ The accepted **v0.1 Cluster Explorer implementation is complete** and the reposi
 - containerized Kafka compatibility/security validation,
 - SBOM, vulnerability-scan and signed-image release workflow.
 
-See `docs/operator/v0.1-operator-guide.md` for deployment and operations, and `docs/releases/v0.1.md` for release scope and limitations.
+Release notes are in `docs/releases/v0.1.md`. Deployment and operations guidance are in `docs/operator/v0.1-operator-guide.md`.
 
 ## Project principles
 
