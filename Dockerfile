@@ -9,7 +9,7 @@ RUN npm run build
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
 WORKDIR /src
 COPY . .
-RUN dotnet restore Kafdeck.slnx --locked-mode || dotnet restore Kafdeck.slnx
+RUN dotnet restore Kafdeck.slnx --locked-mode
 RUN dotnet publish src/backend/Kafdeck.Api/Kafdeck.Api.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
