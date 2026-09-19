@@ -1,9 +1,13 @@
+using Kafdeck.Core.Security;
+
 namespace Kafdeck.Infrastructure.Configuration;
 
 public sealed record SafeConfigurationDiagnostic(
     string ListenHost,
     bool IsRemoteBinding,
+    AccessMode AccessMode,
     bool DeploymentTokenConfigured,
+    bool OidcConfigured,
     IReadOnlyList<SafeClusterDiagnostic> Clusters);
 
 public sealed record SafeClusterDiagnostic(
@@ -35,7 +39,9 @@ public static class SafeConfigurationDiagnostics
         return new SafeConfigurationDiagnostic(
             listenHost,
             !KafdeckConfigurationValidator.IsLoopbackBinding(options.Deployment.ListenUrl),
+            options.Deployment.Mode,
             options.Deployment.AccessToken is not null,
+            options.Deployment.Oidc is not null,
             Array.AsReadOnly(clusterDiagnostics));
     }
 }
