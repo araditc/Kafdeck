@@ -8,6 +8,8 @@ on:
       - 'src/frontend/**'
   push:
     branches: [main]
+    tags:
+      - 'v*'
     paths:
       - 'src/backend/**'
       - 'tests/backend/**'

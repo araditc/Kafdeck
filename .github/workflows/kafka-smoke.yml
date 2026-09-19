@@ -12,6 +12,8 @@ on:
       - '.github/workflows/kafka-smoke.yml'
   push:
     branches: [main]
+    tags:
+      - 'v*'
     paths:
       - 'deploy/dev/**'
       - 'scripts/ci/kafka-smoke.sh'
