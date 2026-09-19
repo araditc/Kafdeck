@@ -428,7 +428,7 @@ public static class OidcReturnUrlPolicy
         var normalized = returnUrl.Trim();
         if (!normalized.StartsWith("/", StringComparison.Ordinal) ||
             normalized.StartsWith("//", StringComparison.Ordinal) ||
-            normalized.Contains('\', StringComparison.Ordinal) ||
+            normalized.Contains('\\') ||
             Uri.TryCreate(normalized, UriKind.Absolute, out _))
         {
             return "/";
