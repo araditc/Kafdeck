@@ -277,23 +277,33 @@ public sealed class ConfluentKafkaAdministrationAdapter : IKafkaAdministrationPo
             cancellationToken,
             async (client, timeout, token) =>
             {
-                var results = await client.DescribeConfigsAsync(
-                        [resource],
-                        new DescribeConfigsOptions { RequestTimeout = timeout })
-                    .WaitAsync(token)
-                    .ConfigureAwait(false);
+                try
+                {
+                    var results = await client.DescribeConfigsAsync(
+                            [resource],
+                            new DescribeConfigsOptions { RequestTimeout = timeout })
+                        .WaitAsync(token)
+                        .ConfigureAwait(false);
 
-                var result = results.Single();
+                    var result = results.Single();
 
-                return result.Entries.Values
-                    .OrderBy(entry => entry.Name, StringComparer.Ordinal)
-                    .Select(entry => new KafkaConfigurationEntry(
-                        entry.Name,
-                        entry.Value,
-                        entry.IsSensitive,
-                        entry.IsReadOnly,
-                        entry.Source.ToString()))
-                    .ToArray();
+                    return result.Entries.Values
+                        .OrderBy(entry => entry.Name, StringComparer.Ordinal)
+                        .Select(entry => new KafkaConfigurationEntry(
+                            entry.Name,
+                            entry.Value,
+                            entry.IsSensitive,
+                            entry.IsReadOnly,
+                            entry.Source.ToString()))
+                        .ToArray();
+                }
+                catch (DescribeConfigsException exception) when (exception.Results.Count == 1 && exception.Results[0].Error.IsError)
+                {
+                    // librdkafka surfaces per-resource authorization failures as a partial
+                    // admin-operation error. Preserve the concrete resource error so the
+                    // shared mapper can classify TopicAuthorizationFailed correctly.
+                    throw new KafkaException(exception.Results[0].Error);
+                }
             });
 
     private async Task<KafkaResult<T>> ExecuteAsync<T>(
