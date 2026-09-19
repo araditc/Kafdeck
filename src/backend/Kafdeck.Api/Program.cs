@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Kafdeck.Api;
 using Kafdeck.Core;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Kafka;
 using Kafdeck.Infrastructure.Security;
@@ -21,9 +22,11 @@ KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
 builder.WebHost.UseUrls(kafdeckOptions.Deployment.ListenUrl);
 
 var secretResolver = new SecretResolver();
-var deploymentAccessToken = kafdeckOptions.Deployment.AccessToken is null
-    ? null
-    : secretResolver.Resolve(kafdeckOptions.Deployment.AccessToken).Reveal();
+var deploymentAccessToken =
+    DeploymentAccessModePolicy.UsesDeploymentToken(kafdeckOptions.Deployment.Mode) &&
+    kafdeckOptions.Deployment.AccessToken is not null
+        ? secretResolver.Resolve(kafdeckOptions.Deployment.AccessToken).Reveal()
+        : null;
 
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options =>
