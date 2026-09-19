@@ -66,6 +66,9 @@ if (deploymentAccessToken is not null)
     app.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken);
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapGet("/healthz", () => Results.Ok(new
     {
         status = "ok",
@@ -74,6 +77,7 @@ app.MapGet("/healthz", () => Results.Ok(new
     .WithName("healthz");
 
 app.MapKafdeckV01(kafdeckOptions);
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
