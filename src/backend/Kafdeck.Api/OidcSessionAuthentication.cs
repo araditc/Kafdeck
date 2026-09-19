@@ -143,7 +143,6 @@ public static class KafdeckOidcServiceCollectionExtensions
                         }
                         catch (Exception exception) when (
                             exception is ArgumentException or
-                            ArgumentOutOfRangeException or
                             InvalidOperationException)
                         {
                             context.Fail("OIDC identity claims are invalid.");
