@@ -118,19 +118,17 @@ public static class KafdeckConfigurationValidator
         {
             errors.Add("OIDC issuer must be an absolute HTTP or HTTPS URL.");
         }
-        else if (!string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
-                 !IPAddress.TryParse(issuer.Host.Trim('[', ']'), out var address))
+        else if (!string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            if (!string.Equals(issuer.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            var host = issuer.Host.Trim('[', ']');
+            var isLoopbackIssuer =
+                string.Equals(issuer.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+
+            if (!isLoopbackIssuer)
             {
                 errors.Add("OIDC issuer must use HTTPS unless it is a loopback development issuer.");
             }
-        }
-        else if (!string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
-                 address is not null &&
-                 !IPAddress.IsLoopback(address))
-        {
-            errors.Add("OIDC issuer must use HTTPS unless it is a loopback development issuer.");
         }
 
         if (string.IsNullOrWhiteSpace(oidc.ClientId) || oidc.ClientId.Trim().Length > 512)
