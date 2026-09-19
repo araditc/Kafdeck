@@ -61,9 +61,14 @@ foreach (var cluster in kafdeckOptions.Clusters.Where(cluster =>
 app.UseExceptionHandler();
 app.UseMiddleware<ApiTelemetryMiddleware>();
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 if (deploymentAccessToken is not null)
 {
-    app.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken);
+    app.UseWhen(
+        context => context.Request.Path.StartsWithSegments("/api"),
+        branch => branch.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken));
 }
 
 app.MapGet("/healthz", () => Results.Ok(new
@@ -74,6 +79,7 @@ app.MapGet("/healthz", () => Results.Ok(new
     .WithName("healthz");
 
 app.MapKafdeckV01(kafdeckOptions);
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
