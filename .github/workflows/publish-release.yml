@@ -17,6 +17,68 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    name: release-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      publish_needed: ${{ steps.manifest.outputs.publish_needed }}
+      source_sha: ${{ steps.manifest.outputs.source_sha }}
+      version: ${{ steps.manifest.outputs.version }}
+      title: ${{ steps.manifest.outputs.title }}
+      notes: ${{ steps.manifest.outputs.notes }}
+      image: ${{ steps.manifest.outputs.image }}
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Validate manifest and release ownership before publication
+        id: manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(jq -r '.version' .github/release/release.json)"
+          title="$(jq -r '.title' .github/release/release.json)"
+          notes="$(jq -r '.notes' .github/release/release.json)"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          source_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          publish_needed=false
+
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?([.-][0-9A-Za-z.-]+)?$ ]]
+          test -n "$title"
+          test -f "$notes"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            publish_needed=true
+
+            if gh release view "$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              release_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" --jq '.object.sha')"
+              echo "Release $version already exists on $release_target; immutable version publication will be skipped."
+              publish_needed=false
+            elif tag_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" --jq '.object.sha' 2>/dev/null)"; then
+              if [[ "$tag_target" != "$source_sha" ]]; then
+                echo "::error::Orphan tag $version points to $tag_target, expected $source_sha"
+                exit 1
+              fi
+              echo "Existing source tag $version already targets this exact SHA; release publication may resume."
+            fi
+          fi
+
+          {
+            echo "publish_needed=$publish_needed"
+            echo "source_sha=$source_sha"
+            echo "version=$version"
+            echo "title=$title"
+            echo "notes=$notes"
+            echo "image=$image"
+          } >> "$GITHUB_OUTPUT"
+
   quality:
     name: release-quality
     runs-on: ubuntu-latest
@@ -27,17 +89,6 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Validate release manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(jq -r '.version' .github/release/release.json)"
-          title="$(jq -r '.title' .github/release/release.json)"
-          notes="$(jq -r '.notes' .github/release/release.json)"
-          [[ "$version" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?([.-][0-9A-Za-z.-]+)?$ ]]
-          test -n "$title"
-          test -f "$notes"
 
       - name: Validate repository structure and workflow pinning
         run: bash scripts/ci/validate-repository.sh
@@ -96,7 +147,8 @@ jobs:
 
   evidence:
     name: release-evidence
-    needs: [quality, compatibility]
+    needs: [preflight, quality, compatibility]
+    if: github.event_name == 'pull_request' || needs.preflight.outputs.publish_needed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -105,40 +157,17 @@ jobs:
       id-token: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
-      version: ${{ steps.manifest.outputs.version }}
-      title: ${{ steps.manifest.outputs.title }}
-      notes: ${{ steps.manifest.outputs.notes }}
-      image: ${{ steps.manifest.outputs.image }}
+      version: ${{ needs.preflight.outputs.version }}
+      title: ${{ needs.preflight.outputs.title }}
+      notes: ${{ needs.preflight.outputs.notes }}
+      image: ${{ needs.preflight.outputs.image }}
+      source_sha: ${{ needs.preflight.outputs.source_sha }}
     steps:
       - name: Checkout exact source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Load release manifest
-        id: manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(jq -r '.version' .github/release/release.json)"
-          title="$(jq -r '.title' .github/release/release.json)"
-          notes="$(jq -r '.notes' .github/release/release.json)"
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          source_sha="${{ github.event.pull_request.head.sha || github.sha }}"
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            provenance="mode=max"
-          else
-            provenance="false"
-          fi
-          {
-            echo "version=$version"
-            echo "title=$title"
-            echo "notes=$notes"
-            echo "image=$image"
-            echo "source_sha=$source_sha"
-            echo "provenance=$provenance"
-          } >> "$GITHUB_OUTPUT"
+          ref: ${{ needs.preflight.outputs.source_sha }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -151,25 +180,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build immutable release candidate once
+      - name: Build immutable candidate once
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           load: ${{ github.event_name == 'pull_request' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          provenance: ${{ steps.manifest.outputs.provenance }}
-          tags: |
-            ${{ steps.manifest.outputs.image }}:${{ steps.manifest.outputs.version }}
-            ${{ steps.manifest.outputs.image }}:sha-${{ steps.manifest.outputs.source_sha }}
+          provenance: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'mode=max' || 'false' }}
+          tags: ${{ github.event_name == 'push' && format('{0}:candidate-{1}', needs.preflight.outputs.image, needs.preflight.outputs.source_sha) || format('kafdeck:evidence-{0}', needs.preflight.outputs.source_sha) }}
 
       - name: Select exact candidate reference
         shell: bash
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            echo "CANDIDATE_REF=${{ steps.manifest.outputs.image }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_ENV"
+            echo "CANDIDATE_REF=${{ needs.preflight.outputs.image }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_ENV"
           else
-            echo "CANDIDATE_REF=${{ steps.manifest.outputs.image }}:${{ steps.manifest.outputs.version }}" >> "$GITHUB_ENV"
+            echo "CANDIDATE_REF=kafdeck:evidence-${{ needs.preflight.outputs.source_sha }}" >> "$GITHUB_ENV"
           fi
 
       - name: Generate SPDX SBOM for exact candidate
@@ -194,7 +221,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-evidence-${{ steps.manifest.outputs.source_sha }}
+          name: release-evidence-${{ needs.preflight.outputs.source_sha }}
           path: |
             sbom.spdx.json
             trivy-results.sarif
@@ -204,17 +231,65 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
-      - name: Keyless-sign exact published digest
+      - name: Keyless-sign exact approved candidate digest
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
-          IMAGE: ${{ steps.manifest.outputs.image }}
+          IMAGE: ${{ needs.preflight.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
+      - name: Re-check release ownership before exposing final image tags
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --jq '.object.sha')"
+            if [[ "$release_target" != "$SOURCE_SHA" ]]; then
+              echo "::error::Release $VERSION appeared on $release_target while candidate was validating; refusing to move image tags."
+              exit 1
+            fi
+            echo "Release $VERSION already exists on this exact SHA; final image tag promotion is already owned by that release."
+            exit 0
+          fi
+
+          if tag_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$tag_target" != "$SOURCE_SHA" ]]; then
+              echo "::error::Tag $VERSION appeared on $tag_target while candidate was validating; refusing to move image tags."
+              exit 1
+            fi
+          fi
+
+      - name: Promote approved digest to final immutable release tags
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ${{ needs.preflight.outputs.image }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker buildx imagetools create             --tag "$IMAGE:$VERSION"             --tag "$IMAGE:sha-$SOURCE_SHA"             "$IMAGE@$DIGEST"
+
+          for ref in "$IMAGE:$VERSION" "$IMAGE:sha-$SOURCE_SHA"; do
+            actual_digest="$(docker buildx imagetools inspect "$ref" | awk '$1 == "Digest:" {print $2; exit}')"
+            if [[ "$actual_digest" != "$DIGEST" ]]; then
+              echo "::error::$ref resolved to $actual_digest, expected $DIGEST"
+              exit 1
+            fi
+          done
+
   publish:
     name: publish-github-release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [evidence]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.preflight.outputs.publish_needed == 'true'
+    needs: [preflight, evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -224,49 +299,46 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.preflight.outputs.source_sha }}
 
       - name: Publish idempotent GitHub Release on exact SHA
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.evidence.outputs.version }}
-          RELEASE_TITLE: ${{ needs.evidence.outputs.title }}
-          NOTES_PATH: ${{ needs.evidence.outputs.notes }}
-          IMAGE: ${{ needs.evidence.outputs.image }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          RELEASE_TITLE: ${{ needs.preflight.outputs.title }}
+          NOTES_PATH: ${{ needs.preflight.outputs.notes }}
+          IMAGE: ${{ needs.preflight.outputs.image }}
           DIGEST: ${{ needs.evidence.outputs.digest }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          existing_release_target=""
           if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             existing_release_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --jq '.object.sha')"
-            if [[ "$existing_release_target" != "$GITHUB_SHA" ]]; then
-              echo "::error::Release $VERSION already exists on $existing_release_target, expected $GITHUB_SHA"
+            if [[ "$existing_release_target" != "$SOURCE_SHA" ]]; then
+              echo "::error::Release $VERSION already exists on $existing_release_target, expected $SOURCE_SHA"
               exit 1
             fi
             echo "Release $VERSION already exists on exact source SHA; publication is idempotently complete."
             exit 0
           fi
 
-          tag_target=""
           if tag_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --jq '.object.sha' 2>/dev/null)"; then
-            if [[ "$tag_target" != "$GITHUB_SHA" ]]; then
-              echo "::error::Tag $VERSION already exists on $tag_target, expected $GITHUB_SHA"
+            if [[ "$tag_target" != "$SOURCE_SHA" ]]; then
+              echo "::error::Tag $VERSION already exists on $tag_target, expected $SOURCE_SHA"
               exit 1
             fi
             tag_args=(--verify-tag)
           else
-            tag_args=(--target "$GITHUB_SHA")
+            tag_args=(--target "$SOURCE_SHA")
           fi
 
           cp "$NOTES_PATH" /tmp/release-notes.md
           {
-            echo
-            echo "## Immutable OCI image"
-            echo
-            echo "`$IMAGE@$DIGEST`"
-            echo
-            echo "SBOM and vulnerability-scan evidence are retained by the release workflow for source SHA `$GITHUB_SHA`."
+            printf '\n## Immutable OCI image\n\n'
+            printf '`%s@%s`\n\n' "$IMAGE" "$DIGEST"
+            printf 'SBOM and vulnerability-scan evidence are retained by the release workflow for source SHA `%s`.\n' "$SOURCE_SHA"
           } >> /tmp/release-notes.md
 
           gh release create "$VERSION"             --repo "$GITHUB_REPOSITORY"             "${tag_args[@]}"             --title "$RELEASE_TITLE"             --notes-file /tmp/release-notes.md
