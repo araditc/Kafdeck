@@ -10,6 +10,18 @@ on:
       - 'tests/Kafdeck.Architecture.Tests/Kafka*.cs'
       - 'Directory.Packages.props'
       - '.github/workflows/kafka-compatibility.yml'
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+    paths:
+      - 'deploy/dev/**'
+      - 'scripts/ci/kafka-smoke.sh'
+      - 'src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/**'
+      - 'src/backend/Kafdeck.Core/Kafka/**'
+      - 'tests/Kafdeck.Architecture.Tests/Kafka*.cs'
+      - 'Directory.Packages.props'
+      - '.github/workflows/kafka-compatibility.yml'
   workflow_dispatch:
 
 permissions:
