@@ -30,5 +30,12 @@ updates:
       time: "06:30"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      react-runtime:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
     commit-message:
       prefix: "chore(deps)"
