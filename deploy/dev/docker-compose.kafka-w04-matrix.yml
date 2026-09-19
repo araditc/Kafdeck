@@ -46,12 +46,12 @@ services:
         org.apache.kafka.common.security.plain.PlainLoginModule required
         username="admin" password="${KAFDECK_BROKER_PASSWORD}"
         user_kafdeck="${KAFDECK_PLAIN_PASSWORD}"
-        user_kafdeck-restricted="${KAFDECK_RESTRICTED_PASSWORD}";
+        user_kafdeck_restricted="${KAFDECK_RESTRICTED_PASSWORD}";
       KAFKA_LISTENER_NAME_SASL__SSL_PLAIN_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.plain.PlainLoginModule required
         username="admin" password="${KAFDECK_BROKER_PASSWORD}"
         user_kafdeck="${KAFDECK_PLAIN_PASSWORD}"
-        user_kafdeck-restricted="${KAFDECK_RESTRICTED_PASSWORD}";
+        user_kafdeck_restricted="${KAFDECK_RESTRICTED_PASSWORD}";
       KAFKA_LISTENER_NAME_SASL__PLAINTEXT_SCRAM___SHA___256_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.scram.ScramLoginModule required
         username="admin" password="${KAFDECK_BROKER_PASSWORD}";
