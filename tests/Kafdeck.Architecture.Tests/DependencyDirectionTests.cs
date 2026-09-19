@@ -14,7 +14,10 @@ public sealed class DependencyDirectionTests
         AssertNoForbiddenReferences(
             typeof(KafdeckCoreAssemblyMarker).Assembly,
             "Kafdeck.Infrastructure",
-            "Confluent.Kafka");
+            "Confluent.Kafka",
+            "Microsoft.IdentityModel",
+            "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+            "IdentityModel");
     }
 
     [Theory]

@@ -1,4 +1,5 @@
 using System.Net;
+using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Configuration;
 
@@ -57,9 +58,100 @@ public static class KafdeckConfigurationValidator
             return;
         }
 
-        if (!IsLoopbackBinding(deployment.ListenUrl) && deployment.AccessToken is null)
+        switch (deployment.Mode)
         {
-            errors.Add("Non-loopback deployment binding requires an access-token secret reference.");
+            case AccessMode.Local:
+                if (!IsLoopbackBinding(deployment.ListenUrl))
+                {
+                    errors.Add("Non-loopback deployment binding requires an access-token secret reference in Token mode or an enabled OIDC mode.");
+                }
+
+                if (deployment.AccessToken is not null)
+                {
+                    errors.Add("Local access mode must not configure a deployment access token.");
+                }
+
+                if (deployment.Oidc is not null)
+                {
+                    errors.Add("Local access mode must not configure OIDC settings.");
+                }
+
+                break;
+
+            case AccessMode.Token:
+                if (deployment.AccessToken is null)
+                {
+                    errors.Add("Token access mode requires an access-token secret reference.");
+                }
+
+                if (deployment.Oidc is not null)
+                {
+                    errors.Add("Token access mode must not configure OIDC settings.");
+                }
+
+                break;
+
+            case AccessMode.Oidc:
+                if (deployment.Oidc is null)
+                {
+                    errors.Add("OIDC access mode requires OIDC configuration.");
+                }
+                else
+                {
+                    ValidateOidc(deployment.Oidc, errors);
+                }
+
+                errors.Add("OIDC access mode is defined by v0.2 contracts but cannot be activated until the W13 OIDC session adapter is implemented.");
+                break;
+
+            default:
+                errors.Add("Deployment access mode is unsupported.");
+                break;
+        }
+    }
+
+    private static void ValidateOidc(OidcProfile oidc, ICollection<string> errors)
+    {
+        if (!Uri.TryCreate(oidc.Issuer, UriKind.Absolute, out var issuer) ||
+            !(string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(issuer.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add("OIDC issuer must be an absolute HTTP or HTTPS URL.");
+        }
+        else if (!string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            var host = issuer.Host.Trim('[', ']');
+            var isLoopbackIssuer =
+                string.Equals(issuer.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+
+            if (!isLoopbackIssuer)
+            {
+                errors.Add("OIDC issuer must use HTTPS unless it is a loopback development issuer.");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(oidc.ClientId) || oidc.ClientId.Trim().Length > 512)
+        {
+            errors.Add("OIDC client ID is required and must not exceed 512 characters.");
+        }
+
+        if (oidc.GroupClaim is { Length: > 256 })
+        {
+            errors.Add("OIDC group-claim name must not exceed 256 characters.");
+        }
+
+        if (oidc.Scopes.Count == 0 ||
+            oidc.Scopes.Count > 16 ||
+            oidc.Scopes.Any(string.IsNullOrWhiteSpace) ||
+            oidc.Scopes.Any(scope => scope.Trim().Length > 128) ||
+            oidc.Scopes.Distinct(StringComparer.Ordinal).Count() != oidc.Scopes.Count)
+        {
+            errors.Add("OIDC scopes must contain 1 to 16 unique non-empty values of at most 128 characters.");
+        }
+        else if (!oidc.Scopes.Contains("openid", StringComparer.Ordinal))
+        {
+            errors.Add("OIDC scopes must include 'openid'.");
         }
     }
 

@@ -1,3 +1,5 @@
+using Kafdeck.Core.Security;
+
 namespace Kafdeck.Infrastructure.Configuration;
 
 public enum KafkaSecurityProtocol
@@ -21,7 +23,26 @@ public sealed record KafdeckOptions(
 
 public sealed record DeploymentOptions(
     string ListenUrl,
-    SecretReference? AccessToken);
+    SecretReference? AccessToken,
+    AccessMode Mode,
+    OidcProfile? Oidc)
+{
+    public DeploymentOptions(string listenUrl, SecretReference? accessToken)
+        : this(
+            listenUrl,
+            accessToken,
+            accessToken is null ? AccessMode.Local : AccessMode.Token,
+            null)
+    {
+    }
+}
+
+public sealed record OidcProfile(
+    string Issuer,
+    string ClientId,
+    SecretReference? ClientSecret,
+    string? GroupClaim,
+    IReadOnlyList<string> Scopes);
 
 public sealed record ClusterProfile(
     string Id,

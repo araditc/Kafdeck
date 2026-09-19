@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
+using Microsoft.Extensions.Configuration;
 using Kafdeck.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -40,6 +42,96 @@ public sealed class ConfigurationSecurityBoundaryTests
     public void Invalid_secret_references_fail_validation(string value)
     {
         Assert.Throws<KafdeckConfigurationException>(() => SecretReference.Parse(value));
+    }
+
+
+    [Fact]
+    public void Legacy_deployment_options_infer_local_or_token_mode()
+    {
+        var local = new DeploymentOptions("http://127.0.0.1:8080", null);
+        var token = new DeploymentOptions(
+            "http://0.0.0.0:8080",
+            SecretReference.Parse("env:KAFDECK_DEPLOYMENT_TOKEN"));
+
+        Assert.Equal(AccessMode.Local, local.Mode);
+        Assert.Equal(AccessMode.Token, token.Mode);
+    }
+
+    [Fact]
+    public void Loader_preserves_v01_token_mode_when_access_mode_is_omitted()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Kafdeck:Deployment:ListenUrl"] = "http://0.0.0.0:8080",
+            ["Kafdeck:Deployment:AccessToken"] = "env:KAFDECK_DEPLOYMENT_TOKEN",
+        };
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var options = KafdeckConfigurationLoader.Load(configuration);
+
+        Assert.Equal(AccessMode.Token, options.Deployment.Mode);
+        Assert.NotNull(options.Deployment.AccessToken);
+        KafdeckConfigurationValidator.ValidateAndThrow(options);
+    }
+
+    [Fact]
+    public void Loader_parses_oidc_contract_but_activation_fails_closed_until_w13()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Kafdeck:Deployment:ListenUrl"] = "https://0.0.0.0:8443",
+            ["Kafdeck:Deployment:AccessMode"] = "Oidc",
+            ["Kafdeck:Deployment:Oidc:Issuer"] = "https://idp.example",
+            ["Kafdeck:Deployment:Oidc:ClientId"] = "kafdeck",
+            ["Kafdeck:Deployment:Oidc:ClientSecret"] = "env:KAFDECK_OIDC_CLIENT_SECRET",
+            ["Kafdeck:Deployment:Oidc:GroupClaim"] = "groups",
+            ["Kafdeck:Deployment:Oidc:Scopes:0"] = "openid",
+            ["Kafdeck:Deployment:Oidc:Scopes:1"] = "profile",
+        };
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var options = KafdeckConfigurationLoader.Load(configuration);
+
+        Assert.Equal(AccessMode.Oidc, options.Deployment.Mode);
+        Assert.NotNull(options.Deployment.Oidc);
+        Assert.Equal("https://idp.example", options.Deployment.Oidc!.Issuer);
+        Assert.Equal("kafdeck", options.Deployment.Oidc.ClientId);
+        Assert.Equal(new[] { "openid", "profile" }, options.Deployment.Oidc.Scopes);
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains("cannot be activated until the W13 OIDC session adapter", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Oidc_safe_diagnostics_never_expose_client_secret_reference()
+    {
+        const string secretVariable = "KAFDECK_OIDC_CLIENT_SECRET";
+
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "https://0.0.0.0:8443",
+                null,
+                AccessMode.Oidc,
+                new OidcProfile(
+                    "https://idp.example",
+                    "kafdeck",
+                    SecretReference.Parse($"env:{secretVariable}"),
+                    "groups",
+                    new[] { "openid", "profile" })),
+            Array.Empty<ClusterProfile>());
+
+        var json = JsonSerializer.Serialize(SafeConfigurationDiagnostics.Create(options));
+
+        Assert.DoesNotContain(secretVariable, json, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClientSecret", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

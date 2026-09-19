@@ -1,3 +1,4 @@
+using Kafdeck.Core.Security;
 using Microsoft.Extensions.Configuration;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -11,6 +12,8 @@ public static class KafdeckConfigurationLoader
         var deploymentSection = configuration.GetSection("Kafdeck:Deployment");
         var listenUrl = deploymentSection["ListenUrl"] ?? "http://127.0.0.1:8080";
         var accessToken = ParseOptionalSecret(deploymentSection["AccessToken"]);
+        var accessMode = ParseAccessMode(deploymentSection["AccessMode"], accessToken);
+        var oidc = LoadOidcProfile(deploymentSection.GetSection("Oidc"));
 
         var clusters = configuration
             .GetSection("Kafdeck:Clusters")
@@ -19,8 +22,44 @@ public static class KafdeckConfigurationLoader
             .ToArray();
 
         return new KafdeckOptions(
-            new DeploymentOptions(listenUrl, accessToken),
+            new DeploymentOptions(listenUrl, accessToken, accessMode, oidc),
             Array.AsReadOnly(clusters));
+    }
+
+    private static AccessMode ParseAccessMode(string? value, SecretReference? accessToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return accessToken is null ? AccessMode.Local : AccessMode.Token;
+        }
+
+        return ParseEnum(value, AccessMode.Local, "Deployment access mode");
+    }
+
+    private static OidcProfile? LoadOidcProfile(IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        var scopes = section
+            .GetSection("Scopes")
+            .GetChildren()
+            .Select(child => child.Value ?? string.Empty)
+            .ToArray();
+
+        if (scopes.Length == 0)
+        {
+            scopes = ["openid", "profile"];
+        }
+
+        return new OidcProfile(
+            section["Issuer"] ?? string.Empty,
+            section["ClientId"] ?? string.Empty,
+            ParseOptionalSecret(section["ClientSecret"]),
+            string.IsNullOrWhiteSpace(section["GroupClaim"]) ? null : section["GroupClaim"]!.Trim(),
+            Array.AsReadOnly(scopes));
     }
 
     private static ClusterProfile LoadCluster(IConfigurationSection section)

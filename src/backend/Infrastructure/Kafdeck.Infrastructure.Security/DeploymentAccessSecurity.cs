@@ -1,9 +1,17 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using Kafdeck.Core.Security;
 using Microsoft.AspNetCore.Http;
 
 namespace Kafdeck.Infrastructure.Security;
+
+public static class DeploymentAccessModePolicy
+{
+    public static bool UsesDeploymentToken(AccessMode mode) => mode == AccessMode.Token;
+
+    public static bool RequiresOperatorIdentity(AccessMode mode) => mode == AccessMode.Oidc;
+}
 
 public static class DeploymentAccessTokenValidator
 {
