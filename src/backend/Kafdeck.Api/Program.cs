@@ -61,13 +61,15 @@ foreach (var cluster in kafdeckOptions.Clusters.Where(cluster =>
 app.UseExceptionHandler();
 app.UseMiddleware<ApiTelemetryMiddleware>();
 
-if (deploymentAccessToken is not null)
-{
-    app.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken);
-}
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+if (deploymentAccessToken is not null)
+{
+    app.UseWhen(
+        context => context.Request.Path.StartsWithSegments("/api"),
+        branch => branch.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken));
+}
 
 app.MapGet("/healthz", () => Results.Ok(new
     {
