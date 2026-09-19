@@ -28,6 +28,11 @@ var deploymentAccessToken =
         ? secretResolver.Resolve(kafdeckOptions.Deployment.AccessToken).Reveal()
         : null;
 
+if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
+{
+    builder.Services.AddKafdeckOidc(kafdeckOptions.Deployment, secretResolver);
+}
+
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -64,6 +69,11 @@ foreach (var cluster in kafdeckOptions.Clusters.Where(cluster =>
 app.UseExceptionHandler();
 app.UseMiddleware<ApiTelemetryMiddleware>();
 
+if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
+{
+    app.UseAuthentication();
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -74,12 +84,26 @@ if (deploymentAccessToken is not null)
         branch => branch.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken));
 }
 
+if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
+{
+    app.UseWhen(
+        context =>
+            context.Request.Path.StartsWithSegments("/api/v1") &&
+            !context.Request.Path.StartsWithSegments("/api/v1/auth/login"),
+        branch => branch.UseMiddleware<OidcApiAuthenticationBoundaryMiddleware>());
+}
+
 app.MapGet("/healthz", () => Results.Ok(new
     {
         status = "ok",
         product = ProductIdentity.Name,
     }))
     .WithName("healthz");
+
+if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
+{
+    app.MapKafdeckOidcSessionEndpoints();
+}
 
 app.MapKafdeckV01(kafdeckOptions);
 app.MapFallbackToFile("index.html");
