@@ -429,7 +429,7 @@ public static class OidcReturnUrlPolicy
         if (!normalized.StartsWith("/", StringComparison.Ordinal) ||
             normalized.StartsWith("//", StringComparison.Ordinal) ||
             normalized.Contains('\\') ||
-            Uri.TryCreate(normalized, UriKind.Absolute, out _))
+            normalized.Any(char.IsControl))
         {
             return "/";
         }
