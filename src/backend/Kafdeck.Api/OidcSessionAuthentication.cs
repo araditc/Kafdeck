@@ -41,6 +41,11 @@ public static class KafdeckOidcServiceCollectionExtensions
         }
 
         var oidc = deployment.Oidc;
+        var listenUri = new Uri(deployment.ListenUrl, UriKind.Absolute);
+        var useSecureCookie = string.Equals(
+            listenUri.Scheme,
+            Uri.UriSchemeHttps,
+            StringComparison.OrdinalIgnoreCase);
         var sessionStore = new BoundedMemoryTicketStore(
             maxEntries: 4096,
             defaultLifetime: TimeSpan.FromHours(8));
@@ -57,12 +62,6 @@ public static class KafdeckOidcServiceCollectionExtensions
             })
             .AddCookie(KafdeckOidcDefaults.CookieScheme, options =>
             {
-                var listenUri = new Uri(deployment.ListenUrl, UriKind.Absolute);
-                var useSecureCookie = string.Equals(
-                    listenUri.Scheme,
-                    Uri.UriSchemeHttps,
-                    StringComparison.OrdinalIgnoreCase);
-
                 options.Cookie.Name = "Kafdeck.Session";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Strict;
@@ -85,6 +84,7 @@ public static class KafdeckOidcServiceCollectionExtensions
                     ? null
                     : secretResolver.Resolve(oidc.ClientSecret).Reveal();
                 options.ResponseType = OpenIdConnectResponseType.Code;
+                options.ResponseMode = OpenIdConnectResponseMode.Query;
                 options.UsePkce = true;
                 options.SaveTokens = false;
                 options.GetClaimsFromUserInfoEndpoint = false;
@@ -116,15 +116,22 @@ public static class KafdeckOidcServiceCollectionExtensions
                     NameClaimType = "name",
                 };
 
+                options.ProtocolValidator.RequireStateValidation = true;
+                options.ProtocolValidator.RequireNonce = true;
+
                 options.CorrelationCookie.HttpOnly = true;
-                options.CorrelationCookie.SameSite = SameSiteMode.None;
-                options.CorrelationCookie.SecurePolicy = options.RequireHttpsMetadata
+                options.CorrelationCookie.SameSite = useSecureCookie
+                    ? SameSiteMode.None
+                    : SameSiteMode.Lax;
+                options.CorrelationCookie.SecurePolicy = useSecureCookie
                     ? CookieSecurePolicy.Always
                     : CookieSecurePolicy.SameAsRequest;
 
                 options.NonceCookie.HttpOnly = true;
-                options.NonceCookie.SameSite = SameSiteMode.None;
-                options.NonceCookie.SecurePolicy = options.RequireHttpsMetadata
+                options.NonceCookie.SameSite = useSecureCookie
+                    ? SameSiteMode.None
+                    : SameSiteMode.Lax;
+                options.NonceCookie.SecurePolicy = useSecureCookie
                     ? CookieSecurePolicy.Always
                     : CookieSecurePolicy.SameAsRequest;
 
