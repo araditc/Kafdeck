@@ -24,7 +24,7 @@ printf '%s' "$KAFDECK_STORE_PASSWORD" > "$secrets_dir/kafka_ssl_key_creds"
 printf '%s' "$KAFDECK_STORE_PASSWORD" > "$secrets_dir/kafka_truststore_creds"
 printf '%s' 'kafdeck' > "$secrets_dir/plain.username"
 printf '%s' "$KAFDECK_PLAIN_PASSWORD" > "$secrets_dir/plain.password"
-printf '%s' 'kafdeck-restricted' > "$secrets_dir/restricted.username"
+printf '%s' 'kafdeck_restricted' > "$secrets_dir/restricted.username"
 printf '%s' "$KAFDECK_RESTRICTED_PASSWORD" > "$secrets_dir/restricted.password"
 printf '%s' 'kafdeck-scram256' > "$secrets_dir/scram256.username"
 printf '%s' "$KAFDECK_SCRAM256_PASSWORD" > "$secrets_dir/scram256.password"
@@ -37,7 +37,7 @@ KafkaServer {
   username="admin"
   password="$KAFDECK_BROKER_PASSWORD"
   user_kafdeck="$KAFDECK_PLAIN_PASSWORD"
-  user_kafdeck-restricted="$KAFDECK_RESTRICTED_PASSWORD";
+  user_kafdeck_restricted="$KAFDECK_RESTRICTED_PASSWORD";
 };
 EOF
 
@@ -82,8 +82,8 @@ docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --a
 # Once any ACL exists on a resource, allow.everyone.if.no.acl.found no longer grants
 # unrelated operations on that resource. Explicitly retain metadata Describe while
 # denying DescribeConfigs so the integration test exercises genuine partial access.
-docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck-restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null
-docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --deny-principal User:kafdeck-restricted --operation DescribeConfigs --topic kafdeck-ci-smoke --force >/dev/null
+docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck_restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null
+docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --deny-principal User:kafdeck_restricted --operation DescribeConfigs --topic kafdeck-ci-smoke --force >/dev/null
 
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore --filter FullyQualifiedName~KafkaAdapterIntegrationTests
