@@ -79,14 +79,20 @@ docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --de
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${KAFDECK_SCRAM256_PASSWORD}]" --entity-type users --entity-name kafdeck-scram256 >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-512=[iterations=4096,password=${KAFDECK_SCRAM512_PASSWORD}]" --entity-type users --entity-name kafdeck-scram512 >/dev/null
 
-# Once any ACL exists on a resource, allow.everyone.if.no.acl.found no longer grants
-# unrelated operations on that resource. Explicitly retain metadata Describe while
-# denying DescribeConfigs so the integration test exercises genuine partial access.
+# Run the accepted transport/security matrix before introducing restricted ACLs.
+# This keeps an authorization-fixture defect from obscuring TLS/SASL compatibility.
+KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
+  --filter 'FullyQualifiedName~KafkaAdapterIntegrationTests&FullyQualifiedName!~KafkaAdapterIntegrationTestsAuthorization'
+
+# Explicitly retain metadata Describe while denying DescribeConfigs so the second
+# pass exercises genuine partial access rather than a total authorization failure.
 docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck_restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null
 docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --deny-principal User:kafdeck_restricted --operation DescribeConfigs --topic kafdeck-ci-smoke --force >/dev/null
 
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
-  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore --filter FullyQualifiedName~KafkaAdapterIntegrationTests
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
+  --filter FullyQualifiedName~KafkaAdapterIntegrationTestsAuthorization
 
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke
 
