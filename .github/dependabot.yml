@@ -8,6 +8,14 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      release-supply-chain:
+        patterns:
+          - "docker/login-action"
+          - "docker/build-push-action"
+          - "docker/setup-buildx-action"
+          - "anchore/sbom-action"
+          - "sigstore/cosign-installer"
     commit-message:
       prefix: "chore(deps)"
 
