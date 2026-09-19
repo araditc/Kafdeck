@@ -2,15 +2,14 @@
 set -euo pipefail
 
 compose_file="deploy/dev/docker-compose.kafka-w04-matrix.yml"
-secrets_dir="deploy/dev/.generated/kafka-secrets"
+secrets_dir="deploy/dev/.secrets/kafka-w04"
 
 cleanup() {
   docker compose -f "$compose_file" down -v --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "deploy/dev/.generated"
+  rm -rf "$secrets_dir"
 }
 trap cleanup EXIT
-
-rm -rf "$secrets_dir"
+cleanup
 mkdir -p "$secrets_dir"
 
 export KAFDECK_STORE_PASSWORD="$(openssl rand -hex 24)"
@@ -31,7 +30,8 @@ printf '%s' 'kafdeck-scram256' > "$secrets_dir/scram256.username"
 printf '%s' "$KAFDECK_SCRAM256_PASSWORD" > "$secrets_dir/scram256.password"
 printf '%s' 'kafdeck-scram512' > "$secrets_dir/scram512.username"
 printf '%s' "$KAFDECK_SCRAM512_PASSWORD" > "$secrets_dir/scram512.password"
-cat > "$secrets_dir/broker_jaas.conf" <<EOF
+
+cat > "$secrets_dir/kafka_server_jaas.conf" <<EOF
 KafkaServer {
   org.apache.kafka.common.security.plain.PlainLoginModule required
   username="admin"
@@ -79,7 +79,10 @@ docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --de
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${KAFDECK_SCRAM256_PASSWORD}]" --entity-type users --entity-name kafdeck-scram256 >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-512=[iterations=4096,password=${KAFDECK_SCRAM512_PASSWORD}]" --entity-type users --entity-name kafdeck-scram512 >/dev/null
 
-# The restricted principal may read metadata but must not read topic configuration.
+# Once any ACL exists on a resource, allow.everyone.if.no.acl.found no longer grants
+# unrelated operations on that resource. Explicitly retain metadata Describe while
+# denying DescribeConfigs so the integration test exercises genuine partial access.
+docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck-restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null
 docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --deny-principal User:kafdeck-restricted --operation DescribeConfigs --topic kafdeck-ci-smoke --force >/dev/null
 
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
