@@ -204,7 +204,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 : EmptyBudgetDurationBatch();
         }
 
-        var watermarks = watermarkResult.Value!.Value;
+        var watermarks = watermarkResult.Value!;
         var low = watermarks.Low.Value;
         var high = watermarks.High.Value;
 
@@ -234,7 +234,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 high));
         }
 
-        var resolvedAnchor = anchorResult.Value!.Value;
+        var resolvedAnchor = anchorResult.Value!;
 
         if (resolvedAnchor < low || resolvedAnchor > high)
         {
