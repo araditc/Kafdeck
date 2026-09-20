@@ -77,7 +77,7 @@ public sealed class RecordFilterEngineTests
                 new RecordFilterRequest(
                     structuredFilter: new RecordStructuredFilter(
                         RecordFilterLanguage.Cel,
-                        "value.name == "alpha""),
+                        "value.name == \"alpha\""),
                     budget: tinyExpressionBudget)));
 
         var tinyAstBudget = new RecordFilterBudget(
@@ -187,7 +187,7 @@ public sealed class RecordFilterEngineTests
         var reader = new StubRecordReader(
             KafkaResult<RecordReadBatch>.Success(
                 new RecordReadBatch(
-                    [Raw(0, "key", $"{{"secret":"{secret}"}}")],
+                    [Raw(0, "key", JsonSerializer.Serialize(new { secret }))],
                     0,
                     1,
                     0,
@@ -203,7 +203,7 @@ public sealed class RecordFilterEngineTests
             new RecordFilterRequest(
                 structuredFilter: new RecordStructuredFilter(
                     RecordFilterLanguage.Cel,
-                    "value.secret == "x"")));
+                    "value.secret == \"x\"")));
 
         var result = await service.FilterPageAsync(
             ReadRequest(),
@@ -242,7 +242,6 @@ public sealed class RecordFilterEngineTests
         Assert.True(controller.TryAcquire("issuer|alice", "prod", out var afterRelease));
         afterRelease.Dispose();
     }
-
 
     [Fact]
     public async Task Live_tail_second_session_for_same_identity_is_admission_denied()
