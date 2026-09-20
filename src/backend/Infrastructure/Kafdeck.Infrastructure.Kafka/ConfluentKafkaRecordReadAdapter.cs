@@ -270,6 +270,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         var outcome = RecordBudgetOutcome.Complete;
         var rateWindowStartedAt = _timeProvider.GetUtcNow();
         var rateWindowRecords = 0;
+        long? nextOffsetOverride = null;
 
         while (true)
         {
@@ -338,6 +339,10 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             if (rawBytes + rawSize > request.Budget.MaxRawBytes)
             {
                 outcome = RecordBudgetOutcome.RawByteLimit;
+                if (records.Count == 0 && offset < high)
+                {
+                    nextOffsetOverride = Math.Min(offset + 1, high);
+                }
                 break;
             }
 
@@ -346,7 +351,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             rateWindowRecords++;
         }
 
-        return Success(BuildBatch(records, low, high, outcome, startOffset, high));
+        return Success(BuildBatch(records, low, high, outcome, startOffset, high, nextOffsetOverride));
     }
 
     private SetupResult<long> ResolveAnchorOffset(
@@ -512,13 +517,18 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         long high,
         RecordBudgetOutcome outcome,
         long startOffset,
-        long highWatermark)
+        long highWatermark,
+        long? nextOffsetOverride = null)
     {
         var first = records.Count == 0 ? (long?)null : records[0].Offset;
         var last = records.Count == 0 ? (long?)null : records[^1].Offset;
 
         RecordAnchor? next = null;
-        if (last.HasValue && last.Value < highWatermark - 1)
+        if (nextOffsetOverride.HasValue && nextOffsetOverride.Value < highWatermark)
+        {
+            next = RecordAnchor.AtOffset(nextOffsetOverride.Value);
+        }
+        else if (last.HasValue && last.Value < highWatermark - 1)
         {
             next = RecordAnchor.AtOffset(last.Value + 1);
         }
