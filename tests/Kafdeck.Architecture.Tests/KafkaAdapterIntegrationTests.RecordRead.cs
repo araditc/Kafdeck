@@ -171,6 +171,8 @@ public sealed class KafkaAdapterIntegrationTestsRecordRead
             "1",
             StringComparison.Ordinal);
 
-    private static string? Utf8(ReadOnlyMemory<byte>? value) =>
-        value.HasValue ? Encoding.UTF8.GetString(value.Value.Span) : null;
+    private static string Utf8(ReadOnlyMemory<byte>? value) =>
+        value.HasValue
+            ? Encoding.UTF8.GetString(value.Value.Span)
+            : throw new InvalidOperationException("Expected a non-null record value fixture.");
 }
