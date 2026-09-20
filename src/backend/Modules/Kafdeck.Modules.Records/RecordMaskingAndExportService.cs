@@ -232,15 +232,20 @@ public sealed class RecordMaskingService
         {
             if (segment == "*")
             {
-                var names = jsonObject.Select(pair => pair.Key).ToArray();
-                var count = 0;
-                foreach (var name in names)
+                var names = new List<string>(Math.Min(jsonObject.Count, Math.Max(0, traversalStepsRemaining)));
+                foreach (var property in jsonObject)
                 {
                     if (!ConsumeTraversalStep(ref traversalStepsRemaining))
                     {
                         return -1;
                     }
 
+                    names.Add(property.Key);
+                }
+
+                var count = 0;
+                foreach (var name in names)
+                {
                     if (isLast)
                     {
                         jsonObject[name] = replacement;
@@ -560,18 +565,74 @@ public sealed class RecordExportService
         }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        linked.CancelAfter(remaining);
-        try
+        var writeTask = destination.WriteAsync(payload, linked.Token).AsTask();
+        var deadlineTask = Task.Delay(remaining, CancellationToken.None);
+        var callerCancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        var completed = await Task.WhenAny(writeTask, deadlineTask, callerCancellationTask).ConfigureAwait(false);
+
+        if (completed == writeTask)
         {
-            await destination.WriteAsync(payload, linked.Token);
+            await writeTask.ConfigureAwait(false);
             return stopwatch.Elapsed >= maxDuration
                 ? BudgetedWriteResult.CompletedAfterDeadline
                 : BudgetedWriteResult.Completed;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+
+        linked.Cancel();
+
+        if (writeTask.IsCompleted)
         {
-            return BudgetedWriteResult.DeadlineExceeded;
+            try
+            {
+                await writeTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return BudgetedWriteResult.DeadlineExceeded;
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            return BudgetedWriteResult.CompletedAfterDeadline;
         }
+
+        ObserveBackground(writeTask);
+        AbortDestinationInBackground(destination);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return BudgetedWriteResult.DeadlineExceeded;
+    }
+
+    private static void AbortDestinationInBackground(Stream destination)
+    {
+        var disposeTask = Task.Run(() =>
+        {
+            try
+            {
+                destination.Dispose();
+            }
+            catch (Exception)
+            {
+                // The destination is already invalid after a deadline/cancellation race.
+            }
+        });
+        ObserveBackground(disposeTask);
+    }
+
+    private static void ObserveBackground(Task task)
+    {
+        _ = task.ContinueWith(
+            completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private static byte[] SerializeJsonRow(RecordSafeProjection projection)
