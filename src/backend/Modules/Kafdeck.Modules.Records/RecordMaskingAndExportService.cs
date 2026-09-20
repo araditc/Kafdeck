@@ -327,7 +327,15 @@ public sealed class RecordExportService
             var completed = await Task.WhenAny(writeTask, Task.Delay(remaining, CancellationToken.None), Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)).ConfigureAwait(false);
             if (completed == writeTask)
             {
-                await writeTask.ConfigureAwait(false);
+                try
+                {
+                    await writeTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return BudgetedWriteResult.Indeterminate;
+                }
+
                 return stopwatch.Elapsed >= maxDuration ? BudgetedWriteResult.CompletedAfterDeadline : BudgetedWriteResult.Completed;
             }
 
@@ -338,13 +346,11 @@ public sealed class RecordExportService
             if (settled == settlementTask)
             {
                 _ = await settlementTask.ConfigureAwait(false);
-                if (cancellationToken.IsCancellationRequested) cancellationToken.ThrowIfCancellationRequested();
                 return BudgetedWriteResult.Indeterminate;
             }
 
             ownershipTransferred = true;
             OwnPendingWrite(destination, settlementTask);
-            if (cancellationToken.IsCancellationRequested) cancellationToken.ThrowIfCancellationRequested();
             return BudgetedWriteResult.Indeterminate;
         }
         finally { if (!ownershipTransferred) OwnedWriteSlots.Release(); }
