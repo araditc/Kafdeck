@@ -49,6 +49,35 @@ public sealed class RecordMaskingAndExportTests
     }
 
     [Fact]
+    public void Structured_masking_preserves_significant_whitespace_in_json_pointer_segments()
+    {
+        const string secret = "space-sensitive-secret";
+        using var document = JsonDocument.Parse(
+            $$"""{"secret":"visible-value","secret ":"{{secret}}"}""");
+        var item = new RecordFilteredItem(
+            new KafkaRawRecord(
+                10,
+                DateTimeOffset.UtcNow,
+                null,
+                Encoding.UTF8.GetBytes(document.RootElement.GetRawText()),
+                []),
+            new RecordDecodedValue(1, RecordSchemaFormat.JsonSchema, document.RootElement.Clone()));
+        var policy = RecordMaskingPolicyCompiler.Compile(
+            new RecordMaskingPolicyDefinition(
+                "space-sensitive",
+                1,
+                [new RecordStructuredMaskRule("/secret ")]));
+
+        var safe = new RecordMaskingService().Apply(0, item, policy);
+        var json = safe.StructuredValue!.Value;
+
+        Assert.Equal("visible-value", json.GetProperty("secret").GetString());
+        Assert.Equal("[REDACTED]", json.GetProperty("secret ").GetString());
+        Assert.DoesNotContain(secret, json.GetRawText(), StringComparison.Ordinal);
+        Assert.Contains("/secret ", safe.RedactedPaths);
+    }
+
+    [Fact]
     public void Mandatory_structured_masking_fails_closed_without_decoded_value_or_required_path()
     {
         const string secret = "must-never-leak";
@@ -91,7 +120,35 @@ public sealed class RecordMaskingAndExportTests
     }
 
     [Fact]
-    public async Task Export_requires_exact_record_export_authorization_and_contains_only_safe_values()
+    public void Structured_masking_fails_closed_when_aggregate_traversal_budget_is_exhausted()
+    {
+        const string secret = "never-leak-on-budget-exhaustion";
+        using var document = JsonDocument.Parse(
+            $$"""{"items":[{"secret":"{{secret}}"},{"secret":"{{secret}}"},{"secret":"{{secret}}"}]}""");
+        var item = new RecordFilteredItem(
+            new KafkaRawRecord(
+                3,
+                DateTimeOffset.UtcNow,
+                null,
+                Encoding.UTF8.GetBytes(document.RootElement.GetRawText()),
+                []),
+            new RecordDecodedValue(9, RecordSchemaFormat.JsonSchema, document.RootElement.Clone()));
+        var policy = RecordMaskingPolicyCompiler.Compile(
+            new RecordMaskingPolicyDefinition(
+                "bounded",
+                1,
+                [new RecordStructuredMaskRule("/items/*/secret")]));
+
+        var safe = new RecordMaskingService(maxTraversalSteps: 3).Apply(0, item, policy);
+
+        Assert.Equal(RecordPayloadProjectionKind.FullyRedacted, safe.ValueKind);
+        Assert.Null(safe.RawValue);
+        Assert.Null(safe.StructuredValue);
+        Assert.DoesNotContain(secret, JsonSerializer.Serialize(safe), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Export_evaluates_record_export_authorization_for_the_exact_page_target()
     {
         var page = SafePage(
             new RecordSafeProjection(
@@ -108,40 +165,33 @@ public sealed class RecordMaskingAndExportTests
                 1,
                 ["$payload"]));
         var service = new RecordExportService();
+        var (evaluator, identity) = ExportAuthorization();
 
         await using var denied = new MemoryStream();
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.ExportAsync(
                 page,
                 new RecordExportRequest(RecordExportFormat.Json),
-                ExportRequest(),
-                AuthorizationDecision.Denied(AuthorizationDecisionReason.ActionDenied),
+                evaluator,
+                null,
                 denied));
 
-        await using var wrongAction = new MemoryStream();
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            service.ExportAsync(
-                page,
-                new RecordExportRequest(RecordExportFormat.Json),
-                new AuthorizationRequest(AuthorizationAction.RecordRead, "cluster-a", "orders"),
-                AuthorizationDecision.Allowed(["reader"]),
-                wrongAction));
-
+        var otherPage = SafePageFor("cluster-b", "orders", SafeProjection(12, "safe"));
         await using var wrongTarget = new MemoryStream();
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.ExportAsync(
-                page,
+                otherPage,
                 new RecordExportRequest(RecordExportFormat.Json),
-                new AuthorizationRequest(AuthorizationAction.RecordExport, "cluster-b", "orders"),
-                AuthorizationDecision.Allowed(["record-exporter"]),
+                evaluator,
+                identity,
                 wrongTarget));
 
         await using var allowed = new MemoryStream();
         var summary = await service.ExportAsync(
             page,
             new RecordExportRequest(RecordExportFormat.Json),
-            ExportRequest(),
-            AuthorizationDecision.Allowed(["record-exporter"]),
+            evaluator,
+            identity,
             allowed);
         var output = Encoding.UTF8.GetString(allowed.ToArray());
 
@@ -162,6 +212,7 @@ public sealed class RecordMaskingAndExportTests
             SafeProjection(2, "two"),
             SafeProjection(3, "three"));
         var service = new RecordExportService();
+        var (evaluator, identity) = ExportAuthorization();
         await using var destination = new MemoryStream();
 
         var summary = await service.ExportAsync(
@@ -169,8 +220,8 @@ public sealed class RecordMaskingAndExportTests
             new RecordExportRequest(
                 format,
                 new RecordExportBudget(maxRows: 2, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(1))),
-            ExportRequest(),
-            AuthorizationDecision.Allowed(["export"]),
+            evaluator,
+            identity,
             destination);
 
         Assert.Equal(2, summary.RowCount);
@@ -184,6 +235,7 @@ public sealed class RecordMaskingAndExportTests
     {
         var page = SafePage(SafeProjection(1, new string('x', 500)));
         var service = new RecordExportService();
+        var (evaluator, identity) = ExportAuthorization();
         await using var destination = new MemoryStream();
 
         var summary = await service.ExportAsync(
@@ -191,8 +243,8 @@ public sealed class RecordMaskingAndExportTests
             new RecordExportRequest(
                 RecordExportFormat.Json,
                 new RecordExportBudget(maxRows: 10, maxBytes: 256, maxDuration: TimeSpan.FromSeconds(1))),
-            ExportRequest(),
-            AuthorizationDecision.Allowed(["export"]),
+            evaluator,
+            identity,
             destination);
 
         Assert.Equal(0, summary.RowCount);
@@ -200,6 +252,72 @@ public sealed class RecordMaskingAndExportTests
         Assert.InRange(summary.ByteCount, 2, 256);
         using var parsed = JsonDocument.Parse(destination.ToArray());
         Assert.Equal(0, parsed.RootElement.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Export_enforces_duration_budget_during_stream_writes()
+    {
+        var page = SafePage(SafeProjection(1, "one"));
+        var service = new RecordExportService();
+        var (evaluator, identity) = ExportAuthorization();
+        await using var destination = new DelayedWriteStream(TimeSpan.FromMilliseconds(100));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var summary = await service.ExportAsync(
+            page,
+            new RecordExportRequest(
+                RecordExportFormat.Ndjson,
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+            evaluator,
+            identity,
+            destination);
+
+        Assert.Equal(RecordExportBudgetOutcome.DurationLimit, summary.Outcome);
+        Assert.Equal(0, summary.RowCount);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Export_preserves_caller_cancellation_during_stream_write()
+    {
+        var page = SafePage(SafeProjection(1, "one"));
+        var service = new RecordExportService();
+        var (evaluator, identity) = ExportAuthorization();
+        await using var destination = new DelayedWriteStream(TimeSpan.FromSeconds(1));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ExportAsync(
+                page,
+                new RecordExportRequest(
+                    RecordExportFormat.Ndjson,
+                    new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(2))),
+                evaluator,
+                identity,
+                destination,
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void Export_audit_reports_only_offsets_actually_exported()
+    {
+        var page = SafePage(
+            SafeProjection(1, "one"),
+            SafeProjection(2, "two"),
+            SafeProjection(3, "three"));
+        var service = new RecordExportService();
+
+        var partial = service.BuildExportAudit(
+            page,
+            new RecordExportSummary(RecordExportFormat.Ndjson, 2, 120, RecordExportBudgetOutcome.RowLimit));
+        var none = service.BuildExportAudit(
+            page,
+            new RecordExportSummary(RecordExportFormat.Ndjson, 0, 0, RecordExportBudgetOutcome.ByteLimit));
+
+        Assert.Equal(1, partial.FirstOffset);
+        Assert.Equal(2, partial.LastOffset);
+        Assert.Null(none.FirstOffset);
+        Assert.Null(none.LastOffset);
     }
 
     [Fact]
@@ -228,8 +346,32 @@ public sealed class RecordMaskingAndExportTests
         Assert.DoesNotContain("RawValue", JsonSerializer.Serialize(audit), StringComparison.Ordinal);
     }
 
-    private static AuthorizationRequest ExportRequest() =>
-        new(AuthorizationAction.RecordExport, "cluster-a", "orders");
+    private static (AuthorizationPolicyEvaluator Evaluator, OperatorIdentity Identity) ExportAuthorization()
+    {
+        var policy = AuthorizationPolicyCompiler.Compile(
+            new AuthorizationPolicyDefinition(
+                [
+                    new AuthorizationRoleDefinition(
+                        "exporter",
+                        [
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.RecordExport,
+                                ["cluster-a"],
+                                ["orders"]),
+                        ]),
+                ],
+                [
+                    new AuthorizationSubjectBindingDefinition(
+                        "https://issuer.example",
+                        "operator-1",
+                        ["exporter"]),
+                ],
+                []));
+
+        return (
+            new AuthorizationPolicyEvaluator(policy),
+            new OperatorIdentity(new OperatorIdentityKey("https://issuer.example", "operator-1")));
+    }
 
     private static RecordSafeProjection SafeProjection(long offset, string value) =>
         new(
@@ -247,9 +389,15 @@ public sealed class RecordMaskingAndExportTests
             []);
 
     private static RecordSafePage SafePage(params RecordSafeProjection[] records) =>
+        SafePageFor("cluster-a", "orders", records);
+
+    private static RecordSafePage SafePageFor(
+        string clusterId,
+        string topicName,
+        params RecordSafeProjection[] records) =>
         new(
-            "cluster-a",
-            "orders",
+            clusterId,
+            topicName,
             0,
             Array.AsReadOnly(records),
             0,
@@ -261,4 +409,55 @@ public sealed class RecordMaskingAndExportTests
             [],
             records.Length == 0 ? "none" : records[0].PolicyId,
             records.Length == 0 ? 1 : records[0].PolicyVersion);
+
+    private sealed class DelayedWriteStream : Stream
+    {
+        private readonly MemoryStream _inner = new();
+        private readonly TimeSpan _delay;
+
+        public DelayedWriteStream(TimeSpan delay)
+        {
+            _delay = delay;
+        }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _inner.Length;
+        public override long Position
+        {
+            get => _inner.Position;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+
+        public override async ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(_delay, cancellationToken);
+            await _inner.WriteAsync(buffer, cancellationToken);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _inner.DisposeAsync();
+            GC.SuppressFinalize(this);
+        }
+    }
 }
