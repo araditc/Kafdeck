@@ -235,6 +235,7 @@ public enum RecordExportBudgetOutcome
     RowLimit = 2,
     ByteLimit = 3,
     DurationLimit = 4,
+    Indeterminate = 5,
 }
 
 public sealed record RecordExportBudget
