@@ -136,6 +136,11 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
                 "The record schema format is not supported.",
                 false);
         }
+        catch (SchemaDependencyException exception)
+        {
+            return RecordSchemaResult<RecordDecodedValue>.Failed(
+                exception.Failure);
+        }
         catch (Exception exception) when (
             exception is AvroException or
             InvalidProtocolBufferException or
@@ -183,16 +188,25 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
         ReadOnlyMemory<byte> payload)
     {
         var schema = Schema.Parse(document.SchemaText);
-        var reader = new GenericDatumReader<object>(schema, schema);
+        var deserializationBudget = new AvroDeserializationBudget();
+        var reader = new BoundedGenericDatumReader(
+            schema,
+            schema,
+            deserializationBudget);
 
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
-        var decoder = new BinaryDecoder(stream);
+        var decoder = new BoundedAvroDecoder(stream);
         var value = reader.Read(default!, decoder);
 
-        var budget = new StructureBudget();
-        var normalized = NormalizeAvro(value, budget, 0);
+        if (stream.Position != stream.Length)
+        {
+            throw new InvalidDataException("Trailing Avro bytes remain.");
+        }
 
-        return JsonSerializer.SerializeToElement(normalized);
+        var structureBudget = new StructureBudget();
+        var normalized = NormalizeAvro(value, structureBudget, 0);
+
+        return BoundedStructuredProjection.SerializeToElement(normalized);
     }
 
     private async Task<JsonElement> DecodeProtobufAsync(
@@ -231,7 +245,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
             throw new InvalidDataException("Trailing Protobuf bytes remain.");
         }
 
-        return JsonSerializer.SerializeToElement(decoded);
+        return BoundedStructuredProjection.SerializeToElement(decoded);
     }
 
     private async Task<ProtobufFileSet> LoadProtobufFilesAsync(
@@ -276,7 +290,13 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
 
             if (!result.IsSuccess)
             {
-                throw new InvalidOperationException("Referenced Protobuf schema could not be resolved.");
+                throw new SchemaDependencyException(
+                    result.Failure
+                    ?? new RecordSchemaFailure(
+                        RecordSchemaFailureCategory.InvalidResponse,
+                        "schema_dependency_failed",
+                        "Referenced schema could not be resolved safely.",
+                        false));
             }
 
             var document = result.Value!;
@@ -910,4 +930,15 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
     private sealed record MessageTypeInfo(
         DescriptorProto Descriptor,
         string Package);
+
+    private sealed class SchemaDependencyException : Exception
+    {
+        public SchemaDependencyException(RecordSchemaFailure failure)
+            : base(failure.SafeMessage)
+        {
+            Failure = failure ?? throw new ArgumentNullException(nameof(failure));
+        }
+
+        public RecordSchemaFailure Failure { get; }
+    }
 }
