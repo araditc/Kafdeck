@@ -16,9 +16,7 @@ public sealed class SchemaRegistryCacheOptions
     public static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(5);
     public static readonly TimeSpan HardMaxTtl = TimeSpan.FromHours(1);
 
-    public SchemaRegistryCacheOptions(
-        int maxEntries = DefaultMaxEntries,
-        TimeSpan? ttl = null)
+    public SchemaRegistryCacheOptions(int maxEntries = DefaultMaxEntries, TimeSpan? ttl = null)
     {
         if (maxEntries < 1 || maxEntries > HardMaxEntries)
         {
@@ -36,13 +34,13 @@ public sealed class SchemaRegistryCacheOptions
     }
 
     public int MaxEntries { get; }
-
     public TimeSpan Ttl { get; }
 }
 
 public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, IDisposable
 {
     private const int MaxResponseBytes = 4 * 1024 * 1024;
+    private const int MaxSubjectLength = 1_024;
 
     private readonly IReadOnlyDictionary<string, RegistryRuntime> _registries;
     private readonly ConcurrentDictionary<SchemaCacheKey, SchemaCacheEntry> _cache = new();
@@ -86,7 +84,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
                 StringComparer.Ordinal);
     }
 
-    public async Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaByIdAsync(
+    public Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaByIdAsync(
         string clusterId,
         int schemaId,
         KafkaOperationContext operation,
@@ -96,13 +94,78 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
 
         if (schemaId <= 0)
         {
-            return Failed(
+            return Task.FromResult(Failed(
                 RecordSchemaFailureCategory.InvalidResponse,
                 "invalid_schema_id",
                 "Schema ID must be a positive integer.",
-                false);
+                false));
         }
 
+        return GetSchemaCoreAsync(
+            clusterId,
+            new SchemaCacheKey(clusterId, $"id:{schemaId}"),
+            $"schemas/ids/{schemaId}",
+            schemaId,
+            operation,
+            cancellationToken);
+    }
+
+    public Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaBySubjectVersionAsync(
+        string clusterId,
+        string subject,
+        int version,
+        KafkaOperationContext operation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        if (string.IsNullOrWhiteSpace(subject) || subject.Trim().Length > MaxSubjectLength)
+        {
+            return Task.FromResult(Failed(
+                RecordSchemaFailureCategory.InvalidResponse,
+                "invalid_schema_subject",
+                "Schema subject is invalid.",
+                false));
+        }
+
+        if (version <= 0)
+        {
+            return Task.FromResult(Failed(
+                RecordSchemaFailureCategory.InvalidResponse,
+                "invalid_schema_version",
+                "Schema version must be a positive integer.",
+                false));
+        }
+
+        var normalizedSubject = subject.Trim();
+
+        return GetSchemaCoreAsync(
+            clusterId,
+            new SchemaCacheKey(clusterId, $"subject:{normalizedSubject}@{version}"),
+            $"subjects/{Uri.EscapeDataString(normalizedSubject)}/versions/{version}",
+            fallbackSchemaId: 0,
+            operation,
+            cancellationToken);
+    }
+
+    public void Dispose()
+    {
+        foreach (var runtime in _registries.Values)
+        {
+            runtime.Client.Dispose();
+        }
+
+        _cache.Clear();
+    }
+
+    private async Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaCoreAsync(
+        string clusterId,
+        SchemaCacheKey cacheKey,
+        string relativePath,
+        int fallbackSchemaId,
+        KafkaOperationContext operation,
+        CancellationToken cancellationToken)
+    {
         if (cancellationToken.IsCancellationRequested)
         {
             return Cancelled();
@@ -111,7 +174,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         var now = _timeProvider.GetUtcNow();
         if (operation.IsExpired(now))
         {
-            return Timeout();
+            return TimeoutFailure();
         }
 
         if (!_registries.TryGetValue(clusterId, out var runtime))
@@ -123,7 +186,6 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
                 false);
         }
 
-        var cacheKey = new SchemaCacheKey(clusterId, schemaId);
         if (_cache.TryGetValue(cacheKey, out var cached) && cached.ExpiresAtUtc > now)
         {
             return RecordSchemaResult<RecordSchemaDocument>.Success(cached.Document);
@@ -135,42 +197,69 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
             var remaining = operation.Remaining(_timeProvider.GetUtcNow());
             if (remaining <= TimeSpan.Zero)
             {
-                return Timeout();
+                return TimeoutFailure();
             }
 
             deadline.CancelAfter(remaining);
 
-            var response = await GetSchemaResponseAsync(
+            var initial = await GetSchemaResponseAsync(
                     runtime,
-                    schemaId,
-                    format: null,
+                    relativePath,
+                    fallbackSchemaId,
                     deadline.Token)
                 .ConfigureAwait(false);
 
-            if (!response.IsSuccess)
+            if (!initial.IsSuccess)
             {
-                return response;
+                return initial;
             }
 
-            var document = response.Value!;
+            var document = initial.Value!;
+
             if (document.Format == RecordSchemaFormat.Avro &&
                 document.References.Count > 0)
             {
                 var resolved = await GetSchemaResponseAsync(
                         runtime,
-                        schemaId,
-                        "resolved",
+                        AppendFormat(relativePath, "resolved"),
+                        document.Id,
                         deadline.Token)
                     .ConfigureAwait(false);
 
-                if (resolved.IsSuccess)
-                {
-                    document = resolved.Value!;
-                }
-                else
+                if (!resolved.IsSuccess)
                 {
                     return resolved;
                 }
+
+                document = resolved.Value! with
+                {
+                    References = resolved.Value!.References.Count == 0
+                        ? document.References
+                        : resolved.Value.References,
+                };
+            }
+            else if (document.Format == RecordSchemaFormat.Protobuf)
+            {
+                // Confluent's serialized Protobuf representation is a base64
+                // FileDescriptorProto, allowing compiler-free generic decoding.
+                var serialized = await GetSchemaResponseAsync(
+                        runtime,
+                        AppendFormat(relativePath, "serialized"),
+                        document.Id,
+                        deadline.Token)
+                    .ConfigureAwait(false);
+
+                if (!serialized.IsSuccess)
+                {
+                    return serialized;
+                }
+
+                document = serialized.Value! with
+                {
+                    References = serialized.Value!.References.Count == 0
+                        ? document.References
+                        : serialized.Value.References,
+                };
             }
 
             AddCache(cacheKey, document);
@@ -182,7 +271,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         }
         catch (OperationCanceledException)
         {
-            return Timeout();
+            return TimeoutFailure();
         }
         catch (HttpRequestException)
         {
@@ -210,29 +299,13 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         }
     }
 
-    public void Dispose()
-    {
-        foreach (var runtime in _registries.Values)
-        {
-            runtime.Client.Dispose();
-        }
-
-        _cache.Clear();
-    }
-
     private async Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaResponseAsync(
         RegistryRuntime runtime,
-        int schemaId,
-        string? format,
+        string relativePath,
+        int fallbackSchemaId,
         CancellationToken cancellationToken)
     {
-        var relative = $"schemas/ids/{schemaId}";
-        if (!string.IsNullOrEmpty(format))
-        {
-            relative += $"?format={Uri.EscapeDataString(format)}";
-        }
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, relative);
+        using var request = new HttpRequestMessage(HttpMethod.Get, relativePath);
         request.Headers.Accept.ParseAdd("application/vnd.schemaregistry.v1+json");
 
         if (runtime.BasicAuthorization is not null)
@@ -241,10 +314,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         }
 
         using var response = await runtime.Client
-            .SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken)
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -283,10 +353,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
                 false);
         }
 
-        var bytes = await ReadBoundedAsync(
-                response.Content,
-                MaxResponseBytes,
-                cancellationToken)
+        var bytes = await ReadBoundedAsync(response.Content, MaxResponseBytes, cancellationToken)
             .ConfigureAwait(false);
 
         using var json = JsonDocument.Parse(bytes);
@@ -302,6 +369,16 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         var schemaType = root.TryGetProperty("schemaType", out var typeElement)
             ? typeElement.GetString()
             : null;
+
+        var schemaId = root.TryGetProperty("id", out var idElement) &&
+            idElement.TryGetInt32(out var responseId)
+            ? responseId
+            : fallbackSchemaId;
+
+        if (schemaId <= 0)
+        {
+            throw new JsonException("Schema ID is missing.");
+        }
 
         var formatValue = ParseFormat(schemaType);
 
@@ -327,11 +404,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         }
 
         return RecordSchemaResult<RecordSchemaDocument>.Success(
-            new RecordSchemaDocument(
-                schemaId,
-                formatValue,
-                schemaText,
-                references));
+            new RecordSchemaDocument(schemaId, formatValue, schemaText, references));
     }
 
     private RegistryRuntime CreateRuntime(
@@ -369,10 +442,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
     private void AddCache(SchemaCacheKey key, RecordSchemaDocument document)
     {
         var now = _timeProvider.GetUtcNow();
-        _cache[key] = new SchemaCacheEntry(
-            document,
-            now,
-            now + _cacheOptions.Ttl);
+        _cache[key] = new SchemaCacheEntry(document, now, now + _cacheOptions.Ttl);
 
         if (_cache.Count <= _cacheOptions.MaxEntries)
         {
@@ -395,6 +465,12 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
                 _cache.TryRemove(item.Key, out _);
             }
         }
+    }
+
+    private static string AppendFormat(string relativePath, string format)
+    {
+        var separator = relativePath.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        return $"{relativePath}{separator}format={Uri.EscapeDataString(format)}";
     }
 
     private static RecordSchemaFormat ParseFormat(string? schemaType)
@@ -423,8 +499,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         int maxBytes,
         CancellationToken cancellationToken)
     {
-        await using var stream = await content
-            .ReadAsStreamAsync(cancellationToken)
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken)
             .ConfigureAwait(false);
 
         using var buffer = new MemoryStream();
@@ -432,8 +507,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
 
         while (true)
         {
-            var read = await stream
-                .ReadAsync(chunk.AsMemory(), cancellationToken)
+            var read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken)
                 .ConfigureAwait(false);
 
             if (read == 0)
@@ -467,7 +541,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
             "Schema Registry operation was cancelled.",
             false);
 
-    private static RecordSchemaResult<RecordSchemaDocument> Timeout() =>
+    private static RecordSchemaResult<RecordSchemaDocument> TimeoutFailure() =>
         Failed(
             RecordSchemaFailureCategory.Timeout,
             "schema_registry_timeout",
@@ -478,9 +552,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         HttpClient Client,
         AuthenticationHeaderValue? BasicAuthorization);
 
-    private readonly record struct SchemaCacheKey(
-        string ClusterId,
-        int SchemaId);
+    private readonly record struct SchemaCacheKey(string ClusterId, string Identity);
 
     private sealed record SchemaCacheEntry(
         RecordSchemaDocument Document,
