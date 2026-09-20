@@ -17,21 +17,38 @@ public enum SecurityAuditOutcome
     Failed = 3,
 }
 
-public sealed record SecurityAuditEvent(
-    DateTimeOffset TimestampUtc,
-    SecurityAuditEventType EventType,
-    string Principal,
-    string? SessionCorrelationId,
-    string? ClusterId,
-    string? ResourceName,
-    SecurityAuditOutcome Outcome,
-    string ReasonCategory)
+public sealed record SecurityAuditEvent
 {
-    public SecurityAuditEvent
+    public SecurityAuditEvent(
+        DateTimeOffset timestampUtc,
+        SecurityAuditEventType eventType,
+        string principal,
+        string? sessionCorrelationId,
+        string? clusterId,
+        string? resourceName,
+        SecurityAuditOutcome outcome,
+        string reasonCategory)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(Principal);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ReasonCategory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(principal);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reasonCategory);
+        TimestampUtc = timestampUtc;
+        EventType = eventType;
+        Principal = principal;
+        SessionCorrelationId = sessionCorrelationId;
+        ClusterId = clusterId;
+        ResourceName = resourceName;
+        Outcome = outcome;
+        ReasonCategory = reasonCategory;
     }
+
+    public DateTimeOffset TimestampUtc { get; }
+    public SecurityAuditEventType EventType { get; }
+    public string Principal { get; }
+    public string? SessionCorrelationId { get; }
+    public string? ClusterId { get; }
+    public string? ResourceName { get; }
+    public SecurityAuditOutcome Outcome { get; }
+    public string ReasonCategory { get; }
 }
 
 public interface ISecurityAuditSink
