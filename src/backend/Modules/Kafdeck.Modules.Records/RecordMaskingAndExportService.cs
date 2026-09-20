@@ -322,7 +322,6 @@ public sealed class RecordExportService
         var ownershipTransferred = false;
         try
         {
-            var lengthBefore = TryGetStableLength(destination);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var writeTask = Task.Run(async () => await destination.WriteAsync(payload, linked.Token).ConfigureAwait(false), CancellationToken.None);
             var completed = await Task.WhenAny(writeTask, Task.Delay(remaining, CancellationToken.None), Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)).ConfigureAwait(false);
@@ -331,16 +330,18 @@ public sealed class RecordExportService
                 await writeTask.ConfigureAwait(false);
                 return stopwatch.Elapsed >= maxDuration ? BudgetedWriteResult.CompletedAfterDeadline : BudgetedWriteResult.Completed;
             }
+
             linked.Cancel();
             var abortTask = Task.Run(() => { try { destination.Dispose(); } catch (Exception) { } }, CancellationToken.None);
-            var settlementTask = SettleAbortedWriteAsync(destination, writeTask, abortTask, lengthBefore);
+            var settlementTask = SettleAbortedWriteAsync(writeTask, abortTask);
             var settled = await Task.WhenAny(settlementTask, Task.Delay(AbortSettlementGrace, CancellationToken.None)).ConfigureAwait(false);
             if (settled == settlementTask)
             {
-                var result = await settlementTask.ConfigureAwait(false);
+                _ = await settlementTask.ConfigureAwait(false);
                 if (cancellationToken.IsCancellationRequested) cancellationToken.ThrowIfCancellationRequested();
-                return result;
+                return BudgetedWriteResult.Indeterminate;
             }
+
             ownershipTransferred = true;
             OwnPendingWrite(destination, settlementTask);
             if (cancellationToken.IsCancellationRequested) cancellationToken.ThrowIfCancellationRequested();
@@ -349,22 +350,13 @@ public sealed class RecordExportService
         finally { if (!ownershipTransferred) OwnedWriteSlots.Release(); }
     }
 
-    private static async Task<BudgetedWriteResult> SettleAbortedWriteAsync(Stream destination, Task writeTask, Task abortTask, long? lengthBefore)
+    private static async Task<BudgetedWriteResult> SettleAbortedWriteAsync(Task writeTask, Task abortTask)
     {
         try { await abortTask.ConfigureAwait(false); } catch (Exception) { }
-        try
-        {
-            await writeTask.ConfigureAwait(false);
-            var lengthAfter = TryGetStableLength(destination);
-            return lengthBefore.HasValue && lengthAfter.HasValue && lengthBefore.Value == lengthAfter.Value
-                ? BudgetedWriteResult.DeadlineExceeded : BudgetedWriteResult.Indeterminate;
-        }
-        catch (OperationCanceledException) { return BudgetedWriteResult.DeadlineExceeded; }
-        catch (ObjectDisposedException) { return BudgetedWriteResult.DeadlineExceeded; }
-        catch (Exception) { return BudgetedWriteResult.Indeterminate; }
+        try { await writeTask.ConfigureAwait(false); } catch (Exception) { }
+        return BudgetedWriteResult.Indeterminate;
     }
 
-    private static long? TryGetStableLength(Stream destination) { try { return destination.CanSeek ? destination.Length : null; } catch (Exception) { return null; } }
     private static void OwnPendingWrite(Stream destination, Task<BudgetedWriteResult> settlementTask)
     {
         var id = Interlocked.Increment(ref _ownedPendingWriteSequence);
