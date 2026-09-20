@@ -137,6 +137,127 @@ public sealed class ConfluentRecordDecoderTests
         Assert.Equal(7, result.Value.StructuredValue.GetProperty("count").GetInt32());
     }
 
+
+    [Fact]
+    public async Task Protobuf_well_known_timestamp_resolves_without_registry_reference()
+    {
+        const int schemaId = 14;
+
+        var rootMessage = new DescriptorProto { Name = "Root" };
+        rootMessage.Field.Add(new FieldDescriptorProto
+        {
+            Name = "created_at",
+            JsonName = "createdAt",
+            Number = 1,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.Message,
+            TypeName = ".google.protobuf.Timestamp",
+        });
+
+        var file = new FileDescriptorProto
+        {
+            Name = "root.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        file.Dependency.Add("google/protobuf/timestamp.proto");
+        file.MessageType.Add(rootMessage);
+
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Protobuf,
+                Convert.ToBase64String(file.ToByteArray()),
+                []));
+
+        // indexes [0], Root.created_at => Timestamp { seconds = 1, nanos = 2 }.
+        var body = new byte[]
+        {
+            0x00,
+            0x0A, 0x04,
+            0x08, 0x01,
+            0x10, 0x02,
+        };
+
+        var decoder = new ConfluentRecordDecoder(schemas);
+        var result = await decoder.DecodeAsync(Request(schemaId, body), Operation(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        var timestamp = result.Value!.StructuredValue.GetProperty("createdAt");
+        Assert.Equal(1L, timestamp.GetProperty("seconds").GetInt64());
+        Assert.Equal(2, timestamp.GetProperty("nanos").GetInt32());
+    }
+
+    [Fact]
+    public async Task Protobuf_map_entry_projects_to_json_object()
+    {
+        const int schemaId = 15;
+
+        var entry = new DescriptorProto
+        {
+            Name = "LabelsEntry",
+            Options = new MessageOptions { MapEntry = true },
+        };
+        entry.Field.Add(new FieldDescriptorProto
+        {
+            Name = "key",
+            JsonName = "key",
+            Number = 1,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.String,
+        });
+        entry.Field.Add(new FieldDescriptorProto
+        {
+            Name = "value",
+            JsonName = "value",
+            Number = 2,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.Int32,
+        });
+
+        var root = new DescriptorProto { Name = "Root" };
+        root.NestedType.Add(entry);
+        root.Field.Add(new FieldDescriptorProto
+        {
+            Name = "labels",
+            JsonName = "labels",
+            Number = 1,
+            Label = FieldDescriptorProto.Types.Label.Repeated,
+            Type = FieldDescriptorProto.Types.Type.Message,
+            TypeName = ".test.Root.LabelsEntry",
+        });
+
+        var file = new FileDescriptorProto
+        {
+            Name = "root.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        file.MessageType.Add(root);
+
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Protobuf,
+                Convert.ToBase64String(file.ToByteArray()),
+                []));
+
+        // indexes [0], Root.labels map entry { key = "a", value = 7 }.
+        var body = new byte[]
+        {
+            0x00,
+            0x0A, 0x05,
+            0x0A, 0x01, (byte)'a',
+            0x10, 0x07,
+        };
+
+        var decoder = new ConfluentRecordDecoder(schemas);
+        var result = await decoder.DecodeAsync(Request(schemaId, body), Operation(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(7, result.Value!.StructuredValue.GetProperty("labels").GetProperty("a").GetInt32());
+    }
+
     [Fact]
     public async Task Invalid_magic_byte_fails_without_schema_lookup()
     {
