@@ -258,6 +258,155 @@ public sealed class ConfluentRecordDecoderTests
         Assert.Equal(7, result.Value!.StructuredValue.GetProperty("labels").GetProperty("a").GetInt32());
     }
 
+
+    [Fact]
+    public async Task Avro_array_block_count_is_bounded_before_collection_allocation()
+    {
+        const int schemaId = 16;
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Avro,
+                """{"type":"array","items":"null"}""",
+                []));
+
+        // A positive Avro block count of 20,001 with no item bytes.
+        // The bounded decoder must reject the count before GenericDatumReader
+        // can resize/materialize the collection.
+        var body = EncodeAvroLong(20_001);
+        var decoder = new ConfluentRecordDecoder(schemas);
+
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, body),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RecordSchemaFailureCategory.DecodeFailed, result.Failure!.Category);
+        Assert.Equal("record_decode_failed", result.Failure.Code);
+    }
+
+    [Fact]
+    public async Task Avro_map_block_count_is_bounded_before_dictionary_population()
+    {
+        const int schemaId = 18;
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Avro,
+                """{"type":"map","values":"null"}""",
+                []));
+
+        var body = EncodeAvroLong(20_001);
+        var decoder = new ConfluentRecordDecoder(schemas);
+
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, body),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RecordSchemaFailureCategory.DecodeFailed, result.Failure!.Category);
+        Assert.Equal("record_decode_failed", result.Failure.Code);
+    }
+
+    [Fact]
+    public async Task Avro_trailing_bytes_are_rejected()
+    {
+        const int schemaId = 19;
+        const string schema = """
+            {
+              "type":"record",
+              "name":"Order",
+              "fields":[{"name":"count","type":"int"}]
+            }
+            """;
+
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(schemaId, RecordSchemaFormat.Avro, schema, []));
+
+        // int 7 => zig-zag 14; trailing byte must not be silently ignored.
+        var decoder = new ConfluentRecordDecoder(schemas);
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, new byte[] { 0x0E, 0x00 }),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("record_decode_failed", result.Failure!.Code);
+    }
+
+    [Fact]
+    public void Structured_projection_enforces_aggregate_byte_budget_before_document_materialization()
+    {
+        var value = new Dictionary<string, object?>
+        {
+            [new string('k', 80)] = new string('v', 80),
+        };
+
+        Assert.Throws<InvalidDataException>(
+            () => BoundedStructuredProjection.SerializeToElement(value, maxBytes: 64));
+    }
+
+    [Theory]
+    [InlineData(
+        RecordSchemaFailureCategory.Unauthorized,
+        "schema_registry_authorization_denied",
+        false)]
+    [InlineData(
+        RecordSchemaFailureCategory.Unavailable,
+        "schema_registry_unavailable",
+        true)]
+    [InlineData(
+        RecordSchemaFailureCategory.Timeout,
+        "schema_registry_timeout",
+        true)]
+    [InlineData(
+        RecordSchemaFailureCategory.Cancelled,
+        "schema_registry_cancelled",
+        false)]
+    public async Task Protobuf_reference_failure_is_preserved(
+        RecordSchemaFailureCategory category,
+        string code,
+        bool retryable)
+    {
+        const int schemaId = 24;
+
+        var rootFile = new FileDescriptorProto
+        {
+            Name = "root.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        rootFile.Dependency.Add("shared.proto");
+        rootFile.MessageType.Add(new DescriptorProto { Name = "Root" });
+
+        var root = new RecordSchemaDocument(
+            schemaId,
+            RecordSchemaFormat.Protobuf,
+            Convert.ToBase64String(rootFile.ToByteArray()),
+            [new RecordSchemaReference("shared.proto", "shared-value", 1)]);
+
+        var failure = new RecordSchemaFailure(
+            category,
+            code,
+            "Safe dependency failure.",
+            retryable);
+
+        var decoder = new ConfluentRecordDecoder(
+            new ReferenceFailingSchemaPort(root, failure));
+
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, new byte[] { 0x00 }),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(category, result.Failure!.Category);
+        Assert.Equal(code, result.Failure.Code);
+        Assert.Equal(retryable, result.Failure.IsRetryable);
+    }
+
     [Fact]
     public async Task Invalid_magic_byte_fails_without_schema_lookup()
     {
@@ -439,6 +588,29 @@ public sealed class ConfluentRecordDecoderTests
         Assert.Equal(1, schemas.SubjectLookupCount);
     }
 
+
+    private static byte[] EncodeAvroLong(long value)
+    {
+        var zigZag = unchecked((ulong)((value << 1) ^ (value >> 63)));
+        var bytes = new List<byte>();
+
+        do
+        {
+            var current = (byte)(zigZag & 0x7F);
+            zigZag >>= 7;
+
+            if (zigZag != 0)
+            {
+                current |= 0x80;
+            }
+
+            bytes.Add(current);
+        }
+        while (zigZag != 0);
+
+        return bytes.ToArray();
+    }
+
     private static RecordDecodeRequest Request(int schemaId, byte[] body)
     {
         var framed = new byte[5 + body.Length];
@@ -461,6 +633,45 @@ public sealed class ConfluentRecordDecoderTests
     private static KafkaOperationContext Operation() =>
         new(DateTimeOffset.UtcNow.AddSeconds(10));
 
+
+
+    private sealed class ReferenceFailingSchemaPort : IRecordSchemaReadPort
+    {
+        private readonly RecordSchemaDocument _root;
+        private readonly RecordSchemaFailure _failure;
+
+        public ReferenceFailingSchemaPort(
+            RecordSchemaDocument root,
+            RecordSchemaFailure failure)
+        {
+            _root = root;
+            _failure = failure;
+        }
+
+        public Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaByIdAsync(
+            string clusterId,
+            int schemaId,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                schemaId == _root.Id
+                    ? RecordSchemaResult<RecordSchemaDocument>.Success(_root)
+                    : RecordSchemaResult<RecordSchemaDocument>.Failed(
+                        new RecordSchemaFailure(
+                            RecordSchemaFailureCategory.SchemaNotFound,
+                            "schema_not_found",
+                            "Schema not found.",
+                            false)));
+
+        public Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaBySubjectVersionAsync(
+            string clusterId,
+            string subject,
+            int version,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                RecordSchemaResult<RecordSchemaDocument>.Failed(_failure));
+    }
 
     private sealed class FailingSchemaPort : IRecordSchemaReadPort
     {
