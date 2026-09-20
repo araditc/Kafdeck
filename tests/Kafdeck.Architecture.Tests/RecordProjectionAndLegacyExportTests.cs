@@ -17,12 +17,7 @@ public sealed class RecordProjectionAndLegacyExportTests
             0,
             RecordAnchor.Earliest(),
             RecordReadDirection.Forward,
-            new RecordOperationBudget(
-                maxRecords: 10,
-                maxRawBytes: 4096,
-                maxProjectedBytes: 1,
-                maxDuration: TimeSpan.FromSeconds(1),
-                maxRecordsPerSecond: 10));
+            new RecordOperationBudget(10, 4096, 1, TimeSpan.FromSeconds(1), 10));
         var raw = new KafkaRawRecord(
             42,
             DateTimeOffset.UtcNow,
@@ -66,8 +61,8 @@ public sealed class RecordProjectionAndLegacyExportTests
                 new RecordExportRequest(RecordExportFormat.Ndjson),
                 evaluator,
                 identity: null,
-                denied,
-                CancellationToken.None,
+                destination: denied,
+                cancellationToken: CancellationToken.None,
                 legacyDeploymentAuthorized: false));
 
         await using var allowed = new MemoryStream();
@@ -76,8 +71,8 @@ public sealed class RecordProjectionAndLegacyExportTests
             new RecordExportRequest(RecordExportFormat.Ndjson),
             evaluator,
             identity: null,
-            allowed,
-            CancellationToken.None,
+            destination: allowed,
+            cancellationToken: CancellationToken.None,
             legacyDeploymentAuthorized: true);
 
         Assert.Equal(RecordExportBudgetOutcome.Complete, summary.Outcome);
