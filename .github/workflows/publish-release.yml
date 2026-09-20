@@ -279,7 +279,7 @@ jobs:
           docker buildx imagetools create             --tag "$IMAGE:$VERSION"             --tag "$IMAGE:sha-$SOURCE_SHA"             "$IMAGE@$DIGEST"
 
           for ref in "$IMAGE:$VERSION" "$IMAGE:sha-$SOURCE_SHA"; do
-            actual_digest="$(docker buildx imagetools inspect "$ref" | awk '$1 == "Digest:" {print $2; exit}')"
+            actual_digest="$(docker buildx imagetools inspect "$ref" | awk '$1 == "Digest:" && !seen++ {digest=$2} END {print digest}')"
             if [[ "$actual_digest" != "$DIGEST" ]]; then
               echo "::error::$ref resolved to $actual_digest, expected $DIGEST"
               exit 1
