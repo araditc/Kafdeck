@@ -147,6 +147,22 @@ public static class KafdeckOidcServiceCollectionExtensions
                                 issuer,
                                 oidc.GroupClaim,
                                 DateTimeOffset.UtcNow);
+
+                            if (OperatorSessionContextFactory.TryCreate(context.Principal, out var session) && session is not null)
+                            {
+                                var audit = context.HttpContext.RequestServices.GetRequiredService<ISecurityAuditSink>();
+                                return audit.WriteAsync(
+                                    new SecurityAuditEvent(
+                                        DateTimeOffset.UtcNow,
+                                        SecurityAuditEventType.LoginSucceeded,
+                                        SecurityAuditPrincipal.FromOperator(session.Identity),
+                                        session.SessionId.Value.ToString("N"),
+                                        null,
+                                        null,
+                                        SecurityAuditOutcome.Succeeded,
+                                        "oidc_validated"),
+                                    context.HttpContext.RequestAborted).AsTask();
+                            }
                         }
                         catch (Exception exception) when (
                             exception is ArgumentException or
@@ -480,8 +496,23 @@ public static class KafdeckOidcEndpointExtensions
             });
         }).WithName("v02-auth-session");
 
-        app.MapPost("/api/v1/auth/logout", async (HttpContext context) =>
+        app.MapPost("/api/v1/auth/logout", async (HttpContext context, ISecurityAuditSink audit) =>
         {
+            var principal = OperatorSessionContextFactory.TryCreate(context.User, out var session) && session is not null
+                ? SecurityAuditPrincipal.FromOperator(session.Identity)
+                : SecurityAuditPrincipal.Anonymous;
+            await audit.WriteAsync(
+                new SecurityAuditEvent(
+                    DateTimeOffset.UtcNow,
+                    SecurityAuditEventType.Logout,
+                    principal,
+                    session?.SessionId.Value.ToString("N"),
+                    null,
+                    null,
+                    SecurityAuditOutcome.Succeeded,
+                    "logout"),
+                context.RequestAborted).ConfigureAwait(false);
+
             await context.SignOutAsync(KafdeckOidcDefaults.CookieScheme);
             await context.SignOutAsync(
                 KafdeckOidcDefaults.OidcScheme,
