@@ -137,6 +137,21 @@ public static class KafdeckOidcServiceCollectionExtensions
 
                 options.Events = new OpenIdConnectEvents
                 {
+                    OnRemoteFailure = async context =>
+                    {
+                        var audit = context.HttpContext.RequestServices.GetRequiredService<ISecurityAuditSink>();
+                        await audit.WriteAsync(
+                            new SecurityAuditEvent(
+                                DateTimeOffset.UtcNow,
+                                SecurityAuditEventType.LoginFailed,
+                                SecurityAuditPrincipal.Anonymous,
+                                null,
+                                null,
+                                null,
+                                SecurityAuditOutcome.Failed,
+                                "oidc_remote_failure"),
+                            context.HttpContext.RequestAborted).ConfigureAwait(false);
+                    },
                     OnTokenValidated = context =>
                     {
                         try
