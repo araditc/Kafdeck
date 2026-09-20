@@ -136,6 +136,43 @@ public sealed class SchemaRegistryReadAdapterTests
         Assert.Contains("B", second.Value!.SchemaText, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public async Task Subject_version_lookup_is_get_only_and_uses_response_schema_id()
+    {
+        Uri? observed = null;
+        var handler = new StubHandler(request =>
+        {
+            observed = request.RequestUri;
+            return Json(HttpStatusCode.OK, """
+            {
+              "id":55,
+              "schemaType":"JSON",
+              "schema":"{\"type\":\"object\"}"
+            }
+            """);
+        });
+
+        using var adapter = CreateAdapter("cluster-a", handler);
+
+        var result = await adapter.GetSchemaBySubjectVersionAsync(
+            "cluster-a",
+            "orders-value",
+            3,
+            Operation(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(55, result.Value!.Id);
+        Assert.Equal(RecordSchemaFormat.JsonSchema, result.Value.Format);
+        Assert.NotNull(observed);
+        Assert.EndsWith(
+            "/subjects/orders-value/versions/3",
+            observed!.AbsolutePath,
+            StringComparison.Ordinal);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
     [Fact]
     public async Task Basic_auth_uses_secret_references_and_never_mutates_registry()
     {
