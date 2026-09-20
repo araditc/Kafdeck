@@ -87,7 +87,27 @@ public static class V03RecordApiContract
         }
       }
     }
-  }
+  },
+  "components": {
+    "securitySchemes": {
+      "oidcSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "Kafdeck.Session",
+        "description": "Server-managed Kafdeck OIDC operator session."
+      },
+      "deploymentToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Kafdeck-Access-Token",
+        "description": "Legacy deployment access boundary; not an operator identity."
+      }
+    }
+  },
+  "security": [
+    { "oidcSession": [] },
+    { "deploymentToken": [] }
+  ]
 }
 """;
 }
