@@ -118,7 +118,7 @@ public sealed class DeploymentAccessTokenMiddleware
             : expectedToken;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, ISecurityAuditSink audit)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -128,11 +128,33 @@ public sealed class DeploymentAccessTokenMiddleware
         if (DeploymentAccessTokenValidator.Matches(_expectedToken, providedToken))
         {
             _failureLimiter.Reset(clientKey);
+            await audit.WriteAsync(
+                new SecurityAuditEvent(
+                    DateTimeOffset.UtcNow,
+                    SecurityAuditEventType.LegacyTokenRequest,
+                    SecurityAuditPrincipal.LegacyDeployment,
+                    null,
+                    null,
+                    null,
+                    SecurityAuditOutcome.Succeeded,
+                    "deployment_token_accepted"),
+                context.RequestAborted).ConfigureAwait(false);
             await _next(context);
             return;
         }
 
         var withinLimit = _failureLimiter.TryRecordFailure(clientKey, DateTimeOffset.UtcNow);
+        await audit.WriteAsync(
+            new SecurityAuditEvent(
+                DateTimeOffset.UtcNow,
+                SecurityAuditEventType.LegacyTokenRequest,
+                SecurityAuditPrincipal.LegacyDeployment,
+                null,
+                null,
+                null,
+                SecurityAuditOutcome.Denied,
+                withinLimit ? "deployment_token_rejected" : "deployment_token_rate_limited"),
+            context.RequestAborted).ConfigureAwait(false);
         context.Response.StatusCode = withinLimit
             ? StatusCodes.Status401Unauthorized
             : StatusCodes.Status429TooManyRequests;
