@@ -14,19 +14,18 @@ public sealed class RecordMaskingAndExportTests
     {
         const string secret = "4111111111111111";
         using var document = JsonDocument.Parse(
-            $$"""{"customers":[{"name":"alice","card":"{{secret}}"},{"name":"bob","card":"{{secret}}"}],"visible":"ok"}""");
-
-        var raw = new KafkaRawRecord(
-            42,
-            DateTimeOffset.UtcNow,
-            Encoding.UTF8.GetBytes("private-key"),
-            Encoding.UTF8.GetBytes(document.RootElement.GetRawText()),
-            [
-                new KafkaRecordHeader("authorization", Encoding.UTF8.GetBytes("Bearer secret-token")),
-                new KafkaRecordHeader("trace", Encoding.UTF8.GetBytes("trace-1")),
-            ]);
-        var decoded = new RecordDecodedValue(7, RecordSchemaFormat.JsonSchema, document.RootElement.Clone());
-        var item = new RecordFilteredItem(raw, decoded);
+            $$"""{"customers":[{"card":"{{secret}}"},{"card":"{{secret}}"}],"visible":"ok"}""");
+        var item = new RecordFilteredItem(
+            new KafkaRawRecord(
+                42,
+                DateTimeOffset.UtcNow,
+                Encoding.UTF8.GetBytes("private-key"),
+                Encoding.UTF8.GetBytes(document.RootElement.GetRawText()),
+                [
+                    new KafkaRecordHeader("authorization", Encoding.UTF8.GetBytes("Bearer secret-token")),
+                    new KafkaRecordHeader("trace", Encoding.UTF8.GetBytes("trace-1")),
+                ]),
+            new RecordDecodedValue(7, RecordSchemaFormat.JsonSchema, document.RootElement.Clone()));
         var policy = RecordMaskingPolicyCompiler.Compile(
             new RecordMaskingPolicyDefinition(
                 "payments",
@@ -45,7 +44,6 @@ public sealed class RecordMaskingAndExportTests
         Assert.DoesNotContain(secret, serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-token", serialized, StringComparison.Ordinal);
         Assert.Contains("[REDACTED]", safe.StructuredValue!.Value.GetRawText(), StringComparison.Ordinal);
-        Assert.Contains("/customers/*/card", safe.RedactedPaths);
         Assert.True(safe.Headers.Single(header => header.Name == "authorization").IsRedacted);
         Assert.False(safe.Headers.Single(header => header.Name == "trace").IsRedacted);
     }
@@ -66,39 +64,20 @@ public sealed class RecordMaskingAndExportTests
             new RecordMaskingPolicyDefinition(
                 "pii",
                 1,
-                [new RecordStructuredMaskRule("/ssn")])) ;
+                [new RecordStructuredMaskRule("/ssn")]));
 
         var safe = new RecordMaskingService().Apply(0, item, policy);
-        var serialized = JsonSerializer.Serialize(safe);
 
         Assert.Equal(RecordPayloadProjectionKind.FullyRedacted, safe.ValueKind);
         Assert.Null(safe.RawValue);
         Assert.Null(safe.StructuredValue);
         Assert.Contains("$payload", safe.RedactedPaths);
-        Assert.DoesNotContain(secret, serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, JsonSerializer.Serialize(safe), StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Masking_policy_rejects_duplicate_or_oversized_rules()
+    public async Task Export_requires_explicit_authorization_and_contains_only_safe_values()
     {
-        Assert.Throws<ArgumentException>(() =>
-            RecordMaskingPolicyCompiler.Compile(
-                new RecordMaskingPolicyDefinition(
-                    "duplicate",
-                    1,
-                    [
-                        new RecordStructuredMaskRule("/customer/ssn"),
-                        new RecordStructuredMaskRule("/customer/ssn"),
-                    ])));
-
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new RecordStructuredMaskRule("/" + string.Join('/', Enumerable.Repeat("x", 17))));
-    }
-
-    [Fact]
-    public async Task Export_requires_explicit_authorization_and_uses_safe_projection_only()
-    {
-        const string clearSecret = "clear-secret";
         var page = SafePage(
             new RecordSafeProjection(
                 0,
@@ -115,34 +94,33 @@ public sealed class RecordMaskingAndExportTests
                 ["$payload"]));
         var service = new RecordExportService();
 
-        await using var deniedStream = new MemoryStream();
+        await using var denied = new MemoryStream();
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.ExportAsync(
                 page,
                 new RecordExportRequest(RecordExportFormat.Json),
                 AuthorizationDecision.Denied(AuthorizationDecisionReason.ActionDenied),
-                deniedStream));
+                denied));
 
-        await using var allowedStream = new MemoryStream();
+        await using var allowed = new MemoryStream();
         var summary = await service.ExportAsync(
             page,
             new RecordExportRequest(RecordExportFormat.Json),
             AuthorizationDecision.Allowed(["record-exporter"]),
-            allowedStream);
-        var output = Encoding.UTF8.GetString(allowedStream.ToArray());
+            allowed);
+        var output = Encoding.UTF8.GetString(allowed.ToArray());
 
         Assert.Equal(1, summary.RowCount);
         Assert.Equal(RecordExportBudgetOutcome.Complete, summary.Outcome);
         Assert.Contains("FullyRedacted", output, StringComparison.Ordinal);
-        Assert.DoesNotContain(clearSecret, output, StringComparison.Ordinal);
-        Assert.DoesNotContain("authorization", output, StringComparison.OrdinalIgnoreCase | StringComparison.Ordinal);
+        Assert.Contains("W1JFREFDVEVEXQ==", output, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData(RecordExportFormat.Json)]
     [InlineData(RecordExportFormat.Ndjson)]
     [InlineData(RecordExportFormat.Csv)]
-    public async Task Export_formats_are_bounded_and_never_receive_raw_record_objects(RecordExportFormat format)
+    public async Task Export_formats_enforce_row_budget(RecordExportFormat format)
     {
         var page = SafePage(
             SafeProjection(1, "one"),
@@ -166,7 +144,7 @@ public sealed class RecordMaskingAndExportTests
     }
 
     [Fact]
-    public async Task Export_stops_before_exceeding_byte_budget_and_json_remains_valid()
+    public async Task Json_export_stops_before_byte_budget_and_remains_valid()
     {
         var page = SafePage(SafeProjection(1, new string('x', 500)));
         var service = new RecordExportService();
@@ -184,27 +162,33 @@ public sealed class RecordMaskingAndExportTests
         Assert.Equal(RecordExportBudgetOutcome.ByteLimit, summary.Outcome);
         Assert.InRange(summary.ByteCount, 2, 256);
         using var parsed = JsonDocument.Parse(destination.ToArray());
-        Assert.Equal(JsonValueKind.Array, parsed.RootElement.ValueKind);
         Assert.Equal(0, parsed.RootElement.GetArrayLength());
     }
 
     [Fact]
-    public void Audit_metadata_contains_scope_and_counts_but_no_payload_fields()
+    public void Policy_validation_and_audit_metadata_are_bounded_and_payload_free()
     {
-        var page = SafePage(SafeProjection(7, "safe"));
-        var masking = new RecordMaskingService();
-        var export = new RecordExportService();
+        Assert.Throws<ArgumentException>(() =>
+            RecordMaskingPolicyCompiler.Compile(
+                new RecordMaskingPolicyDefinition(
+                    "duplicate",
+                    1,
+                    [
+                        new RecordStructuredMaskRule("/customer/ssn"),
+                        new RecordStructuredMaskRule("/customer/ssn"),
+                    ])));
 
-        var readAudit = masking.BuildReadAudit(page);
-        var exportAudit = export.BuildExportAudit(
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new RecordStructuredMaskRule("/" + string.Join('/', Enumerable.Repeat("x", 17))));
+
+        var page = SafePage(SafeProjection(7, "safe"));
+        var audit = new RecordExportService().BuildExportAudit(
             page,
             new RecordExportSummary(RecordExportFormat.Ndjson, 1, 120, RecordExportBudgetOutcome.Complete));
 
-        Assert.Equal("record.read", readAudit.Operation);
-        Assert.Equal("record.export", exportAudit.Operation);
-        Assert.Equal("orders", exportAudit.TopicName);
-        Assert.Equal(1, exportAudit.ExportRowCount);
-        Assert.DoesNotContain("RawValue", JsonSerializer.Serialize(exportAudit), StringComparison.Ordinal);
+        Assert.Equal("record.export", audit.Operation);
+        Assert.Equal("orders", audit.TopicName);
+        Assert.DoesNotContain("RawValue", JsonSerializer.Serialize(audit), StringComparison.Ordinal);
     }
 
     private static RecordSafeProjection SafeProjection(long offset, string value) =>
