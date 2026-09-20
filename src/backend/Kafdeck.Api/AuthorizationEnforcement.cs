@@ -67,13 +67,18 @@ public static class KafdeckAuthorizationEndpointExtensions
             var request = new AuthorizationRequest(action, clusterId, resourceName);
             var outcome = authorization.Authorize(http.User, request);
 
-            var audit = http.RequestServices.GetRequiredService<ISecurityAuditSink>();
+            var shouldAudit = outcome == KafdeckAuthorizationOutcome.Forbidden ||
+                (outcome == KafdeckAuthorizationOutcome.Allowed &&
+                 action is AuthorizationAction.BrokerConfigRead or AuthorizationAction.TopicConfigRead);
+            var audit = shouldAudit
+                ? http.RequestServices.GetRequiredService<ISecurityAuditSink>()
+                : null;
             if (outcome == KafdeckAuthorizationOutcome.Forbidden)
             {
                 var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
                     ? SecurityAuditPrincipal.FromOperator(session.Identity)
                     : SecurityAuditPrincipal.Anonymous;
-                await audit.WriteAsync(
+                await audit!.WriteAsync(
                     new SecurityAuditEvent(
                         DateTimeOffset.UtcNow,
                         SecurityAuditEventType.AuthorizationDenied,
@@ -92,7 +97,7 @@ public static class KafdeckAuthorizationEndpointExtensions
                 var principal = OperatorSessionContextFactory.TryCreate(http.User, out var sensitiveSession) && sensitiveSession is not null
                     ? SecurityAuditPrincipal.FromOperator(sensitiveSession.Identity)
                     : SecurityAuditPrincipal.LegacyDeployment;
-                await audit.WriteAsync(
+                await audit!.WriteAsync(
                     new SecurityAuditEvent(
                         DateTimeOffset.UtcNow,
                         SecurityAuditEventType.SensitiveRead,
