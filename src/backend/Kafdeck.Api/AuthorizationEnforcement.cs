@@ -77,6 +77,7 @@ public static class KafdeckAuthorizationEndpointExtensions
                     detail: "An authenticated operator session is required."),
                 _ => Results.Problem(
                     statusCode: StatusCodes.Status403Forbidden,
+                    type: "urn:kafdeck:problem:operator-authorization-denied",
                     title: "Forbidden",
                     detail: "The authenticated operator is not authorized for this operation."),
             };
