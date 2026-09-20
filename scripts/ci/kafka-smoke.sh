@@ -73,9 +73,13 @@ fi
 kafka_topics='/opt/kafka/bin/kafka-topics.sh'
 kafka_configs='/opt/kafka/bin/kafka-configs.sh'
 kafka_acls='/opt/kafka/bin/kafka-acls.sh'
+kafka_producer='/opt/kafka/bin/kafka-console-producer.sh'
 
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --create --topic kafdeck-ci-smoke --partitions 1 --replication-factor 1
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --describe --topic kafdeck-ci-smoke
+printf 'kafdeck-record-1\nkafdeck-record-2\nkafdeck-record-3\n' | \
+  docker exec -i kafdeck-kafka "$kafka_producer" --bootstrap-server localhost:9092 --topic kafdeck-ci-smoke >/dev/null
+
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${KAFDECK_SCRAM256_PASSWORD}]" --entity-type users --entity-name kafdeck-scram256 >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-512=[iterations=4096,password=${KAFDECK_SCRAM512_PASSWORD}]" --entity-type users --entity-name kafdeck-scram512 >/dev/null
 
@@ -83,7 +87,7 @@ docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --a
 # This keeps an authorization-fixture defect from obscuring TLS/SASL compatibility.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter 'FullyQualifiedName~KafkaAdapterIntegrationTests&FullyQualifiedName!~KafkaAdapterIntegrationTestsAuthorization'
+  --filter 'FullyQualifiedName~KafkaAdapterIntegrationTests&FullyQualifiedName!~KafkaAdapterIntegrationTestsAuthorization|FullyQualifiedName~KafkaRecordReadAdapterIntegrationTests'
 
 # Explicitly retain metadata Describe while denying DescribeConfigs so the second
 # pass exercises genuine partial access rather than a total authorization failure.
@@ -96,4 +100,4 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
 
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke
 
-echo "Kafka ${KAFDECK_KAFKA_VERSION:-4.3.1} W10 compatibility, security and partial-access matrix passed."
+echo "Kafka ${KAFDECK_KAFKA_VERSION:-4.3.1} W10 compatibility, security, record-read and partial-access matrix passed."
