@@ -19,10 +19,14 @@ internal sealed class BoundedAvroDecoder : Decoder
     private const int MaxScalarBytes = (int)RecordOperationBudget.HardMaxRawBytes;
 
     private readonly Stream _stream;
+    private readonly DecodeExecutionGuard _guard;
 
-    public BoundedAvroDecoder(Stream stream)
+    public BoundedAvroDecoder(
+        Stream stream,
+        DecodeExecutionGuard guard)
     {
         _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+        _guard = guard ?? throw new ArgumentNullException(nameof(guard));
 
         if (!stream.CanRead)
         {
@@ -32,6 +36,7 @@ internal sealed class BoundedAvroDecoder : Decoder
 
     public void ReadNull()
     {
+        _guard.CheckPeriodically();
     }
 
     public bool ReadBoolean()
@@ -58,6 +63,8 @@ internal sealed class BoundedAvroDecoder : Decoder
 
     public long ReadLong()
     {
+        _guard.CheckPeriodically();
+
         ulong raw = 0;
         var shift = 0;
 
@@ -245,6 +252,8 @@ internal sealed class BoundedAvroDecoder : Decoder
 
     private int ReadByteChecked()
     {
+        _guard.CheckPeriodically();
+
         var value = _stream.ReadByte();
         if (value < 0)
         {
@@ -266,10 +275,14 @@ internal sealed class BoundedAvroDecoder : Decoder
 
     private void ReadExact(Span<byte> destination)
     {
+        _guard.CheckPeriodically();
+
         var read = 0;
 
         while (read < destination.Length)
         {
+            _guard.CheckPeriodically();
+
             var count = _stream.Read(destination[read..]);
             if (count <= 0)
             {
@@ -287,6 +300,8 @@ internal sealed class BoundedAvroDecoder : Decoder
 
         while (remaining > 0)
         {
+            _guard.CheckPeriodically();
+
             var chunk = Math.Min(remaining, scratch.Length);
             ReadExact(scratch[..chunk]);
             remaining -= chunk;
@@ -537,10 +552,18 @@ internal sealed class AvroDeserializationBudget
 {
     public const int MaxNodes = 20_000;
 
+    private readonly DecodeExecutionGuard _guard;
     private int _reservedNodes;
+
+    public AvroDeserializationBudget(DecodeExecutionGuard guard)
+    {
+        _guard = guard ?? throw new ArgumentNullException(nameof(guard));
+    }
 
     public void Reserve(int count)
     {
+        _guard.CheckPeriodically();
+
         if (count < 0 ||
             _reservedNodes > MaxNodes - count)
         {
@@ -552,6 +575,8 @@ internal sealed class AvroDeserializationBudget
 
     public void ValidateCollectionSize(int size)
     {
+        _guard.CheckPeriodically();
+
         if (size < 0 || size > MaxNodes)
         {
             throw new InvalidDataException("Avro collection exceeds the configured bound.");
@@ -560,6 +585,8 @@ internal sealed class AvroDeserializationBudget
 
     public void ValidateFixedSize(int size)
     {
+        _guard.CheckPeriodically();
+
         if (size < 0 || size > RecordOperationBudget.HardMaxRawBytes)
         {
             throw new InvalidDataException("Avro fixed value exceeds the configured bound.");
