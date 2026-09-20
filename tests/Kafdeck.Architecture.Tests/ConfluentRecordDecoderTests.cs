@@ -407,6 +407,210 @@ public sealed class ConfluentRecordDecoderTests
         Assert.Equal(retryable, result.Failure.IsRetryable);
     }
 
+
+    [Fact]
+    public async Task Protobuf_oneof_keeps_only_the_last_member_on_wire()
+    {
+        const int schemaId = 25;
+
+        var root = new DescriptorProto { Name = "Root" };
+        root.OneofDecl.Add(new OneofDescriptorProto { Name = "choice" });
+        root.Field.Add(new FieldDescriptorProto
+        {
+            Name = "first",
+            JsonName = "first",
+            Number = 1,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.String,
+            OneofIndex = 0,
+        });
+        root.Field.Add(new FieldDescriptorProto
+        {
+            Name = "second",
+            JsonName = "second",
+            Number = 2,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.String,
+            OneofIndex = 0,
+        });
+
+        var file = new FileDescriptorProto
+        {
+            Name = "oneof.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        file.MessageType.Add(root);
+
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Protobuf,
+                Convert.ToBase64String(file.ToByteArray()),
+                []));
+
+        // indexes [0], first = "a", then second = "b".
+        var body = new byte[]
+        {
+            0x00,
+            0x0A, 0x01, (byte)'a',
+            0x12, 0x01, (byte)'b',
+        };
+
+        var decoder = new ConfluentRecordDecoder(schemas);
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, body),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        var value = result.Value!.StructuredValue;
+        Assert.False(value.TryGetProperty("first", out _));
+        Assert.Equal("b", value.GetProperty("second").GetString());
+    }
+
+    [Fact]
+    public async Task Protobuf_map_entries_apply_implicit_defaults_for_missing_key_or_value()
+    {
+        const int schemaId = 26;
+
+        var entry = new DescriptorProto
+        {
+            Name = "LabelsEntry",
+            Options = new MessageOptions { MapEntry = true },
+        };
+        entry.Field.Add(new FieldDescriptorProto
+        {
+            Name = "key",
+            JsonName = "key",
+            Number = 1,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.String,
+        });
+        entry.Field.Add(new FieldDescriptorProto
+        {
+            Name = "value",
+            JsonName = "value",
+            Number = 2,
+            Label = FieldDescriptorProto.Types.Label.Optional,
+            Type = FieldDescriptorProto.Types.Type.Int32,
+        });
+
+        var root = new DescriptorProto { Name = "Root" };
+        root.NestedType.Add(entry);
+        root.Field.Add(new FieldDescriptorProto
+        {
+            Name = "labels",
+            JsonName = "labels",
+            Number = 1,
+            Label = FieldDescriptorProto.Types.Label.Repeated,
+            Type = FieldDescriptorProto.Types.Type.Message,
+            TypeName = ".test.Root.LabelsEntry",
+        });
+
+        var file = new FileDescriptorProto
+        {
+            Name = "map-defaults.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        file.MessageType.Add(root);
+
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Protobuf,
+                Convert.ToBase64String(file.ToByteArray()),
+                []));
+
+        // indexes [0]
+        // labels entry 1: key = "a", value omitted => 0
+        // labels entry 2: key omitted => "", value = 7
+        var body = new byte[]
+        {
+            0x00,
+            0x0A, 0x03,
+            0x0A, 0x01, (byte)'a',
+            0x0A, 0x02,
+            0x10, 0x07,
+        };
+
+        var decoder = new ConfluentRecordDecoder(schemas);
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, body),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        var labels = result.Value!.StructuredValue.GetProperty("labels");
+        Assert.Equal(0, labels.GetProperty("a").GetInt32());
+        Assert.Equal(7, labels.GetProperty(string.Empty).GetInt32());
+    }
+
+    [Fact]
+    public async Task Decode_deadline_is_checked_during_structured_traversal()
+    {
+        const int schemaId = 27;
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.JsonSchema,
+                """{"type":"array","items":{"type":"integer"}}""",
+                []));
+
+        var values = Enumerable.Range(0, 256).ToArray();
+        var body = JsonSerializer.SerializeToUtf8Bytes(values);
+
+        var start = new DateTimeOffset(
+            2026,
+            9,
+            20,
+            20,
+            0,
+            0,
+            TimeSpan.Zero);
+
+        var time = new SteppedTimeProvider(
+            start,
+            TimeSpan.FromMilliseconds(40));
+
+        var decoder = new ConfluentRecordDecoder(schemas, time);
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, body),
+            new KafkaOperationContext(start + TimeSpan.FromMilliseconds(180)),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RecordSchemaFailureCategory.Timeout, result.Failure!.Category);
+        Assert.Equal("record_decode_timeout", result.Failure.Code);
+    }
+
+    [Fact]
+    public void Protobuf_nested_decode_uses_bounded_slices_instead_of_per_level_byte_arrays()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(
+            root,
+            "src",
+            "backend",
+            "Infrastructure",
+            "Kafdeck.Infrastructure.SchemaRegistry",
+            "ConfluentRecordDecoder.cs"));
+
+        Assert.DoesNotContain(
+            "ReadBytes().ToByteArray()",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "new CodedInputStream",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ReadSubMessage()",
+            source,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Invalid_magic_byte_fails_without_schema_lookup()
     {
@@ -611,6 +815,25 @@ public sealed class ConfluentRecordDecoderTests
         return bytes.ToArray();
     }
 
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? current = new(AppContext.BaseDirectory);
+
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "Kafdeck.slnx")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            "Unable to locate Kafdeck repository root.");
+    }
+
     private static RecordDecodeRequest Request(int schemaId, byte[] body)
     {
         var framed = new byte[5 + body.Length];
@@ -695,6 +918,28 @@ public sealed class ConfluentRecordDecoderTests
             KafkaOperationContext operation,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+
+    private sealed class SteppedTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now;
+        private readonly TimeSpan _step;
+
+        public SteppedTimeProvider(
+            DateTimeOffset initial,
+            TimeSpan step)
+        {
+            _now = initial;
+            _step = step;
+        }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            var current = _now;
+            _now += _step;
+            return current;
+        }
     }
 
     private sealed class StubSchemaPort : IRecordSchemaReadPort
