@@ -78,7 +78,7 @@ public sealed class ConfigurationSecurityBoundaryTests
     }
 
     [Fact]
-    public void Loader_parses_oidc_contract_but_activation_fails_closed_until_w13()
+    public void Loader_parses_valid_oidc_contract()
     {
         var values = new Dictionary<string, string?>
         {
@@ -104,10 +104,51 @@ public sealed class ConfigurationSecurityBoundaryTests
         Assert.Equal("kafdeck", options.Deployment.Oidc.ClientId);
         Assert.Equal(new[] { "openid", "profile" }, options.Deployment.Oidc.Scopes);
 
+        KafdeckConfigurationValidator.ValidateAndThrow(options);
+    }
+
+    [Fact]
+    public void Non_loopback_oidc_binding_requires_https()
+    {
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "http://0.0.0.0:8080",
+                null,
+                AccessMode.Oidc,
+                new OidcProfile(
+                    "https://idp.example",
+                    "kafdeck",
+                    null,
+                    "groups",
+                    new[] { "openid", "profile" })),
+            Array.Empty<ClusterProfile>());
+
         var exception = Assert.Throws<KafdeckConfigurationException>(
             () => KafdeckConfigurationValidator.ValidateAndThrow(options));
 
-        Assert.Contains("cannot be activated until the W13 OIDC session adapter", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("requires HTTPS", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Oidc_mode_rejects_deployment_access_token()
+    {
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "https://0.0.0.0:8443",
+                SecretReference.Parse("env:KAFDECK_DEPLOYMENT_TOKEN"),
+                AccessMode.Oidc,
+                new OidcProfile(
+                    "https://idp.example",
+                    "kafdeck",
+                    null,
+                    "groups",
+                    new[] { "openid", "profile" })),
+            Array.Empty<ClusterProfile>());
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains("must not configure a deployment access token", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

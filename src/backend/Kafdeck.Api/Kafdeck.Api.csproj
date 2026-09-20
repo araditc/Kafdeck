@@ -4,6 +4,9 @@
     <RootNamespace>Kafdeck.Api</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Kafdeck.Core/Kafdeck.Core.csproj" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Clusters/Kafdeck.Modules.Clusters.csproj" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />

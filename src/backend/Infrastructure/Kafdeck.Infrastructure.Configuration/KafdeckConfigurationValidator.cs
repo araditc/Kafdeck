@@ -92,6 +92,17 @@ public static class KafdeckConfigurationValidator
                 break;
 
             case AccessMode.Oidc:
+                if (deployment.AccessToken is not null)
+                {
+                    errors.Add("OIDC access mode must not configure a deployment access token.");
+                }
+
+                if (!IsLoopbackBinding(deployment.ListenUrl) &&
+                    !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("Non-loopback OIDC deployment binding requires HTTPS.");
+                }
+
                 if (deployment.Oidc is null)
                 {
                     errors.Add("OIDC access mode requires OIDC configuration.");
@@ -101,7 +112,6 @@ public static class KafdeckConfigurationValidator
                     ValidateOidc(deployment.Oidc, errors);
                 }
 
-                errors.Add("OIDC access mode is defined by v0.2 contracts but cannot be activated until the W13 OIDC session adapter is implemented.");
                 break;
 
             default:
