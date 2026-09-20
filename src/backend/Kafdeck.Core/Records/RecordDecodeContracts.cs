@@ -117,6 +117,13 @@ public interface IRecordSchemaReadPort
         int schemaId,
         KafkaOperationContext operation,
         CancellationToken cancellationToken);
+
+    Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaBySubjectVersionAsync(
+        string clusterId,
+        string subject,
+        int version,
+        KafkaOperationContext operation,
+        CancellationToken cancellationToken);
 }
 
 public interface IRecordDecodePort
