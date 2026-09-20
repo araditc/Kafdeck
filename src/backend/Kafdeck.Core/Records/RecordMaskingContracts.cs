@@ -14,7 +14,7 @@ public sealed record RecordStructuredMaskRule
         ArgumentNullException.ThrowIfNull(replacement);
 
         var normalized = jsonPointer.Trim();
-        if (!normalized.StartsWith('/', StringComparison.Ordinal) || normalized.Length > MaxPathCharacters)
+        if (!normalized.StartsWith("/", StringComparison.Ordinal) || normalized.Length > MaxPathCharacters)
         {
             throw new ArgumentException("Structured masking paths must be bounded JSON-pointer-style paths starting with '/'.", nameof(jsonPointer));
         }
