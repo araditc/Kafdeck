@@ -289,7 +289,7 @@ public sealed class ConfigurationSecurityBoundaryTests
         context.Response.Body = new MemoryStream();
         context.Request.Headers[DeploymentAccessTokenMiddleware.HeaderName] = suppliedToken;
 
-        await middleware.InvokeAsync(context);
+        await middleware.InvokeAsync(context, new CapturingAuditSink());
 
         Assert.False(nextInvoked);
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
@@ -300,4 +300,15 @@ public sealed class ConfigurationSecurityBoundaryTests
         Assert.DoesNotContain(expectedToken, body, StringComparison.Ordinal);
         Assert.DoesNotContain(suppliedToken, body, StringComparison.Ordinal);
     }
+    private sealed class CapturingAuditSink : ISecurityAuditSink
+    {
+        public List<SecurityAuditEvent> Events { get; } = new();
+
+        public ValueTask WriteAsync(SecurityAuditEvent auditEvent, CancellationToken cancellationToken = default)
+        {
+            Events.Add(auditEvent);
+            return ValueTask.CompletedTask;
+        }
+    }
 }
+
