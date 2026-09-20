@@ -377,12 +377,22 @@ public sealed class RecordExportService
 
         if (request.Format == RecordExportFormat.Json)
         {
-            if (!await WriteWithinBudgetAsync(destination, JsonStart, stopwatch, request.Budget.MaxDuration, cancellationToken))
+            var startResult = await WriteWithinBudgetAsync(
+                destination,
+                JsonStart,
+                stopwatch,
+                request.Budget.MaxDuration,
+                cancellationToken);
+            if (startResult == BudgetedWriteResult.DeadlineExceeded)
             {
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
             }
 
             bytesWritten += JsonStart.Length;
+            if (startResult == BudgetedWriteResult.CompletedAfterDeadline)
+            {
+                return new RecordExportSummary(request.Format, 0, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
+            }
         }
         else if (request.Format == RecordExportFormat.Csv)
         {
@@ -391,12 +401,22 @@ public sealed class RecordExportService
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.ByteLimit);
             }
 
-            if (!await WriteWithinBudgetAsync(destination, CsvHeader, stopwatch, request.Budget.MaxDuration, cancellationToken))
+            var headerResult = await WriteWithinBudgetAsync(
+                destination,
+                CsvHeader,
+                stopwatch,
+                request.Budget.MaxDuration,
+                cancellationToken);
+            if (headerResult == BudgetedWriteResult.DeadlineExceeded)
             {
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
             }
 
             bytesWritten += CsvHeader.Length;
+            if (headerResult == BudgetedWriteResult.CompletedAfterDeadline)
+            {
+                return new RecordExportSummary(request.Format, 0, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
+            }
         }
 
         for (var index = 0; index < page.Records.Count; index++)
@@ -436,7 +456,13 @@ public sealed class RecordExportService
                 break;
             }
 
-            if (!await WriteWithinBudgetAsync(destination, payload, stopwatch, request.Budget.MaxDuration, cancellationToken))
+            var rowResult = await WriteWithinBudgetAsync(
+                destination,
+                payload,
+                stopwatch,
+                request.Budget.MaxDuration,
+                cancellationToken);
+            if (rowResult == BudgetedWriteResult.DeadlineExceeded)
             {
                 outcome = RecordExportBudgetOutcome.DurationLimit;
                 break;
@@ -444,17 +470,29 @@ public sealed class RecordExportService
 
             bytesWritten += payload.Length;
             rowsWritten++;
+            if (rowResult == BudgetedWriteResult.CompletedAfterDeadline)
+            {
+                outcome = RecordExportBudgetOutcome.DurationLimit;
+                break;
+            }
         }
 
         if (request.Format == RecordExportFormat.Json)
         {
-            if (!await WriteWithinBudgetAsync(destination, JsonEnd, stopwatch, request.Budget.MaxDuration, cancellationToken))
-            {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-            }
-            else
+            var endResult = await WriteWithinBudgetAsync(
+                destination,
+                JsonEnd,
+                stopwatch,
+                request.Budget.MaxDuration,
+                cancellationToken);
+            if (endResult != BudgetedWriteResult.DeadlineExceeded)
             {
                 bytesWritten += JsonEnd.Length;
+            }
+
+            if (endResult != BudgetedWriteResult.Completed)
+            {
+                outcome = RecordExportBudgetOutcome.DurationLimit;
             }
         }
 
@@ -506,7 +544,7 @@ public sealed class RecordExportService
         }
     }
 
-    private static async Task<bool> WriteWithinBudgetAsync(
+    private static async Task<BudgetedWriteResult> WriteWithinBudgetAsync(
         Stream destination,
         ReadOnlyMemory<byte> payload,
         Stopwatch stopwatch,
@@ -518,19 +556,21 @@ public sealed class RecordExportService
         var remaining = maxDuration - stopwatch.Elapsed;
         if (remaining <= TimeSpan.Zero)
         {
-            return false;
+            return BudgetedWriteResult.DeadlineExceeded;
         }
 
-        using var deadline = new CancellationTokenSource(remaining);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linked.CancelAfter(remaining);
         try
         {
             await destination.WriteAsync(payload, linked.Token);
-            return true;
+            return stopwatch.Elapsed >= maxDuration
+                ? BudgetedWriteResult.CompletedAfterDeadline
+                : BudgetedWriteResult.Completed;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return BudgetedWriteResult.DeadlineExceeded;
         }
     }
 
@@ -600,6 +640,13 @@ public sealed class RecordExportService
         Comma.CopyTo(result, 0);
         value.CopyTo(result, Comma.Length);
         return result;
+    }
+
+    private enum BudgetedWriteResult
+    {
+        Completed = 1,
+        CompletedAfterDeadline = 2,
+        DeadlineExceeded = 3,
     }
 
     private sealed record ExportHeader(string Name, string ValueBase64, bool Redacted);
