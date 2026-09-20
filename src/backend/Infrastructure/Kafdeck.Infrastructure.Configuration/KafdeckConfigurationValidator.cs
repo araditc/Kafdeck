@@ -222,6 +222,45 @@ public static class KafdeckConfigurationValidator
             {
                 errors.Add($"Cluster '{cluster.Id}' provides SASL settings while using a non-SASL security protocol.");
             }
+
+            if (cluster.SchemaRegistry is not null)
+            {
+                ValidateSchemaRegistry(cluster, errors);
+            }
+        }
+    }
+
+    private static void ValidateSchemaRegistry(ClusterProfile cluster, ICollection<string> errors)
+    {
+        var registry = cluster.SchemaRegistry!;
+
+        if (!Uri.TryCreate(registry.Url, UriKind.Absolute, out var uri) ||
+            !(string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add($"Cluster '{cluster.Id}' Schema Registry URL must be an absolute HTTP or HTTPS URL.");
+            return;
+        }
+
+        var hasUsername = registry.Username is not null;
+        var hasPassword = registry.Password is not null;
+        if (hasUsername != hasPassword)
+        {
+            errors.Add($"Cluster '{cluster.Id}' Schema Registry basic authentication requires both username and password secret references.");
+        }
+
+        if (hasUsername &&
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            var host = uri.Host.Trim('[', ']');
+            var isLoopback =
+                string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+
+            if (!isLoopback)
+            {
+                errors.Add($"Cluster '{cluster.Id}' Schema Registry basic authentication requires HTTPS unless the registry is loopback-only.");
+            }
         }
     }
 }

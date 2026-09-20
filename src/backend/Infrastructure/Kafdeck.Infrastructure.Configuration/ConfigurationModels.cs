@@ -49,7 +49,13 @@ public sealed record ClusterProfile(
     IReadOnlyList<string> BootstrapServers,
     KafkaSecurityProtocol SecurityProtocol,
     TlsProfile? Tls,
-    SaslProfile? Sasl);
+    SaslProfile? Sasl,
+    SchemaRegistryProfile? SchemaRegistry = null);
+
+public sealed record SchemaRegistryProfile(
+    string Url,
+    SecretReference? Username,
+    SecretReference? Password);
 
 public sealed record TlsProfile(
     bool VerifyServerCertificate,
