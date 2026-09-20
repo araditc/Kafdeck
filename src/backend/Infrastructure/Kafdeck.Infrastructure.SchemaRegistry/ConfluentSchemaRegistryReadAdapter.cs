@@ -385,14 +385,29 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         var formatValue = ParseFormat(schemaType);
 
         var references = new List<RecordSchemaReference>();
-        if (root.TryGetProperty("references", out var referencesElement) &&
-            referencesElement.ValueKind == JsonValueKind.Array)
+        if (root.TryGetProperty("references", out var referencesElement))
         {
+            if (referencesElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new JsonException("Schema references must be an array.");
+            }
+
             foreach (var reference in referencesElement.EnumerateArray())
             {
-                var name = reference.GetProperty("name").GetString() ?? string.Empty;
-                var subject = reference.GetProperty("subject").GetString() ?? string.Empty;
-                var version = reference.GetProperty("version").GetInt32();
+                if (reference.ValueKind != JsonValueKind.Object ||
+                    !reference.TryGetProperty("name", out var nameElement) ||
+                    nameElement.ValueKind != JsonValueKind.String ||
+                    !reference.TryGetProperty("subject", out var subjectElement) ||
+                    subjectElement.ValueKind != JsonValueKind.String ||
+                    !reference.TryGetProperty("version", out var versionElement) ||
+                    versionElement.ValueKind != JsonValueKind.Number ||
+                    !versionElement.TryGetInt32(out var version))
+                {
+                    throw new JsonException("Schema reference is invalid.");
+                }
+
+                var name = nameElement.GetString() ?? string.Empty;
+                var subject = subjectElement.GetString() ?? string.Empty;
 
                 if (string.IsNullOrWhiteSpace(name) ||
                     string.IsNullOrWhiteSpace(subject) ||
