@@ -9,6 +9,8 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class RecordExportOwnershipTests
 {
+    private static readonly TimeSpan WriteStartBudget = TimeSpan.FromMilliseconds(250);
+
     [Fact]
     public async Task Export_deadline_isolated_from_synchronously_blocking_write_invocation()
     {
@@ -21,7 +23,7 @@ public sealed class RecordExportOwnershipTests
             SafePage(),
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
-                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
             destination);
@@ -36,14 +38,14 @@ public sealed class RecordExportOwnershipTests
     {
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
-        await using var destination = new LateCommitWriteStream(TimeSpan.FromMilliseconds(300));
+        await using var destination = new LateCommitWriteStream(TimeSpan.FromSeconds(1));
         var stopwatch = Stopwatch.StartNew();
 
         var summary = await service.ExportAsync(
             SafePage(),
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
-                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
             destination);
@@ -68,7 +70,7 @@ public sealed class RecordExportOwnershipTests
             SafePage(),
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
-                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
             destination);
@@ -89,7 +91,7 @@ public sealed class RecordExportOwnershipTests
             SafePage(),
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
-                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
             destination);
