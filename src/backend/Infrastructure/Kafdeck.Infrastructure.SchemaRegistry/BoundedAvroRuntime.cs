@@ -600,7 +600,8 @@ internal sealed class BoundedJsonBufferWriter : IBufferWriter<byte>
             throw new InvalidDataException("Structured projection exceeds the configured byte bound.");
         }
 
-        return _inner.GetMemory(requested)[..remaining];
+        var memory = _inner.GetMemory(requested);
+        return memory[..Math.Min(memory.Length, remaining)];
     }
 
     public Span<byte> GetSpan(int sizeHint = 0) =>
@@ -609,10 +610,17 @@ internal sealed class BoundedJsonBufferWriter : IBufferWriter<byte>
 
 internal static class BoundedStructuredProjection
 {
-    public static JsonElement SerializeToElement(object? value)
+    public static JsonElement SerializeToElement(
+        object? value,
+        int maxBytes = (int)RecordOperationBudget.HardMaxProjectedBytes)
     {
-        var writerBuffer = new BoundedJsonBufferWriter(
-            checked((int)RecordOperationBudget.HardMaxProjectedBytes));
+        if (maxBytes < 1 ||
+            maxBytes > RecordOperationBudget.HardMaxProjectedBytes)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxBytes));
+        }
+
+        var writerBuffer = new BoundedJsonBufferWriter(maxBytes);
 
         using (var writer = new Utf8JsonWriter(writerBuffer))
         {
