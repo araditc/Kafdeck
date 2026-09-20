@@ -17,6 +17,7 @@ public sealed class V03BenchmarkEvidenceTests
 {
     private const int WarmupIterations = 1_000;
     private const int MeasurementIterations = 20_000;
+    private const string Redacted = "[REDACTED]";
     private readonly ITestOutputHelper _output;
 
     public V03BenchmarkEvidenceTests(ITestOutputHelper output)
@@ -80,8 +81,7 @@ public sealed class V03BenchmarkEvidenceTests
 
         for (var index = 0; index < WarmupIterations; index++)
         {
-            var projected = service.Apply(0, item, policy);
-            Assert.Equal(RecordPayloadProjectionKind.Structured, projected.ValueKind);
+            AssertRedacted(service.Apply(0, item, policy));
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -89,15 +89,29 @@ public sealed class V03BenchmarkEvidenceTests
         for (var index = 0; index < MeasurementIterations; index++)
         {
             var projected = service.Apply(0, item, policy);
-            if (projected.ValueKind == RecordPayloadProjectionKind.Structured)
-            {
-                projectedCount++;
-            }
+            AssertRedacted(projected);
+            projectedCount++;
         }
         stopwatch.Stop();
 
         Assert.Equal(MeasurementIterations, projectedCount);
         Report("structured_masking", MeasurementIterations, stopwatch.Elapsed);
+    }
+
+    private static void AssertRedacted(RecordSafeProjection projected)
+    {
+        Assert.Equal(RecordPayloadProjectionKind.Structured, projected.ValueKind);
+        Assert.True(projected.KeyRedacted);
+        Assert.True(projected.Key.HasValue);
+        Assert.Equal(Redacted, Encoding.UTF8.GetString(projected.Key.Value.Span));
+        Assert.True(projected.StructuredValue.HasValue);
+        Assert.Equal(
+            Redacted,
+            projected.StructuredValue.Value
+                .GetProperty("customer")
+                .GetProperty("ssn")
+                .GetString());
+        Assert.Contains("/customer/ssn", projected.RedactedPaths);
     }
 
     private void Report(string scenario, int operations, TimeSpan elapsed)
