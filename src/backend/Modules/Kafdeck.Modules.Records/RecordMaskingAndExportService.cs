@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -348,12 +349,17 @@ public sealed class RecordMaskingService
 
 public sealed class RecordExportService
 {
+    private const int MaxOwnedPendingWrites = 16;
+    private static readonly TimeSpan AbortSettlementGrace = TimeSpan.FromMilliseconds(100);
     private static readonly byte[] JsonStart = "["u8.ToArray();
     private static readonly byte[] JsonEnd = "]"u8.ToArray();
     private static readonly byte[] Comma = ","u8.ToArray();
     private static readonly byte[] NewLine = "\n"u8.ToArray();
     private static readonly byte[] CsvHeader = Encoding.UTF8.GetBytes(
         "partition,offset,timestampUtc,keyBase64,valueKind,value,headersJson,policyId,policyVersion\n");
+    private static readonly SemaphoreSlim OwnedWriteSlots = new(MaxOwnedPendingWrites, MaxOwnedPendingWrites);
+    private static readonly ConcurrentDictionary<long, OwnedPendingWrite> OwnedPendingWrites = new();
+    private static long _ownedPendingWriteSequence;
 
     public async Task<RecordExportSummary> ExportAsync(
         RecordSafePage page,
@@ -382,63 +388,34 @@ public sealed class RecordExportService
 
         if (request.Format == RecordExportFormat.Json)
         {
-            var startResult = await WriteWithinBudgetAsync(
-                destination,
-                JsonStart,
-                stopwatch,
-                request.Budget.MaxDuration,
-                cancellationToken);
+            var startResult = await WriteWithinBudgetAsync(destination, JsonStart, stopwatch, request.Budget.MaxDuration, cancellationToken);
             if (startResult == BudgetedWriteResult.DeadlineExceeded)
-            {
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
-            }
-
+            if (startResult == BudgetedWriteResult.Indeterminate)
+                return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.Indeterminate);
             bytesWritten += JsonStart.Length;
             if (startResult == BudgetedWriteResult.CompletedAfterDeadline)
-            {
                 return new RecordExportSummary(request.Format, 0, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
-            }
         }
         else if (request.Format == RecordExportFormat.Csv)
         {
             if (CsvHeader.LongLength > request.Budget.MaxBytes)
-            {
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.ByteLimit);
-            }
-
-            var headerResult = await WriteWithinBudgetAsync(
-                destination,
-                CsvHeader,
-                stopwatch,
-                request.Budget.MaxDuration,
-                cancellationToken);
+            var headerResult = await WriteWithinBudgetAsync(destination, CsvHeader, stopwatch, request.Budget.MaxDuration, cancellationToken);
             if (headerResult == BudgetedWriteResult.DeadlineExceeded)
-            {
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
-            }
-
+            if (headerResult == BudgetedWriteResult.Indeterminate)
+                return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.Indeterminate);
             bytesWritten += CsvHeader.Length;
             if (headerResult == BudgetedWriteResult.CompletedAfterDeadline)
-            {
                 return new RecordExportSummary(request.Format, 0, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
-            }
         }
 
         for (var index = 0; index < page.Records.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            if (stopwatch.Elapsed >= request.Budget.MaxDuration)
-            {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-                break;
-            }
-
-            if (rowsWritten >= request.Budget.MaxRows)
-            {
-                outcome = RecordExportBudgetOutcome.RowLimit;
-                break;
-            }
+            if (stopwatch.Elapsed >= request.Budget.MaxDuration) { outcome = RecordExportBudgetOutcome.DurationLimit; break; }
+            if (rowsWritten >= request.Budget.MaxRows) { outcome = RecordExportBudgetOutcome.RowLimit; break; }
 
             var row = request.Format switch
             {
@@ -447,281 +424,167 @@ public sealed class RecordExportService
                 RecordExportFormat.Csv => Encoding.UTF8.GetBytes(SerializeCsvRow(page.Records[index])),
                 _ => throw new ArgumentOutOfRangeException(nameof(request.Format)),
             };
-
-            var payload = request.Format == RecordExportFormat.Json && rowsWritten > 0
-                ? PrependComma(row)
-                : row;
-            var reservedClosingBytes = request.Format == RecordExportFormat.Json
-                ? JsonEnd.LongLength
-                : 0L;
-
+            var payload = request.Format == RecordExportFormat.Json && rowsWritten > 0 ? PrependComma(row) : row;
+            var reservedClosingBytes = request.Format == RecordExportFormat.Json ? JsonEnd.LongLength : 0L;
             if (bytesWritten + payload.LongLength + reservedClosingBytes > request.Budget.MaxBytes)
-            {
-                outcome = RecordExportBudgetOutcome.ByteLimit;
-                break;
-            }
+            { outcome = RecordExportBudgetOutcome.ByteLimit; break; }
 
-            var rowResult = await WriteWithinBudgetAsync(
-                destination,
-                payload,
-                stopwatch,
-                request.Budget.MaxDuration,
-                cancellationToken);
+            var rowResult = await WriteWithinBudgetAsync(destination, payload, stopwatch, request.Budget.MaxDuration, cancellationToken);
             if (rowResult == BudgetedWriteResult.DeadlineExceeded)
-            {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-                break;
-            }
-
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
+            if (rowResult == BudgetedWriteResult.Indeterminate)
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.Indeterminate);
             bytesWritten += payload.Length;
             rowsWritten++;
             if (rowResult == BudgetedWriteResult.CompletedAfterDeadline)
-            {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-                break;
-            }
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
         }
 
         if (request.Format == RecordExportFormat.Json)
         {
-            var endResult = await WriteWithinBudgetAsync(
-                destination,
-                JsonEnd,
-                stopwatch,
-                request.Budget.MaxDuration,
-                cancellationToken);
-            if (endResult != BudgetedWriteResult.DeadlineExceeded)
-            {
-                bytesWritten += JsonEnd.Length;
-            }
-
-            if (endResult != BudgetedWriteResult.Completed)
-            {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-            }
+            var endResult = await WriteWithinBudgetAsync(destination, JsonEnd, stopwatch, request.Budget.MaxDuration, cancellationToken);
+            if (endResult == BudgetedWriteResult.Indeterminate)
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.Indeterminate);
+            if (endResult != BudgetedWriteResult.DeadlineExceeded) bytesWritten += JsonEnd.Length;
+            if (endResult != BudgetedWriteResult.Completed) outcome = RecordExportBudgetOutcome.DurationLimit;
         }
 
         return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, outcome);
     }
 
-    public RecordAccessAuditMetadata BuildExportAudit(
-        RecordSafePage page,
-        RecordExportSummary summary)
+    public RecordAccessAuditMetadata BuildExportAudit(RecordSafePage page, RecordExportSummary summary)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(summary);
-
         var exportedCount = Math.Clamp(summary.RowCount, 0, page.Records.Count);
         var exportedRecords = page.Records.Take(exportedCount).ToArray();
-
         return new RecordAccessAuditMetadata(
-            page.ClusterId,
-            page.TopicName,
-            page.Partition,
-            "record.export",
-            page.PolicyId,
-            page.PolicyVersion,
+            page.ClusterId, page.TopicName, page.Partition, "record.export", page.PolicyId, page.PolicyVersion,
             exportedRecords.Length == 0 ? null : exportedRecords.Min(record => record.Offset),
             exportedRecords.Length == 0 ? null : exportedRecords.Max(record => record.Offset),
-            page.ReadBudgetOutcome,
-            page.FilterBudgetOutcome,
-            summary.Format,
-            summary.RowCount,
-            summary.ByteCount,
-            summary.Outcome);
+            page.ReadBudgetOutcome, page.FilterBudgetOutcome, summary.Format, summary.RowCount, summary.ByteCount, summary.Outcome);
     }
 
-    private static void EnsureExportAuthorized(
-        RecordSafePage page,
-        AuthorizationPolicyEvaluator authorizationEvaluator,
-        OperatorIdentity? identity)
+    private static void EnsureExportAuthorized(RecordSafePage page, AuthorizationPolicyEvaluator authorizationEvaluator, OperatorIdentity? identity)
     {
-        var decision = authorizationEvaluator.Evaluate(
-            identity,
-            new AuthorizationRequest(
-                AuthorizationAction.RecordExport,
-                page.ClusterId,
-                page.TopicName));
-
+        var decision = authorizationEvaluator.Evaluate(identity, new AuthorizationRequest(AuthorizationAction.RecordExport, page.ClusterId, page.TopicName));
         if (!decision.IsAllowed)
-        {
             throw new UnauthorizedAccessException("record.export authorization for the exact cluster/topic target is required.");
-        }
     }
 
     private static async Task<BudgetedWriteResult> WriteWithinBudgetAsync(
-        Stream destination,
-        ReadOnlyMemory<byte> payload,
-        Stopwatch stopwatch,
-        TimeSpan maxDuration,
-        CancellationToken cancellationToken)
+        Stream destination, ReadOnlyMemory<byte> payload, Stopwatch stopwatch, TimeSpan maxDuration, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
         var remaining = maxDuration - stopwatch.Elapsed;
-        if (remaining <= TimeSpan.Zero)
-        {
+        if (remaining <= TimeSpan.Zero) return BudgetedWriteResult.DeadlineExceeded;
+        if (!await OwnedWriteSlots.WaitAsync(remaining, cancellationToken).ConfigureAwait(false))
             return BudgetedWriteResult.DeadlineExceeded;
-        }
 
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var writeTask = destination.WriteAsync(payload, linked.Token).AsTask();
-        var deadlineTask = Task.Delay(remaining, CancellationToken.None);
-        var callerCancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-        var completed = await Task.WhenAny(writeTask, deadlineTask, callerCancellationTask).ConfigureAwait(false);
-
-        if (completed == writeTask)
+        var ownershipTransferred = false;
+        try
         {
-            await writeTask.ConfigureAwait(false);
-            return stopwatch.Elapsed >= maxDuration
-                ? BudgetedWriteResult.CompletedAfterDeadline
-                : BudgetedWriteResult.Completed;
-        }
-
-        linked.Cancel();
-
-        if (writeTask.IsCompleted)
-        {
-            try
+            var lengthBefore = TryGetStableLength(destination);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var writeTask = Task.Run(async () => await destination.WriteAsync(payload, linked.Token).ConfigureAwait(false), CancellationToken.None);
+            var deadlineTask = Task.Delay(remaining, CancellationToken.None);
+            var callerCancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            var completed = await Task.WhenAny(writeTask, deadlineTask, callerCancellationTask).ConfigureAwait(false);
+            if (completed == writeTask)
             {
                 await writeTask.ConfigureAwait(false);
+                return stopwatch.Elapsed >= maxDuration ? BudgetedWriteResult.CompletedAfterDeadline : BudgetedWriteResult.Completed;
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+
+            linked.Cancel();
+            var abortTask = Task.Run(() => { try { destination.Dispose(); } catch (Exception) { } }, CancellationToken.None);
+            var settlementTask = SettleAbortedWriteAsync(destination, writeTask, abortTask, lengthBefore);
+            var settled = await Task.WhenAny(settlementTask, Task.Delay(AbortSettlementGrace, CancellationToken.None)).ConfigureAwait(false);
+            if (settled == settlementTask)
             {
+                var result = await settlementTask.ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested) cancellationToken.ThrowIfCancellationRequested();
+                return result;
+            }
+
+            ownershipTransferred = true;
+            OwnPendingWrite(destination, settlementTask);
+            if (cancellationToken.IsCancellationRequested) cancellationToken.ThrowIfCancellationRequested();
+            return BudgetedWriteResult.Indeterminate;
+        }
+        finally
+        {
+            if (!ownershipTransferred) OwnedWriteSlots.Release();
+        }
+    }
+
+    private static async Task<BudgetedWriteResult> SettleAbortedWriteAsync(Stream destination, Task writeTask, Task abortTask, long? lengthBefore)
+    {
+        try { await abortTask.ConfigureAwait(false); } catch (Exception) { }
+        try
+        {
+            await writeTask.ConfigureAwait(false);
+            var lengthAfter = TryGetStableLength(destination);
+            if (lengthBefore.HasValue && lengthAfter.HasValue && lengthBefore.Value == lengthAfter.Value)
                 return BudgetedWriteResult.DeadlineExceeded;
-            }
-
-            if (cancellationToken.IsCancellationRequested)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-
-            return BudgetedWriteResult.CompletedAfterDeadline;
+            return BudgetedWriteResult.Indeterminate;
         }
-
-        ObserveBackground(writeTask);
-        AbortDestinationInBackground(destination);
-
-        if (cancellationToken.IsCancellationRequested)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        return BudgetedWriteResult.DeadlineExceeded;
+        catch (OperationCanceledException) { return BudgetedWriteResult.DeadlineExceeded; }
+        catch (ObjectDisposedException) { return BudgetedWriteResult.DeadlineExceeded; }
+        catch (Exception) { return BudgetedWriteResult.Indeterminate; }
     }
 
-    private static void AbortDestinationInBackground(Stream destination)
+    private static long? TryGetStableLength(Stream destination)
     {
-        var disposeTask = Task.Run(() =>
-        {
-            try
-            {
-                destination.Dispose();
-            }
-            catch (Exception)
-            {
-                // The destination is already invalid after a deadline/cancellation race.
-            }
-        });
-        ObserveBackground(disposeTask);
+        try { return destination.CanSeek ? destination.Length : null; }
+        catch (Exception) { return null; }
     }
 
-    private static void ObserveBackground(Task task)
+    private static void OwnPendingWrite(Stream destination, Task<BudgetedWriteResult> settlementTask)
     {
-        _ = task.ContinueWith(
-            completed => _ = completed.Exception,
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
+        var id = Interlocked.Increment(ref _ownedPendingWriteSequence);
+        var owned = new OwnedPendingWrite(destination, settlementTask);
+        OwnedPendingWrites[id] = owned;
+        _ = settlementTask.ContinueWith(completed =>
+        {
+            _ = completed.Exception;
+            OwnedPendingWrites.TryRemove(id, out _);
+            OwnedWriteSlots.Release();
+            GC.KeepAlive(owned);
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private static byte[] SerializeJsonRow(RecordSafeProjection projection)
     {
         var row = new ExportRow(
-            projection.Partition,
-            projection.Offset,
-            projection.TimestampUtc,
-            ToBase64(projection.Key),
-            projection.ValueKind.ToString(),
-            projection.RawValue.HasValue ? ToBase64(projection.RawValue) : null,
-            projection.StructuredValue,
-            projection.Headers.Select(header => new ExportHeader(
-                header.Name,
-                Convert.ToBase64String(header.Value.Span),
-                header.IsRedacted)).ToArray(),
-            projection.PolicyId,
-            projection.PolicyVersion,
-            projection.RedactedPaths);
-
+            projection.Partition, projection.Offset, projection.TimestampUtc, ToBase64(projection.Key), projection.ValueKind.ToString(),
+            projection.RawValue.HasValue ? ToBase64(projection.RawValue) : null, projection.StructuredValue,
+            projection.Headers.Select(header => new ExportHeader(header.Name, Convert.ToBase64String(header.Value.Span), header.IsRedacted)).ToArray(),
+            projection.PolicyId, projection.PolicyVersion, projection.RedactedPaths);
         return JsonSerializer.SerializeToUtf8Bytes(row);
     }
 
     private static string SerializeCsvRow(RecordSafeProjection projection)
     {
-        var value = projection.StructuredValue.HasValue
-            ? projection.StructuredValue.Value.GetRawText()
-            : projection.RawValue.HasValue
-                ? ToBase64(projection.RawValue)
-                : "[REDACTED]";
-        var headers = JsonSerializer.Serialize(
-            projection.Headers.Select(header => new ExportHeader(
-                header.Name,
-                Convert.ToBase64String(header.Value.Span),
-                header.IsRedacted)));
-
+        var value = projection.StructuredValue.HasValue ? projection.StructuredValue.Value.GetRawText()
+            : projection.RawValue.HasValue ? ToBase64(projection.RawValue) : "[REDACTED]";
+        var headers = JsonSerializer.Serialize(projection.Headers.Select(header => new ExportHeader(header.Name, Convert.ToBase64String(header.Value.Span), header.IsRedacted)));
         return string.Join(",",
-            projection.Partition.ToString(CultureInfo.InvariantCulture),
-            projection.Offset.ToString(CultureInfo.InvariantCulture),
-            CsvEscape(projection.TimestampUtc?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty),
-            CsvEscape(ToBase64(projection.Key) ?? string.Empty),
-            CsvEscape(projection.ValueKind.ToString()),
-            CsvEscape(value ?? string.Empty),
-            CsvEscape(headers),
-            CsvEscape(projection.PolicyId),
+            projection.Partition.ToString(CultureInfo.InvariantCulture), projection.Offset.ToString(CultureInfo.InvariantCulture),
+            CsvEscape(projection.TimestampUtc?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty), CsvEscape(ToBase64(projection.Key) ?? string.Empty),
+            CsvEscape(projection.ValueKind.ToString()), CsvEscape(value ?? string.Empty), CsvEscape(headers), CsvEscape(projection.PolicyId),
             projection.PolicyVersion.ToString(CultureInfo.InvariantCulture)) + "\n";
     }
 
-    private static string CsvEscape(string value) =>
-        $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    private static string CsvEscape(string value) => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    private static string? ToBase64(ReadOnlyMemory<byte>? value) => value.HasValue ? Convert.ToBase64String(value.Value.Span) : null;
+    private static byte[] AppendNewLine(byte[] value) { var result = new byte[value.Length + NewLine.Length]; value.CopyTo(result, 0); NewLine.CopyTo(result, value.Length); return result; }
+    private static byte[] PrependComma(byte[] value) { var result = new byte[value.Length + Comma.Length]; Comma.CopyTo(result, 0); value.CopyTo(result, Comma.Length); return result; }
 
-    private static string? ToBase64(ReadOnlyMemory<byte>? value) =>
-        value.HasValue ? Convert.ToBase64String(value.Value.Span) : null;
-
-    private static byte[] AppendNewLine(byte[] value)
-    {
-        var result = new byte[value.Length + NewLine.Length];
-        value.CopyTo(result, 0);
-        NewLine.CopyTo(result, value.Length);
-        return result;
-    }
-
-    private static byte[] PrependComma(byte[] value)
-    {
-        var result = new byte[value.Length + Comma.Length];
-        Comma.CopyTo(result, 0);
-        value.CopyTo(result, Comma.Length);
-        return result;
-    }
-
-    private enum BudgetedWriteResult
-    {
-        Completed = 1,
-        CompletedAfterDeadline = 2,
-        DeadlineExceeded = 3,
-    }
-
+    private enum BudgetedWriteResult { Completed = 1, CompletedAfterDeadline = 2, DeadlineExceeded = 3, Indeterminate = 4 }
+    private sealed record OwnedPendingWrite(Stream Destination, Task<BudgetedWriteResult> SettlementTask);
     private sealed record ExportHeader(string Name, string ValueBase64, bool Redacted);
-
-    private sealed record ExportRow(
-        int Partition,
-        long Offset,
-        DateTimeOffset? TimestampUtc,
-        string? KeyBase64,
-        string ValueKind,
-        string? RawValueBase64,
-        JsonElement? StructuredValue,
-        IReadOnlyList<ExportHeader> Headers,
-        string PolicyId,
-        int PolicyVersion,
+    private sealed record ExportRow(int Partition, long Offset, DateTimeOffset? TimestampUtc, string? KeyBase64, string ValueKind,
+        string? RawValueBase64, JsonElement? StructuredValue, IReadOnlyList<ExportHeader> Headers, string PolicyId, int PolicyVersion,
         IReadOnlyList<string> RedactedPaths);
 }
