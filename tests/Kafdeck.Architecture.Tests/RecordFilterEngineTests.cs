@@ -413,7 +413,6 @@ public sealed class RecordFilterEngineTests
                     Encoding.UTF8.GetBytes(header.Value)))
                 .ToArray());
 
-
     private sealed class BlockingTailReader : IKafkaRecordReadPort
     {
         public TaskCompletionSource Started { get; } =
