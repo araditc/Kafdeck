@@ -108,14 +108,17 @@ public sealed class RecordMaskingService
                 return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
             }
 
-            var redactedPaths = new List<string>();
+            var redactedPaths = new List<string>(policy.StructuredRules.Count);
             foreach (var rule in policy.StructuredRules)
             {
                 var segments = ParsePointer(rule.JsonPointer);
-                if (ApplyPath(root, segments, 0, rule.Replacement) > 0)
+                var matchCount = ApplyPath(root, segments, 0, rule.Replacement);
+                if (matchCount == 0)
                 {
-                    redactedPaths.Add(rule.JsonPointer);
+                    return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
                 }
+
+                redactedPaths.Add(rule.JsonPointer);
             }
 
             var projectedBytes = JsonSerializer.SerializeToUtf8Bytes(root);
@@ -296,19 +299,18 @@ public sealed class RecordExportService
     public async Task<RecordExportSummary> ExportAsync(
         RecordSafePage page,
         RecordExportRequest request,
+        AuthorizationRequest authorizationRequest,
         AuthorizationDecision exportAuthorization,
         Stream destination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(authorizationRequest);
         ArgumentNullException.ThrowIfNull(exportAuthorization);
         ArgumentNullException.ThrowIfNull(destination);
 
-        if (!exportAuthorization.IsAllowed)
-        {
-            throw new UnauthorizedAccessException("record.export authorization is required.");
-        }
+        EnsureExportAuthorized(page, authorizationRequest, exportAuthorization);
 
         if (!destination.CanWrite)
         {
@@ -359,6 +361,12 @@ public sealed class RecordExportService
                 RecordExportFormat.Csv => Encoding.UTF8.GetBytes(SerializeCsvRow(page.Records[index])),
                 _ => throw new ArgumentOutOfRangeException(nameof(request.Format)),
             };
+
+            if (stopwatch.Elapsed >= request.Budget.MaxDuration)
+            {
+                outcome = RecordExportBudgetOutcome.DurationLimit;
+                break;
+            }
 
             var delimiterBytes = request.Format == RecordExportFormat.Json && rowsWritten > 0
                 ? Comma.LongLength
@@ -415,6 +423,20 @@ public sealed class RecordExportService
             summary.RowCount,
             summary.ByteCount,
             summary.Outcome);
+    }
+
+    private static void EnsureExportAuthorized(
+        RecordSafePage page,
+        AuthorizationRequest authorizationRequest,
+        AuthorizationDecision exportAuthorization)
+    {
+        if (!exportAuthorization.IsAllowed ||
+            authorizationRequest.Action != AuthorizationAction.RecordExport ||
+            !string.Equals(authorizationRequest.ClusterId, page.ClusterId, StringComparison.Ordinal) ||
+            !string.Equals(authorizationRequest.ResourceName, page.TopicName, StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException("record.export authorization for the exact cluster/topic target is required.");
+        }
     }
 
     private static byte[] SerializeJsonRow(RecordSafeProjection projection)
