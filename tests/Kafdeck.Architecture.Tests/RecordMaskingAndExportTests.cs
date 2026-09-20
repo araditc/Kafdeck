@@ -558,7 +558,6 @@ public sealed class RecordMaskingAndExportTests
     private sealed class NonCooperativeWriteStream : Stream
     {
         private readonly MemoryStream _inner = new();
-        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private bool _disposed;
 
         public override bool CanRead => false;
@@ -581,7 +580,7 @@ public sealed class RecordMaskingAndExportTests
             ReadOnlyMemory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            await _release.Task.ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None).ConfigureAwait(false);
             if (!_disposed)
             {
                 await _inner.WriteAsync(buffer, CancellationToken.None).ConfigureAwait(false);
@@ -593,7 +592,6 @@ public sealed class RecordMaskingAndExportTests
             if (disposing && !_disposed)
             {
                 _disposed = true;
-                _release.TrySetResult();
                 _inner.Dispose();
             }
 
