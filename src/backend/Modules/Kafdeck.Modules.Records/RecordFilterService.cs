@@ -23,10 +23,18 @@ public sealed class RecordFilterService
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    public Task<KafkaResult<RecordFilterPage>> FilterPageAsync(
+        RecordReadRequest readRequest,
+        RecordFilterPlan plan,
+        KafkaOperationContext operation,
+        CancellationToken cancellationToken) =>
+        FilterPageAsync(readRequest, plan, operation, requireDecodedValue: false, cancellationToken);
+
     public async Task<KafkaResult<RecordFilterPage>> FilterPageAsync(
         RecordReadRequest readRequest,
         RecordFilterPlan plan,
         KafkaOperationContext operation,
+        bool requireDecodedValue,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(readRequest);
@@ -90,12 +98,19 @@ public sealed class RecordFilterService
             }
 
             RecordDecodedValue? decoded = null;
+            var needsDecode = plan.RequiresStructuredValue || requireDecodedValue;
 
-            if (plan.RequiresStructuredValue)
+            if (needsDecode)
             {
                 if (_decoder is null || !record.Value.HasValue)
                 {
                     decodeUnavailable++;
+                    if (plan.RequiresStructuredValue)
+                    {
+                        continue;
+                    }
+
+                    matched.Add(new RecordFilteredItem(record, null));
                     continue;
                 }
 
@@ -126,12 +141,19 @@ public sealed class RecordFilterService
                         decodeFailed++;
                     }
 
+                    if (plan.RequiresStructuredValue)
+                    {
+                        continue;
+                    }
+
+                    matched.Add(new RecordFilteredItem(record, null));
                     continue;
                 }
 
                 decoded = decodedResult.Value;
 
-                if (!_evaluator.MatchesStructuredValue(
+                if (plan.RequiresStructuredValue &&
+                    !_evaluator.MatchesStructuredValue(
                         decoded.StructuredValue,
                         plan))
                 {
@@ -259,8 +281,14 @@ public sealed class RecordLiveTailService
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    public IAsyncEnumerable<RecordTailFrame> TailAsync(
+        RecordTailRequest request,
+        CancellationToken cancellationToken = default) =>
+        TailAsync(request, requireDecodedValue: false, cancellationToken);
+
     public async IAsyncEnumerable<RecordTailFrame> TailAsync(
         RecordTailRequest request,
+        bool requireDecodedValue,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -346,6 +374,7 @@ public sealed class RecordLiveTailService
                         pageRequest,
                         plan,
                         operation,
+                        requireDecodedValue,
                         cancellationToken)
                     .ConfigureAwait(false);
 
