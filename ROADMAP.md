@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0, Gate 1 and Gate 2 accepted**  
+Status: **Gate 0, Gate 1, Gate 2 accepted; v0.2 released; v0.3 scope accepted**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -56,34 +56,71 @@ Compatibility:
 
 Exit criteria remain those accepted by Gate 1/RFC-0001.
 
-## v0.2 — Safe Data Explorer
+## Sequencing reconciliation — v0.2/v0.3
 
-Goal: inspect Kafka record data without turning Kafdeck into an unbounded consumer or data-exfiltration surface.
+The Gate 2 capability order remains authoritative, but its original version-number mapping was superseded by later owner decisions.
+
+- Issue #57 advanced **Operator Identity/RBAC** into v0.2; v0.2 is released.
+- Issue #75 accepted **Safe Data Explorer + Server-Side Masking** as v0.3.
+- Consumers/Schemas/Ecosystem Read Views therefore move to v0.4.
+- v0.5+ sequencing remains unchanged unless a later approved scope decision supersedes it.
+
+Historical Gate 2 records remain unchanged as approval evidence.
+
+## v0.2 — Operator Identity/RBAC — RELEASED
+
+Primary posture: **human operator identity + default-deny authorization while Kafka remains metadata-only/read-only**.
+
+Capabilities delivered:
+- OIDC Authorization Code + PKCE,
+- server-side sessions,
+- Local/Token/OIDC access-mode separation,
+- issuer+subject canonical identity,
+- configuration-driven immutable RBAC,
+- subject/group bindings,
+- cluster/resource-scoped permissions,
+- backend-authoritative enforcement,
+- structured security audit,
+- preserved v0.1 Local/Token compatibility.
+
+v0.2 introduced no Kafka mutation and no payload browsing. RFC-0002 and the v0.2 release evidence remain authoritative for its exact contract.
+
+## v0.3 — Safe Data Explorer + Server-Side Masking — ACCEPTED SCOPE
+
+Goal: inspect Kafka record data under the released v0.2 identity/RBAC boundary without creating an unbounded consumer, payload database, or data-exfiltration bypass.
 
 Capabilities:
-- Record browsing by topic/partition
-- Offset and timestamp navigation/time-travel debugging
-- Key/value/header inspection
-- JSON, UTF-8 text and binary/hex views
-- Read-only Schema Registry adapters for Avro, Protobuf and JSON Schema decoding
-- Bounded live tailing
-- Search by key, partition, offset, timestamp and headers
-- Regex plus deterministic CEL and jq-style expression filtering
-- Tree/structured payload view
-- Server-side field masking/redaction before data reaches browser/API/export
-- Policy-controlled JSON/CSV/NDJSON export
-- Explicit scan range, byte/time/rate budgets and cancellation
+- topic/partition record browsing,
+- offset and timestamp navigation/time-travel debugging,
+- bounded forward/previous-page reads,
+- bounded live tail,
+- key/value/header inspection,
+- JSON, UTF-8 text and binary/hex views,
+- read-only Schema Registry-assisted Avro/Protobuf/JSON Schema decoding,
+- bounded key/header/range/regex/CEL/jq-style filtering,
+- server-side masking/redaction before browser/API/export,
+- explicit `record.read` authorization separate from metadata permissions,
+- separate `record.export` authorization,
+- bounded JSON/CSV/NDJSON export,
+- explicit record/byte/time/rate/concurrency budgets,
+- cancellation and per-cluster load isolation,
+- record-read/export audit events,
+- REST/OpenAPI/UI parity,
+- repeatable load/benchmark evidence.
 
-Not in v0.2:
-- arbitrary server-side JavaScript execution,
+Not in v0.3:
+- Kafka mutation,
+- record production/replay,
+- consumer offset mutation,
+- payload persistence/indexing by default,
 - unbounded whole-topic scans,
-- a promise of a fixed "millions of messages/sec" search rate,
-- native unbounded SQL stream processing,
-- message production/replay.
+- arbitrary server-side JavaScript,
+- native general-purpose SQL stream processing,
+- full Schema Registry explorer.
 
-Invariant: Kafka record payloads are not persisted by Kafdeck by default.
+Invariant: an active masking rule cannot be bypassed by browser/API/export/raw/hex paths.
 
-## v0.3 — Consumers, Schemas & Ecosystem Read Views
+## v0.4 — Consumers, Schemas & Ecosystem Read Views
 
 Capabilities:
 - Consumer groups, state, members and assignments
@@ -97,28 +134,6 @@ Capabilities:
 - Kafka Connect cluster/connector/task read-only status
 - ksqlDB discovery/read-only metadata where configured
 - Topic documentation/catalog metadata foundations
-
-## v0.4 — Identity, Policy, Masking & Audit
-
-This phase intentionally precedes general write administration.
-
-Capabilities:
-- OIDC/OAuth2 as the primary enterprise identity path
-- Standalone/local authentication where justified
-- LDAP/Active Directory integration through an identity-provider boundary
-- Federated SSO; direct SAML implementation only if an RFC demonstrates need beyond OIDC/federation
-- Fine-grained RBAC for cluster/topic/group/schema/connector/action scope
-- Topic-pattern permissions
-- Explicit metadata-vs-payload access separation
-- Session management
-- Role/resource-aware masking policies
-- Explain Access/effective-permission view
-- Read-only deployment/role modes
-- Tamper-evident audit design with export sinks
-
-Representative permissions include `cluster.read`, `topic.*`, `record.*`, `consumer.*`, `schema.*`, `connect.*`, `acl.*` and `settings.manage`.
-
-Exit criterion: general mutation endpoints do not ship before this identity/authorization/audit foundation is enforced.
 
 ## v0.5 — Safe Administration & Controlled Mutations
 
