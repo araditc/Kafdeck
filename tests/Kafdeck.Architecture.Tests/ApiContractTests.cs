@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Kafdeck.Api;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Topics;
@@ -47,6 +48,12 @@ public sealed class ApiContractTests
         builder.Services.AddSingleton<TopicExplorerService>(_ => throw new NotSupportedException());
         builder.Services.AddSingleton<IKafkaAdministrationPort>(_ => throw new NotSupportedException());
         builder.Services.AddSingleton<KafkaSnapshotCoordinator>(_ => throw new NotSupportedException());
+        builder.Services.AddSingleton(new KafdeckAuthorizationService(
+            new KafdeckOptions(new DeploymentOptions("http://127.0.0.1:0", null), Array.Empty<ClusterProfile>()),
+            new AuthorizationPolicyEvaluator(AuthorizationPolicyCompiler.Compile(new AuthorizationPolicyDefinition(
+                Array.Empty<AuthorizationRoleDefinition>(),
+                Array.Empty<AuthorizationSubjectBindingDefinition>(),
+                Array.Empty<AuthorizationGroupBindingDefinition>())))));
 
         var app = builder.Build();
         app.MapKafdeckV01(new KafdeckOptions(
