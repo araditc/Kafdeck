@@ -94,6 +94,7 @@ public sealed class OidcSessionTests
     [InlineData("https://evil.example/", "/")]
     [InlineData("//evil.example/", "/")]
     [InlineData("/\\evil", "/")]
+    [InlineData("/%5cevil", "/%5cevil")]
     [InlineData("/clusters/prod", "/clusters/prod")]
     public void Return_url_policy_allows_only_local_application_paths(string? input, string expected)
     {
@@ -191,6 +192,8 @@ public sealed class OidcSessionTests
         Assert.Equal(SameSiteMode.None, oidc.NonceCookie.SameSite);
         Assert.Equal(CookieSecurePolicy.Always, oidc.NonceCookie.SecurePolicy);
         Assert.False(cookie.SlidingExpiration);
+        Assert.NotNull(oidc.Events.OnRemoteFailure);
+        Assert.NotNull(oidc.Events.OnTokenValidated);
     }
 
     [Fact]
