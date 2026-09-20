@@ -32,36 +32,83 @@ public static class V01ApiContract
   "info": {
     "title": "Kafdeck Cluster Explorer API",
     "version": "0.1.0",
-    "description": "Read-only Kafka Cluster Explorer API. No Kafka mutation route is permitted in v0.1."
+    "description": "Read-only Kafka Cluster Explorer API. In OIDC mode, Kafdeck operator RBAC is authoritative before Kafka access; Local/Token compatibility remains deployment-bound. No Kafka mutation route is permitted."
   },
   "paths": {
     "/api/v1/system/info": {
       "get": {
         "operationId": "v01-system-info",
-        "responses": { "200": { "description": "Kafdeck runtime information" } }
+        "responses": {
+          "200": {
+            "description": "Kafdeck runtime information"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/system/health": {
       "get": {
         "operationId": "v01-system-health",
-        "responses": { "200": { "description": "Safe runtime health" } }
+        "responses": {
+          "200": {
+            "description": "Safe runtime health"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters": {
       "get": {
         "operationId": "v01-clusters-list",
-        "responses": { "200": { "description": "Configured cluster projections" } }
+        "responses": {
+          "200": {
+            "description": "Configured cluster projections"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters/{clusterId}": {
       "get": {
         "operationId": "v01-clusters-detail",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Cluster projection" },
-          "404": { "description": "Cluster ID is not configured" }
+          "200": {
+            "description": "Cluster projection"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          },
+          "404": {
+            "description": "Cluster ID is not configured"
+          }
         }
       }
     },
@@ -69,39 +116,116 @@ public static class V01ApiContract
       "get": {
         "operationId": "v01-clusters-health",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
-        "responses": { "200": { "description": "Explainable cluster health" } }
+        "responses": {
+          "200": {
+            "description": "Explainable cluster health"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters/{clusterId}/capabilities": {
       "get": {
         "operationId": "v01-clusters-capabilities",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
-        "responses": { "200": { "description": "Capability evidence" } }
+        "responses": {
+          "200": {
+            "description": "Capability evidence"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters/{clusterId}/brokers": {
       "get": {
         "operationId": "v01-brokers-list",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
-        "responses": { "200": { "description": "Broker projections" } }
+        "responses": {
+          "200": {
+            "description": "Broker projections"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters/{clusterId}/brokers/{brokerId}": {
       "get": {
         "operationId": "v01-brokers-detail",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "brokerId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32", "minimum": 0 } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "brokerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Broker projection" },
-          "404": { "description": "Broker not observed in current cluster projection" }
+          "200": {
+            "description": "Broker projection"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          },
+          "404": {
+            "description": "Broker not observed in current cluster projection"
+          }
         }
       }
     },
@@ -109,12 +233,35 @@ public static class V01ApiContract
       "get": {
         "operationId": "v01-brokers-configuration",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "brokerId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32", "minimum": 0 } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "brokerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Broker configuration entries" },
-          "403": { "description": "Broker configuration authorization denied" }
+          "200": {
+            "description": "Broker configuration entries"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Broker configuration authorization denied"
+          }
         }
       }
     },
@@ -122,15 +269,58 @@ public static class V01ApiContract
       "get": {
         "operationId": "v01-topics-list",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } },
-          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } },
-          { "name": "pageSize", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Bounded topic page" },
-          "400": { "description": "Invalid page size or cursor" },
-          "409": { "description": "Cursor no longer matches active topic snapshot" }
+          "200": {
+            "description": "Bounded topic page"
+          },
+          "400": {
+            "description": "Invalid page size or cursor"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          },
+          "409": {
+            "description": "Cursor no longer matches active topic snapshot"
+          }
         }
       }
     },
@@ -138,36 +328,129 @@ public static class V01ApiContract
       "get": {
         "operationId": "v01-topics-detail",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
-        "responses": { "200": { "description": "Topic and partition projection" } }
+        "responses": {
+          "200": {
+            "description": "Topic and partition projection"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions": {
       "get": {
         "operationId": "v01-topics-partitions",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
-        "responses": { "200": { "description": "Partition leader, replica, ISR and anomaly projections" } }
+        "responses": {
+          "200": {
+            "description": "Partition leader, replica, ISR and anomaly projections"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Denied by Kafdeck operator RBAC or by Kafka authorization, distinguished by Problem Details type/code"
+          }
+        }
       }
     },
     "/api/v1/clusters/{clusterId}/topics/{topicName}/configuration": {
       "get": {
         "operationId": "v01-topics-configuration",
         "parameters": [
-          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } }
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Topic configuration entries" },
-          "403": { "description": "Topic configuration authorization denied" }
+          "200": {
+            "description": "Topic configuration entries"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Topic configuration authorization denied"
+          }
         }
       }
     }
-  }
+  },
+  "components": {
+    "securitySchemes": {
+      "oidcSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "Kafdeck.Session",
+        "description": "Server-managed Kafdeck OIDC operator session."
+      },
+      "deploymentToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Kafdeck-Access-Token",
+        "description": "Legacy deployment access boundary; not an operator identity."
+      }
+    }
+  },
+  "security": [
+    {
+      "oidcSession": []
+    },
+    {
+      "deploymentToken": []
+    }
+  ]
 }
 """;
 }

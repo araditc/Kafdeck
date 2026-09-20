@@ -1,6 +1,7 @@
 using System.Reflection;
 using Kafdeck.Core;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Topics;
@@ -28,7 +29,8 @@ public static class KafdeckApiEndpoints
                 apiVersion = "v1",
                 kafkaAdministrationMode = "readOnly",
             }))
-            .WithName("v01-system-info");
+            .WithName("v01-system-info")
+            .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
 
         app.MapGet("/api/v1/system/health", () => Results.Ok(new
             {
@@ -36,20 +38,31 @@ public static class KafdeckApiEndpoints
                 product = ProductIdentity.Name,
                 configuredClusterCount = options.Clusters.Count,
             }))
-            .WithName("v01-system-health");
+            .WithName("v01-system-health")
+            .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
 
         app.MapGet("/api/v1/clusters", async (
+                HttpContext context,
+                [Microsoft.AspNetCore.Mvc.FromServices] KafdeckAuthorizationService authorization,
                 ClusterExplorerService clusters,
                 CancellationToken cancellationToken) =>
             {
+                var authorizedClusterIds = options.Clusters
+                    .Select(cluster => cluster.Id)
+                    .Where(clusterId => authorization.Authorize(
+                        context.User,
+                        new AuthorizationRequest(AuthorizationAction.ClusterRead, clusterId)) ==
+                        KafdeckAuthorizationOutcome.Allowed)
+                    .ToArray();
+
                 var projections = await clusters.ListClustersAsync(
-                        options.Clusters.Select(cluster => cluster.Id),
+                        authorizedClusterIds,
                         cancellationToken)
                     .ConfigureAwait(false);
 
                 return Results.Ok(new
                 {
-                    data = projections.Select(ToClusterEnvelope).ToArray(),
+                    data = projections.Select(projection => ToClusterEnvelope(projection, authorization, context.User)).ToArray(),
                 });
             })
             .WithName("v01-clusters-list");
@@ -57,6 +70,8 @@ public static class KafdeckApiEndpoints
         app.MapGet("/api/v1/clusters/{clusterId}", async (
                 string clusterId,
                 ClusterExplorerService clusters,
+                [Microsoft.AspNetCore.Mvc.FromServices] KafdeckAuthorizationService authorization,
+                HttpContext context,
                 CancellationToken cancellationToken) =>
             {
                 if (!IsConfiguredCluster(options, clusterId))
@@ -65,9 +80,10 @@ public static class KafdeckApiEndpoints
                 }
 
                 var projection = await clusters.GetClusterAsync(clusterId, cancellationToken).ConfigureAwait(false);
-                return Results.Ok(ToClusterEnvelope(projection));
+                return Results.Ok(ToClusterEnvelope(projection, authorization, context.User));
             })
-            .WithName("v01-clusters-detail");
+            .WithName("v01-clusters-detail")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/health", async (
                 string clusterId,
@@ -91,7 +107,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(projection.Observation, limitations.Count > 0),
                     limitations));
             })
-            .WithName("v01-clusters-health");
+            .WithName("v01-clusters-health")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/capabilities", async (
                 string clusterId,
@@ -130,7 +147,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(result.Observation, limitations.Count > 0),
                     limitations));
             })
-            .WithName("v01-clusters-capabilities");
+            .WithName("v01-clusters-capabilities")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/brokers", async (
                 string clusterId,
@@ -154,7 +172,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(projection.Observation, limitations.Count > 0),
                     limitations));
             })
-            .WithName("v01-brokers-list");
+            .WithName("v01-brokers-list")
+            .RequireKafdeckAuthorization(AuthorizationAction.BrokerRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/brokers/{brokerId:int}", async (
                 string clusterId,
@@ -185,7 +204,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(projection.Observation, limitations.Count > 0),
                     limitations));
             })
-            .WithName("v01-brokers-detail");
+            .WithName("v01-brokers-detail")
+            .RequireKafdeckAuthorization(AuthorizationAction.BrokerRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/brokers/{brokerId:int}/configuration", async (
                 string clusterId,
@@ -216,7 +236,10 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(result.Observation, false),
                     Array.Empty<ApiLimitation>()));
             })
-            .WithName("v01-brokers-configuration");
+            .WithName("v01-brokers-configuration")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
+            .RequireKafdeckAuthorization(AuthorizationAction.BrokerRead, "clusterId")
+            .RequireKafdeckAuthorization(AuthorizationAction.BrokerConfigRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/topics", async (
                 string clusterId,
@@ -264,7 +287,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(result.Observation, false),
                     Array.Empty<ApiLimitation>()));
             })
-            .WithName("v01-topics-list");
+            .WithName("v01-topics-list")
+            .RequireKafdeckAuthorization(AuthorizationAction.TopicList, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/topics/{topicName}", async (
                 string clusterId,
@@ -296,7 +320,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(result.Observation, false),
                     Array.Empty<ApiLimitation>()));
             })
-            .WithName("v01-topics-detail");
+            .WithName("v01-topics-detail")
+            .RequireKafdeckAuthorization(AuthorizationAction.TopicRead, "clusterId", "topicName");
 
         app.MapGet("/api/v1/clusters/{clusterId}/topics/{topicName}/partitions", async (
                 string clusterId,
@@ -320,7 +345,8 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(result.Observation, false),
                     Array.Empty<ApiLimitation>()));
             })
-            .WithName("v01-topics-partitions");
+            .WithName("v01-topics-partitions")
+            .RequireKafdeckAuthorization(AuthorizationAction.TopicRead, "clusterId", "topicName");
 
         app.MapGet("/api/v1/clusters/{clusterId}/topics/{topicName}/configuration", async (
                 string clusterId,
@@ -346,19 +372,32 @@ public static class KafdeckApiEndpoints
                     ApiObservationMapper.Create(result.Observation, false),
                     Array.Empty<ApiLimitation>()));
             })
-            .WithName("v01-topics-configuration");
+            .WithName("v01-topics-configuration")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
+            .RequireKafdeckAuthorization(AuthorizationAction.TopicRead, "clusterId", "topicName")
+            .RequireKafdeckAuthorization(AuthorizationAction.TopicConfigRead, "clusterId", "topicName");
 
         return app;
     }
 
-    private static ApiEnvelope<ClusterData> ToClusterEnvelope(ClusterProjection projection)
+    private static ApiEnvelope<ClusterData> ToClusterEnvelope(
+        ClusterProjection projection,
+        KafdeckAuthorizationService? authorization = null,
+        System.Security.Claims.ClaimsPrincipal? principal = null)
     {
         var limitations = ApiObservationMapper.FromCluster(projection.Limitations);
+        var brokers = authorization is null ||
+            authorization.Authorize(
+                principal,
+                new AuthorizationRequest(AuthorizationAction.BrokerRead, projection.ClusterId)) ==
+                KafdeckAuthorizationOutcome.Allowed
+            ? projection.Brokers
+            : Array.Empty<BrokerProjection>();
         var data = new ClusterData(
             projection.ClusterId,
             projection.KafkaClusterId,
             projection.ControllerBrokerId,
-            projection.Brokers,
+            brokers,
             projection.Health,
             projection.HealthReasons,
             projection.Failure?.Code);

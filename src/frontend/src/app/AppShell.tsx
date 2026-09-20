@@ -7,6 +7,7 @@ import {
   type ConfigurationEntryData,
   type TopicDetailData,
   type TopicListItem,
+  type OperatorSession,
 } from '../shared/api.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
@@ -17,6 +18,8 @@ function observationText(envelope: ApiEnvelope<unknown>) {
 }
 
 function problemText(reason: unknown) {
+  if (reason instanceof ApiProblem && reason.status === 401) return 'Operator authentication is required.';
+  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return 'Access denied by Kafdeck operator authorization policy.';
   if (reason instanceof ApiProblem && reason.status === 403) return 'Access denied by Kafka authorization policy.';
   if (reason instanceof ApiProblem && reason.status === 501) return 'This capability is unsupported by the connected Kafka cluster.';
   return reason instanceof Error ? reason.message : 'The requested observation could not be loaded.';
@@ -28,6 +31,8 @@ function ConfigurationView({ entries }: { entries: ConfigurationEntryData[] }) {
 }
 
 export function AppShell() {
+  const [operator, setOperator] = useState<OperatorSession | null>(null);
+  const [authenticationRequired, setAuthenticationRequired] = useState(false);
   const [clusters, setClusters] = useState<ApiEnvelope<ClusterData>[]>([]);
   const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [selected, setSelected] = useState<ApiEnvelope<ClusterData> | null>(null);
@@ -55,6 +60,7 @@ export function AppShell() {
       setSelected(response.data.find(item => item.data.clusterId === nextId) ?? null);
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') return;
+      if (reason instanceof ApiProblem && reason.status === 401) setAuthenticationRequired(true);
       setError(problemText(reason));
     } finally {
       if (!signal?.aborted) setLoading(false);
@@ -79,6 +85,16 @@ export function AppShell() {
 
   useEffect(() => {
     const controller = new AbortController();
+    void kafdeckApi.getOperatorSession(controller.signal)
+      .then(session => {
+        setOperator(session);
+        setAuthenticationRequired(false);
+      })
+      .catch(reason => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        // Local/Token modes intentionally have no human operator session endpoint.
+        if (reason instanceof ApiProblem && reason.status === 401) setAuthenticationRequired(true);
+      });
     void loadClusters(controller.signal);
     return () => controller.abort();
   }, [loadClusters]);
@@ -153,9 +169,9 @@ export function AppShell() {
   };
 
   return <main aria-labelledby="kafdeck-title">
-    <header><div><h1 id="kafdeck-title">{productName}</h1><p>{productDescription}</p></div><div><label htmlFor="cluster-selector">Cluster</label>{' '}<select id="cluster-selector" value={selectedClusterId} onChange={event => selectCluster(event.target.value)} disabled={loading || clusters.length === 0}>{clusters.map(cluster => <option key={cluster.data.clusterId} value={cluster.data.clusterId}>{cluster.data.clusterId}</option>)}</select>{' '}<button type="button" onClick={() => void loadClusters()} disabled={loading}>Refresh</button></div></header>
+    <header><div><h1 id="kafdeck-title">{productName}</h1><p>{productDescription}</p>{operator && <p>Signed in as <strong>{operator.displayName ?? operator.email ?? 'operator'}</strong>{' '}<button type="button" onClick={() => void kafdeckApi.logout()}>Sign out</button></p>}{authenticationRequired && <p><a href="/api/v1/auth/login">Sign in with your identity provider</a></p>}</div><div><label htmlFor="cluster-selector">Cluster</label>{' '}<select id="cluster-selector" value={selectedClusterId} onChange={event => selectCluster(event.target.value)} disabled={loading || clusters.length === 0}>{clusters.map(cluster => <option key={cluster.data.clusterId} value={cluster.data.clusterId}>{cluster.data.clusterId}</option>)}</select>{' '}<button type="button" onClick={() => void loadClusters()} disabled={loading}>Refresh</button></div></header>
     <nav aria-label="Kafdeck sections"><a href="#overview">Overview</a>{' · '}<a href="#brokers">Brokers</a>{' · '}<a href="#topics">Topics</a></nav>
-    {loading && <p role="status">Loading cluster observations…</p>}{error && <p role="alert">{error}</p>}{!loading && !error && clusters.length === 0 && <p role="status">No clusters are configured.</p>}
+    {loading && <p role="status">Loading cluster observations…</p>}{error && <p role="alert">{error}</p>}{!loading && !error && clusters.length === 0 && <p role="status">No authorized clusters are available.</p>}
     {selected && <>
       <section id="overview" aria-labelledby="overview-title"><h2 id="overview-title">Cluster overview</h2><p><strong>{selected.data.clusterId}</strong> · {observationText(selected)}</p><dl><dt>Kafka cluster ID</dt><dd>{selected.data.kafkaClusterId ?? 'Not observed'}</dd><dt>Health</dt><dd>{String(selected.data.health)}</dd><dt>Controller</dt><dd>{selected.data.controllerBrokerId ?? 'Not observed'}</dd><dt>Brokers</dt><dd>{selected.data.brokers.length}</dd></dl>{selected.limitations.length > 0 && <aside aria-label="Cluster limitations"><h3>Limitations</h3><ul>{selected.limitations.map((item, index) => <li key={`${item.capability}-${index}`}>{item.capability ?? 'cluster'}: {item.state}{item.reason ? ` — ${item.reason}` : ''}</li>)}</ul></aside>}</section>
       <section id="brokers" aria-labelledby="brokers-title"><h2 id="brokers-title">Brokers</h2>{selected.data.brokers.length === 0 ? <p>No broker metadata is currently observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Host</th><th scope="col">Port</th><th scope="col">Role</th><th scope="col">Configuration</th></tr></thead><tbody>{selected.data.brokers.map(broker => <tr key={broker.brokerId}><th scope="row">{broker.brokerId}</th><td>{broker.host}</td><td>{broker.port}</td><td>{broker.isController ? 'Controller' : 'Broker'}</td><td><button type="button" onClick={() => void openBroker(broker.brokerId)}>View configuration</button></td></tr>)}</tbody></table>}{brokerError && <p role="alert">{brokerError}</p>}{brokerConfiguration && <article aria-labelledby="broker-config-title"><h3 id="broker-config-title">Broker {brokerConfiguration.brokerId} configuration</h3><ConfigurationView entries={brokerConfiguration.entries} /></article>}</section>
