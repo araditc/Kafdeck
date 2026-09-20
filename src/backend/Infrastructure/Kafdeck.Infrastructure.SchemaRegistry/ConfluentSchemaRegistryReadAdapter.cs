@@ -351,7 +351,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         var client = new HttpClient(handler, disposeHandler: true)
         {
             BaseAddress = baseUri,
-            Timeout = Timeout.InfiniteTimeSpan,
+            Timeout = System.Threading.Timeout.InfiniteTimeSpan,
         };
 
         AuthenticationHeaderValue? authorization = null;
