@@ -139,6 +139,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
         catch (Exception exception) when (
             exception is AvroException or
             InvalidProtocolBufferException or
+            InvalidDataException or
             JsonException or
             FormatException or
             IOException or
