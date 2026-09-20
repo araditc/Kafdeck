@@ -296,7 +296,11 @@ internal sealed class BoundedAvroDecoder : Decoder
 
 internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
 {
-    private readonly AvroDeserializationBudget _budget;
+    // GenericDatumReader builds resolver/access objects inside its base
+    // constructor, before this derived constructor can initialize fields.
+    // Access objects therefore retain the owner and resolve the budget only
+    // when an actual datum is read.
+    private AvroDeserializationBudget? _budget;
 
     public BoundedGenericDatumReader(
         Schema writerSchema,
@@ -307,28 +311,32 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
         _budget = budget ?? throw new ArgumentNullException(nameof(budget));
     }
 
+    private AvroDeserializationBudget Budget =>
+        _budget
+        ?? throw new InvalidOperationException("Avro reader budget is not initialized.");
+
     protected override ArrayAccess GetArrayAccess(ArraySchema readerSchema) =>
-        new BoundedArrayAccess(_budget);
+        new BoundedArrayAccess(this);
 
     protected override MapAccess GetMapAccess(MapSchema readerSchema) =>
-        new BoundedMapAccess(_budget);
+        new BoundedMapAccess(this);
 
     protected override RecordAccess GetRecordAccess(RecordSchema readerSchema) =>
-        new BoundedRecordAccess(readerSchema, _budget);
+        new BoundedRecordAccess(readerSchema, this);
 
     protected override EnumAccess GetEnumAccess(EnumSchema readerSchema) =>
-        new BoundedEnumAccess(readerSchema, _budget);
+        new BoundedEnumAccess(readerSchema, this);
 
     protected override FixedAccess GetFixedAccess(FixedSchema readerSchema) =>
-        new BoundedFixedAccess(readerSchema, _budget);
+        new BoundedFixedAccess(readerSchema, this);
 
     private sealed class BoundedArrayAccess : ArrayAccess
     {
-        private readonly AvroDeserializationBudget _budget;
+        private readonly BoundedGenericDatumReader _owner;
 
-        public BoundedArrayAccess(AvroDeserializationBudget budget)
+        public BoundedArrayAccess(BoundedGenericDatumReader owner)
         {
-            _budget = budget;
+            _owner = owner;
         }
 
         public object Create(object reuse) =>
@@ -336,7 +344,7 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
 
         public void EnsureSize(ref object array, int targetSize)
         {
-            _budget.ValidateCollectionSize(targetSize);
+            _owner.Budget.ValidateCollectionSize(targetSize);
 
             if (((object[])array).Length < targetSize)
             {
@@ -346,7 +354,7 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
 
         public void Resize(ref object array, int targetSize)
         {
-            _budget.ValidateCollectionSize(targetSize);
+            _owner.Budget.ValidateCollectionSize(targetSize);
             SizeTo(ref array, targetSize);
         }
 
@@ -358,7 +366,7 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
             Decoder decoder,
             bool reuse)
         {
-            _budget.Reserve(elements);
+            _owner.Budget.Reserve(elements);
 
             var array = (object[])arrayObj;
             if (index < 0 || elements < 0 || index > array.Length - elements)
@@ -384,11 +392,11 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
 
     private sealed class BoundedMapAccess : MapAccess
     {
-        private readonly AvroDeserializationBudget _budget;
+        private readonly BoundedGenericDatumReader _owner;
 
-        public BoundedMapAccess(AvroDeserializationBudget budget)
+        public BoundedMapAccess(BoundedGenericDatumReader owner)
         {
-            _budget = budget;
+            _owner = owner;
         }
 
         public object Create(object reuse)
@@ -409,7 +417,7 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
             Decoder decoder,
             bool reuse)
         {
-            _budget.Reserve(elements);
+            _owner.Budget.Reserve(elements);
 
             var map = (IDictionary<string, object>)mapObj;
             if (elements < 0 ||
@@ -429,19 +437,19 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
     private sealed class BoundedRecordAccess : RecordAccess
     {
         private readonly RecordSchema _schema;
-        private readonly AvroDeserializationBudget _budget;
+        private readonly BoundedGenericDatumReader _owner;
 
         public BoundedRecordAccess(
             RecordSchema schema,
-            AvroDeserializationBudget budget)
+            BoundedGenericDatumReader owner)
         {
             _schema = schema;
-            _budget = budget;
+            _owner = owner;
         }
 
         public object CreateRecord(object reuse)
         {
-            _budget.Reserve(1);
+            _owner.Budget.Reserve(1);
 
             if (reuse is GenericRecord record &&
                 record.Schema.Equals(_schema))
@@ -463,7 +471,7 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
             int fieldPos,
             object fieldValue)
         {
-            _budget.Reserve(1);
+            _owner.Budget.Reserve(1);
             ((GenericRecord)record).Add(fieldName, fieldValue);
         }
     }
@@ -471,19 +479,19 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
     private sealed class BoundedEnumAccess : EnumAccess
     {
         private readonly EnumSchema _schema;
-        private readonly AvroDeserializationBudget _budget;
+        private readonly BoundedGenericDatumReader _owner;
 
         public BoundedEnumAccess(
             EnumSchema schema,
-            AvroDeserializationBudget budget)
+            BoundedGenericDatumReader owner)
         {
             _schema = schema;
-            _budget = budget;
+            _owner = owner;
         }
 
         public object CreateEnum(object reuse, int ordinal)
         {
-            _budget.Reserve(1);
+            _owner.Budget.Reserve(1);
 
             if (reuse is GenericEnum value &&
                 value.Schema.Equals(_schema))
@@ -499,20 +507,20 @@ internal sealed class BoundedGenericDatumReader : GenericDatumReader<object>
     private sealed class BoundedFixedAccess : FixedAccess
     {
         private readonly FixedSchema _schema;
-        private readonly AvroDeserializationBudget _budget;
+        private readonly BoundedGenericDatumReader _owner;
 
         public BoundedFixedAccess(
             FixedSchema schema,
-            AvroDeserializationBudget budget)
+            BoundedGenericDatumReader owner)
         {
             _schema = schema;
-            _budget = budget;
+            _owner = owner;
         }
 
         public object CreateFixed(object reuse)
         {
-            _budget.ValidateFixedSize(_schema.Size);
-            _budget.Reserve(1);
+            _owner.Budget.ValidateFixedSize(_schema.Size);
+            _owner.Budget.Reserve(1);
 
             return reuse is GenericFixed fixedValue &&
                    fixedValue.Schema.Equals(_schema)
