@@ -10,6 +10,7 @@ export interface TopicPageData { items: TopicListItem[]; nextCursor: string | nu
 export interface PartitionProjection { partitionId: number; leaderBrokerId: number | null; replicaBrokerIds: number[]; inSyncReplicaBrokerIds: number[]; outOfSyncReplicaBrokerIds: number[]; health: string | number; healthReasons: string[]; }
 export interface TopicDetailData { name: string; isInternal: boolean; partitions: PartitionProjection[]; offlinePartitionCount: number; underReplicatedPartitionCount: number; anomalyState: string | number; }
 export interface ConfigurationEntryData { name: string; value: string | null; isSensitive: boolean; isReadOnly: boolean; source: string | null; }
+export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; }
 
 export class ApiProblem extends Error {
   readonly status: number;
@@ -43,8 +44,8 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, init);
   const payload = (await response.json()) as unknown;
   if (!response.ok) {
-    const problem = payload as { detail?: string; title?: string; code?: string };
-    throw new ApiProblem(response.status, problem.detail ?? problem.title ?? 'Kafdeck request failed.', problem.code ?? null);
+    const problem = payload as { detail?: string; title?: string; code?: string; type?: string };
+    throw new ApiProblem(response.status, problem.detail ?? problem.title ?? 'Kafdeck request failed.', problem.code ?? problem.type ?? null);
   }
   return payload as T;
 }
@@ -52,7 +53,20 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 function clusterPath(clusterId: string) { return `/api/v1/clusters/${encodeURIComponent(clusterId)}`; }
 function topicPath(clusterId: string, topicName: string) { return `${clusterPath(clusterId)}/topics/${encodeURIComponent(topicName)}`; }
 
+async function post(path: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = bootstrapDeploymentToken();
+  if (token) headers['X-Kafdeck-Access-Token'] = token;
+  const response = await fetch(path, { method: 'POST', headers });
+  if (!response.ok && !response.redirected) {
+    const payload = (await response.json()) as { detail?: string; title?: string; code?: string; type?: string };
+    throw new ApiProblem(response.status, payload.detail ?? payload.title ?? 'Kafdeck request failed.', payload.code ?? payload.type ?? null);
+  }
+}
+
 export const kafdeckApi = {
+  getOperatorSession(signal?: AbortSignal) { return readJson<OperatorSession>('/api/v1/auth/session', signal); },
+  async logout() { await post('/api/v1/auth/logout'); window.location.assign('/'); },
   listClusters(signal?: AbortSignal) { return readJson<{ data: ApiEnvelope<ClusterData>[] }>('/api/v1/clusters', signal); },
   getCluster(clusterId: string, signal?: AbortSignal) { return readJson<ApiEnvelope<ClusterData>>(clusterPath(clusterId), signal); },
   listTopics(clusterId: string, query: string, cursor: string | null, signal?: AbortSignal) {
