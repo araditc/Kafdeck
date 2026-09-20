@@ -1162,7 +1162,7 @@ internal sealed class FilterLexer
             return ReadNumber();
         }
 
-        if (current is '"' or ''')
+        if (current is '"' or '\'')
         {
             return ReadString();
         }
