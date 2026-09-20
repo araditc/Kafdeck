@@ -13,13 +13,17 @@ public sealed record RecordStructuredMaskRule
         ArgumentException.ThrowIfNullOrWhiteSpace(jsonPointer);
         ArgumentNullException.ThrowIfNull(replacement);
 
-        var normalized = jsonPointer.Trim();
-        if (!normalized.StartsWith("/", StringComparison.Ordinal) || normalized.Length > MaxPathCharacters)
+        if (!jsonPointer.StartsWith("/", StringComparison.Ordinal) || jsonPointer.Length > MaxPathCharacters)
         {
             throw new ArgumentException("Structured masking paths must be bounded JSON-pointer-style paths starting with '/'.", nameof(jsonPointer));
         }
 
-        var segmentCount = normalized.Split('/', StringSplitOptions.None).Length - 1;
+        if (jsonPointer.Any(char.IsControl))
+        {
+            throw new ArgumentException("Structured masking paths must not contain control characters.", nameof(jsonPointer));
+        }
+
+        var segmentCount = jsonPointer.Split('/', StringSplitOptions.None).Length - 1;
         if (segmentCount is < 1 or > MaxPathSegments)
         {
             throw new ArgumentOutOfRangeException(nameof(jsonPointer), $"Structured masking paths must contain between 1 and {MaxPathSegments} segments.");
@@ -30,7 +34,7 @@ public sealed record RecordStructuredMaskRule
             throw new ArgumentOutOfRangeException(nameof(replacement));
         }
 
-        JsonPointer = normalized;
+        JsonPointer = jsonPointer;
         Replacement = replacement;
     }
 
