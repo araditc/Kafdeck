@@ -243,6 +243,103 @@ public sealed class RecordFilterEngineTests
         afterRelease.Dispose();
     }
 
+
+    [Fact]
+    public async Task Live_tail_second_session_for_same_identity_is_admission_denied()
+    {
+        var reader = new BlockingTailReader();
+        var filter = new RecordFilterService(reader);
+        var tail = new RecordLiveTailService(
+            filter,
+            new RecordLiveTailOptions(
+                globalLimit: 2,
+                perClusterLimit: 2,
+                perIdentityLimit: 1,
+                emptyPollDelay: TimeSpan.Zero));
+
+        var request = new RecordTailRequest(
+            "issuer|alice",
+            new RecordReadRequest(
+                "cluster-a",
+                "orders",
+                0,
+                RecordAnchor.Latest(),
+                RecordReadDirection.Forward,
+                RecordOperationBudget.Default),
+            new RecordFilterRequest(),
+            new RecordTailBudget(
+                maxRecords: 10,
+                maxRawBytes: 1024,
+                maxDuration: TimeSpan.FromSeconds(5),
+                maxRecordsPerSecond: 10));
+
+        using var firstCancellation = new CancellationTokenSource();
+        var firstEnumerator = tail
+            .TailAsync(request, firstCancellation.Token)
+            .GetAsyncEnumerator(firstCancellation.Token);
+
+        var firstMove = firstEnumerator.MoveNextAsync().AsTask();
+        await reader.Started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        await using var secondEnumerator = tail
+            .TailAsync(request)
+            .GetAsyncEnumerator();
+
+        Assert.True(await secondEnumerator.MoveNextAsync());
+        Assert.Equal(
+            RecordTailFrameKind.AdmissionDenied,
+            secondEnumerator.Current.Kind);
+
+        firstCancellation.Cancel();
+        reader.Release.TrySetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await firstMove);
+
+        await firstEnumerator.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Live_tail_emits_first_kafka_failure_and_does_not_retry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var reader = new CountingFailureReader(
+            KafkaResult<RecordReadBatch>.Failed(
+                new KafkaFailure(
+                    KafkaFailureCategory.Unavailable,
+                    "kafka_unavailable",
+                    "Kafka is temporarily unavailable.",
+                    true),
+                new ObservationMetadata(now, now, now, ObservationSource.Live)));
+
+        var filter = new RecordFilterService(reader);
+        var tail = new RecordLiveTailService(
+            filter,
+            new RecordLiveTailOptions(emptyPollDelay: TimeSpan.Zero));
+
+        var request = new RecordTailRequest(
+            "issuer|alice",
+            new RecordReadRequest(
+                "cluster-a",
+                "orders",
+                0,
+                RecordAnchor.Latest(),
+                RecordReadDirection.Forward,
+                RecordOperationBudget.Default),
+            new RecordFilterRequest());
+
+        var frames = new List<RecordTailFrame>();
+        await foreach (var frame in tail.TailAsync(request))
+        {
+            frames.Add(frame);
+        }
+
+        Assert.Single(frames);
+        Assert.Equal(RecordTailFrameKind.KafkaFailure, frames[0].Kind);
+        Assert.Equal("kafka_unavailable", frames[0].Failure!.Code);
+        Assert.Equal(1, reader.CallCount);
+    }
+
     [Fact]
     public async Task Live_tail_rejects_previous_direction()
     {
@@ -315,6 +412,59 @@ public sealed class RecordFilterEngineTests
                     header.Name,
                     Encoding.UTF8.GetBytes(header.Value)))
                 .ToArray());
+
+
+    private sealed class BlockingTailReader : IKafkaRecordReadPort
+    {
+        public TaskCompletionSource Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<KafkaResult<RecordReadBatch>> ReadPageAsync(
+            RecordReadRequest request,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+
+            var now = DateTimeOffset.UtcNow;
+            return KafkaResult<RecordReadBatch>.Success(
+                new RecordReadBatch(
+                    [],
+                    0,
+                    0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    RecordBudgetOutcome.Complete),
+                new ObservationMetadata(now, now, now, ObservationSource.Live));
+        }
+    }
+
+    private sealed class CountingFailureReader : IKafkaRecordReadPort
+    {
+        private readonly KafkaResult<RecordReadBatch> _result;
+
+        public CountingFailureReader(KafkaResult<RecordReadBatch> result)
+        {
+            _result = result;
+        }
+
+        public int CallCount { get; private set; }
+
+        public Task<KafkaResult<RecordReadBatch>> ReadPageAsync(
+            RecordReadRequest request,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult(_result);
+        }
+    }
 
     private sealed class StubRecordReader : IKafkaRecordReadPort
     {
