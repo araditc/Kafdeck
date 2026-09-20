@@ -237,6 +237,8 @@ public static class KafdeckApiEndpoints
                     Array.Empty<ApiLimitation>()));
             })
             .WithName("v01-brokers-configuration")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
+            .RequireKafdeckAuthorization(AuthorizationAction.BrokerRead, "clusterId")
             .RequireKafdeckAuthorization(AuthorizationAction.BrokerConfigRead, "clusterId");
 
         app.MapGet("/api/v1/clusters/{clusterId}/topics", async (
@@ -371,6 +373,8 @@ public static class KafdeckApiEndpoints
                     Array.Empty<ApiLimitation>()));
             })
             .WithName("v01-topics-configuration")
+            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
+            .RequireKafdeckAuthorization(AuthorizationAction.TopicRead, "clusterId", "topicName")
             .RequireKafdeckAuthorization(AuthorizationAction.TopicConfigRead, "clusterId", "topicName");
 
         return app;
