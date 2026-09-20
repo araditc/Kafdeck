@@ -108,6 +108,8 @@ public static class AuthorizationPolicyConfigurationLoader
             ["topicread"] = AuthorizationAction.TopicRead,
             ["topicconfigread"] = AuthorizationAction.TopicConfigRead,
             ["brokerconfigread"] = AuthorizationAction.BrokerConfigRead,
+            ["recordread"] = AuthorizationAction.RecordRead,
+            ["recordexport"] = AuthorizationAction.RecordExport,
         };
 
         if (aliases.TryGetValue(normalized, out var mapped))
