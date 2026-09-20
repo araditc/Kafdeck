@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
+using Google.Protobuf;
+using Google.Protobuf.Reflection;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Configuration;
