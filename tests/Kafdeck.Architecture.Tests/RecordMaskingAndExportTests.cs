@@ -341,8 +341,9 @@ public sealed class RecordMaskingAndExportTests
             identity,
             destination);
 
-        Assert.Equal(RecordExportBudgetOutcome.DurationLimit, summary.Outcome);
-        Assert.InRange(summary.RowCount, 0, 1);
+        Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
+        Assert.Equal(0, summary.RowCount);
+        Assert.Equal(0, summary.ByteCount);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
     }
 
@@ -364,8 +365,9 @@ public sealed class RecordMaskingAndExportTests
             identity,
             destination);
 
-        Assert.Equal(RecordExportBudgetOutcome.DurationLimit, summary.Outcome);
+        Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
+        Assert.Equal(0, summary.ByteCount);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
     }
 
