@@ -102,7 +102,6 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             return ReadBounded(
                 consumer,
                 request,
-                operation,
                 effectiveDeadline,
                 durationBudgetOwnsDeadline,
                 cancellationToken,
@@ -176,7 +175,6 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
     private KafkaResult<RecordReadBatch> ReadBounded(
         IConsumer<byte[], byte[]> consumer,
         RecordReadRequest request,
-        KafkaOperationContext operation,
         DateTimeOffset effectiveDeadline,
         bool durationBudgetOwnsDeadline,
         CancellationToken callerCancellation,
@@ -277,8 +275,8 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             }
         }
 
-        var firstOffset = records.Count == 0 ? null : records[0].Offset;
-        var lastOffset = records.Count == 0 ? null : records[^1].Offset;
+        long? firstOffset = records.Count == 0 ? null : records[0].Offset;
+        long? lastOffset = records.Count == 0 ? null : records[^1].Offset;
 
         RecordAnchor? nextAnchor = null;
         RecordAnchor? previousAnchor = null;
