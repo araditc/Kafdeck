@@ -160,6 +160,82 @@ public sealed class ConfluentRecordDecoderTests
         Assert.Equal(0, schemas.IdLookupCount);
     }
 
+
+    [Fact]
+    public async Task Truncated_confluent_frame_fails_before_registry_lookup()
+    {
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                1,
+                RecordSchemaFormat.JsonSchema,
+                """{"type":"object"}""",
+                []));
+
+        var decoder = new ConfluentRecordDecoder(schemas);
+
+        var result = await decoder.DecodeAsync(
+            new RecordDecodeRequest(
+                "cluster-a",
+                "orders",
+                0,
+                0,
+                false,
+                new byte[] { 0, 0, 0, 1 }),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("invalid_confluent_payload", result.Failure!.Code);
+        Assert.Equal(0, schemas.IdLookupCount);
+    }
+
+    [Fact]
+    public async Task Excessive_protobuf_message_index_depth_fails_closed()
+    {
+        const int schemaId = 17;
+        var file = new FileDescriptorProto
+        {
+            Name = "root.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        file.MessageType.Add(new DescriptorProto { Name = "Root" });
+
+        var schemas = new StubSchemaPort(
+            new RecordSchemaDocument(
+                schemaId,
+                RecordSchemaFormat.Protobuf,
+                Convert.ToBase64String(file.ToByteArray()),
+                []));
+
+        // Zig-zag encoded positive 33 => 66, above MaxMessageIndexDepth.
+        var decoder = new ConfluentRecordDecoder(schemas);
+        var result = await decoder.DecodeAsync(
+            Request(schemaId, new byte[] { 66 }),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RecordSchemaFailureCategory.DecodeFailed, result.Failure!.Category);
+        Assert.Equal("record_decode_failed", result.Failure.Code);
+    }
+
+    [Fact]
+    public async Task Schema_registry_failure_is_propagated_without_payload_detail()
+    {
+        var schemas = new FailingSchemaPort();
+        var decoder = new ConfluentRecordDecoder(schemas);
+
+        var result = await decoder.DecodeAsync(
+            Request(23, Encoding.UTF8.GetBytes("""{"secret":"must-not-leak"}""")),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RecordSchemaFailureCategory.Unavailable, result.Failure!.Category);
+        Assert.DoesNotContain("must-not-leak", result.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Protobuf_references_are_loaded_by_subject_version()
     {
@@ -263,6 +339,31 @@ public sealed class ConfluentRecordDecoderTests
 
     private static KafkaOperationContext Operation() =>
         new(DateTimeOffset.UtcNow.AddSeconds(10));
+
+
+    private sealed class FailingSchemaPort : IRecordSchemaReadPort
+    {
+        public Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaByIdAsync(
+            string clusterId,
+            int schemaId,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                RecordSchemaResult<RecordSchemaDocument>.Failed(
+                    new RecordSchemaFailure(
+                        RecordSchemaFailureCategory.Unavailable,
+                        "schema_registry_unavailable",
+                        "Schema Registry is temporarily unavailable.",
+                        true)));
+
+        public Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaBySubjectVersionAsync(
+            string clusterId,
+            string subject,
+            int version,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
 
     private sealed class StubSchemaPort : IRecordSchemaReadPort
     {
