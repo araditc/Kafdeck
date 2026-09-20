@@ -155,6 +155,16 @@ public sealed record RecordReadRequest
             throw new ArgumentOutOfRangeException(nameof(partition), "Partition must be non-negative.");
         }
 
+        if (!Enum.IsDefined(anchor.Kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(anchor), "Record anchor kind must be defined.");
+        }
+
+        if (!Enum.IsDefined(direction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(direction), "Record read direction must be defined.");
+        }
+
         ClusterId = clusterId.Trim();
         TopicName = topicName.Trim();
         Partition = partition;
