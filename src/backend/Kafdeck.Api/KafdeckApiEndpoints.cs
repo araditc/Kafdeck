@@ -43,7 +43,7 @@ public static class KafdeckApiEndpoints
 
         app.MapGet("/api/v1/clusters", async (
                 HttpContext context,
-                KafdeckAuthorizationService authorization,
+                [Microsoft.AspNetCore.Mvc.FromServices] KafdeckAuthorizationService authorization,
                 ClusterExplorerService clusters,
                 CancellationToken cancellationToken) =>
             {
@@ -62,7 +62,7 @@ public static class KafdeckApiEndpoints
 
                 return Results.Ok(new
                 {
-                    data = projections.Select(ToClusterEnvelope).ToArray(),
+                    data = projections.Select(projection => ToClusterEnvelope(projection, authorization, context.User)).ToArray(),
                 });
             })
             .WithName("v01-clusters-list");
@@ -70,6 +70,8 @@ public static class KafdeckApiEndpoints
         app.MapGet("/api/v1/clusters/{clusterId}", async (
                 string clusterId,
                 ClusterExplorerService clusters,
+                [Microsoft.AspNetCore.Mvc.FromServices] KafdeckAuthorizationService authorization,
+                HttpContext context,
                 CancellationToken cancellationToken) =>
             {
                 if (!IsConfiguredCluster(options, clusterId))
@@ -78,7 +80,7 @@ public static class KafdeckApiEndpoints
                 }
 
                 var projection = await clusters.GetClusterAsync(clusterId, cancellationToken).ConfigureAwait(false);
-                return Results.Ok(ToClusterEnvelope(projection));
+                return Results.Ok(ToClusterEnvelope(projection, authorization, context.User));
             })
             .WithName("v01-clusters-detail")
             .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId");
@@ -374,14 +376,24 @@ public static class KafdeckApiEndpoints
         return app;
     }
 
-    private static ApiEnvelope<ClusterData> ToClusterEnvelope(ClusterProjection projection)
+    private static ApiEnvelope<ClusterData> ToClusterEnvelope(
+        ClusterProjection projection,
+        KafdeckAuthorizationService? authorization = null,
+        System.Security.Claims.ClaimsPrincipal? principal = null)
     {
         var limitations = ApiObservationMapper.FromCluster(projection.Limitations);
+        var brokers = authorization is null ||
+            authorization.Authorize(
+                principal,
+                new AuthorizationRequest(AuthorizationAction.BrokerRead, projection.ClusterId)) ==
+                KafdeckAuthorizationOutcome.Allowed
+            ? projection.Brokers
+            : Array.Empty<BrokerProjection>();
         var data = new ClusterData(
             projection.ClusterId,
             projection.KafkaClusterId,
             projection.ControllerBrokerId,
-            projection.Brokers,
+            brokers,
             projection.Health,
             projection.HealthReasons,
             projection.Failure?.Code);
