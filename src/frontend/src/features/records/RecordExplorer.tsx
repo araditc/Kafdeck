@@ -80,9 +80,8 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
       ...anchor,
       direction: 'forward',
       maxRecords,
-      keyPrefix: keyPrefix || undefined,
-      filter: filter || undefined,
-      filterLanguage,
+      ...(keyPrefix ? { keyPrefix } : {}),
+      ...(filter ? { filter, filterLanguage } : {}),
     };
   }, [anchorKind, anchorValue, filter, filterLanguage, keyPrefix, maxRecords, partition]);
 
@@ -100,8 +99,10 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   async function startTail() {
     stopTail();
     const controller = new AbortController(); tailController.current = controller; setTailing(true); setError(null);
+    const { anchor: _anchor, offset: _offset, timestampUtc: _timestampUtc, ...tailBase } = baseQuery;
+    const tailQuery: RecordQuery = { ...tailBase, anchor: 'latest' };
     try {
-      await kafdeckApi.tailRecords(clusterId, topicName, { ...baseQuery, anchor: 'latest', offset: undefined, timestampUtc: undefined }, frame => {
+      await kafdeckApi.tailRecords(clusterId, topicName, tailQuery, frame => {
         if (frame.kind === 'records' && frame.page) {
           setPage(previous => previous ? { ...frame.page!, records: [...previous.records, ...frame.page!.records].slice(-maxRecords) } : frame.page);
         } else if (frame.kind === 'error' && frame.failure) setError(frame.failure.message);
