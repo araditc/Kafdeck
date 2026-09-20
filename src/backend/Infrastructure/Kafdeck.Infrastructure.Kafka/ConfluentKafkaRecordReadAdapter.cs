@@ -354,12 +354,15 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 var result = consumer.OffsetsForTimes([lookup], timeout).Single();
                 return result.Offset == Offset.Unset ? highWatermark : result.Offset.Value;
             }
-            catch (KafkaException exception) when (
-                exception.Error.Code == ErrorCode.Local_TimedOut &&
-                _timeProvider.GetUtcNow() < effectiveDeadline &&
-                !cancellationToken.IsCancellationRequested)
+            catch (KafkaException exception) when (exception.Error.Code == ErrorCode.Local_TimedOut)
             {
-                // Retry only the bounded metadata lookup; no record has been delivered yet.
+                // A synchronous librdkafka metadata call cannot accept a token. Keep the
+                // slice short, then re-check cancellation/deadline before any retry.
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_timeProvider.GetUtcNow() >= effectiveDeadline)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
             }
         }
     }
@@ -378,12 +381,15 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             {
                 return consumer.QueryWatermarkOffsets(topicPartition, timeout);
             }
-            catch (KafkaException exception) when (
-                exception.Error.Code == ErrorCode.Local_TimedOut &&
-                _timeProvider.GetUtcNow() < effectiveDeadline &&
-                !cancellationToken.IsCancellationRequested)
+            catch (KafkaException exception) when (exception.Error.Code == ErrorCode.Local_TimedOut)
             {
-                // A short local timeout is expected while honoring a longer operation deadline.
+                // A short local timeout is expected while honoring the linked token and
+                // the larger operation deadline. Re-check both before retrying.
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_timeProvider.GetUtcNow() >= effectiveDeadline)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
             }
         }
     }
