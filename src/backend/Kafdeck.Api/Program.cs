@@ -46,6 +46,7 @@ var authorizationPolicy = AuthorizationPolicyCompiler.Compile(
     AuthorizationPolicyConfigurationLoader.Load(builder.Configuration));
 builder.Services.AddSingleton(authorizationPolicy);
 builder.Services.AddSingleton<AuthorizationPolicyEvaluator>();
+builder.Services.AddSingleton<KafdeckAuthorizationService>();
 builder.Services.AddSingleton<KafkaSnapshotPolicy>();
 builder.Services.AddSingleton<KafkaSnapshotCoordinator>(services =>
     new KafkaSnapshotCoordinator(services.GetRequiredService<KafkaSnapshotPolicy>()));
