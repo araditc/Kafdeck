@@ -42,11 +42,21 @@ public static class KafdeckApiEndpoints
             .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
 
         app.MapGet("/api/v1/clusters", async (
+                HttpContext context,
+                KafdeckAuthorizationService authorization,
                 ClusterExplorerService clusters,
                 CancellationToken cancellationToken) =>
             {
+                var authorizedClusterIds = options.Clusters
+                    .Select(cluster => cluster.Id)
+                    .Where(clusterId => authorization.Authorize(
+                        context.User,
+                        new AuthorizationRequest(AuthorizationAction.ClusterRead, clusterId)) ==
+                        KafdeckAuthorizationOutcome.Allowed)
+                    .ToArray();
+
                 var projections = await clusters.ListClustersAsync(
-                        options.Clusters.Select(cluster => cluster.Id),
+                        authorizedClusterIds,
                         cancellationToken)
                     .ConfigureAwait(false);
 
@@ -55,8 +65,7 @@ public static class KafdeckApiEndpoints
                     data = projections.Select(ToClusterEnvelope).ToArray(),
                 });
             })
-            .WithName("v01-clusters-list")
-            .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead);
+            .WithName("v01-clusters-list");
 
         app.MapGet("/api/v1/clusters/{clusterId}", async (
                 string clusterId,
