@@ -99,10 +99,12 @@ public sealed class V03W24RegressionTests
         Assert.Equal(2, reader.CallCount);
         Assert.Equal(3, frames.Count);
         Assert.Equal(RecordTailFrameKind.Records, frames[0].Kind);
-        Assert.Equal(RecordBudgetOutcome.RateLimit, frames[0].Page!.ReadBudgetOutcome);
-        Assert.Equal(0, frames[0].Page.Records.Single().RawRecord.Offset);
+        var firstPage = Assert.IsType<RecordFilterPage>(frames[0].Page);
+        Assert.Equal(RecordBudgetOutcome.RateLimit, firstPage.ReadBudgetOutcome);
+        Assert.Equal(0, firstPage.Records.Single().RawRecord.Offset);
         Assert.Equal(RecordTailFrameKind.Records, frames[1].Kind);
-        Assert.Equal(1, frames[1].Page!.Records.Single().RawRecord.Offset);
+        var secondPage = Assert.IsType<RecordFilterPage>(frames[1].Page);
+        Assert.Equal(1, secondPage.Records.Single().RawRecord.Offset);
         Assert.Equal(RecordTailFrameKind.Completed, frames[2].Kind);
         Assert.Equal(1, reader.SecondAnchorOffset);
     }
