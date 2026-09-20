@@ -15,7 +15,8 @@ public sealed record SafeClusterDiagnostic(
     int BootstrapServerCount,
     KafkaSecurityProtocol SecurityProtocol,
     bool TlsConfigured,
-    bool SaslConfigured);
+    bool SaslConfigured,
+    bool SchemaRegistryConfigured);
 
 public static class SafeConfigurationDiagnostics
 {
@@ -33,7 +34,8 @@ public static class SafeConfigurationDiagnostics
                 cluster.BootstrapServers.Count,
                 cluster.SecurityProtocol,
                 cluster.Tls is not null,
-                cluster.Sasl is not null))
+                cluster.Sasl is not null,
+                cluster.SchemaRegistry is not null))
             .ToArray();
 
         return new SafeConfigurationDiagnostic(
