@@ -64,6 +64,38 @@ public sealed class RecordReadContractTests
     }
 
     [Fact]
+    public void Record_request_rejects_undefined_anchor_kind()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RecordReadRequest(
+            "prod",
+            "payments",
+            0,
+            default,
+            RecordReadDirection.Forward,
+            RecordOperationBudget.Default));
+    }
+
+    [Fact]
+    public void Record_request_rejects_undefined_direction()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RecordReadRequest(
+            "prod",
+            "payments",
+            0,
+            RecordAnchor.Earliest(),
+            (RecordReadDirection)0,
+            RecordOperationBudget.Default));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RecordReadRequest(
+            "prod",
+            "payments",
+            0,
+            RecordAnchor.Earliest(),
+            (RecordReadDirection)999,
+            RecordOperationBudget.Default));
+    }
+
+    [Fact]
     public void Record_read_port_is_read_only_and_cancellable()
     {
         var methods = typeof(IKafkaRecordReadPort).GetMethods(BindingFlags.Instance | BindingFlags.Public);
