@@ -123,26 +123,27 @@ public sealed class RecordFilterEvaluator
             return false;
         }
 
-        if (filter.KeyEqualsUtf8 is not null &&
-            !TryDecodeUtf8(record.Key, out var keyEquals))
+        if (filter.KeyEqualsUtf8 is not null)
         {
-            return false;
-        }
-        else if (filter.KeyEqualsUtf8 is not null &&
-                 !string.Equals(keyEquals, filter.KeyEqualsUtf8, StringComparison.Ordinal))
-        {
-            return false;
+            if (!TryDecodeUtf8(record.Key, out var keyEquals) ||
+                !string.Equals(
+                    keyEquals,
+                    filter.KeyEqualsUtf8,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
         }
 
-        if (filter.KeyPrefixUtf8 is not null &&
-            !TryDecodeUtf8(record.Key, out var keyPrefix))
+        if (filter.KeyPrefixUtf8 is not null)
         {
-            return false;
-        }
-        else if (filter.KeyPrefixUtf8 is not null &&
-                 !keyPrefix.StartsWith(filter.KeyPrefixUtf8, StringComparison.Ordinal))
-        {
-            return false;
+            if (!TryDecodeUtf8(record.Key, out var keyPrefix) ||
+                !keyPrefix.StartsWith(
+                    filter.KeyPrefixUtf8,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
         }
 
         foreach (var predicate in filter.Headers)
