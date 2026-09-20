@@ -233,6 +233,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
 
                 document = resolved.Value! with
                 {
+                    Format = document.Format,
                     References = resolved.Value!.References.Count == 0
                         ? document.References
                         : resolved.Value.References,
@@ -256,6 +257,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
 
                 document = serialized.Value! with
                 {
+                    Format = document.Format,
                     References = serialized.Value!.References.Count == 0
                         ? document.References
                         : serialized.Value.References,
