@@ -64,9 +64,27 @@ public static class KafdeckAuthorizationEndpointExtensions
                 : http.Request.RouteValues[resourceRouteKey]?.ToString();
 
             var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
-            var outcome = authorization.Authorize(
-                http.User,
-                new AuthorizationRequest(action, clusterId, resourceName));
+            var request = new AuthorizationRequest(action, clusterId, resourceName);
+            var outcome = authorization.Authorize(http.User, request);
+
+            if (outcome == KafdeckAuthorizationOutcome.Forbidden)
+            {
+                var audit = http.RequestServices.GetRequiredService<ISecurityAuditSink>();
+                var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
+                    ? SecurityAuditPrincipal.FromOperator(session.Identity)
+                    : SecurityAuditPrincipal.Anonymous;
+                await audit.WriteAsync(
+                    new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.AuthorizationDenied,
+                        principal,
+                        session?.SessionId.Value.ToString("N"),
+                        clusterId,
+                        resourceName,
+                        SecurityAuditOutcome.Denied,
+                        "rbac_denied"),
+                    http.RequestAborted).ConfigureAwait(false);
+            }
 
             return outcome switch
             {
