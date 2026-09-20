@@ -99,3 +99,51 @@ No Gate 0 decision remains open. Implementation-level details that do not alter 
 - The accepted v0.1 Gate 1 contract is unchanged.
 - Roadmap sequencing is v0.1 Cluster Explorer → v0.2 Safe Data Explorer → v0.3 Consumers/Schemas/Ecosystem Read Views → v0.4 Identity/Policy/Masking/Audit → v0.5 Safe Administration → v0.6 Fleet/Kafka Security → v0.7 Developer/Streaming Ecosystem → v0.8 Observability/Automation/Platform APIs → v0.9 Governance/Hardening → v1.0 Stable.
 - Material departures from these boundaries require a new RFC/approval gate.
+
+
+## Gate 3 — v0.3 Safe Data Explorer + Server-Side Masking Scope
+
+- **Date:** 2026-09-20
+- **Status:** ACCEPTED
+- **Authority:** Project Owner
+- **Scope:** v0.3 product scope and sequencing reconciliation
+- **Scope issue:** #75
+- **RFC:** RFC-0003 planning package
+
+### Accepted decision
+
+**Option A — v0.3 Safe Data Explorer + Server-Side Masking**
+
+Accepted scope includes bounded topic/partition record browsing, offset/timestamp navigation, bounded live tail, key/value/header inspection, JSON/text/binary views, read-only schema-assisted decoding, deterministic bounded filtering, authoritative server-side masking, separate `record.read` / `record.export` permissions, bounded export, hard load budgets, cancellation/isolation, audit, API/UI parity and benchmark evidence.
+
+### Hard invariants
+
+- no Kafka mutation,
+- no record production/replay,
+- no consumer-offset mutation,
+- no payload persistence by default,
+- no unbounded scan,
+- no arbitrary server-side JavaScript,
+- no general-purpose SQL stream engine,
+- no masking bypass,
+- authorization uncertainty fails closed,
+- metadata permissions do not imply payload access.
+
+### Sequencing consequence
+
+Gate 2's capability principles remain accepted, but its original version-number mapping was superseded:
+
+1. Issue #57 advanced Operator Identity/RBAC to v0.2; v0.2 is released.
+2. Issue #75 assigns Safe Data Explorer + Server-Side Masking to v0.3.
+3. Consumers/Schemas/Ecosystem Read Views move to v0.4.
+4. v0.5+ remains unchanged unless a later approved scope gate supersedes it.
+
+Historical Gate 2 text remains unchanged as auditable approval evidence.
+
+### Owner approval
+
+> **Option A — v0.3 Safe Data Explorer + Server-Side Masking تأیید است.**
+
+### Implementation gate
+
+Implementation begins only after the RFC-0003 planning package receives exact-head CI, independent review, resolved required review threads and governed merge.
