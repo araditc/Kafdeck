@@ -53,20 +53,17 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 function clusterPath(clusterId: string) { return `/api/v1/clusters/${encodeURIComponent(clusterId)}`; }
 function topicPath(clusterId: string, topicName: string) { return `${clusterPath(clusterId)}/topics/${encodeURIComponent(topicName)}`; }
 
-async function post(path: string): Promise<void> {
-  const headers: Record<string, string> = {};
-  const token = bootstrapDeploymentToken();
-  if (token) headers['X-Kafdeck-Access-Token'] = token;
-  const response = await fetch(path, { method: 'POST', headers });
-  if (!response.ok && !response.redirected) {
-    const payload = (await response.json()) as { detail?: string; title?: string; code?: string; type?: string };
-    throw new ApiProblem(response.status, payload.detail ?? payload.title ?? 'Kafdeck request failed.', payload.code ?? payload.type ?? null);
-  }
-}
-
 export const kafdeckApi = {
   getOperatorSession(signal?: AbortSignal) { return readJson<OperatorSession>('/api/v1/auth/session', signal); },
-  async logout() { await post('/api/v1/auth/logout'); window.location.assign('/'); },
+  logout() {
+    sessionStorage.removeItem(deploymentTokenKey);
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/api/v1/auth/logout';
+    form.hidden = true;
+    document.body.appendChild(form);
+    form.submit();
+  },
   listClusters(signal?: AbortSignal) { return readJson<{ data: ApiEnvelope<ClusterData>[] }>('/api/v1/clusters', signal); },
   getCluster(clusterId: string, signal?: AbortSignal) { return readJson<ApiEnvelope<ClusterData>>(clusterPath(clusterId), signal); },
   listTopics(clusterId: string, query: string, cursor: string | null, signal?: AbortSignal) {
