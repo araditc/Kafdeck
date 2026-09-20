@@ -1,0 +1,43 @@
+name: generate-w20-locks
+
+on:
+  pull_request:
+    paths:
+      - 'Directory.Packages.props'
+      - 'src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/**'
+      - 'tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj'
+      - '.github/workflows/generate-w20-locks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  generate-locks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate deterministic lock files
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore Kafdeck.slnx --use-lock-file --force-evaluate
+          git status --short
+
+          for file in             src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/packages.lock.json             tests/Kafdeck.Architecture.Tests/packages.lock.json
+          do
+            echo "LOCKFILE_BEGIN:$file"
+            base64 -w0 "$file"
+            echo
+            echo "LOCKFILE_END:$file"
+          done
