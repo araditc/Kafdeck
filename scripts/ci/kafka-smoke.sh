@@ -76,6 +76,9 @@ kafka_acls='/opt/kafka/bin/kafka-acls.sh'
 
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --create --topic kafdeck-ci-smoke --partitions 1 --replication-factor 1
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --describe --topic kafdeck-ci-smoke
+printf 'kafdeck-record-alpha\nkafdeck-record-beta\nkafdeck-record-gamma\n' | \
+  docker exec -i kafdeck-kafka /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 --topic kafdeck-ci-smoke >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${KAFDECK_SCRAM256_PASSWORD}]" --entity-type users --entity-name kafdeck-scram256 >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-512=[iterations=4096,password=${KAFDECK_SCRAM512_PASSWORD}]" --entity-type users --entity-name kafdeck-scram512 >/dev/null
 
