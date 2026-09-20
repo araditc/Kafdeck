@@ -64,9 +64,51 @@ public static class KafdeckAuthorizationEndpointExtensions
                 : http.Request.RouteValues[resourceRouteKey]?.ToString();
 
             var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
-            var outcome = authorization.Authorize(
-                http.User,
-                new AuthorizationRequest(action, clusterId, resourceName));
+            var request = new AuthorizationRequest(action, clusterId, resourceName);
+            var outcome = authorization.Authorize(http.User, request);
+
+            var shouldAudit = outcome == KafdeckAuthorizationOutcome.Forbidden ||
+                (outcome == KafdeckAuthorizationOutcome.Allowed &&
+                 action is AuthorizationAction.BrokerConfigRead or AuthorizationAction.TopicConfigRead);
+            var audit = shouldAudit
+                ? http.RequestServices.GetRequiredService<ISecurityAuditSink>()
+                : null;
+            if (outcome == KafdeckAuthorizationOutcome.Forbidden)
+            {
+                var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
+                    ? SecurityAuditPrincipal.FromOperator(session.Identity)
+                    : SecurityAuditPrincipal.Anonymous;
+                await audit!.WriteAsync(
+                    new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.AuthorizationDenied,
+                        principal,
+                        session?.SessionId.Value.ToString("N"),
+                        clusterId,
+                        resourceName,
+                        SecurityAuditOutcome.Denied,
+                        "rbac_denied"),
+                    http.RequestAborted).ConfigureAwait(false);
+            }
+
+            if (outcome == KafdeckAuthorizationOutcome.Allowed &&
+                action is AuthorizationAction.BrokerConfigRead or AuthorizationAction.TopicConfigRead)
+            {
+                var principal = OperatorSessionContextFactory.TryCreate(http.User, out var sensitiveSession) && sensitiveSession is not null
+                    ? SecurityAuditPrincipal.FromOperator(sensitiveSession.Identity)
+                    : SecurityAuditPrincipal.LegacyDeployment;
+                await audit!.WriteAsync(
+                    new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.SensitiveRead,
+                        principal,
+                        sensitiveSession?.SessionId.Value.ToString("N"),
+                        clusterId,
+                        resourceName,
+                        SecurityAuditOutcome.Succeeded,
+                        action == AuthorizationAction.BrokerConfigRead ? "broker_config_read" : "topic_config_read"),
+                    http.RequestAborted).ConfigureAwait(false);
+            }
 
             return outcome switch
             {
