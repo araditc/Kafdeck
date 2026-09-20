@@ -1,3 +1,4 @@
+using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -19,7 +20,11 @@ public enum SaslMechanism
 
 public sealed record KafdeckOptions(
     DeploymentOptions Deployment,
-    IReadOnlyList<ClusterProfile> Clusters);
+    IReadOnlyList<ClusterProfile> Clusters,
+    RecordDataOptions? Records = null);
+
+public sealed record RecordDataOptions(
+    RecordMaskingPolicyDefinition MaskingPolicy);
 
 public sealed record DeploymentOptions(
     string ListenUrl,
