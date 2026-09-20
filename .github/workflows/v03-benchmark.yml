@@ -1,0 +1,49 @@
+name: v03-benchmark
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v03-benchmark-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bounded-processing-benchmark:
+    name: bounded-processing-benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore locked dependencies
+        run: dotnet restore Kafdeck.slnx --locked-mode
+
+      - name: Run bounded v0.3 processing microbenchmarks
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+          DOTNET_NOLOGO: '1'
+        run: >-
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
+          --configuration Release
+          --no-restore
+          --filter 'FullyQualifiedName~V03BenchmarkEvidenceTests'
+          --logger 'console;verbosity=detailed'
+
+      - name: Record benchmark interpretation guard
+        run: |
+          echo 'The V03_BENCHMARK lines are bounded in-process release evidence.'
+          echo 'They are not Kafka end-to-end throughput, a public SLA, or a universal hardware claim.'
