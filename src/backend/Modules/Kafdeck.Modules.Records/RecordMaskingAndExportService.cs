@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -348,12 +349,17 @@ public sealed class RecordMaskingService
 
 public sealed class RecordExportService
 {
+    private const int MaxOwnedPendingWrites = 16;
+    private static readonly TimeSpan AbortSettlementGrace = TimeSpan.FromMilliseconds(100);
     private static readonly byte[] JsonStart = "["u8.ToArray();
     private static readonly byte[] JsonEnd = "]"u8.ToArray();
     private static readonly byte[] Comma = ","u8.ToArray();
     private static readonly byte[] NewLine = "\n"u8.ToArray();
     private static readonly byte[] CsvHeader = Encoding.UTF8.GetBytes(
         "partition,offset,timestampUtc,keyBase64,valueKind,value,headersJson,policyId,policyVersion\n");
+    private static readonly SemaphoreSlim OwnedWriteSlots = new(MaxOwnedPendingWrites, MaxOwnedPendingWrites);
+    private static readonly ConcurrentDictionary<long, OwnedPendingWrite> OwnedPendingWrites = new();
+    private static long _ownedPendingWriteSequence;
 
     public async Task<RecordExportSummary> ExportAsync(
         RecordSafePage page,
@@ -393,6 +399,11 @@ public sealed class RecordExportService
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
             }
 
+            if (startResult == BudgetedWriteResult.Indeterminate)
+            {
+                return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.Indeterminate);
+            }
+
             bytesWritten += JsonStart.Length;
             if (startResult == BudgetedWriteResult.CompletedAfterDeadline)
             {
@@ -415,6 +426,11 @@ public sealed class RecordExportService
             if (headerResult == BudgetedWriteResult.DeadlineExceeded)
             {
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
+            }
+
+            if (headerResult == BudgetedWriteResult.Indeterminate)
+            {
+                return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.Indeterminate);
             }
 
             bytesWritten += CsvHeader.Length;
@@ -469,16 +485,19 @@ public sealed class RecordExportService
                 cancellationToken);
             if (rowResult == BudgetedWriteResult.DeadlineExceeded)
             {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-                break;
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
+            }
+
+            if (rowResult == BudgetedWriteResult.Indeterminate)
+            {
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.Indeterminate);
             }
 
             bytesWritten += payload.Length;
             rowsWritten++;
             if (rowResult == BudgetedWriteResult.CompletedAfterDeadline)
             {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-                break;
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.DurationLimit);
             }
         }
 
@@ -490,6 +509,11 @@ public sealed class RecordExportService
                 stopwatch,
                 request.Budget.MaxDuration,
                 cancellationToken);
+            if (endResult == BudgetedWriteResult.Indeterminate)
+            {
+                return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, RecordExportBudgetOutcome.Indeterminate);
+            }
+
             if (endResult != BudgetedWriteResult.DeadlineExceeded)
             {
                 bytesWritten += JsonEnd.Length;
@@ -564,74 +588,156 @@ public sealed class RecordExportService
             return BudgetedWriteResult.DeadlineExceeded;
         }
 
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var writeTask = destination.WriteAsync(payload, linked.Token).AsTask();
-        var deadlineTask = Task.Delay(remaining, CancellationToken.None);
-        var callerCancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-        var completed = await Task.WhenAny(writeTask, deadlineTask, callerCancellationTask).ConfigureAwait(false);
-
-        if (completed == writeTask)
+        if (!await OwnedWriteSlots.WaitAsync(remaining, cancellationToken).ConfigureAwait(false))
         {
-            await writeTask.ConfigureAwait(false);
-            return stopwatch.Elapsed >= maxDuration
-                ? BudgetedWriteResult.CompletedAfterDeadline
-                : BudgetedWriteResult.Completed;
+            return BudgetedWriteResult.DeadlineExceeded;
         }
 
-        linked.Cancel();
-
-        if (writeTask.IsCompleted)
+        var ownershipTransferred = false;
+        try
         {
-            try
+            var lengthBefore = TryGetStableLength(destination);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            // Invocation itself runs off the deadline-critical caller path. A Stream override that
+            // blocks synchronously before returning its ValueTask therefore cannot prevent the
+            // deadline/caller-cancellation race from starting.
+            var writeTask = Task.Run(
+                async () => await destination.WriteAsync(payload, linked.Token).ConfigureAwait(false),
+                CancellationToken.None);
+            var deadlineTask = Task.Delay(remaining, CancellationToken.None);
+            var callerCancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            var completed = await Task.WhenAny(writeTask, deadlineTask, callerCancellationTask).ConfigureAwait(false);
+
+            if (completed == writeTask)
             {
                 await writeTask.ConfigureAwait(false);
+                return stopwatch.Elapsed >= maxDuration
+                    ? BudgetedWriteResult.CompletedAfterDeadline
+                    : BudgetedWriteResult.Completed;
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+
+            linked.Cancel();
+            var abortTask = Task.Run(
+                () =>
+                {
+                    try
+                    {
+                        destination.Dispose();
+                    }
+                    catch (Exception)
+                    {
+                        // Settlement below decides whether the result is definitive or indeterminate.
+                    }
+                },
+                CancellationToken.None);
+            var settlementTask = SettleAbortedWriteAsync(destination, writeTask, abortTask, lengthBefore);
+            var settled = await Task.WhenAny(
+                    settlementTask,
+                    Task.Delay(AbortSettlementGrace, CancellationToken.None))
+                .ConfigureAwait(false);
+
+            if (settled == settlementTask)
             {
-                return BudgetedWriteResult.DeadlineExceeded;
+                var result = await settlementTask.ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                return result;
             }
+
+            ownershipTransferred = true;
+            OwnPendingWrite(destination, settlementTask);
 
             if (cancellationToken.IsCancellationRequested)
             {
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            return BudgetedWriteResult.CompletedAfterDeadline;
+            // The service deliberately does not claim a definitive byte/row result while a
+            // non-cooperative write is still owned and may settle later.
+            return BudgetedWriteResult.Indeterminate;
         }
-
-        ObserveBackground(writeTask);
-        AbortDestinationInBackground(destination);
-
-        if (cancellationToken.IsCancellationRequested)
+        finally
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (!ownershipTransferred)
+            {
+                OwnedWriteSlots.Release();
+            }
         }
-
-        return BudgetedWriteResult.DeadlineExceeded;
     }
 
-    private static void AbortDestinationInBackground(Stream destination)
+    private static async Task<BudgetedWriteResult> SettleAbortedWriteAsync(
+        Stream destination,
+        Task writeTask,
+        Task abortTask,
+        long? lengthBefore)
     {
-        var disposeTask = Task.Run(() =>
+        try
         {
-            try
+            await abortTask.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // A failed abort cannot support a definitive no-write claim.
+        }
+
+        try
+        {
+            await writeTask.ConfigureAwait(false);
+
+            var lengthAfter = TryGetStableLength(destination);
+            if (lengthBefore.HasValue && lengthAfter.HasValue && lengthBefore.Value == lengthAfter.Value)
             {
-                destination.Dispose();
+                return BudgetedWriteResult.DeadlineExceeded;
             }
-            catch (Exception)
-            {
-                // The destination is already invalid after a deadline/cancellation race.
-            }
-        });
-        ObserveBackground(disposeTask);
+
+            return BudgetedWriteResult.Indeterminate;
+        }
+        catch (OperationCanceledException)
+        {
+            return BudgetedWriteResult.DeadlineExceeded;
+        }
+        catch (ObjectDisposedException)
+        {
+            return BudgetedWriteResult.DeadlineExceeded;
+        }
+        catch (Exception)
+        {
+            return BudgetedWriteResult.Indeterminate;
+        }
     }
 
-    private static void ObserveBackground(Task task)
+    private static long? TryGetStableLength(Stream destination)
     {
-        _ = task.ContinueWith(
-            completed => _ = completed.Exception,
+        try
+        {
+            return destination.CanSeek ? destination.Length : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static void OwnPendingWrite(Stream destination, Task<BudgetedWriteResult> settlementTask)
+    {
+        var id = Interlocked.Increment(ref _ownedPendingWriteSequence);
+        var owned = new OwnedPendingWrite(destination, settlementTask);
+        OwnedPendingWrites[id] = owned;
+
+        _ = settlementTask.ContinueWith(
+            completed =>
+            {
+                _ = completed.Exception;
+                OwnedPendingWrites.TryRemove(id, out _);
+                OwnedWriteSlots.Release();
+                GC.KeepAlive(owned);
+            },
             CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
     }
 
@@ -708,7 +814,10 @@ public sealed class RecordExportService
         Completed = 1,
         CompletedAfterDeadline = 2,
         DeadlineExceeded = 3,
+        Indeterminate = 4,
     }
+
+    private sealed record OwnedPendingWrite(Stream Destination, Task<BudgetedWriteResult> SettlementTask);
 
     private sealed record ExportHeader(string Name, string ValueBase64, bool Redacted);
 
