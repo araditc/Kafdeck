@@ -4,6 +4,10 @@
     <RootNamespace>Kafdeck.Infrastructure.SchemaRegistry</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Apache.Avro" />
+    <PackageReference Include="Google.Protobuf" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
     <ProjectReference Include="../Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
   </ItemGroup>
