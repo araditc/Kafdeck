@@ -9,6 +9,7 @@ import {
   type TopicListItem,
   type OperatorSession,
 } from '../shared/api.js';
+import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 
@@ -92,7 +93,6 @@ export function AppShell() {
       })
       .catch(reason => {
         if (reason instanceof DOMException && reason.name === 'AbortError') return;
-        // Local/Token modes intentionally have no human operator session endpoint.
         if (reason instanceof ApiProblem && reason.status === 401) setAuthenticationRequired(true);
       });
     void loadClusters(controller.signal);
@@ -179,7 +179,7 @@ export function AppShell() {
         {topicsLoading && topics.length === 0 && <p role="status">Loading topics…</p>}{topicsError && <p role="alert">{topicsError}</p>}{!topicsLoading && !topicsError && topics.length === 0 && <p>No topics match the current search.</p>}
         {topics.length > 0 && <table><thead><tr><th scope="col">Topic</th><th scope="col">Partitions</th><th scope="col">Offline</th><th scope="col">Under replicated</th><th scope="col">State</th></tr></thead><tbody>{topics.map(topic => <tr key={topic.name}><th scope="row"><button type="button" onClick={() => void openTopic(topic.name)}>{topic.name}</button></th><td>{topic.partitionCount}</td><td>{topic.offlinePartitionCount ?? 'Unknown'}</td><td>{topic.underReplicatedPartitionCount ?? 'Unknown'}</td><td>{String(topic.anomalyState)}</td></tr>)}</tbody></table>}
         {topicCursor && <button type="button" disabled={topicsLoading} onClick={() => void loadTopics(selectedClusterId, topicQuery, topicCursor, true)}>{topicsLoading ? 'Loading…' : 'Load more topics'}</button>}
-        {topicDetailError && <p role="alert">{topicDetailError}</p>}{topicDetail && <article aria-labelledby="topic-detail-title"><h3 id="topic-detail-title">Topic: {topicDetail.data.name}</h3><p>{observationText(topicDetail)} · {topicDetail.data.partitions.length} partitions · {topicDetail.data.offlinePartitionCount} offline · {topicDetail.data.underReplicatedPartitionCount} under replicated</p><h4>Partitions</h4>{topicDetail.data.partitions.length === 0 ? <p>No partitions are observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Leader</th><th scope="col">Replicas</th><th scope="col">ISR</th><th scope="col">Out of sync</th><th scope="col">Health</th></tr></thead><tbody>{topicDetail.data.partitions.map(partition => <tr key={partition.partitionId}><th scope="row">{partition.partitionId}</th><td>{partition.leaderBrokerId ?? 'No leader'}</td><td>{partition.replicaBrokerIds.join(', ')}</td><td>{partition.inSyncReplicaBrokerIds.join(', ')}</td><td>{partition.outOfSyncReplicaBrokerIds.join(', ') || 'None'}</td><td>{partition.healthReasons.length > 0 ? partition.healthReasons.join('; ') : String(partition.health)}</td></tr>)}</tbody></table>}<h4>Configuration</h4>{topicConfiguration === null ? (topicDetailError ? null : <p role="status">Loading configuration…</p>) : <ConfigurationView entries={topicConfiguration} />}</article>}
+        {topicDetailError && <p role="alert">{topicDetailError}</p>}{topicDetail && <article aria-labelledby="topic-detail-title"><h3 id="topic-detail-title">Topic: {topicDetail.data.name}</h3><p>{observationText(topicDetail)} · {topicDetail.data.partitions.length} partitions · {topicDetail.data.offlinePartitionCount} offline · {topicDetail.data.underReplicatedPartitionCount} under replicated</p><h4>Partitions</h4>{topicDetail.data.partitions.length === 0 ? <p>No partitions are observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Leader</th><th scope="col">Replicas</th><th scope="col">ISR</th><th scope="col">Out of sync</th><th scope="col">Health</th></tr></thead><tbody>{topicDetail.data.partitions.map(partition => <tr key={partition.partitionId}><th scope="row">{partition.partitionId}</th><td>{partition.leaderBrokerId ?? 'No leader'}</td><td>{partition.replicaBrokerIds.join(', ')}</td><td>{partition.inSyncReplicaBrokerIds.join(', ')}</td><td>{partition.outOfSyncReplicaBrokerIds.join(', ') || 'None'}</td><td>{partition.healthReasons.length > 0 ? partition.healthReasons.join('; ') : String(partition.health)}</td></tr>)}</tbody></table>}<h4>Configuration</h4>{topicConfiguration === null ? (topicDetailError ? null : <p role="status">Loading configuration…</p>) : <ConfigurationView entries={topicConfiguration} />}{topicDetail.data.partitions.length > 0 && <RecordExplorer clusterId={selectedClusterId} topicName={topicDetail.data.name} partitions={topicDetail.data.partitions.map(partition => partition.partitionId)} />}</article>}
       </section>
     </>}
   </main>;
