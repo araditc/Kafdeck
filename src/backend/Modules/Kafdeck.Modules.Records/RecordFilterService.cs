@@ -265,6 +265,7 @@ public sealed class RecordLiveTailOptions
 
 public sealed class RecordLiveTailService
 {
+    private static readonly TimeSpan RateWindowDelay = TimeSpan.FromSeconds(1);
     private readonly RecordFilterService _filter;
     private readonly RecordTailAdmissionController _admission;
     private readonly RecordLiveTailOptions _options;
@@ -404,11 +405,27 @@ public sealed class RecordLiveTailService
                 if (page.FilterBudgetOutcome != RecordFilterBudgetOutcome.Complete ||
                     page.ReadBudgetOutcome is
                         RecordBudgetOutcome.RawByteLimit or
-                        RecordBudgetOutcome.DurationLimit or
-                        RecordBudgetOutcome.RateLimit)
+                        RecordBudgetOutcome.DurationLimit)
                 {
                     yield return new RecordTailFrame(RecordTailFrameKind.Completed);
                     yield break;
+                }
+
+                if (page.ReadBudgetOutcome == RecordBudgetOutcome.RateLimit)
+                {
+                    var remainingAfterPage = deadline - _timeProvider.GetUtcNow();
+                    if (remainingAfterPage <= TimeSpan.Zero)
+                    {
+                        yield return new RecordTailFrame(RecordTailFrameKind.Completed);
+                        yield break;
+                    }
+
+                    await Task.Delay(
+                            Min(RateWindowDelay, remainingAfterPage),
+                            _timeProvider,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    continue;
                 }
 
                 if (page.EvaluatedRecordCount == 0 &&
