@@ -40,6 +40,7 @@ public sealed class KafkaRecordReadConcurrencyOptions
 public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDisposable
 {
     private static readonly TimeSpan ConsumePollInterval = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan SetupPollInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly IReadOnlyDictionary<string, ClusterProfile> _profiles;
     private readonly IKafkaRecordConsumerFactory _consumerFactory;
@@ -113,11 +114,13 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             using var admissionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             admissionDeadline.CancelAfter(operation.Remaining(now));
 
-            await _globalGate.WaitAsync(admissionDeadline.Token).ConfigureAwait(false);
-            globalAcquired = true;
-
+            // Acquire the cluster bulkhead first. Waiting work for one cluster must
+            // not consume global permits and starve unrelated clusters.
             await clusterGate.WaitAsync(admissionDeadline.Token).ConfigureAwait(false);
             clusterAcquired = true;
+
+            await _globalGate.WaitAsync(admissionDeadline.Token).ConfigureAwait(false);
+            globalAcquired = true;
 
             return await Task.Run(
                     () => ReadPageCore(profile, request, operation, cancellationToken),
@@ -187,25 +190,51 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         var budgetDeadlineUtc = startedAt + request.Budget.MaxDuration;
         var topicPartition = new TopicPartition(request.TopicName, new Partition(request.Partition));
 
-        var setupTimeout = RemainingIoTime(operation, budgetDeadlineUtc);
-        if (setupTimeout <= TimeSpan.Zero)
+        var watermarkResult = QueryWatermarksWithCancellation(
+            consumer,
+            topicPartition,
+            operation,
+            budgetDeadlineUtc,
+            cancellationToken);
+
+        if (!watermarkResult.IsSuccess)
         {
-            return EmptyBudgetDurationBatch();
+            return watermarkResult.Failure is not null
+                ? Failed(watermarkResult.Failure)
+                : EmptyBudgetDurationBatch();
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var watermarks = consumer.QueryWatermarkOffsets(topicPartition, setupTimeout);
+        var watermarks = watermarkResult.Value!.Value;
         var low = watermarks.Low.Value;
         var high = watermarks.High.Value;
 
-        var resolvedAnchor = ResolveAnchorOffset(
+        var anchorResult = ResolveAnchorOffset(
             consumer,
             topicPartition,
             request.Anchor,
             low,
             high,
-            RemainingIoTime(operation, budgetDeadlineUtc));
+            operation,
+            budgetDeadlineUtc,
+            cancellationToken);
+
+        if (!anchorResult.IsSuccess)
+        {
+            if (anchorResult.Failure is not null)
+            {
+                return Failed(anchorResult.Failure);
+            }
+
+            return Success(BuildBatch(
+                [],
+                low,
+                high,
+                RecordBudgetOutcome.DurationLimit,
+                low,
+                high));
+        }
+
+        var resolvedAnchor = anchorResult.Value!.Value;
 
         if (resolvedAnchor < low || resolvedAnchor > high)
         {
@@ -320,44 +349,121 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         return Success(BuildBatch(records, low, high, outcome, startOffset, high));
     }
 
-    private long ResolveAnchorOffset(
+    private SetupResult<long> ResolveAnchorOffset(
         IKafkaRecordConsumerSession consumer,
         TopicPartition topicPartition,
         RecordAnchor anchor,
         long low,
         long high,
-        TimeSpan timeout)
+        KafkaOperationContext operation,
+        DateTimeOffset budgetDeadlineUtc,
+        CancellationToken cancellationToken)
     {
-        if (timeout <= TimeSpan.Zero)
-        {
-            return high;
-        }
-
         return anchor.Kind switch
         {
-            RecordAnchorKind.Earliest => low,
-            RecordAnchorKind.Latest => high,
-            RecordAnchorKind.Offset => anchor.Offset!.Value,
-            RecordAnchorKind.Timestamp => ResolveTimestampOffset(
+            RecordAnchorKind.Earliest => SetupResult<long>.Success(low),
+            RecordAnchorKind.Latest => SetupResult<long>.Success(high),
+            RecordAnchorKind.Offset => SetupResult<long>.Success(anchor.Offset!.Value),
+            RecordAnchorKind.Timestamp => ResolveTimestampOffsetWithCancellation(
                 consumer,
                 topicPartition,
                 anchor.TimestampUtc!.Value,
                 high,
-                timeout),
+                operation,
+                budgetDeadlineUtc,
+                cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(anchor)),
         };
     }
 
-    private static long ResolveTimestampOffset(
+    private SetupResult<WatermarkOffsets> QueryWatermarksWithCancellation(
+        IKafkaRecordConsumerSession consumer,
+        TopicPartition topicPartition,
+        KafkaOperationContext operation,
+        DateTimeOffset budgetDeadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var remaining = RemainingIoTime(operation, budgetDeadlineUtc);
+            if (remaining <= TimeSpan.Zero)
+            {
+                return SetupExpired<WatermarkOffsets>(operation, budgetDeadlineUtc);
+            }
+
+            var slice = remaining < SetupPollInterval ? remaining : SetupPollInterval;
+
+            try
+            {
+                return SetupResult<WatermarkOffsets>.Success(
+                    consumer.QueryWatermarkOffsets(topicPartition, slice));
+            }
+            catch (KafkaException exception) when (IsSetupSliceTimeout(exception.Error))
+            {
+                // A short timeout is used as an interruption point so request
+                // cancellation is observed without waiting for the full operation deadline.
+            }
+        }
+    }
+
+    private SetupResult<long> ResolveTimestampOffsetWithCancellation(
         IKafkaRecordConsumerSession consumer,
         TopicPartition topicPartition,
         DateTimeOffset timestampUtc,
         long high,
-        TimeSpan timeout)
+        KafkaOperationContext operation,
+        DateTimeOffset budgetDeadlineUtc,
+        CancellationToken cancellationToken)
     {
-        var resolved = consumer.OffsetForTimestamp(topicPartition, timestampUtc, timeout);
-        return resolved == Offset.Unset ? high : resolved.Value;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var remaining = RemainingIoTime(operation, budgetDeadlineUtc);
+            if (remaining <= TimeSpan.Zero)
+            {
+                return SetupExpired<long>(operation, budgetDeadlineUtc);
+            }
+
+            var slice = remaining < SetupPollInterval ? remaining : SetupPollInterval;
+
+            try
+            {
+                var resolved = consumer.OffsetForTimestamp(topicPartition, timestampUtc, slice);
+                return SetupResult<long>.Success(resolved == Offset.Unset ? high : resolved.Value);
+            }
+            catch (KafkaException exception) when (IsSetupSliceTimeout(exception.Error))
+            {
+                // Retry only before any record has been observed. Each slice is
+                // bounded so cancellation/deadline/budget state is re-evaluated.
+            }
+        }
     }
+
+    private SetupResult<T> SetupExpired<T>(
+        KafkaOperationContext operation,
+        DateTimeOffset budgetDeadlineUtc)
+    {
+        var now = _timeProvider.GetUtcNow();
+        if (operation.IsExpired(now))
+        {
+            return SetupResult<T>.Failed(KafkaFailureMapper.DeadlineExceeded());
+        }
+
+        if (now >= budgetDeadlineUtc)
+        {
+            return SetupResult<T>.BudgetExhausted();
+        }
+
+        return SetupResult<T>.Failed(KafkaFailureMapper.DeadlineExceeded());
+    }
+
+    private static bool IsSetupSliceTimeout(Error error) =>
+        error.Code is ErrorCode.Local_TimedOut or
+            ErrorCode.Local_TimedOutQueue or
+            ErrorCode.RequestTimedOut;
 
     private static KafkaRawRecord ToCoreRecord(ConsumeResult<byte[], byte[]> consumed)
     {
@@ -457,6 +563,30 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             : budgetDeadlineUtc - now;
 
         return operationRemaining <= budgetRemaining ? operationRemaining : budgetRemaining;
+    }
+
+    private sealed record SetupResult<T>
+    {
+        private SetupResult(T? value, KafkaFailure? failure, bool budgetExhausted)
+        {
+            Value = value;
+            Failure = failure;
+            IsBudgetExhausted = budgetExhausted;
+        }
+
+        public T? Value { get; }
+
+        public KafkaFailure? Failure { get; }
+
+        public bool IsBudgetExhausted { get; }
+
+        public bool IsSuccess => Failure is null && !IsBudgetExhausted;
+
+        public static SetupResult<T> Success(T value) => new(value, null, false);
+
+        public static SetupResult<T> Failed(KafkaFailure failure) => new(default, failure, false);
+
+        public static SetupResult<T> BudgetExhausted() => new(default, null, true);
     }
 
     private KafkaResult<RecordReadBatch> Failed(KafkaFailure failure) =>
