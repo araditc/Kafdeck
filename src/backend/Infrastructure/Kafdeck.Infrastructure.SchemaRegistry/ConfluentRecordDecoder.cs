@@ -22,10 +22,14 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
     private const int MaxMessageIndexDepth = 32;
 
     private readonly IRecordSchemaReadPort _schemas;
+    private readonly TimeProvider _timeProvider;
 
-    public ConfluentRecordDecoder(IRecordSchemaReadPort schemas)
+    public ConfluentRecordDecoder(
+        IRecordSchemaReadPort schemas,
+        TimeProvider? timeProvider = null)
     {
         _schemas = schemas ?? throw new ArgumentNullException(nameof(schemas));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<RecordSchemaResult<RecordDecodedValue>> DecodeAsync(
@@ -44,7 +48,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
                 false);
         }
 
-        if (operation.IsExpired(DateTimeOffset.UtcNow))
+        if (operation.IsExpired(_timeProvider.GetUtcNow()))
         {
             return Failed(
                 RecordSchemaFailureCategory.Timeout,
