@@ -20,8 +20,8 @@ public sealed class KafkaRecordReadAdapterTests
         Assert.False(config.AllowAutoCreateTopics ?? true);
         Assert.True(config.EnablePartitionEof ?? false);
         Assert.Equal(AutoOffsetReset.Error, config.AutoOffsetReset);
-        Assert.Equal(RecordOperationBudget.HardMaxRawBytes, config.FetchMaxBytes);
-        Assert.Equal(RecordOperationBudget.HardMaxRawBytes, config.MaxPartitionFetchBytes);
+        Assert.Equal((int)RecordOperationBudget.HardMaxRawBytes, config.FetchMaxBytes.GetValueOrDefault());
+        Assert.Equal((int)RecordOperationBudget.HardMaxRawBytes, config.MaxPartitionFetchBytes.GetValueOrDefault());
     }
 
     [Fact]
