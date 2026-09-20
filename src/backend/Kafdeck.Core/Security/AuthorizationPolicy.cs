@@ -11,6 +11,8 @@ public enum AuthorizationAction
     TopicRead = 5,
     TopicConfigRead = 6,
     BrokerConfigRead = 7,
+    RecordRead = 8,
+    RecordExport = 9,
 }
 
 public enum AuthorizationDecisionReason

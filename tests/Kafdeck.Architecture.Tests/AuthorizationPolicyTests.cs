@@ -182,6 +182,65 @@ public sealed class AuthorizationPolicyTests
     }
 
     [Fact]
+    public void Topic_read_does_not_imply_record_read()
+    {
+        var evaluator = CreateEvaluator(
+            roles: new[]
+            {
+                Role("viewer", Permission(AuthorizationAction.TopicRead)),
+            },
+            subjects: new[]
+            {
+                new AuthorizationSubjectBindingDefinition(
+                    "https://idp.example",
+                    "alice",
+                    new[] { "viewer" }),
+            });
+
+        var decision = evaluator.Evaluate(
+            Identity("https://idp.example", "alice"),
+            new AuthorizationRequest(AuthorizationAction.RecordRead, "prod", "payments"));
+
+        Assert.False(decision.IsAllowed);
+        Assert.Equal(AuthorizationDecisionReason.ActionDenied, decision.Reason);
+    }
+
+    [Fact]
+    public void Record_read_does_not_imply_record_export()
+    {
+        var evaluator = CreateEvaluator(
+            roles: new[]
+            {
+                Role(
+                    "record-reader",
+                    new AuthorizationPermissionDefinition(
+                        AuthorizationAction.RecordRead,
+                        new[] { "prod" },
+                        new[] { "payments.*" })),
+            },
+            subjects: new[]
+            {
+                new AuthorizationSubjectBindingDefinition(
+                    "https://idp.example",
+                    "alice",
+                    new[] { "record-reader" }),
+            });
+
+        var identity = Identity("https://idp.example", "alice");
+
+        Assert.True(evaluator.Evaluate(
+            identity,
+            new AuthorizationRequest(AuthorizationAction.RecordRead, "prod", "payments.created")).IsAllowed);
+
+        var export = evaluator.Evaluate(
+            identity,
+            new AuthorizationRequest(AuthorizationAction.RecordExport, "prod", "payments.created"));
+
+        Assert.False(export.IsAllowed);
+        Assert.Equal(AuthorizationDecisionReason.ActionDenied, export.Reason);
+    }
+
+    [Fact]
     public void Unknown_role_reference_fails_policy_compilation()
     {
         var definition = new AuthorizationPolicyDefinition(
@@ -232,9 +291,12 @@ public sealed class AuthorizationPolicyTests
     }
 
     [Fact]
-    public void Permission_vocabulary_contains_no_write_or_payload_actions()
+    public void Permission_vocabulary_contains_record_reads_but_no_mutation_actions()
     {
-        var forbidden = new[] { "write", "create", "delete", "alter", "produce", "consume", "payload", "record" };
+        Assert.Contains(nameof(AuthorizationAction.RecordRead), Enum.GetNames<AuthorizationAction>());
+        Assert.Contains(nameof(AuthorizationAction.RecordExport), Enum.GetNames<AuthorizationAction>());
+
+        var forbidden = new[] { "write", "create", "delete", "alter", "produce", "replay", "commit", "reset" };
 
         foreach (var action in Enum.GetNames<AuthorizationAction>())
         {
@@ -242,6 +304,42 @@ public sealed class AuthorizationPolicyTests
                 forbidden,
                 term => action.Contains(term, StringComparison.OrdinalIgnoreCase));
         }
+    }
+
+    [Fact]
+    public void Configuration_loader_parses_record_permissions()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Kafdeck:Authorization:Roles:0:Id"] = "records",
+            ["Kafdeck:Authorization:Roles:0:Permissions:0:Action"] = "record.read",
+            ["Kafdeck:Authorization:Roles:0:Permissions:0:ClusterIds:0"] = "prod",
+            ["Kafdeck:Authorization:Roles:0:Permissions:0:ResourcePatterns:0"] = "payments.*",
+            ["Kafdeck:Authorization:Roles:0:Permissions:1:Action"] = "record.export",
+            ["Kafdeck:Authorization:Roles:0:Permissions:1:ClusterIds:0"] = "prod",
+            ["Kafdeck:Authorization:Roles:0:Permissions:1:ResourcePatterns:0"] = "payments.audit",
+            ["Kafdeck:Authorization:SubjectBindings:0:Issuer"] = "https://idp.example",
+            ["Kafdeck:Authorization:SubjectBindings:0:Subject"] = "alice",
+            ["Kafdeck:Authorization:SubjectBindings:0:RoleIds:0"] = "records",
+        };
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var evaluator = new AuthorizationPolicyEvaluator(
+            AuthorizationPolicyCompiler.Compile(AuthorizationPolicyConfigurationLoader.Load(configuration)));
+        var identity = Identity("https://idp.example", "alice");
+
+        Assert.True(evaluator.Evaluate(
+            identity,
+            new AuthorizationRequest(AuthorizationAction.RecordRead, "prod", "payments.created")).IsAllowed);
+        Assert.True(evaluator.Evaluate(
+            identity,
+            new AuthorizationRequest(AuthorizationAction.RecordExport, "prod", "payments.audit")).IsAllowed);
+        Assert.False(evaluator.Evaluate(
+            identity,
+            new AuthorizationRequest(AuthorizationAction.RecordExport, "prod", "payments.created")).IsAllowed);
     }
 
     [Fact]
