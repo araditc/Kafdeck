@@ -34,7 +34,7 @@ public static class KafdeckConfigurationLoader
         var masking = section.GetSection("Masking");
         var policyId = masking["PolicyId"] ?? "default";
         var version = int.TryParse(masking["Version"], out var parsedVersion) ? parsedVersion : 1;
-        var maskKey = bool.TryParse(masking["MaskKey"], out var parsedMaskKey) && parsedMaskKey;
+        var maskKey = ParseOptionalBoolean(masking["MaskKey"], false, "Records masking MaskKey");
         var keyReplacement = masking["KeyReplacement"] ?? "[REDACTED]";
 
         var structuredRules = masking
@@ -177,6 +177,21 @@ public static class KafdeckConfigurationLoader
         }
 
         return SecretReference.Parse(value);
+    }
+
+    private static bool ParseOptionalBoolean(string? value, bool defaultValue, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (bool.TryParse(value, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new KafdeckConfigurationException($"{fieldName} value must be true or false.");
     }
 
     private static TEnum ParseEnum<TEnum>(string? value, TEnum defaultValue, string fieldName)
