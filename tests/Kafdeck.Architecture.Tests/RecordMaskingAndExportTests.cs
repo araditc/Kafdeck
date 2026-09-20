@@ -49,10 +49,17 @@ public sealed class RecordMaskingAndExportTests
     }
 
     [Fact]
-    public void Mandatory_structured_masking_fails_closed_without_decoded_value()
+    public void Mandatory_structured_masking_fails_closed_without_decoded_value_or_required_path()
     {
         const string secret = "must-never-leak";
-        var item = new RecordFilteredItem(
+        var policy = RecordMaskingPolicyCompiler.Compile(
+            new RecordMaskingPolicyDefinition(
+                "pii",
+                1,
+                [new RecordStructuredMaskRule("/ssn")]));
+        var service = new RecordMaskingService();
+
+        var undecoded = new RecordFilteredItem(
             new KafkaRawRecord(
                 1,
                 DateTimeOffset.UtcNow,
@@ -60,23 +67,31 @@ public sealed class RecordMaskingAndExportTests
                 Encoding.UTF8.GetBytes($"{{\"ssn\":\"{secret}\"}}"),
                 []),
             null);
-        var policy = RecordMaskingPolicyCompiler.Compile(
-            new RecordMaskingPolicyDefinition(
-                "pii",
-                1,
-                [new RecordStructuredMaskRule("/ssn")]));
+        var undecodedSafe = service.Apply(0, undecoded, policy);
 
-        var safe = new RecordMaskingService().Apply(0, item, policy);
+        using var wrongShapeDocument = JsonDocument.Parse($"{{\"other\":\"{secret}\"}}");
+        var wrongShape = new RecordFilteredItem(
+            new KafkaRawRecord(
+                2,
+                DateTimeOffset.UtcNow,
+                null,
+                Encoding.UTF8.GetBytes(wrongShapeDocument.RootElement.GetRawText()),
+                []),
+            new RecordDecodedValue(8, RecordSchemaFormat.JsonSchema, wrongShapeDocument.RootElement.Clone()));
+        var wrongShapeSafe = service.Apply(0, wrongShape, policy);
 
-        Assert.Equal(RecordPayloadProjectionKind.FullyRedacted, safe.ValueKind);
-        Assert.Null(safe.RawValue);
-        Assert.Null(safe.StructuredValue);
-        Assert.Contains("$payload", safe.RedactedPaths);
-        Assert.DoesNotContain(secret, JsonSerializer.Serialize(safe), StringComparison.Ordinal);
+        foreach (var safe in new[] { undecodedSafe, wrongShapeSafe })
+        {
+            Assert.Equal(RecordPayloadProjectionKind.FullyRedacted, safe.ValueKind);
+            Assert.Null(safe.RawValue);
+            Assert.Null(safe.StructuredValue);
+            Assert.Contains("$payload", safe.RedactedPaths);
+            Assert.DoesNotContain(secret, JsonSerializer.Serialize(safe), StringComparison.Ordinal);
+        }
     }
 
     [Fact]
-    public async Task Export_requires_explicit_authorization_and_contains_only_safe_values()
+    public async Task Export_requires_exact_record_export_authorization_and_contains_only_safe_values()
     {
         var page = SafePage(
             new RecordSafeProjection(
@@ -99,13 +114,33 @@ public sealed class RecordMaskingAndExportTests
             service.ExportAsync(
                 page,
                 new RecordExportRequest(RecordExportFormat.Json),
+                ExportRequest(),
                 AuthorizationDecision.Denied(AuthorizationDecisionReason.ActionDenied),
                 denied));
+
+        await using var wrongAction = new MemoryStream();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.ExportAsync(
+                page,
+                new RecordExportRequest(RecordExportFormat.Json),
+                new AuthorizationRequest(AuthorizationAction.RecordRead, "cluster-a", "orders"),
+                AuthorizationDecision.Allowed(["reader"]),
+                wrongAction));
+
+        await using var wrongTarget = new MemoryStream();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.ExportAsync(
+                page,
+                new RecordExportRequest(RecordExportFormat.Json),
+                new AuthorizationRequest(AuthorizationAction.RecordExport, "cluster-b", "orders"),
+                AuthorizationDecision.Allowed(["record-exporter"]),
+                wrongTarget));
 
         await using var allowed = new MemoryStream();
         var summary = await service.ExportAsync(
             page,
             new RecordExportRequest(RecordExportFormat.Json),
+            ExportRequest(),
             AuthorizationDecision.Allowed(["record-exporter"]),
             allowed);
         var output = Encoding.UTF8.GetString(allowed.ToArray());
@@ -134,6 +169,7 @@ public sealed class RecordMaskingAndExportTests
             new RecordExportRequest(
                 format,
                 new RecordExportBudget(maxRows: 2, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(1))),
+            ExportRequest(),
             AuthorizationDecision.Allowed(["export"]),
             destination);
 
@@ -155,6 +191,7 @@ public sealed class RecordMaskingAndExportTests
             new RecordExportRequest(
                 RecordExportFormat.Json,
                 new RecordExportBudget(maxRows: 10, maxBytes: 256, maxDuration: TimeSpan.FromSeconds(1))),
+            ExportRequest(),
             AuthorizationDecision.Allowed(["export"]),
             destination);
 
@@ -190,6 +227,9 @@ public sealed class RecordMaskingAndExportTests
         Assert.Equal("orders", audit.TopicName);
         Assert.DoesNotContain("RawValue", JsonSerializer.Serialize(audit), StringComparison.Ordinal);
     }
+
+    private static AuthorizationRequest ExportRequest() =>
+        new(AuthorizationAction.RecordExport, "cluster-a", "orders");
 
     private static RecordSafeProjection SafeProjection(long offset, string value) =>
         new(
