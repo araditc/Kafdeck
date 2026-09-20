@@ -107,16 +107,8 @@ internal sealed class BoundedProtobufReader
         return BinaryPrimitives.ReadUInt32LittleEndian(span);
     }
 
-    public bool ReadBool()
-    {
-        var value = ReadVarint64();
-        return value switch
-        {
-            0 => false,
-            1 => true,
-            _ => throw new InvalidDataException("Protobuf boolean value is invalid."),
-        };
-    }
+    public bool ReadBool() =>
+        ReadVarint64() != 0;
 
     public string ReadString()
     {
