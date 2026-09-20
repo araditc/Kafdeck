@@ -80,7 +80,7 @@ public sealed class SchemaRegistryReadAdapterTests
             if (request.RequestUri!.Query.Contains("format=serialized", StringComparison.Ordinal))
             {
                 // Intentionally omit schemaType to prove the initial type is retained.
-                return Json(HttpStatusCode.OK, $"""{"schema":"{{serialized}}"}""");
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { schema = serialized }));
             }
 
             return Json(HttpStatusCode.OK, """
