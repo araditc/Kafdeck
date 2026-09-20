@@ -52,8 +52,7 @@ public sealed record RecordHeaderMaskRule
         ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
         ArgumentNullException.ThrowIfNull(replacement);
 
-        var normalizedName = headerName.Trim();
-        if (normalizedName.Length > MaxHeaderNameCharacters || normalizedName.Any(char.IsControl))
+        if (headerName.Length > MaxHeaderNameCharacters || headerName.Any(char.IsControl))
         {
             throw new ArgumentOutOfRangeException(nameof(headerName));
         }
@@ -63,7 +62,7 @@ public sealed record RecordHeaderMaskRule
             throw new ArgumentOutOfRangeException(nameof(replacement));
         }
 
-        HeaderName = normalizedName;
+        HeaderName = headerName;
         Replacement = replacement;
     }
 
