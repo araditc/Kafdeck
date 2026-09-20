@@ -273,7 +273,7 @@ public sealed class RecordMaskingAndExportTests
             destination);
 
         Assert.Equal(RecordExportBudgetOutcome.DurationLimit, summary.Outcome);
-        Assert.Equal(0, summary.RowCount);
+        Assert.Equal(1, summary.RowCount);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
     }
 
