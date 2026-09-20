@@ -1,13 +1,47 @@
+using System.Security.Claims;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Http;
 
 namespace Kafdeck.Api;
 
-public sealed record KafdeckAuthorizationRequirement(
-    AuthorizationAction Action,
-    string? ClusterRouteKey = null,
-    string? ResourceRouteKey = null);
+public enum KafdeckAuthorizationOutcome
+{
+    Allowed = 1,
+    Unauthenticated = 2,
+    Forbidden = 3,
+}
+
+public sealed class KafdeckAuthorizationService
+{
+    private readonly KafdeckOptions _options;
+    private readonly AuthorizationPolicyEvaluator _evaluator;
+
+    public KafdeckAuthorizationService(KafdeckOptions options, AuthorizationPolicyEvaluator evaluator)
+    {
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
+    }
+
+    public KafdeckAuthorizationOutcome Authorize(ClaimsPrincipal? principal, AuthorizationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_options.Deployment.Mode != AccessMode.Oidc)
+        {
+            return KafdeckAuthorizationOutcome.Allowed;
+        }
+
+        if (!OperatorSessionContextFactory.TryCreate(principal, out var session) || session is null)
+        {
+            return KafdeckAuthorizationOutcome.Unauthenticated;
+        }
+
+        return _evaluator.Evaluate(session.Identity, request).IsAllowed
+            ? KafdeckAuthorizationOutcome.Allowed
+            : KafdeckAuthorizationOutcome.Forbidden;
+    }
+}
 
 public static class KafdeckAuthorizationEndpointExtensions
 {
@@ -19,48 +53,33 @@ public static class KafdeckAuthorizationEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        var requirement = new KafdeckAuthorizationRequirement(action, clusterRouteKey, resourceRouteKey);
         return builder.AddEndpointFilter(async (invocation, next) =>
         {
             var http = invocation.HttpContext;
-            var options = http.RequestServices.GetRequiredService<KafdeckOptions>();
+            var clusterId = clusterRouteKey is null
+                ? null
+                : http.Request.RouteValues[clusterRouteKey]?.ToString();
+            var resourceName = resourceRouteKey is null
+                ? null
+                : http.Request.RouteValues[resourceRouteKey]?.ToString();
 
-            // Local and Token modes retain their accepted deployment-boundary semantics.
-            // Deployment tokens are never projected into operator identity or RBAC.
-            if (options.Deployment.Mode != AccessMode.Oidc)
-            {
-                return await next(invocation).ConfigureAwait(false);
-            }
+            var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
+            var outcome = authorization.Authorize(
+                http.User,
+                new AuthorizationRequest(action, clusterId, resourceName));
 
-            if (!OperatorSessionContextFactory.TryCreate(http.User, out var session) || session is null)
+            return outcome switch
             {
-                return Results.Problem(
+                KafdeckAuthorizationOutcome.Allowed => await next(invocation).ConfigureAwait(false),
+                KafdeckAuthorizationOutcome.Unauthenticated => Results.Problem(
                     statusCode: StatusCodes.Status401Unauthorized,
                     title: "Authentication required",
-                    detail: "An authenticated operator session is required.");
-            }
-
-            var clusterId = requirement.ClusterRouteKey is null
-                ? null
-                : http.Request.RouteValues[requirement.ClusterRouteKey]?.ToString();
-            var resourceName = requirement.ResourceRouteKey is null
-                ? null
-                : http.Request.RouteValues[requirement.ResourceRouteKey]?.ToString();
-
-            var evaluator = http.RequestServices.GetRequiredService<AuthorizationPolicyEvaluator>();
-            var decision = evaluator.Evaluate(
-                session.Identity,
-                new AuthorizationRequest(requirement.Action, clusterId, resourceName));
-
-            if (!decision.IsAllowed)
-            {
-                return Results.Problem(
+                    detail: "An authenticated operator session is required."),
+                _ => Results.Problem(
                     statusCode: StatusCodes.Status403Forbidden,
                     title: "Forbidden",
-                    detail: "The authenticated operator is not authorized for this operation.");
-            }
-
-            return await next(invocation).ConfigureAwait(false);
+                    detail: "The authenticated operator is not authorized for this operation."),
+            };
         });
     }
 }
