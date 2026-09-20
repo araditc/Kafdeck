@@ -9,6 +9,8 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class RecordMaskingAndExportTests
 {
+    private static readonly TimeSpan WriteStartBudget = TimeSpan.FromMilliseconds(250);
+
     [Fact]
     public void Structured_masking_redacts_nested_wildcards_key_and_headers()
     {
@@ -329,14 +331,14 @@ public sealed class RecordMaskingAndExportTests
         var page = SafePage(SafeProjection(1, "one"));
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
-        await using var destination = new DelayedWriteStream(TimeSpan.FromMilliseconds(100));
+        await using var destination = new DelayedWriteStream(TimeSpan.FromSeconds(1));
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var summary = await service.ExportAsync(
             page,
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
-                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
             destination);
@@ -360,7 +362,7 @@ public sealed class RecordMaskingAndExportTests
             page,
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
-                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
             destination);
@@ -580,7 +582,7 @@ public sealed class RecordMaskingAndExportTests
             ReadOnlyMemory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None).ConfigureAwait(false);
             if (!_disposed)
             {
                 await _inner.WriteAsync(buffer, CancellationToken.None).ConfigureAwait(false);
