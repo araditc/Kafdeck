@@ -5,6 +5,7 @@ namespace Kafdeck.Infrastructure.Security;
 
 public sealed class LoggingSecurityAuditSink : ISecurityAuditSink
 {
+    private const int MaxAuditValueLength = 256;
     private readonly ILogger<LoggingSecurityAuditSink> _logger;
 
     public LoggingSecurityAuditSink(ILogger<LoggingSecurityAuditSink> logger)
@@ -20,14 +21,31 @@ public sealed class LoggingSecurityAuditSink : ISecurityAuditSink
         _logger.LogInformation(
             "SecurityAudit EventType={EventType} Principal={Principal} SessionCorrelationId={SessionCorrelationId} ClusterId={ClusterId} ResourceName={ResourceName} Outcome={Outcome} ReasonCategory={ReasonCategory} TimestampUtc={TimestampUtc}",
             auditEvent.EventType,
-            auditEvent.Principal,
-            auditEvent.SessionCorrelationId,
-            auditEvent.ClusterId,
-            auditEvent.ResourceName,
+            Sanitize(auditEvent.Principal),
+            Sanitize(auditEvent.SessionCorrelationId),
+            Sanitize(auditEvent.ClusterId),
+            Sanitize(auditEvent.ResourceName),
             auditEvent.Outcome,
-            auditEvent.ReasonCategory,
+            Sanitize(auditEvent.ReasonCategory),
             auditEvent.TimestampUtc);
 
         return ValueTask.CompletedTask;
+    }
+
+    internal static string? Sanitize(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var bounded = value.Length <= MaxAuditValueLength
+            ? value
+            : value[..MaxAuditValueLength];
+
+        return bounded
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\t", "\\t", StringComparison.Ordinal);
     }
 }
