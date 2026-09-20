@@ -11,6 +11,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
 {
     public const int DefaultGlobalConcurrency = 16;
     public const int DefaultPerClusterConcurrency = 4;
+    private static readonly TimeSpan MetadataPollSlice = TimeSpan.FromMilliseconds(250);
 
     private readonly KafkaRecordConsumerFactory _consumers;
     private readonly SemaphoreSlim _globalBulkhead;
@@ -92,11 +93,13 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
 
         try
         {
-            await _globalBulkhead.WaitAsync(boundedCancellation.Token).ConfigureAwait(false);
-            globalAcquired = true;
-
+            // Cluster admission comes first so queued reads for one slow cluster
+            // cannot reserve global permits and starve unrelated clusters.
             await clusterBulkhead.WaitAsync(boundedCancellation.Token).ConfigureAwait(false);
             clusterAcquired = true;
+
+            await _globalBulkhead.WaitAsync(boundedCancellation.Token).ConfigureAwait(false);
+            globalAcquired = true;
 
             using var consumer = _consumers.Create(request.ClusterId);
             return ReadBounded(
@@ -143,14 +146,14 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         }
         finally
         {
-            if (clusterAcquired)
-            {
-                clusterBulkhead.Release();
-            }
-
             if (globalAcquired)
             {
                 _globalBulkhead.Release();
+            }
+
+            if (clusterAcquired)
+            {
+                clusterBulkhead.Release();
             }
         }
     }
@@ -181,12 +184,22 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         CancellationToken boundedCancellation)
     {
         var topicPartition = new TopicPartition(request.TopicName, new Partition(request.Partition));
-        var timeout = RemainingTimeout(effectiveDeadline);
-        var watermarks = consumer.QueryWatermarkOffsets(topicPartition, timeout);
+        var watermarks = QueryWatermarksCancellable(
+            consumer,
+            topicPartition,
+            effectiveDeadline,
+            boundedCancellation);
         var low = watermarks.Low.Value;
         var high = watermarks.High.Value;
 
-        var anchorOffset = ResolveAnchorOffset(consumer, topicPartition, request.Anchor, high, effectiveDeadline);
+        var anchorOffset = ResolveAnchorOffset(
+            consumer,
+            topicPartition,
+            request.Anchor,
+            low,
+            high,
+            effectiveDeadline,
+            boundedCancellation);
         if (anchorOffset < low || anchorOffset > high)
         {
             return Failed<RecordReadBatch>(new KafkaFailure(
@@ -305,13 +318,21 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         IConsumer<byte[], byte[]> consumer,
         TopicPartition topicPartition,
         RecordAnchor anchor,
+        long lowWatermark,
         long highWatermark,
-        DateTimeOffset effectiveDeadline) => anchor.Kind switch
+        DateTimeOffset effectiveDeadline,
+        CancellationToken cancellationToken) => anchor.Kind switch
     {
-        RecordAnchorKind.Earliest => consumer.QueryWatermarkOffsets(topicPartition, RemainingTimeout(effectiveDeadline)).Low.Value,
+        RecordAnchorKind.Earliest => lowWatermark,
         RecordAnchorKind.Latest => highWatermark,
         RecordAnchorKind.Offset => anchor.Offset!.Value,
-        RecordAnchorKind.Timestamp => ResolveTimestampOffset(consumer, topicPartition, anchor.TimestampUtc!.Value, highWatermark, effectiveDeadline),
+        RecordAnchorKind.Timestamp => ResolveTimestampOffset(
+            consumer,
+            topicPartition,
+            anchor.TimestampUtc!.Value,
+            highWatermark,
+            effectiveDeadline,
+            cancellationToken),
         _ => throw new ArgumentOutOfRangeException(nameof(anchor)),
     };
 
@@ -320,16 +341,54 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         TopicPartition topicPartition,
         DateTimeOffset timestampUtc,
         long highWatermark,
-        DateTimeOffset effectiveDeadline)
+        DateTimeOffset effectiveDeadline,
+        CancellationToken cancellationToken)
     {
-        var result = consumer.OffsetsForTimes(
-            [new TopicPartitionTimestamp(topicPartition, new Timestamp(timestampUtc.UtcDateTime))],
-            RemainingTimeout(effectiveDeadline)).Single();
-
-        return result.Offset == Offset.Unset ? highWatermark : result.Offset.Value;
+        var lookup = new TopicPartitionTimestamp(topicPartition, new Timestamp(timestampUtc.UtcDateTime));
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var timeout = MetadataSlice(effectiveDeadline);
+            try
+            {
+                var result = consumer.OffsetsForTimes([lookup], timeout).Single();
+                return result.Offset == Offset.Unset ? highWatermark : result.Offset.Value;
+            }
+            catch (KafkaException exception) when (
+                exception.Error.Code == ErrorCode.Local_TimedOut &&
+                _timeProvider.GetUtcNow() < effectiveDeadline &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                // Retry only the bounded metadata lookup; no record has been delivered yet.
+            }
+        }
     }
 
-    private TimeSpan RemainingTimeout(DateTimeOffset effectiveDeadline)
+    private WatermarkOffsets QueryWatermarksCancellable(
+        IConsumer<byte[], byte[]> consumer,
+        TopicPartition topicPartition,
+        DateTimeOffset effectiveDeadline,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var timeout = MetadataSlice(effectiveDeadline);
+            try
+            {
+                return consumer.QueryWatermarkOffsets(topicPartition, timeout);
+            }
+            catch (KafkaException exception) when (
+                exception.Error.Code == ErrorCode.Local_TimedOut &&
+                _timeProvider.GetUtcNow() < effectiveDeadline &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                // A short local timeout is expected while honoring a longer operation deadline.
+            }
+        }
+    }
+
+    private TimeSpan MetadataSlice(DateTimeOffset effectiveDeadline)
     {
         var remaining = effectiveDeadline - _timeProvider.GetUtcNow();
         if (remaining <= TimeSpan.Zero)
@@ -337,7 +396,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             throw new OperationCanceledException();
         }
 
-        return remaining;
+        return remaining < MetadataPollSlice ? remaining : MetadataPollSlice;
     }
 
     private static long CountRawBytes(Message<byte[], byte[]> message)
