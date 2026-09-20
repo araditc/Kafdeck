@@ -6,6 +6,7 @@ using Avro.Generic;
 using Avro.IO;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
+using Google.Protobuf.WellKnownTypes;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
 
@@ -809,7 +810,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
             var messages = new Dictionary<string, MessageTypeInfo>(StringComparer.Ordinal);
             var enums = new Dictionary<string, EnumDescriptorProto>(StringComparer.Ordinal);
 
-            foreach (var file in files)
+            foreach (var file in files.Concat(KnownWellKnownFiles()).GroupBy(file => file.Name, StringComparer.Ordinal).Select(group => group.First()))
             {
                 foreach (var message in file.MessageType)
                 {
@@ -823,6 +824,21 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
             }
 
             return new ProtobufTypeRegistry(messages, enums);
+        }
+
+        private static IEnumerable<FileDescriptorProto> KnownWellKnownFiles()
+        {
+            yield return Any.Descriptor.File.ToProto();
+            yield return Api.Descriptor.File.ToProto();
+            yield return Duration.Descriptor.File.ToProto();
+            yield return Empty.Descriptor.File.ToProto();
+            yield return FieldMask.Descriptor.File.ToProto();
+            yield return SourceContext.Descriptor.File.ToProto();
+            yield return Struct.Descriptor.File.ToProto();
+            yield return Timestamp.Descriptor.File.ToProto();
+            yield return Google.Protobuf.WellKnownTypes.Type.Descriptor.File.ToProto();
+            yield return DoubleValue.Descriptor.File.ToProto();
+            yield return DescriptorProto.Descriptor.File.ToProto();
         }
 
         public MessageTypeInfo ResolveMessage(string typeName, string package)
