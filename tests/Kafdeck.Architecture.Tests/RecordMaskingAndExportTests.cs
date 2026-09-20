@@ -78,6 +78,38 @@ public sealed class RecordMaskingAndExportTests
     }
 
     [Fact]
+    public void Header_masking_preserves_exact_whitespace_significant_name()
+    {
+        const string secret = "space-suffixed-header-secret";
+        var item = new RecordFilteredItem(
+            new KafkaRawRecord(
+                11,
+                DateTimeOffset.UtcNow,
+                null,
+                Encoding.UTF8.GetBytes("safe"),
+                [
+                    new KafkaRecordHeader("authorization", Encoding.UTF8.GetBytes("visible")),
+                    new KafkaRecordHeader("authorization ", Encoding.UTF8.GetBytes(secret)),
+                ]),
+            null);
+        var policy = RecordMaskingPolicyCompiler.Compile(
+            new RecordMaskingPolicyDefinition(
+                "exact-header",
+                1,
+                HeaderRules: [new RecordHeaderMaskRule("authorization ")]));
+
+        var safe = new RecordMaskingService().Apply(0, item, policy);
+
+        var ordinary = safe.Headers.Single(header => header.Name == "authorization");
+        var suffixed = safe.Headers.Single(header => header.Name == "authorization ");
+        Assert.False(ordinary.IsRedacted);
+        Assert.Equal("visible", Encoding.UTF8.GetString(ordinary.Value.Span));
+        Assert.True(suffixed.IsRedacted);
+        Assert.Equal("[REDACTED]", Encoding.UTF8.GetString(suffixed.Value.Span));
+        Assert.DoesNotContain(secret, JsonSerializer.Serialize(safe), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Mandatory_structured_masking_fails_closed_without_decoded_value_or_required_path()
     {
         const string secret = "must-never-leak";
@@ -145,6 +177,43 @@ public sealed class RecordMaskingAndExportTests
         Assert.Null(safe.RawValue);
         Assert.Null(safe.StructuredValue);
         Assert.DoesNotContain(secret, JsonSerializer.Serialize(safe), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Object_wildcard_key_enumeration_is_charged_to_shared_traversal_budget()
+    {
+        var wide = new StringBuilder("{");
+        for (var index = 0; index < 1024; index++)
+        {
+            if (index > 0)
+            {
+                wide.Append(',');
+            }
+
+            wide.Append('"').Append("field").Append(index).Append("\":\"secret\"");
+        }
+
+        wide.Append('}');
+        using var document = JsonDocument.Parse(wide.ToString());
+        var item = new RecordFilteredItem(
+            new KafkaRawRecord(
+                4,
+                DateTimeOffset.UtcNow,
+                null,
+                Encoding.UTF8.GetBytes(wide.ToString()),
+                []),
+            new RecordDecodedValue(10, RecordSchemaFormat.JsonSchema, document.RootElement.Clone()));
+        var policy = RecordMaskingPolicyCompiler.Compile(
+            new RecordMaskingPolicyDefinition(
+                "wide-object",
+                1,
+                [new RecordStructuredMaskRule("/*")]));
+
+        var safe = new RecordMaskingService(maxTraversalSteps: 2).Apply(0, item, policy);
+
+        Assert.Equal(RecordPayloadProjectionKind.FullyRedacted, safe.ValueKind);
+        Assert.Null(safe.RawValue);
+        Assert.Null(safe.StructuredValue);
     }
 
     [Fact]
@@ -274,6 +343,29 @@ public sealed class RecordMaskingAndExportTests
 
         Assert.Equal(RecordExportBudgetOutcome.DurationLimit, summary.Outcome);
         Assert.InRange(summary.RowCount, 0, 1);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Export_deadline_does_not_depend_on_destination_honoring_cancellation()
+    {
+        var page = SafePage(SafeProjection(1, "one"));
+        var service = new RecordExportService();
+        var (evaluator, identity) = ExportAuthorization();
+        await using var destination = new NonCooperativeWriteStream();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var summary = await service.ExportAsync(
+            page,
+            new RecordExportRequest(
+                RecordExportFormat.Ndjson,
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromMilliseconds(20))),
+            evaluator,
+            identity,
+            destination);
+
+        Assert.Equal(RecordExportBudgetOutcome.DurationLimit, summary.Outcome);
+        Assert.Equal(0, summary.RowCount);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
     }
 
@@ -458,6 +550,59 @@ public sealed class RecordMaskingAndExportTests
         {
             await _inner.DisposeAsync();
             GC.SuppressFinalize(this);
+        }
+    }
+
+    private sealed class NonCooperativeWriteStream : Stream
+    {
+        private readonly MemoryStream _inner = new();
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _disposed;
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => !_disposed;
+        public override long Length => _inner.Length;
+        public override long Position
+        {
+            get => _inner.Position;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+
+        public override async ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            await _release.Task.ConfigureAwait(false);
+            if (!_disposed)
+            {
+                await _inner.WriteAsync(buffer, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !_disposed)
+            {
+                _disposed = true;
+                _release.TrySetResult();
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+            return ValueTask.CompletedTask;
         }
     }
 }
