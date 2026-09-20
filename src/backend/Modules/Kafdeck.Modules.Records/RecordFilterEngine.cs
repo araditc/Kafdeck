@@ -1299,7 +1299,7 @@ internal sealed class FilterLexer
             builder.Append(escaped switch
             {
                 '"' => '"',
-                ''' => ''',
+                '\'' => '\'',
                 '\\' => '\\',
                 'n' => '\n',
                 'r' => '\r',
