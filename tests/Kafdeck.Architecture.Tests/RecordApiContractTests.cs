@@ -26,7 +26,7 @@ public sealed class RecordApiContractTests
     }
 
     [Fact]
-    public void Checked_in_v03_OpenApi_is_reproducible_and_has_no_mutation_operation()
+    public void Checked_in_v03_OpenApi_is_reproducible_read_only_and_declares_supported_authentication()
     {
         var root = FindRepositoryRoot();
         var checkedIn = File.ReadAllText(Path.Combine(root, "docs", "api", "openapi-v0.3.json"));
@@ -41,6 +41,22 @@ public sealed class RecordApiContractTests
             Assert.Contains("get", operations);
             Assert.DoesNotContain(operations, operation => operation is "post" or "put" or "patch" or "delete");
         });
+
+        var schemes = document.RootElement
+            .GetProperty("components")
+            .GetProperty("securitySchemes");
+        var oidc = schemes.GetProperty("oidcSession");
+        Assert.Equal("apiKey", oidc.GetProperty("type").GetString());
+        Assert.Equal("cookie", oidc.GetProperty("in").GetString());
+        Assert.Equal("Kafdeck.Session", oidc.GetProperty("name").GetString());
+        var deployment = schemes.GetProperty("deploymentToken");
+        Assert.Equal("apiKey", deployment.GetProperty("type").GetString());
+        Assert.Equal("header", deployment.GetProperty("in").GetString());
+        Assert.Equal("X-Kafdeck-Access-Token", deployment.GetProperty("name").GetString());
+
+        var security = document.RootElement.GetProperty("security").EnumerateArray().ToArray();
+        Assert.Contains(security, requirement => requirement.TryGetProperty("oidcSession", out _));
+        Assert.Contains(security, requirement => requirement.TryGetProperty("deploymentToken", out _));
     }
 
     [Fact]
