@@ -11,6 +11,10 @@ function recordError(reason: unknown) {
   return reason instanceof Error ? reason.message : 'Record data could not be loaded.';
 }
 
+function isAbort(reason: unknown) {
+  return reason instanceof DOMException && reason.name === 'AbortError';
+}
+
 function fromBase64(value: string): Uint8Array {
   const binary = atob(value); const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
@@ -58,16 +62,31 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tailing, setTailing] = useState(false);
+  const browseController = useRef<AbortController | null>(null);
   const tailController = useRef<AbortController | null>(null);
 
+  function stopBrowse() {
+    browseController.current?.abort();
+    browseController.current = null;
+    setLoading(false);
+  }
+
+  function stopTail() {
+    tailController.current?.abort(); tailController.current = null; setTailing(false);
+  }
+
   useEffect(() => {
+    stopBrowse();
     if (!partitions.includes(partition)) setPartition(partitions[0] ?? 0);
     setPage(null); setError(null); stopTail();
     // Topic/cluster changes invalidate all payload state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId, topicName, partitions.join(',')]);
 
-  useEffect(() => () => tailController.current?.abort(), []);
+  useEffect(() => () => {
+    browseController.current?.abort();
+    tailController.current?.abort();
+  }, []);
 
   const baseQuery = useMemo<RecordQuery>(() => {
     const anchor: Partial<RecordQuery> = anchorKind === 'offset'
@@ -86,14 +105,21 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   }, [anchorKind, anchorValue, filter, filterLanguage, keyPrefix, maxRecords, partition]);
 
   async function load(query: RecordQuery) {
+    stopBrowse();
+    const controller = new AbortController();
+    browseController.current = controller;
     setLoading(true); setError(null);
-    try { setPage(await kafdeckApi.getRecords(clusterId, topicName, query)); }
-    catch (reason) { setError(recordError(reason)); }
-    finally { setLoading(false); }
-  }
-
-  function stopTail() {
-    tailController.current?.abort(); tailController.current = null; setTailing(false);
+    try {
+      const result = await kafdeckApi.getRecords(clusterId, topicName, query, controller.signal);
+      if (browseController.current === controller) setPage(result);
+    } catch (reason) {
+      if (!isAbort(reason) && browseController.current === controller) setError(recordError(reason));
+    } finally {
+      if (browseController.current === controller) {
+        browseController.current = null;
+        setLoading(false);
+      }
+    }
   }
 
   async function startTail() {
@@ -103,6 +129,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
     const tailQuery: RecordQuery = { ...tailBase, anchor: 'latest' };
     try {
       await kafdeckApi.tailRecords(clusterId, topicName, tailQuery, frame => {
+        if (tailController.current !== controller) return;
         if (frame.kind === 'records' && frame.page) {
           setPage(previous => previous ? { ...frame.page!, records: [...previous.records, ...frame.page!.records].slice(-maxRecords) } : frame.page);
         } else if (frame.kind === 'error' && frame.failure) setError(frame.failure.message);
@@ -110,7 +137,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
         else if (frame.kind === 'completed') setTailing(false);
       }, controller.signal);
     } catch (reason) {
-      if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError(recordError(reason));
+      if (!isAbort(reason) && tailController.current === controller) setError(recordError(reason));
     } finally {
       if (tailController.current === controller) { tailController.current = null; setTailing(false); }
     }
@@ -133,7 +160,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
     <h4 id="record-explorer-title">Safe Data Explorer</h4>
     <p>Payload access is separately authorized, bounded and server-side masked before it reaches this browser.</p>
     <div>
-      <label>Partition <select value={partition} onChange={event => { setPartition(Number(event.target.value)); setPage(null); }}>{partitions.map(value => <option key={value} value={value}>{value}</option>)}</select></label>{' '}
+      <label>Partition <select value={partition} onChange={event => { stopBrowse(); stopTail(); setPage(null); setError(null); setPartition(Number(event.target.value)); }}>{partitions.map(value => <option key={value} value={value}>{value}</option>)}</select></label>{' '}
       <label>Start <select value={anchorKind} onChange={event => setAnchorKind(event.target.value as typeof anchorKind)}><option value="latest">Latest</option><option value="earliest">Earliest</option><option value="offset">Offset</option><option value="timestamp">Timestamp</option></select></label>{' '}
       {anchorKind === 'offset' && <label>Offset <input type="number" min="0" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}
       {anchorKind === 'timestamp' && <label>Timestamp <input type="datetime-local" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}{' '}
