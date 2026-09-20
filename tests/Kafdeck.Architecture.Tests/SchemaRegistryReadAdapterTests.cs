@@ -274,6 +274,39 @@ public sealed class SchemaRegistryReadAdapterTests
         }
     }
 
+
+    [Fact]
+    public async Task Malformed_schema_reference_is_mapped_to_invalid_response()
+    {
+        var handler = new StubHandler(_ =>
+            Json(HttpStatusCode.OK, """
+            {
+              "schemaType":"PROTOBUF",
+              "schema":"syntax = \"proto3\"; message Root {}",
+              "references":[
+                {"name":"shared.proto","version":999999999999}
+              ]
+            }
+            """));
+
+        using var adapter = CreateAdapter("cluster-a", handler);
+
+        var result = await adapter.GetSchemaByIdAsync(
+            "cluster-a",
+            77,
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            RecordSchemaFailureCategory.InvalidResponse,
+            result.Failure.Category);
+        Assert.Equal(
+            "invalid_schema_registry_response",
+            result.Failure.Code);
+    }
+
     [Fact]
     public async Task Registry_errors_map_to_safe_categories()
     {
