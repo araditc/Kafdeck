@@ -20,3 +20,10 @@ Examples:
 `Draft -> Review -> Accepted/Rejected -> Implemented/Superseded`
 
 Implementation should not outrun an unresolved RFC when the RFC is required by governance.
+
+
+## Current RFC index
+
+- RFC-0001 — v0.1 Cluster Explorer — accepted/implemented.
+- RFC-0002 — v0.2 Operator Identity and RBAC — accepted/implemented.
+- RFC-0003 — v0.3 Safe Data Explorer and Server-Side Masking — planning/review.
