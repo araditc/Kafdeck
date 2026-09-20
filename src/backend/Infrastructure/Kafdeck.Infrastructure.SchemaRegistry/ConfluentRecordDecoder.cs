@@ -204,7 +204,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
         var indexes = ReadMessageIndexes(framedBody.Span, ref cursor);
         if (cursor > framedBody.Length)
         {
-            throw new InvalidProtocolBufferException("Invalid message index framing.");
+            throw new InvalidDataException("Invalid message index framing.");
         }
 
         var files = await LoadProtobufFilesAsync(
@@ -226,7 +226,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
 
         if (!input.IsAtEnd)
         {
-            throw new InvalidProtocolBufferException("Trailing Protobuf bytes remain.");
+            throw new InvalidDataException("Trailing Protobuf bytes remain.");
         }
 
         return JsonSerializer.SerializeToElement(decoded);
@@ -305,7 +305,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
         var bytes = Convert.FromBase64String(base64);
         if (bytes.Length == 0 || bytes.Length > 4 * 1024 * 1024)
         {
-            throw new InvalidProtocolBufferException("Invalid descriptor size.");
+            throw new InvalidDataException("Invalid descriptor size.");
         }
 
         return FileDescriptorProto.Parser.ParseFrom(bytes);
@@ -323,7 +323,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
 
         if (countOrZero < 1 || countOrZero > MaxMessageIndexDepth)
         {
-            throw new InvalidProtocolBufferException("Invalid Protobuf message index depth.");
+            throw new InvalidDataException("Invalid Protobuf message index depth.");
         }
 
         var indexes = new int[countOrZero];
@@ -332,7 +332,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
             var value = ReadZigZagInt(payload, ref cursor);
             if (value < 0)
             {
-                throw new InvalidProtocolBufferException("Invalid Protobuf message index.");
+                throw new InvalidDataException("Invalid Protobuf message index.");
             }
 
             indexes[index] = value;
@@ -350,7 +350,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
         {
             if (cursor >= payload.Length || shift >= 35)
             {
-                throw new InvalidProtocolBufferException("Invalid Protobuf message index varint.");
+                throw new InvalidDataException("Invalid Protobuf message index varint.");
             }
 
             var current = payload[cursor++];
@@ -375,7 +375,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
             indexes[0] < 0 ||
             indexes[0] >= file.MessageType.Count)
         {
-            throw new InvalidProtocolBufferException("Protobuf message index is outside the schema.");
+            throw new InvalidDataException("Protobuf message index is outside the schema.");
         }
 
         var current = file.MessageType[indexes[0]];
@@ -385,7 +385,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
             var index = indexes[depth];
             if (index < 0 || index >= current.NestedType.Count)
             {
-                throw new InvalidProtocolBufferException("Nested Protobuf message index is outside the schema.");
+                throw new InvalidDataException("Nested Protobuf message index is outside the schema.");
             }
 
             current = current.NestedType[index];
@@ -479,7 +479,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
 
         if (!nested.IsAtEnd)
         {
-            throw new InvalidProtocolBufferException("Nested Protobuf message contains trailing bytes.");
+            throw new InvalidDataException("Nested Protobuf message contains trailing bytes.");
         }
 
         return result;
@@ -616,7 +616,7 @@ public sealed class ConfluentRecordDecoder : IRecordDecodePort
 
         if (actual != expected)
         {
-            throw new InvalidProtocolBufferException("Protobuf wire type does not match schema.");
+            throw new InvalidDataException("Protobuf wire type does not match schema.");
         }
     }
 
