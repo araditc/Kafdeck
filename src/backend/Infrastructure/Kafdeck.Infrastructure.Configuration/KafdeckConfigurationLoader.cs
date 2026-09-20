@@ -1,3 +1,4 @@
+using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Microsoft.Extensions.Configuration;
 
@@ -20,10 +21,46 @@ public static class KafdeckConfigurationLoader
             .GetChildren()
             .Select(LoadCluster)
             .ToArray();
+        var records = LoadRecordData(configuration.GetSection("Kafdeck:Records"));
 
         return new KafdeckOptions(
             new DeploymentOptions(listenUrl, accessToken, accessMode, oidc),
-            Array.AsReadOnly(clusters));
+            Array.AsReadOnly(clusters),
+            records);
+    }
+
+    private static RecordDataOptions LoadRecordData(IConfigurationSection section)
+    {
+        var masking = section.GetSection("Masking");
+        var policyId = masking["PolicyId"] ?? "default";
+        var version = int.TryParse(masking["Version"], out var parsedVersion) ? parsedVersion : 1;
+        var maskKey = bool.TryParse(masking["MaskKey"], out var parsedMaskKey) && parsedMaskKey;
+        var keyReplacement = masking["KeyReplacement"] ?? "[REDACTED]";
+
+        var structuredRules = masking
+            .GetSection("StructuredRules")
+            .GetChildren()
+            .Select(rule => new RecordStructuredMaskRule(
+                rule["Path"] ?? string.Empty,
+                rule["Replacement"] ?? "[REDACTED]"))
+            .ToArray();
+
+        var headerRules = masking
+            .GetSection("HeaderRules")
+            .GetChildren()
+            .Select(rule => new RecordHeaderMaskRule(
+                rule["Name"] ?? string.Empty,
+                rule["Replacement"] ?? "[REDACTED]"))
+            .ToArray();
+
+        return new RecordDataOptions(
+            new RecordMaskingPolicyDefinition(
+                policyId,
+                version,
+                Array.AsReadOnly(structuredRules),
+                Array.AsReadOnly(headerRules),
+                maskKey,
+                keyReplacement));
     }
 
     private static AccessMode ParseAccessMode(string? value, SecretReference? accessToken)
