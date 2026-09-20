@@ -62,6 +62,50 @@ public sealed class SchemaRegistryReadAdapterTests
         Assert.Equal(RecordSchemaFormat.Protobuf, proto.Value!.Format);
     }
 
+
+    [Fact]
+    public async Task Protobuf_serialized_lookup_preserves_initial_schema_type()
+    {
+        var descriptor = new FileDescriptorProto
+        {
+            Name = "record.proto",
+            Package = "test",
+            Syntax = "proto3",
+        };
+        descriptor.MessageType.Add(new DescriptorProto { Name = "Record" });
+        var serialized = Convert.ToBase64String(descriptor.ToByteArray());
+
+        var handler = new StubHandler(request =>
+        {
+            if (request.RequestUri!.Query.Contains("format=serialized", StringComparison.Ordinal))
+            {
+                // Intentionally omit schemaType to prove the initial type is retained.
+                return Json(HttpStatusCode.OK, $"""{"schema":"{{serialized}}"}""");
+            }
+
+            return Json(HttpStatusCode.OK, """
+            {
+              "schemaType":"PROTOBUF",
+              "schema":"syntax = \"proto3\"; message Record {}"
+            }
+            """);
+        });
+
+        using var adapter = CreateAdapter("cluster-a", handler);
+
+        var result = await adapter.GetSchemaByIdAsync(
+            "cluster-a",
+            33,
+            Operation(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(RecordSchemaFormat.Protobuf, result.Value!.Format);
+        Assert.Equal(serialized, result.Value.SchemaText);
+        Assert.Equal(2, handler.CallCount);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
     [Fact]
     public async Task Avro_references_trigger_resolved_read_only_lookup()
     {
