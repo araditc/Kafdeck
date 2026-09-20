@@ -115,7 +115,6 @@ public interface IRecordSchemaReadPort
     Task<RecordSchemaResult<RecordSchemaDocument>> GetSchemaByIdAsync(
         string clusterId,
         int schemaId,
-        RecordSchemaFormat format,
         KafkaOperationContext operation,
         CancellationToken cancellationToken);
 }
