@@ -110,12 +110,23 @@ public static class KafdeckConfigurationLoader
                 ParseRequiredSecret(saslSection["Password"], "SASL password"));
         }
 
+        var registrySection = section.GetSection("SchemaRegistry");
+        SchemaRegistryProfile? schemaRegistry = null;
+        if (registrySection.GetChildren().Any())
+        {
+            schemaRegistry = new SchemaRegistryProfile(
+                registrySection["Url"] ?? string.Empty,
+                ParseOptionalSecret(registrySection["Username"]),
+                ParseOptionalSecret(registrySection["Password"]));
+        }
+
         return new ClusterProfile(
             id,
             Array.AsReadOnly(bootstrapServers),
             securityProtocol,
             tls,
-            sasl);
+            sasl,
+            schemaRegistry);
     }
 
     private static SecretReference? ParseOptionalSecret(string? value) =>
