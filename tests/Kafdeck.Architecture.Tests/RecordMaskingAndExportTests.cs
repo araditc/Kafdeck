@@ -374,7 +374,7 @@ public sealed class RecordMaskingAndExportTests
     }
 
     [Fact]
-    public async Task Export_preserves_caller_cancellation_during_stream_write()
+    public async Task Export_preserves_indeterminate_evidence_on_caller_cancellation_during_stream_write()
     {
         var page = SafePage(SafeProjection(1, "one"));
         var service = new RecordExportService();
@@ -382,16 +382,19 @@ public sealed class RecordMaskingAndExportTests
         await using var destination = new DelayedWriteStream(TimeSpan.FromSeconds(1));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            service.ExportAsync(
-                page,
-                new RecordExportRequest(
-                    RecordExportFormat.Ndjson,
-                    new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(2))),
-                evaluator,
-                identity,
-                destination,
-                cancellation.Token));
+        var summary = await service.ExportAsync(
+            page,
+            new RecordExportRequest(
+                RecordExportFormat.Ndjson,
+                new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(2))),
+            evaluator,
+            identity,
+            destination,
+            cancellation.Token);
+
+        Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
+        Assert.Equal(0, summary.RowCount);
+        Assert.Equal(0, summary.ByteCount);
     }
 
     [Fact]
