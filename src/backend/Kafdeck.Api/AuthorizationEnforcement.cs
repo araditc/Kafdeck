@@ -67,9 +67,9 @@ public static class KafdeckAuthorizationEndpointExtensions
             var request = new AuthorizationRequest(action, clusterId, resourceName);
             var outcome = authorization.Authorize(http.User, request);
 
+            var audit = http.RequestServices.GetRequiredService<ISecurityAuditSink>();
             if (outcome == KafdeckAuthorizationOutcome.Forbidden)
             {
-                var audit = http.RequestServices.GetRequiredService<ISecurityAuditSink>();
                 var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
                     ? SecurityAuditPrincipal.FromOperator(session.Identity)
                     : SecurityAuditPrincipal.Anonymous;
@@ -83,6 +83,25 @@ public static class KafdeckAuthorizationEndpointExtensions
                         resourceName,
                         SecurityAuditOutcome.Denied,
                         "rbac_denied"),
+                    http.RequestAborted).ConfigureAwait(false);
+            }
+
+            if (outcome == KafdeckAuthorizationOutcome.Allowed &&
+                action is AuthorizationAction.BrokerConfigRead or AuthorizationAction.TopicConfigRead)
+            {
+                var principal = OperatorSessionContextFactory.TryCreate(http.User, out var sensitiveSession) && sensitiveSession is not null
+                    ? SecurityAuditPrincipal.FromOperator(sensitiveSession.Identity)
+                    : SecurityAuditPrincipal.LegacyDeployment;
+                await audit.WriteAsync(
+                    new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.SensitiveRead,
+                        principal,
+                        sensitiveSession?.SessionId.Value.ToString("N"),
+                        clusterId,
+                        resourceName,
+                        SecurityAuditOutcome.Succeeded,
+                        action == AuthorizationAction.BrokerConfigRead ? "broker_config_read" : "topic_config_read"),
                     http.RequestAborted).ConfigureAwait(false);
             }
 
