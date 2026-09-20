@@ -11,6 +11,20 @@ namespace Kafdeck.Modules.Records;
 public sealed class RecordMaskingService
 {
     private const string FullyRedactedPath = "$payload";
+    public const int DefaultMaxTraversalSteps = 65_536;
+    public const int HardMaxTraversalSteps = 1_000_000;
+
+    private readonly int _maxTraversalSteps;
+
+    public RecordMaskingService(int maxTraversalSteps = DefaultMaxTraversalSteps)
+    {
+        if (maxTraversalSteps is < 1 or > HardMaxTraversalSteps)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTraversalSteps));
+        }
+
+        _maxTraversalSteps = maxTraversalSteps;
+    }
 
     public RecordSafePage Apply(
         RecordReadRequest request,
@@ -108,12 +122,13 @@ public sealed class RecordMaskingService
                 return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
             }
 
+            var traversalStepsRemaining = _maxTraversalSteps;
             var redactedPaths = new List<string>(policy.StructuredRules.Count);
             foreach (var rule in policy.StructuredRules)
             {
                 var segments = ParsePointer(rule.JsonPointer);
-                var matchCount = ApplyPath(root, segments, 0, rule.Replacement);
-                if (matchCount == 0)
+                var matchCount = ApplyPath(root, segments, 0, rule.Replacement, ref traversalStepsRemaining);
+                if (matchCount <= 0)
                 {
                     return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
                 }
@@ -197,8 +212,14 @@ public sealed class RecordMaskingService
         JsonNode node,
         IReadOnlyList<string> segments,
         int segmentIndex,
-        string replacement)
+        string replacement,
+        ref int traversalStepsRemaining)
     {
+        if (!ConsumeTraversalStep(ref traversalStepsRemaining))
+        {
+            return -1;
+        }
+
         if (segmentIndex >= segments.Count)
         {
             return 0;
@@ -215,6 +236,11 @@ public sealed class RecordMaskingService
                 var count = 0;
                 foreach (var name in names)
                 {
+                    if (!ConsumeTraversalStep(ref traversalStepsRemaining))
+                    {
+                        return -1;
+                    }
+
                     if (isLast)
                     {
                         jsonObject[name] = replacement;
@@ -222,7 +248,13 @@ public sealed class RecordMaskingService
                     }
                     else if (jsonObject[name] is JsonNode child)
                     {
-                        count += ApplyPath(child, segments, segmentIndex + 1, replacement);
+                        var childCount = ApplyPath(child, segments, segmentIndex + 1, replacement, ref traversalStepsRemaining);
+                        if (childCount < 0)
+                        {
+                            return -1;
+                        }
+
+                        count += childCount;
                     }
                 }
 
@@ -242,7 +274,7 @@ public sealed class RecordMaskingService
 
             return propertyNode is null
                 ? 0
-                : ApplyPath(propertyNode, segments, segmentIndex + 1, replacement);
+                : ApplyPath(propertyNode, segments, segmentIndex + 1, replacement, ref traversalStepsRemaining);
         }
 
         if (node is JsonArray jsonArray)
@@ -252,6 +284,11 @@ public sealed class RecordMaskingService
                 var count = 0;
                 for (var index = 0; index < jsonArray.Count; index++)
                 {
+                    if (!ConsumeTraversalStep(ref traversalStepsRemaining))
+                    {
+                        return -1;
+                    }
+
                     if (isLast)
                     {
                         jsonArray[index] = replacement;
@@ -259,7 +296,13 @@ public sealed class RecordMaskingService
                     }
                     else if (jsonArray[index] is JsonNode child)
                     {
-                        count += ApplyPath(child, segments, segmentIndex + 1, replacement);
+                        var childCount = ApplyPath(child, segments, segmentIndex + 1, replacement, ref traversalStepsRemaining);
+                        if (childCount < 0)
+                        {
+                            return -1;
+                        }
+
+                        count += childCount;
                     }
                 }
 
@@ -279,11 +322,22 @@ public sealed class RecordMaskingService
             }
 
             return jsonArray[arrayIndex] is JsonNode arrayChild
-                ? ApplyPath(arrayChild, segments, segmentIndex + 1, replacement)
+                ? ApplyPath(arrayChild, segments, segmentIndex + 1, replacement, ref traversalStepsRemaining)
                 : 0;
         }
 
         return 0;
+    }
+
+    private static bool ConsumeTraversalStep(ref int traversalStepsRemaining)
+    {
+        if (traversalStepsRemaining <= 0)
+        {
+            return false;
+        }
+
+        traversalStepsRemaining--;
+        return true;
     }
 }
 
@@ -299,18 +353,17 @@ public sealed class RecordExportService
     public async Task<RecordExportSummary> ExportAsync(
         RecordSafePage page,
         RecordExportRequest request,
-        AuthorizationRequest authorizationRequest,
-        AuthorizationDecision exportAuthorization,
+        AuthorizationPolicyEvaluator authorizationEvaluator,
+        OperatorIdentity? identity,
         Stream destination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(authorizationRequest);
-        ArgumentNullException.ThrowIfNull(exportAuthorization);
+        ArgumentNullException.ThrowIfNull(authorizationEvaluator);
         ArgumentNullException.ThrowIfNull(destination);
 
-        EnsureExportAuthorized(page, authorizationRequest, exportAuthorization);
+        EnsureExportAuthorized(page, authorizationEvaluator, identity);
 
         if (!destination.CanWrite)
         {
@@ -324,7 +377,11 @@ public sealed class RecordExportService
 
         if (request.Format == RecordExportFormat.Json)
         {
-            await destination.WriteAsync(JsonStart, cancellationToken);
+            if (!await WriteWithinBudgetAsync(destination, JsonStart, stopwatch, request.Budget.MaxDuration, cancellationToken))
+            {
+                return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
+            }
+
             bytesWritten += JsonStart.Length;
         }
         else if (request.Format == RecordExportFormat.Csv)
@@ -334,7 +391,11 @@ public sealed class RecordExportService
                 return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.ByteLimit);
             }
 
-            await destination.WriteAsync(CsvHeader, cancellationToken);
+            if (!await WriteWithinBudgetAsync(destination, CsvHeader, stopwatch, request.Budget.MaxDuration, cancellationToken))
+            {
+                return new RecordExportSummary(request.Format, 0, 0, RecordExportBudgetOutcome.DurationLimit);
+            }
+
             bytesWritten += CsvHeader.Length;
         }
 
@@ -362,40 +423,39 @@ public sealed class RecordExportService
                 _ => throw new ArgumentOutOfRangeException(nameof(request.Format)),
             };
 
-            if (stopwatch.Elapsed >= request.Budget.MaxDuration)
-            {
-                outcome = RecordExportBudgetOutcome.DurationLimit;
-                break;
-            }
-
-            var delimiterBytes = request.Format == RecordExportFormat.Json && rowsWritten > 0
-                ? Comma.LongLength
-                : 0L;
+            var payload = request.Format == RecordExportFormat.Json && rowsWritten > 0
+                ? PrependComma(row)
+                : row;
             var reservedClosingBytes = request.Format == RecordExportFormat.Json
                 ? JsonEnd.LongLength
                 : 0L;
 
-            if (bytesWritten + delimiterBytes + row.LongLength + reservedClosingBytes > request.Budget.MaxBytes)
+            if (bytesWritten + payload.LongLength + reservedClosingBytes > request.Budget.MaxBytes)
             {
                 outcome = RecordExportBudgetOutcome.ByteLimit;
                 break;
             }
 
-            if (delimiterBytes > 0)
+            if (!await WriteWithinBudgetAsync(destination, payload, stopwatch, request.Budget.MaxDuration, cancellationToken))
             {
-                await destination.WriteAsync(Comma, cancellationToken);
-                bytesWritten += Comma.Length;
+                outcome = RecordExportBudgetOutcome.DurationLimit;
+                break;
             }
 
-            await destination.WriteAsync(row, cancellationToken);
-            bytesWritten += row.Length;
+            bytesWritten += payload.Length;
             rowsWritten++;
         }
 
         if (request.Format == RecordExportFormat.Json)
         {
-            await destination.WriteAsync(JsonEnd, cancellationToken);
-            bytesWritten += JsonEnd.Length;
+            if (!await WriteWithinBudgetAsync(destination, JsonEnd, stopwatch, request.Budget.MaxDuration, cancellationToken))
+            {
+                outcome = RecordExportBudgetOutcome.DurationLimit;
+            }
+            else
+            {
+                bytesWritten += JsonEnd.Length;
+            }
         }
 
         return new RecordExportSummary(request.Format, rowsWritten, bytesWritten, outcome);
@@ -408,6 +468,9 @@ public sealed class RecordExportService
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(summary);
 
+        var exportedCount = Math.Clamp(summary.RowCount, 0, page.Records.Count);
+        var exportedRecords = page.Records.Take(exportedCount).ToArray();
+
         return new RecordAccessAuditMetadata(
             page.ClusterId,
             page.TopicName,
@@ -415,8 +478,8 @@ public sealed class RecordExportService
             "record.export",
             page.PolicyId,
             page.PolicyVersion,
-            page.Records.Count == 0 ? null : page.Records.Min(record => record.Offset),
-            page.Records.Count == 0 ? null : page.Records.Max(record => record.Offset),
+            exportedRecords.Length == 0 ? null : exportedRecords.Min(record => record.Offset),
+            exportedRecords.Length == 0 ? null : exportedRecords.Max(record => record.Offset),
             page.ReadBudgetOutcome,
             page.FilterBudgetOutcome,
             summary.Format,
@@ -427,15 +490,47 @@ public sealed class RecordExportService
 
     private static void EnsureExportAuthorized(
         RecordSafePage page,
-        AuthorizationRequest authorizationRequest,
-        AuthorizationDecision exportAuthorization)
+        AuthorizationPolicyEvaluator authorizationEvaluator,
+        OperatorIdentity? identity)
     {
-        if (!exportAuthorization.IsAllowed ||
-            authorizationRequest.Action != AuthorizationAction.RecordExport ||
-            !string.Equals(authorizationRequest.ClusterId, page.ClusterId, StringComparison.Ordinal) ||
-            !string.Equals(authorizationRequest.ResourceName, page.TopicName, StringComparison.Ordinal))
+        var decision = authorizationEvaluator.Evaluate(
+            identity,
+            new AuthorizationRequest(
+                AuthorizationAction.RecordExport,
+                page.ClusterId,
+                page.TopicName));
+
+        if (!decision.IsAllowed)
         {
             throw new UnauthorizedAccessException("record.export authorization for the exact cluster/topic target is required.");
+        }
+    }
+
+    private static async Task<bool> WriteWithinBudgetAsync(
+        Stream destination,
+        ReadOnlyMemory<byte> payload,
+        Stopwatch stopwatch,
+        TimeSpan maxDuration,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var remaining = maxDuration - stopwatch.Elapsed;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return false;
+        }
+
+        using var deadline = new CancellationTokenSource(remaining);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        try
+        {
+            await destination.WriteAsync(payload, linked.Token);
+            return true;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+        {
+            return false;
         }
     }
 
@@ -496,6 +591,14 @@ public sealed class RecordExportService
         var result = new byte[value.Length + NewLine.Length];
         value.CopyTo(result, 0);
         NewLine.CopyTo(result, value.Length);
+        return result;
+    }
+
+    private static byte[] PrependComma(byte[] value)
+    {
+        var result = new byte[value.Length + Comma.Length];
+        Comma.CopyTo(result, 0);
+        value.CopyTo(result, Comma.Length);
         return result;
     }
 
