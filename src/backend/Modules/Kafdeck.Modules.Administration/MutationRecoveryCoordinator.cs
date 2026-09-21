@@ -28,8 +28,10 @@ public sealed class MutationRecoveryCoordinator
             throw new ArgumentOutOfRangeException(nameof(maxOperations));
         }
 
-        var interrupted = await _repository.ListByStateAsync(
-            MutationOperationState.Executing,
+        var nowUtc = _timeProvider.GetUtcNow();
+        var interrupted = await _repository.ListRecoverableExecutionsAsync(
+            nowUtc,
+            includeActiveLeases: ignoreActiveExecutionLeases,
             checked(maxOperations + 1),
             cancellationToken).ConfigureAwait(false);
 
@@ -43,14 +45,6 @@ public sealed class MutationRecoveryCoordinator
         foreach (var snapshot in interrupted)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var nowUtc = _timeProvider.GetUtcNow();
-            if (!ignoreActiveExecutionLeases &&
-                snapshot.ExecutionClaimExpiresAtUtc is { } leaseExpiresAtUtc &&
-                leaseExpiresAtUtc > nowUtc)
-            {
-                continue;
-            }
 
             var operation = MutationOperation.Restore(snapshot);
             var code = snapshot.DispatchStartedAtUtc is null
