@@ -211,7 +211,8 @@ public static class MutationIdempotency
         foreach (var target in MutationAuthorization.NormalizeTargets(
                      intent.Kind,
                      intent.ClusterId,
-                     intent.AuthorizationTargets))
+                     intent.AuthorizationTargets,
+                     intent.ResourceKeys))
         {
             Append(builder, "authorization-action", ((int)target.Action).ToString(System.Globalization.CultureInfo.InvariantCulture));
             Append(builder, "authorization-cluster", target.ClusterId);
