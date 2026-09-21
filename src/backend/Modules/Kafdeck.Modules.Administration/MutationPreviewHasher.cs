@@ -120,6 +120,16 @@ public static class MutationPreviewHasher
             .ThenBy(item => item.Digest, StringComparer.Ordinal)
             .ToArray();
 
+        var duplicateName = normalized
+            .GroupBy(item => item.Name, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateName is not null)
+        {
+            throw new ArgumentException(
+                $"Material digest name '{duplicateName.Key}' is duplicated.",
+                nameof(digests));
+        }
+
         return Array.AsReadOnly(normalized);
     }
 
