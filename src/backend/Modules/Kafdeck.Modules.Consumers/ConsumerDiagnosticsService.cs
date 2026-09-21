@@ -115,7 +115,8 @@ public sealed class ConsumerDiagnosticsService
             history.IsSuccess ? history.Value : null,
             _policy.MinimumStallEvidenceWindow,
             metrics.IsSuccess,
-            history.IsSuccess);
+            history.IsSuccess,
+            _timeProvider.GetUtcNow());
 
         var limitations = lag.Limitations
             .Concat(projection.Limitations)
@@ -334,7 +335,14 @@ public sealed class ConsumerDiagnosticsService
             return false;
         }
 
-        if (usable.Any(item => item.ObservedAt > evaluatedAt))
+        if (usable.Any(item => item.ObservedAt > evaluatedAt) ||
+            usable.Any(item => !string.Equals(item.State, "Stable", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var latestHistoryAge = evaluatedAt - usable[^1].ObservedAt;
+        if (latestHistoryAge > minimumWindow)
         {
             return false;
         }
