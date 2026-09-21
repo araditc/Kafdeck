@@ -25,6 +25,7 @@ public static class KafdeckConfigurationValidator
         var errors = new List<string>();
         ValidateDeployment(options.Deployment, errors);
         ValidateClusters(options.Clusters, errors);
+        ValidateCatalog(options.Catalog, options.Clusters, errors);
 
         if (errors.Count > 0)
         {
@@ -226,6 +227,136 @@ public static class KafdeckConfigurationValidator
             if (cluster.SchemaRegistry is not null)
             {
                 ValidateSchemaRegistry(cluster, errors);
+            }
+
+            if (cluster.Connect is not null)
+            {
+                ValidateReadOnlyHttpProfile(
+                    cluster.Id,
+                    "Kafka Connect",
+                    cluster.Connect.Url,
+                    cluster.Connect.Username,
+                    cluster.Connect.Password,
+                    errors);
+            }
+
+            if (cluster.KsqlDb is not null)
+            {
+                ValidateReadOnlyHttpProfile(
+                    cluster.Id,
+                    "ksqlDB",
+                    cluster.KsqlDb.Url,
+                    cluster.KsqlDb.Username,
+                    cluster.KsqlDb.Password,
+                    errors);
+            }
+        }
+    }
+
+    private static void ValidateCatalog(
+        TopicCatalogOptions? catalog,
+        IReadOnlyList<ClusterProfile> clusters,
+        ICollection<string> errors)
+    {
+        if (catalog is null)
+        {
+            return;
+        }
+
+        if (catalog.Topics.Count > 4096)
+        {
+            errors.Add("Topic catalog must not contain more than 4096 entries.");
+            return;
+        }
+
+        var clusterIds = clusters.Select(cluster => cluster.Id).ToHashSet(StringComparer.Ordinal);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var entry in catalog.Topics)
+        {
+            if (!clusterIds.Contains(entry.ClusterId))
+            {
+                errors.Add($"Topic catalog entry references unknown cluster '{entry.ClusterId}'.");
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.TopicName) || entry.TopicName.Trim().Length > 249)
+            {
+                errors.Add($"Topic catalog entry for cluster '{entry.ClusterId}' requires a topic name of at most 249 characters.");
+            }
+
+            if (!keys.Add($"{entry.ClusterId}\u001f{entry.TopicName}"))
+            {
+                errors.Add($"Topic catalog contains duplicate entry '{entry.ClusterId}/{entry.TopicName}'.");
+            }
+
+            if (entry.Tags.Count > 32 ||
+                entry.Tags.Any(string.IsNullOrWhiteSpace) ||
+                entry.Tags.Any(tag => tag.Trim().Length > 64) ||
+                entry.Tags.Distinct(StringComparer.Ordinal).Count() != entry.Tags.Count)
+            {
+                errors.Add($"Topic catalog entry '{entry.ClusterId}/{entry.TopicName}' must contain at most 32 unique non-empty tags of at most 64 characters.");
+            }
+
+            ValidateOptionalText(entry.Description, 2048, "description", entry, errors);
+            ValidateOptionalText(entry.Owner, 256, "owner", entry, errors);
+            ValidateOptionalText(entry.Domain, 256, "domain", entry, errors);
+            ValidateOptionalText(entry.DocumentationReference, 2048, "documentation reference", entry, errors);
+            ValidateOptionalText(entry.Classification, 128, "classification", entry, errors);
+        }
+    }
+
+    private static void ValidateOptionalText(
+        string? value,
+        int maxLength,
+        string field,
+        TopicCatalogEntryProfile entry,
+        ICollection<string> errors)
+    {
+        if (value is { Length: > 0 } && value.Length > maxLength)
+        {
+            errors.Add($"Topic catalog entry '{entry.ClusterId}/{entry.TopicName}' {field} must not exceed {maxLength} characters.");
+        }
+    }
+
+    private static void ValidateReadOnlyHttpProfile(
+        string clusterId,
+        string profileName,
+        string url,
+        SecretReference? username,
+        SecretReference? password,
+        ICollection<string> errors)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            !(string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add($"Cluster '{clusterId}' {profileName} URL must be an absolute HTTP or HTTPS URL.");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment) || !string.IsNullOrEmpty(uri.Query))
+        {
+            errors.Add($"Cluster '{clusterId}' {profileName} URL must not contain user-info, query, or fragment components.");
+        }
+
+        var hasUsername = username is not null;
+        var hasPassword = password is not null;
+        if (hasUsername != hasPassword)
+        {
+            errors.Add($"Cluster '{clusterId}' {profileName} basic authentication requires both username and password secret references.");
+        }
+
+        if (hasUsername &&
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            var host = uri.Host.Trim('[', ']');
+            var isLoopback =
+                string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+
+            if (!isLoopback)
+            {
+                errors.Add($"Cluster '{clusterId}' {profileName} basic authentication requires HTTPS unless the endpoint is loopback-only.");
             }
         }
     }

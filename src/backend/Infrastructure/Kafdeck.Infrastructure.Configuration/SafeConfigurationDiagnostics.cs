@@ -8,6 +8,7 @@ public sealed record SafeConfigurationDiagnostic(
     AccessMode AccessMode,
     bool DeploymentTokenConfigured,
     bool OidcConfigured,
+    int TopicCatalogEntryCount,
     IReadOnlyList<SafeClusterDiagnostic> Clusters);
 
 public sealed record SafeClusterDiagnostic(
@@ -16,7 +17,9 @@ public sealed record SafeClusterDiagnostic(
     KafkaSecurityProtocol SecurityProtocol,
     bool TlsConfigured,
     bool SaslConfigured,
-    bool SchemaRegistryConfigured);
+    bool SchemaRegistryConfigured,
+    bool ConnectConfigured,
+    bool KsqlDbConfigured);
 
 public static class SafeConfigurationDiagnostics
 {
@@ -35,7 +38,9 @@ public static class SafeConfigurationDiagnostics
                 cluster.SecurityProtocol,
                 cluster.Tls is not null,
                 cluster.Sasl is not null,
-                cluster.SchemaRegistry is not null))
+                cluster.SchemaRegistry is not null,
+                cluster.Connect is not null,
+                cluster.KsqlDb is not null))
             .ToArray();
 
         return new SafeConfigurationDiagnostic(
@@ -44,6 +49,7 @@ public static class SafeConfigurationDiagnostics
             options.Deployment.Mode,
             options.Deployment.AccessToken is not null,
             options.Deployment.Oidc is not null,
+            options.Catalog?.Topics.Count ?? 0,
             Array.AsReadOnly(clusterDiagnostics));
     }
 }
