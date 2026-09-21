@@ -78,6 +78,73 @@ public sealed class V05MutationKernelTests
     }
 
     [Fact]
+    public void Mutation_intent_collections_are_hard_bounded()
+    {
+        var risk = MutationRiskClassifier.Classify(
+            new MutationRiskInput(MutationOperationKind.TopicCreate));
+
+        var tooManyResources = Enumerable
+            .Range(0, MutationLimits.MaxResourceKeys + 1)
+            .Select(index => $"cluster/prod/topic/{index}")
+            .ToArray();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            MutationOperation.CreatePreview(
+                "oidc:https://idp.example|alice",
+                new MutationIntentDescriptor(
+                    MutationOperationKind.TopicCreate,
+                    "prod",
+                    "{\"operation\":\"bulk\"}",
+                    tooManyResources),
+                risk,
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                "bulk-resources"));
+
+        var tooManyPreconditions = Enumerable
+            .Range(0, MutationLimits.MaxPreconditions + 1)
+            .Select(index => new MutationPrecondition($"p-{index}", "fingerprint"))
+            .ToArray();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            MutationOperation.CreatePreview(
+                "oidc:https://idp.example|alice",
+                new MutationIntentDescriptor(
+                    MutationOperationKind.TopicCreate,
+                    "prod",
+                    "{\"operation\":\"preconditions\"}",
+                    new[] { "cluster/prod/topic/a" },
+                    tooManyPreconditions),
+                risk,
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                "bulk-preconditions"));
+
+        var tooManyDigests = Enumerable
+            .Range(0, MutationLimits.MaxMaterialDigests + 1)
+            .Select(index => new MutationMaterialDigest($"d-{index}", "digest"))
+            .ToArray();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            MutationOperation.CreatePreview(
+                "oidc:https://idp.example|alice",
+                new MutationIntentDescriptor(
+                    MutationOperationKind.RecordProduce,
+                    "prod",
+                    "{\"operation\":\"material\"}",
+                    new[] { "cluster/prod/topic/a" },
+                    MaterialDigests: tooManyDigests),
+                MutationRiskClassifier.Classify(
+                    new MutationRiskInput(MutationOperationKind.RecordProduce)),
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                "bulk-digests"));
+    }
+
+    [Fact]
     public void Idempotency_intent_hash_binds_resource_targets_and_material_digests()
     {
         var risk = MutationRiskClassifier.Classify(
