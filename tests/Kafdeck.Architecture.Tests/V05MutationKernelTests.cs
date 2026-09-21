@@ -116,7 +116,7 @@ public sealed class V05MutationKernelTests
     public void Pre_dispatch_failure_cannot_be_claimed_after_dispatch_started()
     {
         var operation = ReadyOperation(MutationOperationKind.TopicCreate);
-        operation.ClaimExecution(Now.AddSeconds(3));
+        operation.ClaimExecution(Now.AddSeconds(3), Now.AddMinutes(2));
         operation.MarkDispatchStarted(Now.AddSeconds(4));
 
         Assert.Throws<MutationStateException>(() => operation.Complete(
