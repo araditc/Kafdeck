@@ -133,7 +133,7 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
-    public async Task PostgreSql_repository_supports_durable_idempotency_when_integration_database_is_available()
+    public async Task PostgreSql_repository_coordinates_concurrent_idempotency_cas_and_resource_claims_when_available()
     {
         var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -147,15 +147,63 @@ public sealed class V05MutationPersistenceTests
         await repository.InitializeAsync();
 
         var idempotencyKey = $"pg-{Guid.NewGuid():N}";
-        var operation = CreateOperation(idempotencyKey, "{\"provider\":\"postgres\"}");
+        var firstCandidate = CreateOperation(idempotencyKey, "{\"provider\":\"postgres\"}");
+        var secondCandidate = CreateOperation(idempotencyKey, "{\"provider\":\"postgres\"}");
 
-        var created = await repository.CreateAsync(operation.Snapshot);
-        var replay = await repository.CreateAsync(
-            CreateOperation(idempotencyKey, "{\"provider\":\"postgres\"}").Snapshot);
+        var createResults = await Task.WhenAll(
+            repository.CreateAsync(firstCandidate.Snapshot),
+            repository.CreateAsync(secondCandidate.Snapshot));
 
-        Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
-        Assert.Equal(MutationCreateOutcome.ExistingSameIntent, replay.Outcome);
-        Assert.Equal(created.Operation.OperationId, replay.Operation.OperationId);
+        Assert.Single(createResults, item => item.Outcome == MutationCreateOutcome.Created);
+        Assert.Single(createResults, item => item.Outcome == MutationCreateOutcome.ExistingSameIntent);
+        Assert.Equal(createResults[0].Operation.OperationId, createResults[1].Operation.OperationId);
+
+        var persisted = await repository.GetAsync(createResults[0].Operation.OperationId);
+        Assert.NotNull(persisted);
+
+        var left = MutationOperation.Restore(persisted!);
+        var right = MutationOperation.Restore(persisted!);
+        left.Confirm(left.Snapshot.RequesterPrincipalId, left.Snapshot.PreviewHash, Now.AddSeconds(1));
+        right.Cancel(Now.AddSeconds(1));
+
+        var casResults = await Task.WhenAll(
+            repository.TrySaveAsync(left.Snapshot, persisted!.Version),
+            repository.TrySaveAsync(right.Snapshot, persisted.Version));
+
+        Assert.Single(casResults, item => item.Outcome == MutationSaveOutcome.Saved);
+        Assert.Single(casResults, item => item.Outcome == MutationSaveOutcome.VersionConflict);
+
+        var winner = casResults.Single(item => item.Outcome == MutationSaveOutcome.Saved).Operation!;
+        var competingOperation = CreateOperation(
+            $"pg-claim-{Guid.NewGuid():N}",
+            "{\"provider\":\"postgres\",\"claim\":true}");
+
+        var firstClaim = await repository.TryAcquireResourceClaimsAsync(
+            winner.OperationId,
+            1,
+            winner.ResourceKeys,
+            Now.AddMinutes(2));
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, firstClaim.Outcome);
+
+        var blockedClaim = await repository.TryAcquireResourceClaimsAsync(
+            competingOperation.Snapshot.OperationId,
+            1,
+            competingOperation.Snapshot.ResourceKeys,
+            Now.AddMinutes(2));
+        Assert.Equal(MutationResourceClaimOutcome.Conflict, blockedClaim.Outcome);
+
+        await repository.ReleaseResourceClaimsAsync(winner.OperationId, 1);
+
+        var secondClaim = await repository.TryAcquireResourceClaimsAsync(
+            competingOperation.Snapshot.OperationId,
+            1,
+            competingOperation.Snapshot.ResourceKeys,
+            Now.AddMinutes(2));
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, secondClaim.Outcome);
+
+        await repository.ReleaseResourceClaimsAsync(
+            competingOperation.Snapshot.OperationId,
+            1);
     }
 
     private static MutationOperation CreateOperation(string idempotencyKey, string canonicalIntent)
