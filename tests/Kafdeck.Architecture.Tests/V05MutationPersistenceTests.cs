@@ -745,6 +745,117 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Malformed_provider_result_is_durably_classified_as_execution_unknown()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-malformed-provider-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("malformed-provider-result");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(
+                    new[] { new MalformedResultHandler(MutationOperationKind.TopicCreate) }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor.ExecuteAsync(operation.Snapshot.OperationId);
+
+            Assert.Equal(MutationOperationState.ExecutionUnknown, result.State);
+            Assert.Equal("malformed_provider_result", result.ResultCode);
+            Assert.Empty(result.SafeProviderEvidence);
+
+            var reloaded = await repository.GetAsync(operation.Snapshot.OperationId);
+            Assert.NotNull(reloaded);
+            Assert.Equal(MutationOperationState.ExecutionUnknown, reloaded!.State);
+            Assert.Equal("malformed_provider_result", reloaded.ResultCode);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Pre_dispatch_terminal_audit_failure_still_releases_resource_claim()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-predispatch-audit-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("predispatch-audit");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var executor = new MutationExecutor(
+                repository,
+                new ThrowingPreDispatchTerminalAuditSink(),
+                new DenyingGuard(),
+                new MutationExecutionHandlerRegistry(Array.Empty<IMutationExecutionHandler>()),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => executor.ExecuteAsync(operation.Snapshot.OperationId));
+
+            var persisted = await repository.GetAsync(operation.Snapshot.OperationId);
+            Assert.NotNull(persisted);
+            Assert.Equal(MutationOperationState.FailedBeforeDispatch, persisted!.State);
+            Assert.Equal("authorization_denied", persisted.ResultCode);
+
+            var competitor = CreateReadyOperation("predispatch-audit-competitor");
+            var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+            var aggregate = MutationOperation.Restore(competitorCreated.Operation);
+            var generation = aggregate.ClaimExecution(
+                Now.AddSeconds(2),
+                Now.AddSeconds(20));
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    aggregate.Snapshot,
+                    competitorCreated.Operation.Version)).Outcome);
+
+            var claim = await repository.TryAcquireResourceClaimsAsync(
+                aggregate.Snapshot.OperationId,
+                generation,
+                aggregate.Snapshot.ResourceKeys,
+                Now.AddSeconds(20));
+
+            Assert.Equal(MutationResourceClaimOutcome.Acquired, claim.Outcome);
+            await repository.ReleaseResourceClaimsAsync(
+                aggregate.Snapshot.OperationId,
+                generation);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Timed_out_provider_retains_cluster_concurrency_slot_until_late_task_finishes()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-late-permit-{Guid.NewGuid():N}.db");
@@ -1280,6 +1391,97 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task PostgreSql_multibyte_resource_claim_uses_fixed_size_index_key_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var repository = new AdoMutationOperationRepository(
+            new PostgreSqlMutationDbConnectionFactory(connectionString),
+            new FixedTimeProvider(Now));
+        await repository.InitializeAsync();
+
+        var longResourceKey = new string('界', MutationLimits.MaxResourceKeyCharacters);
+        var risk = MutationRiskClassifier.Classify(
+            new MutationRiskInput(MutationOperationKind.TopicCreate));
+
+        MutationOperation Build(string idempotencyKey)
+        {
+            var operation = MutationOperation.CreatePreview(
+                "oidc:https://idp.example|alice",
+                new MutationIntentDescriptor(
+                    MutationOperationKind.TopicCreate,
+                    "prod",
+                    "{\"operation\":\"long-resource-claim\"}",
+                    new[] { longResourceKey },
+                    new[] { new MutationPrecondition("topic", "absent") },
+                    AuthorizationTargets: new[]
+                    {
+                        new MutationAuthorizationTarget(
+                            Kafdeck.Core.Security.AuthorizationAction.TopicCreate,
+                            "prod",
+                            "long-resource-claim"),
+                    }),
+                risk,
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                idempotencyKey);
+            operation.OpenForConfirmation(Now);
+            operation.Confirm(
+                operation.Snapshot.RequesterPrincipalId,
+                operation.Snapshot.PreviewHash,
+                Now);
+            return operation;
+        }
+
+        var first = Build($"pg-long-resource-{Guid.NewGuid():N}");
+        var firstCreated = await repository.CreateAsync(first.Snapshot);
+        var firstExecuting = MutationOperation.Restore(firstCreated.Operation);
+        var firstGeneration = firstExecuting.ClaimExecution(
+            Now.AddSeconds(1),
+            Now.AddMinutes(2));
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await repository.TrySaveAsync(
+                firstExecuting.Snapshot,
+                firstCreated.Operation.Version)).Outcome);
+
+        var firstClaim = await repository.TryAcquireResourceClaimsAsync(
+            firstExecuting.Snapshot.OperationId,
+            firstGeneration,
+            firstExecuting.Snapshot.ResourceKeys,
+            Now.AddMinutes(2));
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, firstClaim.Outcome);
+
+        var competitor = Build($"pg-long-resource-competitor-{Guid.NewGuid():N}");
+        var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+        var competitorExecuting = MutationOperation.Restore(competitorCreated.Operation);
+        var competitorGeneration = competitorExecuting.ClaimExecution(
+            Now.AddSeconds(1),
+            Now.AddMinutes(2));
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await repository.TrySaveAsync(
+                competitorExecuting.Snapshot,
+                competitorCreated.Operation.Version)).Outcome);
+
+        var blocked = await repository.TryAcquireResourceClaimsAsync(
+            competitorExecuting.Snapshot.OperationId,
+            competitorGeneration,
+            competitorExecuting.Snapshot.ResourceKeys,
+            Now.AddMinutes(2));
+        Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
+
+        await repository.ReleaseResourceClaimsAsync(
+            firstExecuting.Snapshot.OperationId,
+            firstGeneration);
+    }
+
+    [Fact]
     public async Task PostgreSql_repository_coordinates_concurrent_idempotency_cas_and_resource_claims_when_available()
     {
         var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
@@ -1741,6 +1943,45 @@ public sealed class V05MutationPersistenceTests
         }
     }
 
+    private sealed class DenyingGuard : IMutationPreDispatchGuard
+    {
+        public Task<MutationPreDispatchGuardResult> ValidateAsync(
+            MutationOperationSnapshot operation,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(
+                new MutationPreDispatchGuardResult(
+                    MutationPreDispatchGuardOutcome.AuthorizationDenied,
+                    "authorization_denied"));
+        }
+    }
+
+    private sealed class MalformedResultHandler : IMutationExecutionHandler
+    {
+        public MalformedResultHandler(MutationOperationKind operationKind)
+        {
+            OperationKind = operationKind;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+
+        public Task<MutationProviderResult> ExecuteAsync(
+            MutationExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.AppliedVerified,
+                    "verified",
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["error.detail"] = "this free-form evidence is not admitted",
+                    }));
+        }
+    }
+
     private sealed class RecordingHandler : IMutationExecutionHandler
     {
         public RecordingHandler(MutationOperationKind operationKind)
@@ -1937,6 +2178,25 @@ public sealed class V05MutationPersistenceTests
             return Task.FromResult(new MutationProviderResult(
                 MutationExecutionResultKind.AppliedVerified,
                 "material_verified"));
+        }
+    }
+
+    private sealed class ThrowingPreDispatchTerminalAuditSink : IMutationAuditSink
+    {
+        public ValueTask WriteAsync(
+            MutationAuditEvent auditEvent,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (auditEvent.EventType == MutationAuditEventType.Completed &&
+                auditEvent.State == MutationOperationState.FailedBeforeDispatch)
+            {
+                throw new InvalidOperationException(
+                    "simulated pre-dispatch terminal audit failure");
+            }
+
+            return ValueTask.CompletedTask;
         }
     }
 
