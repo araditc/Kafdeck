@@ -35,7 +35,8 @@ public sealed class MutationOperation
         var authorizationTargets = MutationAuthorization.NormalizeTargets(
             intent.Kind,
             clusterId,
-            intent.AuthorizationTargets);
+            intent.AuthorizationTargets,
+            resources);
 
         if (previewExpiresAtUtc <= nowUtc)
         {
