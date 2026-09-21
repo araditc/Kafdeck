@@ -50,6 +50,39 @@ public static class MutationRiskClassifier
             risk == MutationRiskClass.Critical);
     }
 
+    public static MutationRiskDecision EnforceBuiltInFloor(
+        MutationOperationKind operationKind,
+        int targetCount,
+        MutationRiskDecision proposed)
+    {
+        ArgumentNullException.ThrowIfNull(proposed);
+
+        var floor = Classify(new MutationRiskInput(operationKind, targetCount));
+        var effectiveRisk = (MutationRiskClass)Math.Max(
+            (int)floor.RiskClass,
+            (int)proposed.RiskClass);
+
+        var effectiveConfirmation = effectiveRisk >= MutationRiskClass.High
+            ? MutationConfirmationMode.TypedTarget
+            : MutationConfirmationMode.Explicit;
+
+        var reasons = floor.Reasons
+            .Concat(proposed.Reasons ?? Array.Empty<string>())
+            .Where(reason => !string.IsNullOrWhiteSpace(reason))
+            .Select(reason => reason.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(reason => reason, StringComparer.Ordinal)
+            .ToArray();
+
+        return new MutationRiskDecision(
+            effectiveRisk,
+            Array.AsReadOnly(reasons),
+            effectiveConfirmation,
+            effectiveRisk == MutationRiskClass.Critical ||
+            floor.RequiresIndependentApproval ||
+            proposed.RequiresIndependentApproval);
+    }
+
     private static MutationRiskClass BaseRisk(MutationOperationKind kind) => kind switch
     {
         MutationOperationKind.TopicCreate => MutationRiskClass.Low,
