@@ -24,6 +24,12 @@
         "dependencies": {
           "Kafdeck.Core": "[1.0.0, )"
         }
+      },
+      "kafdeck.modules.administration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )"
+        }
       }
     }
   }
