@@ -173,7 +173,11 @@
           "Kafdeck.Infrastructure.Security": "[0.2.0, )",
           "Kafdeck.Modules.Clusters": "[0.2.0, )",
           "Kafdeck.Modules.Topics": "[0.2.0, )",
-          "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )"
+          "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )",
+          "Kafdeck.Modules.Consumers": "[0.2.0, )",
+          "Kafdeck.Modules.Schemas": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Ecosystem": "[0.2.0, )",
+          "Kafdeck.Infrastructure.SchemaRegistry": "[0.2.0, )"
         }
       },
       "kafdeck.core": {
