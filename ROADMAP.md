@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0, Gate 1, Gate 2 accepted; v0.1-v0.3 released**  
+Status: **Gate 0–Gate 4 accepted; v0.1-v0.3 released; v0.4 active**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -120,7 +120,7 @@ Not in v0.3:
 
 Invariant: an active masking rule cannot be bypassed by browser/API/export/raw/hex paths.
 
-## v0.4 — Consumers, Schemas & Ecosystem Read Views
+## v0.4 — Consumers, Schemas & Ecosystem Read Views — ACCEPTED / ACTIVE
 
 Capabilities:
 - Consumer groups, state, members and assignments
@@ -134,6 +134,8 @@ Capabilities:
 - Kafka Connect cluster/connector/task read-only status
 - ksqlDB discovery/read-only metadata where configured
 - Topic documentation/catalog metadata foundations
+
+Scope authority: Issue #99 / Gate 4 / RFC-0004. v0.4 remains read-only: no consumer-offset, Schema Registry, Connect, ksqlDB, Kafka topic/configuration, or record mutation is introduced.
 
 ## v0.5 — Safe Administration & Controlled Mutations
 
