@@ -25,13 +25,13 @@ public static class MutationRiskClassifier
             reasons.Add("permanent_delete");
         }
 
-        if (input.DurabilitySensitiveChange && risk < MutationRiskClass.High)
+        if (input.DurabilitySensitiveChange && (int)risk < (int)MutationRiskClass.High)
         {
             risk = MutationRiskClass.High;
             reasons.Add("durability_sensitive_change");
         }
 
-        if (input.TargetCount > 1 && risk < MutationRiskClass.Critical)
+        if (input.TargetCount > 1 && (int)risk < (int)MutationRiskClass.Critical)
         {
             risk = RaiseOne(risk);
             reasons.Add("multiple_targets");
