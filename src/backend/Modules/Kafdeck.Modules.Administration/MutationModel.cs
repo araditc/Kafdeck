@@ -160,11 +160,26 @@ public static class MutationIdempotency
 {
     public const int MaxKeyLength = 256;
 
-    public static string BuildScope(string principalId, string clusterId, MutationOperationKind operationKind)
+    public static string BuildScope(
+        string principalId,
+        string clusterId,
+        MutationOperationKind operationKind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(principalId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
-        return $"{Encode(principalId)}:{Encode(clusterId)}:{(int)operationKind}";
+
+        var builder = new StringBuilder(512);
+        Append(builder, "principal", principalId.Trim());
+        Append(builder, "cluster", clusterId.Trim());
+        Append(
+            builder,
+            "operation-kind",
+            ((int)operationKind).ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
+            .ToLowerInvariant();
     }
 
     public static string HashKey(string idempotencyKey)
@@ -257,6 +272,4 @@ public static class MutationIdempotency
             .Append('\n');
     }
 
-    private static string Encode(string value) =>
-        Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 }
