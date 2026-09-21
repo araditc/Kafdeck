@@ -23,6 +23,7 @@
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Records/Kafdeck.Modules.Records.csproj" />
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Consumers/Kafdeck.Modules.Consumers.csproj" />
+    <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Schemas/Kafdeck.Modules.Schemas.csproj" />
     <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
     <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/Kafdeck.Infrastructure.Kafka.csproj" />
     <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj" />

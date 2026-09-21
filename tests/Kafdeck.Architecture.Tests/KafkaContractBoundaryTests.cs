@@ -3,6 +3,7 @@ using Kafdeck.Core;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Consumers;
+using Kafdeck.Modules.Schemas;
 using Kafdeck.Modules.Topics;
 using Xunit;
 
@@ -19,6 +20,7 @@ public sealed class KafkaContractBoundaryTests
             typeof(ClustersModuleMarker).Assembly,
             typeof(TopicsModuleMarker).Assembly,
             typeof(ConsumersModuleMarker).Assembly,
+            typeof(SchemasModuleMarker).Assembly,
         ];
 
         foreach (var assembly in contractAssemblies)
