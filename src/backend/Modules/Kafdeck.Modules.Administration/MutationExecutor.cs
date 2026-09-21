@@ -185,7 +185,9 @@ public sealed class MutationExecutor
 
         var operation = MutationOperation.Restore(current);
         var expectedVersion = current.Version;
-        var generation = operation.ClaimExecution(_timeProvider.GetUtcNow());
+        var claimNowUtc = _timeProvider.GetUtcNow();
+        var claimExpiresAtUtc = claimNowUtc.Add(_policy.ResourceClaimTtl);
+        var generation = operation.ClaimExecution(claimNowUtc, claimExpiresAtUtc);
 
         var claimed = await _repository.TrySaveAsync(
             operation.Snapshot,
@@ -211,7 +213,7 @@ public sealed class MutationExecutor
                 operation.Snapshot.OperationId,
                 generation,
                 operation.Snapshot.ResourceKeys,
-                _timeProvider.GetUtcNow().Add(_policy.ResourceClaimTtl),
+                claimExpiresAtUtc,
                 cancellationToken).ConfigureAwait(false);
 
             if (claimResult.Outcome != MutationResourceClaimOutcome.Acquired)
