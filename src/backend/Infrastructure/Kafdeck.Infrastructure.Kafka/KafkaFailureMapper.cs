@@ -12,6 +12,7 @@ internal static class KafkaFailureMapper
         return error.Code switch
         {
             ErrorCode.ClusterAuthorizationFailed or
+            ErrorCode.GroupAuthorizationFailed or
             ErrorCode.TopicAuthorizationFailed or
             ErrorCode.TransactionalIdAuthorizationFailed or
             ErrorCode.DelegationTokenAuthorizationFailed =>

@@ -259,6 +259,12 @@
         "dependencies": {
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.19.2"
         }
+      },
+      "kafdeck.modules.consumers": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )"
+        }
       }
     }
   }
