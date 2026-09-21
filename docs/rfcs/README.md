@@ -27,4 +27,5 @@ Implementation should not outrun an unresolved RFC when the RFC is required by g
 - RFC-0001 — v0.1 Cluster Explorer — accepted/implemented.
 - RFC-0002 — v0.2 Operator Identity and RBAC — accepted/implemented.
 - RFC-0003 — v0.3 Safe Data Explorer and Server-Side Masking — accepted/implemented.
-- RFC-0004 — v0.4 Consumers, Schemas & Ecosystem Read Views — planning/review.
+- RFC-0004 — v0.4 Consumers, Schemas & Ecosystem Read Views — accepted/implemented/released.
+- RFC-0005 — v0.5 Safe Administration & Controlled Mutations — planning/review; implementation blocked until governed admission.
