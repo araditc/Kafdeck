@@ -161,6 +161,25 @@
         "requested": "[3.36.2, )",
         "resolved": "3.36.2",
         "contentHash": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ=="
+      },
+      "kafdeck.modules.consumers": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )"
+        }
+      },
+      "kafdeck.modules.schemas": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )"
+        }
+      },
+      "kafdeck.infrastructure.ecosystem": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
+        }
       }
     }
   }

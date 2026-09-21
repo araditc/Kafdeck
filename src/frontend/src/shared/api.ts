@@ -12,6 +12,139 @@ export interface TopicDetailData { name: string; isInternal: boolean; partitions
 export interface ConfigurationEntryData { name: string; value: string | null; isSensitive: boolean; isReadOnly: boolean; source: string | null; }
 export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; }
 
+export interface ReadViewLimitation { code: string; message: string; }
+export interface ReadViewEnvelope<T> { data: T; partial: boolean; limitations: ReadViewLimitation[]; }
+
+export interface ConsumerGroupSummary {
+  groupId: string;
+  state: string;
+  memberCount: number | null;
+  isSimpleConsumerGroup: boolean;
+}
+export interface ConsumerAssignment { topic: string; partition: number; }
+export interface ConsumerMember {
+  memberId: string;
+  groupInstanceId: string | null;
+  clientId: string | null;
+  clientHost: string | null;
+  assignments: ConsumerAssignment[];
+}
+export interface ConsumerGroupDetail {
+  groupId: string;
+  state: string;
+  protocolType: string | null;
+  protocol: string | null;
+  coordinator: string | null;
+  members: ConsumerMember[];
+}
+export interface ConsumerOffset {
+  topic: string;
+  partition: number;
+  committedOffset: number | null;
+  endOffset: number | null;
+  lag: number | null;
+  state: string;
+}
+export interface ConsumerLag {
+  groupId: string;
+  partitions: ConsumerOffset[];
+  totalLag: number | null;
+  isPartial: boolean;
+  limitations: ReadViewLimitation[];
+}
+export interface ConsumerRateObservation {
+  produceRecordsPerSecond: number | null;
+  consumeRecordsPerSecond: number | null;
+  window: string;
+  observedAt: string;
+  source: string;
+}
+export interface ConsumerDiagnosticEvidence { code: string; safeMessage: string; }
+export interface ConsumerDiagnostics {
+  groupId: string;
+  state: string;
+  groupState: string;
+  totalLag: number | null;
+  rates: ConsumerRateObservation | null;
+  metricsAvailable: boolean;
+  historyAvailable: boolean;
+  evidence: ConsumerDiagnosticEvidence[];
+  limitations: ReadViewLimitation[];
+}
+
+export interface SchemaReference { name: string; subject: string; version: number; }
+export interface SchemaSubjectSummary { subject: string; }
+export interface SchemaVersionSummary {
+  subject: string;
+  version: number;
+  schemaId: number;
+  format: string;
+  references: SchemaReference[];
+}
+export interface SchemaDocument {
+  id: number;
+  format: string;
+  schemaText: string;
+  references: SchemaReference[];
+}
+export interface SchemaVersionDetail { subject: string; version: number; schema: SchemaDocument; }
+export interface SchemaCompatibility {
+  subject: string;
+  mode: string;
+  isInherited: boolean;
+}
+export interface SchemaDiffHunk {
+  leftStartLine: number;
+  leftLineCount: number;
+  rightStartLine: number;
+  rightLineCount: number;
+  removedLines: string[];
+  addedLines: string[];
+}
+export interface SchemaDiff { isEqual: boolean; hunks: SchemaDiffHunk[]; }
+
+export interface ConnectClusterInfo {
+  version: string | null;
+  commit: string | null;
+  kafkaClusterId: string | null;
+}
+export interface ConnectConnectorSummary { name: string; }
+export interface ConnectTaskStatus {
+  id: number;
+  state: string;
+  workerId: string | null;
+  safeTrace: string | null;
+}
+export interface ConnectConnectorDetail {
+  name: string;
+  state: string;
+  workerId: string | null;
+  tasks: ConnectTaskStatus[];
+  safeConfiguration: Record<string, string | null>;
+}
+export interface KsqlServerInfo {
+  version: string | null;
+  kafkaClusterId: string | null;
+  state: string | null;
+}
+export interface KsqlMetadataItem {
+  kind: string;
+  name: string;
+  kafkaTopic: string | null;
+  valueFormat: string | null;
+  keyFormat: string | null;
+}
+export interface TopicCatalogEntry {
+  clusterId: string;
+  topicName: string;
+  description: string | null;
+  owner: string | null;
+  domain: string | null;
+  tags: string[];
+  documentationReference: string | null;
+  classification: string | null;
+}
+
 export interface RecordAnchorProjection { kind: string; offset: number | null; timestampUtc: string | null; }
 export interface RecordSafeHeader { name: string; value: string; isRedacted: boolean; }
 export interface RecordSafeProjection {
@@ -162,6 +295,52 @@ export const kafdeckApi = {
   getTopic(clusterId: string, topicName: string, signal?: AbortSignal) { return readJson<ApiEnvelope<TopicDetailData>>(topicPath(clusterId, topicName), signal); },
   getTopicConfiguration(clusterId: string, topicName: string, signal?: AbortSignal) { return readJson<ApiEnvelope<ConfigurationEntryData[]>>(`${topicPath(clusterId, topicName)}/configuration`, signal); },
   getBrokerConfiguration(clusterId: string, brokerId: number, signal?: AbortSignal) { return readJson<ApiEnvelope<ConfigurationEntryData[]>>(`${clusterPath(clusterId)}/brokers/${brokerId}/configuration`, signal); },
+  listConsumerGroups(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConsumerGroupSummary[]>>(`${clusterPath(clusterId)}/consumer-groups`, signal);
+  },
+  getConsumerGroup(clusterId: string, groupId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConsumerGroupDetail>>(`${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}`, signal);
+  },
+  getConsumerLag(clusterId: string, groupId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConsumerLag>>(`${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}/lag`, signal);
+  },
+  getConsumerDiagnostics(clusterId: string, groupId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConsumerDiagnostics>>(`${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}/diagnostics`, signal);
+  },
+  listSchemaSubjects(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<SchemaSubjectSummary[]>>(`${clusterPath(clusterId)}/schemas/subjects`, signal);
+  },
+  listSchemaVersions(clusterId: string, subject: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<SchemaVersionSummary[]>>(`${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/versions`, signal);
+  },
+  getSchemaVersion(clusterId: string, subject: string, version: number, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<SchemaVersionDetail>>(`${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/versions/${version}`, signal);
+  },
+  getSchemaCompatibility(clusterId: string, subject: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<SchemaCompatibility>>(`${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/compatibility`, signal);
+  },
+  diffSchemaVersions(clusterId: string, subject: string, leftVersion: number, rightVersion: number, signal?: AbortSignal) {
+    const params = new URLSearchParams({ leftVersion: String(leftVersion), rightVersion: String(rightVersion) });
+    return readJson<ReadViewEnvelope<SchemaDiff>>(`${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/diff?${params}`, signal);
+  },
+  getConnectInfo(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectClusterInfo>>(`${clusterPath(clusterId)}/connect`, signal);
+  },
+  listConnectors(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectConnectorSummary[]>>(`${clusterPath(clusterId)}/connect/connectors`, signal);
+  },
+  getConnector(clusterId: string, connectorName: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectConnectorDetail>>(`${clusterPath(clusterId)}/connect/connectors/${encodeURIComponent(connectorName)}`, signal);
+  },
+  getKsqlInfo(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<KsqlServerInfo>>(`${clusterPath(clusterId)}/ksql`, signal);
+  },
+  listKsqlMetadata(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<KsqlMetadataItem[]>>(`${clusterPath(clusterId)}/ksql/metadata`, signal);
+  },
+  getTopicCatalog(clusterId: string, topicName: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<TopicCatalogEntry>>(`${clusterPath(clusterId)}/catalog/topics/${encodeURIComponent(topicName)}`, signal);
+  },
   getRecords(clusterId: string, topicName: string, query: RecordQuery, signal?: AbortSignal) {
     return readJson<RecordSafePage>(`${recordPath(clusterId, topicName, query.partition)}?${recordParams(query)}`, signal);
   },

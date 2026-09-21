@@ -8,8 +8,11 @@ import {
   type TopicDetailData,
   type TopicListItem,
   type OperatorSession,
+  type ReadViewEnvelope,
+  type TopicCatalogEntry,
 } from '../shared/api.js';
 import { RecordExplorer } from '../features/records/RecordExplorer.js';
+import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 
@@ -49,6 +52,7 @@ export function AppShell() {
   const [topicDetail, setTopicDetail] = useState<ApiEnvelope<TopicDetailData> | null>(null);
   const [topicConfiguration, setTopicConfiguration] = useState<ConfigurationEntryData[] | null>(null);
   const [topicDetailError, setTopicDetailError] = useState<string | null>(null);
+  const [topicCatalog, setTopicCatalog] = useState<ReadViewEnvelope<TopicCatalogEntry> | null>(null);
 
   const loadClusters = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -137,6 +141,7 @@ export function AppShell() {
     setTopicDetail(null);
     setTopicConfiguration(null);
     setTopicDetailError(null);
+    setTopicCatalog(null);
   };
 
   const openBroker = async (brokerId: number) => {
@@ -154,9 +159,16 @@ export function AppShell() {
     setTopicDetail(null);
     setTopicConfiguration(null);
     setTopicDetailError(null);
+    setTopicCatalog(null);
     try {
       const detail = await kafdeckApi.getTopic(selectedClusterId, topicName);
       setTopicDetail(detail);
+      try {
+        setTopicCatalog(await kafdeckApi.getTopicCatalog(selectedClusterId, topicName));
+      } catch {
+        // Catalog metadata is optional and separately authorized.
+        setTopicCatalog(null);
+      }
       try {
         const configuration = await kafdeckApi.getTopicConfiguration(selectedClusterId, topicName);
         setTopicConfiguration(configuration.data);
@@ -170,7 +182,7 @@ export function AppShell() {
 
   return <main aria-labelledby="kafdeck-title">
     <header><div><h1 id="kafdeck-title">{productName}</h1><p>{productDescription}</p>{operator && <p>Signed in as <strong>{operator.displayName ?? operator.email ?? 'operator'}</strong>{' '}<button type="button" onClick={() => void kafdeckApi.logout()}>Sign out</button></p>}{authenticationRequired && <p><a href="/api/v1/auth/login">Sign in with your identity provider</a></p>}</div><div><label htmlFor="cluster-selector">Cluster</label>{' '}<select id="cluster-selector" value={selectedClusterId} onChange={event => selectCluster(event.target.value)} disabled={loading || clusters.length === 0}>{clusters.map(cluster => <option key={cluster.data.clusterId} value={cluster.data.clusterId}>{cluster.data.clusterId}</option>)}</select>{' '}<button type="button" onClick={() => void loadClusters()} disabled={loading}>Refresh</button></div></header>
-    <nav aria-label="Kafdeck sections"><a href="#overview">Overview</a>{' · '}<a href="#brokers">Brokers</a>{' · '}<a href="#topics">Topics</a></nav>
+    <nav aria-label="Kafdeck sections"><a href="#overview">Overview</a>{' · '}<a href="#brokers">Brokers</a>{' · '}<a href="#topics">Topics</a>{' · '}<a href="#consumers">Consumers</a>{' · '}<a href="#schemas">Schemas</a>{' · '}<a href="#ecosystem">Ecosystem</a></nav>
     {loading && <p role="status">Loading cluster observations…</p>}{error && <p role="alert">{error}</p>}{!loading && !error && clusters.length === 0 && <p role="status">No authorized clusters are available.</p>}
     {selected && <>
       <section id="overview" aria-labelledby="overview-title"><h2 id="overview-title">Cluster overview</h2><p><strong>{selected.data.clusterId}</strong> · {observationText(selected)}</p><dl><dt>Kafka cluster ID</dt><dd>{selected.data.kafkaClusterId ?? 'Not observed'}</dd><dt>Health</dt><dd>{String(selected.data.health)}</dd><dt>Controller</dt><dd>{selected.data.controllerBrokerId ?? 'Not observed'}</dd><dt>Brokers</dt><dd>{selected.data.brokers.length}</dd></dl>{selected.limitations.length > 0 && <aside aria-label="Cluster limitations"><h3>Limitations</h3><ul>{selected.limitations.map((item, index) => <li key={`${item.capability}-${index}`}>{item.capability ?? 'cluster'}: {item.state}{item.reason ? ` — ${item.reason}` : ''}</li>)}</ul></aside>}</section>
@@ -179,8 +191,9 @@ export function AppShell() {
         {topicsLoading && topics.length === 0 && <p role="status">Loading topics…</p>}{topicsError && <p role="alert">{topicsError}</p>}{!topicsLoading && !topicsError && topics.length === 0 && <p>No topics match the current search.</p>}
         {topics.length > 0 && <table><thead><tr><th scope="col">Topic</th><th scope="col">Partitions</th><th scope="col">Offline</th><th scope="col">Under replicated</th><th scope="col">State</th></tr></thead><tbody>{topics.map(topic => <tr key={topic.name}><th scope="row"><button type="button" onClick={() => void openTopic(topic.name)}>{topic.name}</button></th><td>{topic.partitionCount}</td><td>{topic.offlinePartitionCount ?? 'Unknown'}</td><td>{topic.underReplicatedPartitionCount ?? 'Unknown'}</td><td>{String(topic.anomalyState)}</td></tr>)}</tbody></table>}
         {topicCursor && <button type="button" disabled={topicsLoading} onClick={() => void loadTopics(selectedClusterId, topicQuery, topicCursor, true)}>{topicsLoading ? 'Loading…' : 'Load more topics'}</button>}
-        {topicDetailError && <p role="alert">{topicDetailError}</p>}{topicDetail && <article aria-labelledby="topic-detail-title"><h3 id="topic-detail-title">Topic: {topicDetail.data.name}</h3><p>{observationText(topicDetail)} · {topicDetail.data.partitions.length} partitions · {topicDetail.data.offlinePartitionCount} offline · {topicDetail.data.underReplicatedPartitionCount} under replicated</p><h4>Partitions</h4>{topicDetail.data.partitions.length === 0 ? <p>No partitions are observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Leader</th><th scope="col">Replicas</th><th scope="col">ISR</th><th scope="col">Out of sync</th><th scope="col">Health</th></tr></thead><tbody>{topicDetail.data.partitions.map(partition => <tr key={partition.partitionId}><th scope="row">{partition.partitionId}</th><td>{partition.leaderBrokerId ?? 'No leader'}</td><td>{partition.replicaBrokerIds.join(', ')}</td><td>{partition.inSyncReplicaBrokerIds.join(', ')}</td><td>{partition.outOfSyncReplicaBrokerIds.join(', ') || 'None'}</td><td>{partition.healthReasons.length > 0 ? partition.healthReasons.join('; ') : String(partition.health)}</td></tr>)}</tbody></table>}<h4>Configuration</h4>{topicConfiguration === null ? (topicDetailError ? null : <p role="status">Loading configuration…</p>) : <ConfigurationView entries={topicConfiguration} />}{topicDetail.data.partitions.length > 0 && <RecordExplorer clusterId={selectedClusterId} topicName={topicDetail.data.name} partitions={topicDetail.data.partitions.map(partition => partition.partitionId)} />}</article>}
+        {topicDetailError && <p role="alert">{topicDetailError}</p>}{topicDetail && <article aria-labelledby="topic-detail-title"><h3 id="topic-detail-title">Topic: {topicDetail.data.name}</h3><p>{observationText(topicDetail)} · {topicDetail.data.partitions.length} partitions · {topicDetail.data.offlinePartitionCount} offline · {topicDetail.data.underReplicatedPartitionCount} under replicated</p>{topicCatalog && <aside aria-label="Topic catalog metadata"><h4>Catalog metadata</h4><dl><dt>Description</dt><dd>{topicCatalog.data.description ?? 'Not set'}</dd><dt>Owner</dt><dd>{topicCatalog.data.owner ?? 'Not set'}</dd><dt>Domain</dt><dd>{topicCatalog.data.domain ?? 'Not set'}</dd><dt>Classification</dt><dd>{topicCatalog.data.classification ?? 'Not set'}</dd><dt>Tags</dt><dd>{topicCatalog.data.tags.join(', ') || 'None'}</dd><dt>Documentation reference</dt><dd>{topicCatalog.data.documentationReference ?? 'Not set'}</dd></dl></aside>}<h4>Partitions</h4>{topicDetail.data.partitions.length === 0 ? <p>No partitions are observable.</p> : <table><thead><tr><th scope="col">ID</th><th scope="col">Leader</th><th scope="col">Replicas</th><th scope="col">ISR</th><th scope="col">Out of sync</th><th scope="col">Health</th></tr></thead><tbody>{topicDetail.data.partitions.map(partition => <tr key={partition.partitionId}><th scope="row">{partition.partitionId}</th><td>{partition.leaderBrokerId ?? 'No leader'}</td><td>{partition.replicaBrokerIds.join(', ')}</td><td>{partition.inSyncReplicaBrokerIds.join(', ')}</td><td>{partition.outOfSyncReplicaBrokerIds.join(', ') || 'None'}</td><td>{partition.healthReasons.length > 0 ? partition.healthReasons.join('; ') : String(partition.health)}</td></tr>)}</tbody></table>}<h4>Configuration</h4>{topicConfiguration === null ? (topicDetailError ? null : <p role="status">Loading configuration…</p>) : <ConfigurationView entries={topicConfiguration} />}{topicDetail.data.partitions.length > 0 && <RecordExplorer clusterId={selectedClusterId} topicName={topicDetail.data.name} partitions={topicDetail.data.partitions.map(partition => partition.partitionId)} />}</article>}
       </section>
+      <ReadViewsExplorer clusterId={selectedClusterId} />
     </>}
   </main>;
 }
