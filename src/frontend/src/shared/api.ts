@@ -64,6 +64,7 @@ export interface RecordQuery {
   headerPrefix?: string;
   filterLanguage?: 'cel' | 'jq';
   filter?: string;
+  decode?: boolean;
 }
 
 export class ApiProblem extends Error {
@@ -135,6 +136,7 @@ function recordParams(query: RecordQuery): URLSearchParams {
     params.set('filterLanguage', query.filterLanguage ?? 'cel');
     params.set('filter', query.filter);
   }
+  if (query.decode !== undefined) params.set('decode', String(query.decode));
   return params;
 }
 
