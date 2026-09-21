@@ -83,7 +83,7 @@ Write operations arrive only after metadata, connection resilience, compatibilit
 
 Every mutation ultimately follows:
 
-`Request -> Authorization -> Validation -> Risk Classification -> Preview -> Confirmation -> Execute -> Audit`
+`Request -> Authentication -> Authorization -> Capability Check -> Validation -> Risk Classification -> Preview -> Confirmation/Approval -> Execute -> Verify -> Audit`
 
 Operation risk levels:
 - LOW
@@ -91,7 +91,9 @@ Operation risk levels:
 - HIGH
 - CRITICAL
 
-The implementation may optimize the UI flow for low-risk operations, but may not bypass authorization/validation/audit rules.
+The implementation may optimize presentation for low-risk operations, but may not bypass authentication, authorization, capability, validation, preview, confirmation/approval, verification, or audit rules.
+
+Beginning with v0.5, mutation capability requires durable Kafdeck operation state. Read-only operation remains database-optional; mutation mode fails closed when supported persistence is unavailable. CRITICAL operations require durable evidence from a distinct eligible approver.
 
 ## 9. Resilience and Kafka load protection
 
