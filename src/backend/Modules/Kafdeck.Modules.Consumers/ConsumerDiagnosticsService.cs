@@ -137,13 +137,16 @@ public sealed class ConsumerDiagnosticsService
         IReadOnlyList<ConsumerHistoryObservation>? history,
         TimeSpan minimumStallEvidenceWindow,
         bool metricsAvailable = true,
-        bool historyAvailable = true)
+        bool historyAvailable = true,
+        DateTimeOffset? evaluatedAt = null)
     {
         ArgumentNullException.ThrowIfNull(group);
         ArgumentNullException.ThrowIfNull(lag);
 
         var evidence = new List<ConsumerDiagnosticEvidence>();
         var limitations = new List<ReadViewLimitation>();
+        var evaluationTime = evaluatedAt ?? DateTimeOffset.UtcNow;
+        var usableRates = ValidateRates(rates, evaluationTime, limitations);
 
         if (lag.IsPartial)
         {
@@ -201,16 +204,16 @@ public sealed class ConsumerDiagnosticsService
                 limitations);
         }
 
-        if (rates?.ConsumeRecordsPerSecond is > 0)
+        if (usableRates?.ConsumeRecordsPerSecond is > 0)
         {
             evidence.Add(new ConsumerDiagnosticEvidence(
                 "consumer_progress_rate",
-                "A positive consume rate is available for the current observation window."));
+                "A fresh positive consume rate is available for the current observation window."));
 
             return Projection(
                 group,
                 lag,
-                rates,
+                usableRates,
                 metricsAvailable,
                 historyAvailable,
                 ConsumerDiagnosticState.ActiveWithLag,
@@ -218,12 +221,19 @@ public sealed class ConsumerDiagnosticsService
                 limitations);
         }
 
-        if (CanProveStall(group, lag, rates, history, minimumStallEvidenceWindow, evidence))
+        if (CanProveStall(
+                group,
+                lag,
+                usableRates,
+                history,
+                minimumStallEvidenceWindow,
+                evaluationTime,
+                evidence))
         {
             return Projection(
                 group,
                 lag,
-                rates,
+                usableRates,
                 metricsAvailable,
                 historyAvailable,
                 ConsumerDiagnosticState.Stalled,
@@ -248,12 +258,51 @@ public sealed class ConsumerDiagnosticsService
         return Projection(
             group,
             lag,
-            rates,
+            usableRates,
             metricsAvailable,
             historyAvailable,
             ConsumerDiagnosticState.Unknown,
             evidence,
             limitations);
+    }
+
+    private static ConsumerRateObservation? ValidateRates(
+        ConsumerRateObservation? rates,
+        DateTimeOffset evaluatedAt,
+        ICollection<ReadViewLimitation> limitations)
+    {
+        if (rates is null)
+        {
+            return null;
+        }
+
+        var numericValues = new[]
+        {
+            rates.ProduceRecordsPerSecond,
+            rates.ConsumeRecordsPerSecond,
+        };
+
+        if (rates.Window <= TimeSpan.Zero ||
+            numericValues.Any(value =>
+                value.HasValue &&
+                (!double.IsFinite(value.Value) || value.Value < 0d)))
+        {
+            limitations.Add(new ReadViewLimitation(
+                "consumer_metrics_invalid",
+                "Consumer rate metrics are invalid and were ignored."));
+            return null;
+        }
+
+        var age = evaluatedAt - rates.ObservedAt;
+        if (age < TimeSpan.FromSeconds(-5) || age > rates.Window)
+        {
+            limitations.Add(new ReadViewLimitation(
+                "consumer_metrics_stale",
+                "Consumer rate metrics are stale or have an invalid observation time and were ignored."));
+            return null;
+        }
+
+        return rates;
     }
 
     private static bool CanProveStall(
@@ -262,12 +311,14 @@ public sealed class ConsumerDiagnosticsService
         ConsumerRateObservation? rates,
         IReadOnlyList<ConsumerHistoryObservation>? history,
         TimeSpan minimumWindow,
+        DateTimeOffset evaluatedAt,
         ICollection<ConsumerDiagnosticEvidence> evidence)
     {
         if (group.State != ConsumerGroupState.Stable ||
             lag.TotalLag is not > 0 ||
             rates?.ConsumeRecordsPerSecond is not double consumeRate ||
-            consumeRate > 0 ||
+            !double.IsFinite(consumeRate) ||
+            consumeRate != 0d ||
             history is null)
         {
             return false;
@@ -283,16 +334,26 @@ public sealed class ConsumerDiagnosticsService
             return false;
         }
 
-        var window = usable[^1].ObservedAt - usable[0].ObservedAt;
+        if (usable.Any(item => item.ObservedAt > evaluatedAt))
+        {
+            return false;
+        }
+
+        var window = evaluatedAt - usable[0].ObservedAt;
         if (window < minimumWindow)
         {
             return false;
         }
 
+        var lagSequence = usable
+            .Select(item => item.TotalLag!.Value)
+            .Append(lag.TotalLag.Value)
+            .ToArray();
+
         var noObservedProgress = true;
-        for (var index = 1; index < usable.Length; index++)
+        for (var index = 1; index < lagSequence.Length; index++)
         {
-            if (usable[index].TotalLag!.Value < usable[index - 1].TotalLag!.Value)
+            if (lagSequence[index] < lagSequence[index - 1])
             {
                 noObservedProgress = false;
                 break;
