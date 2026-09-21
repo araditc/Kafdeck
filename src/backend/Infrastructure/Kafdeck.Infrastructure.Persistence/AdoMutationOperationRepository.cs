@@ -415,27 +415,6 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             await purge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await using (var activeCount = connection.CreateCommand())
-        {
-            activeCount.Transaction = transaction;
-            activeCount.CommandText =
-                """
-                SELECT COUNT(*)
-                FROM kafdeck_mutation_cluster_slots
-                WHERE cluster_id = @cluster_id
-                """;
-            AddParameter(activeCount, "@cluster_id", normalizedClusterId);
-
-            var countValue = await activeCount.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-            var activeSlots = Convert.ToInt32(countValue, CultureInfo.InvariantCulture);
-            if (activeSlots >= maxConcurrentPerCluster)
-            {
-                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return new MutationClusterSlotResult(
-                    MutationClusterSlotOutcome.Saturated);
-            }
-        }
-
         await using (var existing = connection.CreateCommand())
         {
             existing.Transaction = transaction;
@@ -488,6 +467,27 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 return new MutationClusterSlotResult(
                     MutationClusterSlotOutcome.Acquired,
                     slotNumber);
+            }
+        }
+
+        await using (var activeCount = connection.CreateCommand())
+        {
+            activeCount.Transaction = transaction;
+            activeCount.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM kafdeck_mutation_cluster_slots
+                WHERE cluster_id = @cluster_id
+                """;
+            AddParameter(activeCount, "@cluster_id", normalizedClusterId);
+
+            var countValue = await activeCount.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            var activeSlots = Convert.ToInt32(countValue, CultureInfo.InvariantCulture);
+            if (activeSlots >= maxConcurrentPerCluster)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new MutationClusterSlotResult(
+                    MutationClusterSlotOutcome.Saturated);
             }
         }
 
