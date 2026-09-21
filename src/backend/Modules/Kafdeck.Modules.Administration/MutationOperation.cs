@@ -46,10 +46,14 @@ public sealed class MutationOperation
             Preconditions = preconditions,
             MaterialDigests = digests,
         };
+        var effectiveRisk = MutationRiskClassifier.EnforceBuiltInFloor(
+            intent.Kind,
+            resources.Count,
+            risk);
 
         var previewHash = MutationPreviewHasher.ComputeHash(
             normalizedIntent,
-            risk,
+            effectiveRisk,
             policyVersion,
             previewExpiresAtUtc);
 
@@ -59,7 +63,7 @@ public sealed class MutationOperation
             RequesterPrincipalId = requester,
             ClusterId = clusterId,
             OperationKind = intent.Kind,
-            Risk = risk,
+            Risk = effectiveRisk,
             State = MutationOperationState.Previewed,
             CanonicalIntent = canonicalIntent,
             CanonicalIntentHash = MutationIdempotency.HashRequestIntent(normalizedIntent),
