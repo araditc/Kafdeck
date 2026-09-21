@@ -51,8 +51,7 @@ public static class MutationRiskClassifier
     }
 
     public static MutationRiskDecision EnforceBuiltInFloor(
-        MutationOperationKind operationKind,
-        int targetCount,
+        MutationRiskInput input,
         MutationRiskDecision proposed)
     {
         ArgumentNullException.ThrowIfNull(proposed);
@@ -73,7 +72,8 @@ public static class MutationRiskClassifier
                 "Mutation risk decisions must not contain more than 32 reasons.");
         }
 
-        var floor = Classify(new MutationRiskInput(operationKind, targetCount));
+        ArgumentNullException.ThrowIfNull(input);
+        var floor = Classify(input);
         var effectiveRisk = (MutationRiskClass)Math.Max(
             (int)floor.RiskClass,
             (int)proposed.RiskClass);
