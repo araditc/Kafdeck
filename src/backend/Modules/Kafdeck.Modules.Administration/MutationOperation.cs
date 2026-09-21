@@ -247,6 +247,37 @@ public sealed class MutationOperation
         return generation;
     }
 
+    public void RenewExecutionLease(DateTimeOffset nowUtc, DateTimeOffset newExpiresAtUtc)
+    {
+        RequireState(MutationOperationState.Executing);
+        if (Snapshot.DispatchStartedAtUtc is not null)
+        {
+            throw new MutationStateException(
+                "Execution lease cannot be renewed through the pre-dispatch path after dispatch starts.");
+        }
+
+        if (Snapshot.ExecutionClaimExpiresAtUtc is not { } currentExpiry ||
+            currentExpiry <= nowUtc)
+        {
+            throw new MutationStateException(
+                "Execution lease has expired and the mutation must not be dispatched.");
+        }
+
+        if (newExpiresAtUtc <= nowUtc || newExpiresAtUtc < currentExpiry)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(newExpiresAtUtc),
+                "Renewed execution lease must be live and must not shorten the current lease.");
+        }
+
+        Snapshot = Snapshot with
+        {
+            ExecutionClaimExpiresAtUtc = newExpiresAtUtc,
+            Version = checked(Snapshot.Version + 1),
+            UpdatedAtUtc = nowUtc,
+        };
+    }
+
     public void MarkDispatchStarted(DateTimeOffset nowUtc)
     {
         RequireState(MutationOperationState.Executing);
