@@ -311,10 +311,16 @@ public sealed class V05MutationKernelTests
         Assert.True(operation.Snapshot.Risk.RequiresIndependentApproval);
 
         operation.OpenForConfirmation(Now.AddSeconds(1));
+        Assert.Throws<MutationStateException>(() => operation.Confirm(
+            operation.Snapshot.RequesterPrincipalId,
+            operation.Snapshot.PreviewHash,
+            Now.AddSeconds(2)));
+
         operation.Confirm(
             operation.Snapshot.RequesterPrincipalId,
             operation.Snapshot.PreviewHash,
-            Now.AddSeconds(2));
+            Now.AddSeconds(2),
+            operation.Snapshot.ConfirmationChallenge);
 
         Assert.Equal(
             MutationOperationState.AwaitingApproval,
@@ -385,24 +391,42 @@ public sealed class V05MutationKernelTests
             "idem-1");
 
         operation.OpenForConfirmation(Now.AddSeconds(1));
+
+        Assert.Throws<MutationStateException>(() => operation.Confirm(
+            "oidc:https://idp.example|alice",
+            operation.Snapshot.PreviewHash,
+            Now.AddSeconds(2),
+            "wrong-target"));
+
         operation.Confirm(
             "oidc:https://idp.example|alice",
             operation.Snapshot.PreviewHash,
-            Now.AddSeconds(2));
+            Now.AddSeconds(2),
+            operation.Snapshot.ConfirmationChallenge);
 
         Assert.Equal(MutationOperationState.AwaitingApproval, operation.Snapshot.State);
+        Assert.Equal(
+            operation.Snapshot.ConfirmationChallenge,
+            operation.Snapshot.ConfirmedChallenge);
+
+        var aliceEvidence = AuthorizedApprovalEvidence(operation.Snapshot, "alice");
         Assert.Throws<MutationStateException>(() => operation.Approve(
-            "oidc:https://idp.example|alice",
+            aliceEvidence,
             operation.Snapshot.PreviewHash,
             Now.AddSeconds(3)));
 
+        Assert.Throws<MutationStateException>(() =>
+            UnauthorizedApprovalEvidence(operation.Snapshot, "mallory"));
+
+        var bobEvidence = AuthorizedApprovalEvidence(operation.Snapshot, "bob");
         operation.Approve(
-            "oidc:https://idp.example|bob",
+            bobEvidence,
             operation.Snapshot.PreviewHash,
             Now.AddSeconds(3));
 
         Assert.Equal(MutationOperationState.Ready, operation.Snapshot.State);
         Assert.Equal("oidc:https://idp.example|bob", operation.Snapshot.ApprovedByPrincipalId);
+        Assert.False(string.IsNullOrWhiteSpace(operation.Snapshot.ApprovalAuthorizationEvidenceHash));
     }
 
     [Fact]
@@ -576,12 +600,13 @@ public sealed class V05MutationKernelTests
         operation.Confirm(
             "oidc:https://idp.example|alice",
             operation.Snapshot.PreviewHash,
-            Now.AddSeconds(2));
+            Now.AddSeconds(2),
+            operation.Snapshot.ConfirmationChallenge);
 
         if (operation.Snapshot.State == MutationOperationState.AwaitingApproval)
         {
             operation.Approve(
-                "oidc:https://idp.example|bob",
+                AuthorizedApprovalEvidence(operation.Snapshot, "bob"),
                 operation.Snapshot.PreviewHash,
                 Now.AddSeconds(2));
         }
@@ -599,6 +624,77 @@ public sealed class V05MutationKernelTests
             "{\"operation\":\"test\"}",
             resources,
             new[] { new MutationPrecondition("metadata", "sha256:abc") });
+
+    private static MutationApprovalAuthorizationEvidence AuthorizedApprovalEvidence(
+        MutationOperationSnapshot operation,
+        string subject)
+    {
+        var action = MutationAuthorization.ExpectedAction(operation.OperationKind);
+        var policy = AuthorizationPolicyCompiler.Compile(
+            new AuthorizationPolicyDefinition(
+                new[]
+                {
+                    new AuthorizationRoleDefinition(
+                        "mutation-approver",
+                        new[]
+                        {
+                            new AuthorizationPermissionDefinition(
+                                action,
+                                new[] { operation.ClusterId },
+                                new[] { "*" }),
+                        }),
+                },
+                new[]
+                {
+                    new AuthorizationSubjectBindingDefinition(
+                        "https://idp.example",
+                        subject,
+                        new[] { "mutation-approver" }),
+                },
+                Array.Empty<AuthorizationGroupBindingDefinition>()));
+
+        var authorizer = new MutationApprovalAuthorizer(
+            new AuthorizationPolicyEvaluator(policy));
+        return authorizer.Authorize(
+            new OperatorIdentity(
+                new OperatorIdentityKey("https://idp.example", subject)),
+            operation);
+    }
+
+    private static MutationApprovalAuthorizationEvidence UnauthorizedApprovalEvidence(
+        MutationOperationSnapshot operation,
+        string subject)
+    {
+        var policy = AuthorizationPolicyCompiler.Compile(
+            new AuthorizationPolicyDefinition(
+                new[]
+                {
+                    new AuthorizationRoleDefinition(
+                        "reader",
+                        new[]
+                        {
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.TopicRead,
+                                new[] { operation.ClusterId },
+                                new[] { "*" }),
+                        }),
+                },
+                new[]
+                {
+                    new AuthorizationSubjectBindingDefinition(
+                        "https://idp.example",
+                        subject,
+                        new[] { "reader" }),
+                },
+                Array.Empty<AuthorizationGroupBindingDefinition>()));
+
+        var authorizer = new MutationApprovalAuthorizer(
+            new AuthorizationPolicyEvaluator(policy));
+        return authorizer.Authorize(
+            new OperatorIdentity(
+                new OperatorIdentityKey("https://idp.example", subject)),
+            operation);
+    }
 
     private static KafdeckOptions LoadMutationOptions(
         string accessMode,
