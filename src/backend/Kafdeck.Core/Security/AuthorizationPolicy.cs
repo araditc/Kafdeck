@@ -13,6 +13,11 @@ public enum AuthorizationAction
     BrokerConfigRead = 7,
     RecordRead = 8,
     RecordExport = 9,
+    ConsumerRead = 10,
+    SchemaRead = 11,
+    ConnectRead = 12,
+    KsqlRead = 13,
+    CatalogRead = 14,
 }
 
 public enum AuthorizationDecisionReason

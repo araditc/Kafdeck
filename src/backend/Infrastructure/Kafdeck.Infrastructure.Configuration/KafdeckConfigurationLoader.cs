@@ -22,11 +22,13 @@ public static class KafdeckConfigurationLoader
             .Select(LoadCluster)
             .ToArray();
         var records = LoadRecordData(configuration.GetSection("Kafdeck:Records"));
+        var catalog = LoadTopicCatalog(configuration.GetSection("Kafdeck:Catalog"));
 
         return new KafdeckOptions(
             new DeploymentOptions(listenUrl, accessToken, accessMode, oidc),
             Array.AsReadOnly(clusters),
-            records);
+            records,
+            catalog);
     }
 
     private static RecordDataOptions LoadRecordData(IConfigurationSection section)
@@ -157,14 +159,66 @@ public static class KafdeckConfigurationLoader
                 ParseOptionalSecret(registrySection["Password"]));
         }
 
+        var connectSection = section.GetSection("Connect");
+        KafkaConnectProfile? connect = null;
+        if (connectSection.GetChildren().Any())
+        {
+            connect = new KafkaConnectProfile(
+                connectSection["Url"] ?? string.Empty,
+                ParseOptionalSecret(connectSection["Username"]),
+                ParseOptionalSecret(connectSection["Password"]));
+        }
+
+        var ksqlSection = section.GetSection("KsqlDb");
+        KsqlDbProfile? ksqlDb = null;
+        if (ksqlSection.GetChildren().Any())
+        {
+            ksqlDb = new KsqlDbProfile(
+                ksqlSection["Url"] ?? string.Empty,
+                ParseOptionalSecret(ksqlSection["Username"]),
+                ParseOptionalSecret(ksqlSection["Password"]));
+        }
+
         return new ClusterProfile(
             id,
             Array.AsReadOnly(bootstrapServers),
             securityProtocol,
             tls,
             sasl,
-            schemaRegistry);
+            schemaRegistry,
+            connect,
+            ksqlDb);
     }
+
+    private static TopicCatalogOptions? LoadTopicCatalog(IConfigurationSection section)
+    {
+        var topics = section
+            .GetSection("Topics")
+            .GetChildren()
+            .Select(item =>
+            {
+                var tags = item.GetSection("Tags")
+                    .GetChildren()
+                    .Select(tag => tag.Value ?? string.Empty)
+                    .ToArray();
+
+                return new TopicCatalogEntryProfile(
+                    item["ClusterId"] ?? string.Empty,
+                    item["TopicName"] ?? string.Empty,
+                    NullIfBlank(item["Description"]),
+                    NullIfBlank(item["Owner"]),
+                    NullIfBlank(item["Domain"]),
+                    Array.AsReadOnly(tags),
+                    NullIfBlank(item["DocumentationReference"]),
+                    NullIfBlank(item["Classification"]));
+            })
+            .ToArray();
+
+        return topics.Length == 0 ? null : new TopicCatalogOptions(Array.AsReadOnly(topics));
+    }
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static SecretReference? ParseOptionalSecret(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : SecretReference.Parse(value);

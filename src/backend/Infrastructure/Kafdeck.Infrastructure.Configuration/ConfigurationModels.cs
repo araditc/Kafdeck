@@ -21,10 +21,24 @@ public enum SaslMechanism
 public sealed record KafdeckOptions(
     DeploymentOptions Deployment,
     IReadOnlyList<ClusterProfile> Clusters,
-    RecordDataOptions? Records = null);
+    RecordDataOptions? Records = null,
+    TopicCatalogOptions? Catalog = null);
 
 public sealed record RecordDataOptions(
     RecordMaskingPolicyDefinition MaskingPolicy);
+
+public sealed record TopicCatalogOptions(
+    IReadOnlyList<TopicCatalogEntryProfile> Topics);
+
+public sealed record TopicCatalogEntryProfile(
+    string ClusterId,
+    string TopicName,
+    string? Description,
+    string? Owner,
+    string? Domain,
+    IReadOnlyList<string> Tags,
+    string? DocumentationReference,
+    string? Classification);
 
 public sealed record DeploymentOptions(
     string ListenUrl,
@@ -55,9 +69,21 @@ public sealed record ClusterProfile(
     KafkaSecurityProtocol SecurityProtocol,
     TlsProfile? Tls,
     SaslProfile? Sasl,
-    SchemaRegistryProfile? SchemaRegistry = null);
+    SchemaRegistryProfile? SchemaRegistry = null,
+    KafkaConnectProfile? Connect = null,
+    KsqlDbProfile? KsqlDb = null);
 
 public sealed record SchemaRegistryProfile(
+    string Url,
+    SecretReference? Username,
+    SecretReference? Password);
+
+public sealed record KafkaConnectProfile(
+    string Url,
+    SecretReference? Username,
+    SecretReference? Password);
+
+public sealed record KsqlDbProfile(
     string Url,
     SecretReference? Username,
     SecretReference? Password);
