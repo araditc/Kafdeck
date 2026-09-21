@@ -66,7 +66,10 @@ public sealed class MutationOperation
             Risk = effectiveRisk,
             State = MutationOperationState.Previewed,
             CanonicalIntent = canonicalIntent,
-            CanonicalIntentHash = MutationIdempotency.HashRequestIntent(normalizedIntent),
+            CanonicalIntentHash = MutationIdempotency.HashAdmittedIntent(
+                normalizedIntent,
+                effectiveRisk,
+                policyVersion),
             ResourceKeys = resources,
             Preconditions = preconditions,
             MaterialDigests = digests,
