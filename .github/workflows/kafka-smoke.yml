@@ -9,6 +9,9 @@ on:
       - 'src/backend/Kafdeck.Core/Kafka/**'
       - 'tests/Kafdeck.Architecture.Tests/Kafka*.cs'
       - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - '.github/release/*-candidate.json'
+      - 'docs/releases/*-readiness.md'
       - '.github/workflows/kafka-smoke.yml'
   push:
     branches: [main]
@@ -21,6 +24,9 @@ on:
       - 'src/backend/Kafdeck.Core/Kafka/**'
       - 'tests/Kafdeck.Architecture.Tests/Kafka*.cs'
       - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - '.github/release/*-candidate.json'
+      - 'docs/releases/*-readiness.md'
       - '.github/workflows/kafka-smoke.yml'
 
 permissions:
