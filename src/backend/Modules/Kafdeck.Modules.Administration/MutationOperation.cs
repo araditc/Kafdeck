@@ -151,12 +151,23 @@ public sealed class MutationOperation
         Transition(MutationOperationState.Rejected, nowUtc);
     }
 
-    public long ClaimExecution(DateTimeOffset nowUtc)
+    public long ClaimExecution(DateTimeOffset nowUtc, DateTimeOffset claimExpiresAtUtc)
     {
         RequireState(MutationOperationState.Ready);
         RequireNotExpired(nowUtc);
+        if (claimExpiresAtUtc <= nowUtc)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(claimExpiresAtUtc),
+                "Execution claim expiry must be in the future.");
+        }
+
         var generation = checked(Snapshot.ExecutionClaimGeneration + 1);
-        Snapshot = Snapshot with { ExecutionClaimGeneration = generation };
+        Snapshot = Snapshot with
+        {
+            ExecutionClaimGeneration = generation,
+            ExecutionClaimExpiresAtUtc = claimExpiresAtUtc,
+        };
         Transition(MutationOperationState.Executing, nowUtc);
         return generation;
     }
