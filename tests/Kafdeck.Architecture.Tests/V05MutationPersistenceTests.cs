@@ -132,6 +132,95 @@ public sealed class V05MutationPersistenceTests
         }
     }
 
+
+    [Fact]
+    public async Task Recovery_marks_interrupted_pre_dispatch_execution_as_failed_before_dispatch()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-recovery-pre-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("recovery-pre");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var aggregate = MutationOperation.Restore(created.Operation);
+            aggregate.ClaimExecution(Now.AddSeconds(1));
+            var claimed = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                created.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, claimed.Outcome);
+
+            var audit = new CapturingMutationAuditSink();
+            var recovery = new MutationRecoveryCoordinator(repository, audit, time);
+
+            var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+
+            Assert.Equal(1, recovered);
+            var persisted = await repository.GetAsync(created.Operation.OperationId);
+            Assert.NotNull(persisted);
+            Assert.Equal(MutationOperationState.FailedBeforeDispatch, persisted!.State);
+            Assert.Equal("process_interrupted_before_dispatch", persisted.ResultCode);
+            Assert.Contains(audit.Events, item => item.OutcomeCode == "process_interrupted_before_dispatch");
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Recovery_marks_interrupted_post_dispatch_execution_as_unknown()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-recovery-post-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("recovery-post");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var aggregate = MutationOperation.Restore(created.Operation);
+            aggregate.ClaimExecution(Now.AddSeconds(1));
+            var claimed = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                created.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, claimed.Outcome);
+
+            aggregate.MarkDispatchStarted(Now.AddSeconds(2));
+            var dispatched = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                claimed.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, dispatched.Outcome);
+
+            var audit = new CapturingMutationAuditSink();
+            var recovery = new MutationRecoveryCoordinator(repository, audit, time);
+
+            var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+
+            Assert.Equal(1, recovered);
+            var persisted = await repository.GetAsync(created.Operation.OperationId);
+            Assert.NotNull(persisted);
+            Assert.Equal(MutationOperationState.ExecutionUnknown, persisted!.State);
+            Assert.Equal("process_interrupted_after_dispatch", persisted.ResultCode);
+            Assert.Contains(audit.Events, item => item.OutcomeCode == "process_interrupted_after_dispatch");
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
     [Fact]
     public async Task PostgreSql_repository_coordinates_concurrent_idempotency_cas_and_resource_claims_when_available()
     {
