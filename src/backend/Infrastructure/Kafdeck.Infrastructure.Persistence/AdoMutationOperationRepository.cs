@@ -1,5 +1,7 @@
 using System.Data.Common;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Kafdeck.Modules.Administration;
 
@@ -33,7 +35,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """,
             """
             INSERT INTO kafdeck_schema_info (component, schema_version)
-            VALUES ('mutation-operations', 3)
+            VALUES ('mutation-operations', 4)
             ON CONFLICT (component) DO NOTHING
             """,
             """
@@ -79,7 +81,8 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """,
             """
             CREATE TABLE IF NOT EXISTS kafdeck_mutation_resource_claims (
-                resource_key TEXT PRIMARY KEY,
+                resource_key_hash TEXT PRIMARY KEY,
+                resource_key TEXT NOT NULL,
                 operation_id TEXT NOT NULL,
                 execution_generation BIGINT NOT NULL,
                 expires_at_utc TEXT NOT NULL
@@ -106,7 +109,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             WHERE component = 'mutation-operations'
             """;
         var version = await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 3)
+        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 4)
         {
             throw new InvalidOperationException(
                 "Mutation persistence schema version is unsupported. Refusing to start mutation mode.");
@@ -703,22 +706,27 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
 
         foreach (var resourceKey in normalized)
         {
+            var resourceKeyHash = HashResourceKey(resourceKey);
+
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText =
                 """
                 INSERT INTO kafdeck_mutation_resource_claims (
+                    resource_key_hash,
                     resource_key,
                     operation_id,
                     execution_generation,
                     expires_at_utc)
                 VALUES (
+                    @resource_key_hash,
                     @resource_key,
                     @operation_id,
                     @execution_generation,
                     @expires_at_utc)
-                ON CONFLICT (resource_key) DO NOTHING
+                ON CONFLICT (resource_key_hash) DO NOTHING
                 """;
+            AddParameter(insert, "@resource_key_hash", resourceKeyHash);
             AddParameter(insert, "@resource_key", resourceKey);
             AddParameter(insert, "@operation_id", operationId.ToString("D"));
             AddParameter(insert, "@execution_generation", executionClaimGeneration);
@@ -733,7 +741,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             var existing = await GetClaimAsync(
                 connection,
                 transaction,
-                resourceKey,
+                resourceKeyHash,
                 cancellationToken).ConfigureAwait(false);
 
             if (existing is not null &&
@@ -746,12 +754,12 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                     """
                     UPDATE kafdeck_mutation_resource_claims
                     SET expires_at_utc = @expires_at_utc
-                    WHERE resource_key = @resource_key
+                    WHERE resource_key_hash = @resource_key_hash
                       AND operation_id = @operation_id
                       AND execution_generation = @execution_generation
                     """;
                 AddParameter(renew, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
-                AddParameter(renew, "@resource_key", resourceKey);
+                AddParameter(renew, "@resource_key_hash", resourceKeyHash);
                 AddParameter(renew, "@operation_id", operationId.ToString("D"));
                 AddParameter(renew, "@execution_generation", executionClaimGeneration);
                 await renew.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -1093,7 +1101,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
     private static async Task<(Guid OperationId, long Generation)?> GetClaimAsync(
         DbConnection connection,
         DbTransaction transaction,
-        string resourceKey,
+        string resourceKeyHash,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -1102,9 +1110,9 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """
             SELECT operation_id, execution_generation
             FROM kafdeck_mutation_resource_claims
-            WHERE resource_key = @resource_key
+            WHERE resource_key_hash = @resource_key_hash
             """;
-        AddParameter(command, "@resource_key", resourceKey);
+        AddParameter(command, "@resource_key_hash", resourceKeyHash);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -1135,6 +1143,14 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
 
         return JsonSerializer.Deserialize<MutationOperationSnapshot>(json, JsonOptions) ??
                throw new InvalidOperationException("Persisted mutation snapshot could not be deserialized.");
+    }
+
+    private static string HashResourceKey(string resourceKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(resourceKey)))
+            .ToLowerInvariant();
     }
 
     private static string Serialize(MutationOperationSnapshot operation) =>
