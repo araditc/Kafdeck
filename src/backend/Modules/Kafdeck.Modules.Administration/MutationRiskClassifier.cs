@@ -57,22 +57,46 @@ public static class MutationRiskClassifier
     {
         ArgumentNullException.ThrowIfNull(proposed);
 
+        if (!Enum.IsDefined(proposed.RiskClass) ||
+            !Enum.IsDefined(proposed.ConfirmationMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(proposed),
+                "Mutation risk decisions must use supported risk and confirmation values.");
+        }
+
+        if (proposed.Reasons.Count > 32)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(proposed),
+                "Mutation risk decisions must not contain more than 32 reasons.");
+        }
+
         var floor = Classify(new MutationRiskInput(operationKind, targetCount));
         var effectiveRisk = (MutationRiskClass)Math.Max(
             (int)floor.RiskClass,
             (int)proposed.RiskClass);
 
-        var effectiveConfirmation = effectiveRisk >= MutationRiskClass.High
-            ? MutationConfirmationMode.TypedTarget
-            : MutationConfirmationMode.Explicit;
+        var effectiveConfirmation =
+            (int)effectiveRisk >= (int)MutationRiskClass.High ||
+            proposed.ConfirmationMode == MutationConfirmationMode.TypedTarget
+                ? MutationConfirmationMode.TypedTarget
+                : MutationConfirmationMode.Explicit;
 
         var reasons = floor.Reasons
-            .Concat(proposed.Reasons ?? Array.Empty<string>())
+            .Concat(proposed.Reasons)
             .Where(reason => !string.IsNullOrWhiteSpace(reason))
             .Select(reason => reason.Trim())
             .Distinct(StringComparer.Ordinal)
             .OrderBy(reason => reason, StringComparer.Ordinal)
             .ToArray();
+
+        if (reasons.Any(reason => reason.Length > 512 || reason.Any(char.IsControl)))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(proposed),
+                "Mutation risk reasons must be at most 512 characters and contain no control characters.");
+        }
 
         return new MutationRiskDecision(
             effectiveRisk,
