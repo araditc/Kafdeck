@@ -142,6 +142,7 @@ if (mutationOptions?.Enabled == true)
             TimeSpan.FromMinutes(2)));
     builder.Services.AddSingleton<MutationExecutor>();
     builder.Services.AddSingleton<MutationRecoveryCoordinator>();
+    builder.Services.AddHostedService<MutationRecoveryHostedService>();
 }
 
 var app = builder.Build();
@@ -158,7 +159,9 @@ if (mutationOptions?.Enabled == true)
 
     var mutationRecovery = app.Services.GetRequiredService<MutationRecoveryCoordinator>();
     var recoveredMutations = await mutationRecovery
-        .RecoverInterruptedExecutionsAsync()
+        .RecoverInterruptedExecutionsAsync(
+            ignoreActiveExecutionLeases:
+                mutationOptions.Persistence!.ExecutionMode == MutationExecutionMode.Standalone)
         .ConfigureAwait(false);
 
     app.Logger.LogInformation(
