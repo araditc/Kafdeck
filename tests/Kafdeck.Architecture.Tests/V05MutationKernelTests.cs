@@ -53,6 +53,30 @@ public sealed class V05MutationKernelTests
         Assert.Equal(firstHash, secondHash);
     }
 
+
+    [Fact]
+    public void Preview_hash_binds_risk_reasons()
+    {
+        var intent = Intent(["cluster/prod/topic/payments"], MutationOperationKind.TopicAlter);
+        var expires = Now.AddMinutes(5);
+
+        var first = new MutationRiskDecision(
+            MutationRiskClass.High,
+            new[] { "durability_sensitive_change" },
+            MutationConfirmationMode.TypedTarget,
+            false);
+        var second = new MutationRiskDecision(
+            MutationRiskClass.High,
+            new[] { "bulk_escalation" },
+            MutationConfirmationMode.TypedTarget,
+            false);
+
+        var firstHash = MutationPreviewHasher.ComputeHash(intent, first, "v0.5-p1", expires);
+        var secondHash = MutationPreviewHasher.ComputeHash(intent, second, "v0.5-p1", expires);
+
+        Assert.NotEqual(firstHash, secondHash);
+    }
+
     [Fact]
     public void Critical_operation_requires_distinct_approver()
     {
