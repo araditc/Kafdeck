@@ -105,28 +105,28 @@ public sealed class KafkaRecordReadAdapterTests
 
         var slowFirst = adapter.ReadPageAsync(
             Request("slow"),
-            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
             CancellationToken.None);
 
-        await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         var slowSecond = adapter.ReadPageAsync(
             Request("slow"),
-            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
             CancellationToken.None);
 
         var fast = adapter.ReadPageAsync(
             Request("fast"),
-            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
             CancellationToken.None);
 
-        var fastResult = await fast.WaitAsync(TimeSpan.FromSeconds(3));
+        var fastResult = await fast.WaitAsync(TimeSpan.FromSeconds(1));
         Assert.True(fastResult.IsSuccess, fastResult.Failure?.SafeMessage);
 
         releaseSlow.Set();
 
-        var firstResult = await slowFirst.WaitAsync(TimeSpan.FromSeconds(3));
-        var secondResult = await slowSecond.WaitAsync(TimeSpan.FromSeconds(3));
+        var firstResult = await slowFirst.WaitAsync(TimeSpan.FromSeconds(2));
+        var secondResult = await slowSecond.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.True(firstResult.IsSuccess, firstResult.Failure?.SafeMessage);
         Assert.True(secondResult.IsSuccess, secondResult.Failure?.SafeMessage);
@@ -155,10 +155,10 @@ public sealed class KafkaRecordReadAdapterTests
             new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
             cancellation.Token);
 
-        await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
         cancellation.Cancel();
 
-        var result = await read.WaitAsync(TimeSpan.FromSeconds(3));
+        var result = await read.WaitAsync(TimeSpan.FromSeconds(1));
 
         AssertFailure(result, KafkaFailureCategory.Cancelled, "operation_cancelled");
     }

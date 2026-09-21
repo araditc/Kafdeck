@@ -332,6 +332,8 @@ public sealed class RecordMaskingAndExportTests
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
         await using var destination = new DelayedWriteStream(TimeSpan.FromSeconds(1));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         var summary = await service.ExportAsync(
             page,
             new RecordExportRequest(
@@ -339,11 +341,12 @@ public sealed class RecordMaskingAndExportTests
                 new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
-            destination).WaitAsync(TimeSpan.FromSeconds(5));
+            destination);
 
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
         Assert.Equal(0, summary.ByteCount);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
     }
 
     [Fact]

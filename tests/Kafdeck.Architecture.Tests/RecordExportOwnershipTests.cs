@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
@@ -16,6 +17,8 @@ public sealed class RecordExportOwnershipTests
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
         await using var destination = new SynchronouslyBlockingWriteStream();
+        var stopwatch = Stopwatch.StartNew();
+
         var summary = await service.ExportAsync(
             SafePage(),
             new RecordExportRequest(
@@ -23,10 +26,11 @@ public sealed class RecordExportOwnershipTests
                 new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
-            destination).WaitAsync(TimeSpan.FromSeconds(5));
+            destination);
 
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -35,6 +39,8 @@ public sealed class RecordExportOwnershipTests
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
         await using var destination = new LateCommitWriteStream(TimeSpan.FromSeconds(1));
+        var stopwatch = Stopwatch.StartNew();
+
         var summary = await service.ExportAsync(
             SafePage(),
             new RecordExportRequest(
@@ -42,14 +48,14 @@ public sealed class RecordExportOwnershipTests
                 new RecordExportBudget(maxRows: 10, maxBytes: 4096, maxDuration: WriteStartBudget)),
             evaluator,
             identity,
-            destination).WaitAsync(TimeSpan.FromSeconds(5));
+            destination);
 
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
         Assert.Equal(0, summary.ByteCount);
-        Assert.False(destination.Committed.IsCompleted);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
 
-        var committedBytes = await destination.Committed.WaitAsync(TimeSpan.FromSeconds(3));
+        var committedBytes = await destination.Committed.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.True(committedBytes > 0);
     }
 
