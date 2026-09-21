@@ -158,6 +158,42 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         return await ReadSingleSnapshotAsync(command, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<MutationOperationSnapshot>> ListByStateAsync(
+        MutationOperationState state,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 10_001)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_mutation_operations
+            WHERE state = @state
+            ORDER BY updated_at_utc, operation_id
+            LIMIT @limit
+            """;
+        AddParameter(command, "@state", (int)state);
+        AddParameter(command, "@limit", limit);
+
+        var items = new List<MutationOperationSnapshot>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var json = reader.GetString(0);
+            items.Add(
+                JsonSerializer.Deserialize<MutationOperationSnapshot>(json, JsonOptions) ??
+                throw new InvalidOperationException("Persisted mutation snapshot could not be deserialized."));
+        }
+
+        return Array.AsReadOnly(items.ToArray());
+    }
+
     public async Task<MutationSaveResult> TrySaveAsync(
         MutationOperationSnapshot operation,
         long expectedVersion,
