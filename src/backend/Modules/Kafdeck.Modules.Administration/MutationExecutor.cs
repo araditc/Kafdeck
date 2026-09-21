@@ -231,9 +231,41 @@ public sealed class MutationExecutor
 
             resourceClaimsAcquired = true;
 
-            var guard = await _guard.ValidateAsync(
-                operation.Snapshot,
-                cancellationToken).ConfigureAwait(false);
+            MutationPreDispatchGuardResult guard;
+            try
+            {
+                guard = await _guard.ValidateAsync(
+                    operation.Snapshot,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                operation.Complete(
+                    MutationExecutionResultKind.FailedBeforeDispatch,
+                    "pre_dispatch_cancelled",
+                    _timeProvider.GetUtcNow());
+                await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                await WriteAuditAsync(
+                    operation.Snapshot,
+                    MutationAuditEventType.Completed,
+                    "pre_dispatch_cancelled",
+                    CancellationToken.None).ConfigureAwait(false);
+                return operation.Snapshot;
+            }
+            catch (Exception)
+            {
+                operation.Complete(
+                    MutationExecutionResultKind.FailedBeforeDispatch,
+                    "pre_dispatch_guard_failed",
+                    _timeProvider.GetUtcNow());
+                await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                await WriteAuditAsync(
+                    operation.Snapshot,
+                    MutationAuditEventType.Completed,
+                    "pre_dispatch_guard_failed",
+                    CancellationToken.None).ConfigureAwait(false);
+                return operation.Snapshot;
+            }
 
             if (guard.Outcome == MutationPreDispatchGuardOutcome.StalePreview)
             {
