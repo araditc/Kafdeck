@@ -387,9 +387,9 @@ public sealed class RecordMaskingAndExportTests
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
         await using var destination = new CancellationAwareBlockingWriteStream();
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+        using var cancellation = new CancellationTokenSource();
 
-        var summary = await service.ExportAsync(
+        var export = service.ExportAsync(
             page,
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
@@ -398,6 +398,10 @@ public sealed class RecordMaskingAndExportTests
             identity,
             destination,
             cancellation.Token);
+
+        await destination.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+        var summary = await export.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
@@ -605,5 +609,4 @@ public sealed class RecordMaskingAndExportTests
             base.Dispose(disposing);
         }
     }
-}
 }

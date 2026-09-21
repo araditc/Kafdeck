@@ -90,14 +90,16 @@ public sealed class KafkaSnapshotCoordinatorTests
     [Fact]
     public async Task Expired_high_cardinality_snapshots_are_swept_during_continued_observation()
     {
-        var coordinator = new KafkaSnapshotCoordinator();
+        var clock = new MutableTestTimeProvider(DateTimeOffset.UtcNow);
+        var coordinator = new KafkaSnapshotCoordinator(timeProvider: clock);
         var ttl = TimeSpan.FromMilliseconds(10);
-        Task<KafkaResult<string>> Read(KafkaOperationContext _, CancellationToken __) => Task.FromResult(Success("value"));
+        Task<KafkaResult<string>> Read(KafkaOperationContext _, CancellationToken __) =>
+            Task.FromResult(Success("value", clock.GetUtcNow()));
 
         for (var i = 0; i < 300; i++)
             await coordinator.ObserveAsync("cluster-a", $"topic:{i}", ttl, Read);
 
-        await Task.Delay(30);
+        clock.Advance(TimeSpan.FromMilliseconds(30));
 
         for (var i = 300; i < 600; i++)
             await coordinator.ObserveAsync("cluster-a", $"topic:{i}", ttl, Read);
