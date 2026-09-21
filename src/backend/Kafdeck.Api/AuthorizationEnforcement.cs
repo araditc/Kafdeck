@@ -41,10 +41,61 @@ public sealed class KafdeckAuthorizationService
             ? KafdeckAuthorizationOutcome.Allowed
             : KafdeckAuthorizationOutcome.Forbidden;
     }
+
+    public KafdeckAuthorizationOutcome AuthorizeCollection(
+        ClaimsPrincipal? principal,
+        AuthorizationAction action,
+        string? clusterId)
+    {
+        if (_options.Deployment.Mode != AccessMode.Oidc)
+        {
+            return KafdeckAuthorizationOutcome.Allowed;
+        }
+
+        if (!OperatorSessionContextFactory.TryCreate(principal, out var session) || session is null)
+        {
+            return KafdeckAuthorizationOutcome.Unauthenticated;
+        }
+
+        return _evaluator.HasApplicablePermission(session.Identity, action, clusterId)
+            ? KafdeckAuthorizationOutcome.Allowed
+            : KafdeckAuthorizationOutcome.Forbidden;
+    }
 }
 
 public static class KafdeckAuthorizationEndpointExtensions
 {
+    public static RouteHandlerBuilder RequireKafdeckCollectionAuthorization(
+        this RouteHandlerBuilder builder,
+        AuthorizationAction action,
+        string clusterRouteKey)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterRouteKey);
+
+        return builder.AddEndpointFilter(async (invocation, next) =>
+        {
+            var http = invocation.HttpContext;
+            var clusterId = http.Request.RouteValues[clusterRouteKey]?.ToString();
+            var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
+            var outcome = authorization.AuthorizeCollection(http.User, action, clusterId);
+
+            return outcome switch
+            {
+                KafdeckAuthorizationOutcome.Allowed => await next(invocation).ConfigureAwait(false),
+                KafdeckAuthorizationOutcome.Unauthenticated => Results.Problem(
+                    statusCode: StatusCodes.Status401Unauthorized,
+                    title: "Authentication required",
+                    detail: "An authenticated operator session is required."),
+                _ => Results.Problem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    type: "urn:kafdeck:problem:operator-authorization-denied",
+                    title: "Forbidden",
+                    detail: "The authenticated operator is not authorized for this collection."),
+            };
+        });
+    }
+
     public static RouteHandlerBuilder RequireKafdeckAuthorization(
         this RouteHandlerBuilder builder,
         AuthorizationAction action,
