@@ -1228,6 +1228,58 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task PostgreSql_long_identity_idempotency_scope_is_fixed_size_and_index_safe_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var repository = new AdoMutationOperationRepository(
+            new PostgreSqlMutationDbConnectionFactory(connectionString),
+            new FixedTimeProvider(Now));
+        await repository.InitializeAsync();
+
+        var principal = "oidc:" + new string('p', 3_500);
+        var clusterId = new string('c', 240);
+        var idempotencyKey = $"pg-long-scope-{Guid.NewGuid():N}";
+        var risk = MutationRiskClassifier.Classify(
+            new MutationRiskInput(MutationOperationKind.TopicCreate));
+        var intent = new MutationIntentDescriptor(
+            MutationOperationKind.TopicCreate,
+            clusterId,
+            "{\"operation\":\"create-topic\",\"name\":\"long-scope-test\"}",
+            new[] { $"cluster/{clusterId}/topic/long-scope-test" },
+            new[] { new MutationPrecondition("topic", "absent") });
+
+        MutationOperation Build() =>
+            MutationOperation.CreatePreview(
+                principal,
+                intent,
+                risk,
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                idempotencyKey);
+
+        var first = Build();
+        var second = Build();
+
+        Assert.Equal(64, first.Snapshot.IdempotencyScope.Length);
+        Assert.DoesNotContain(principal, first.Snapshot.IdempotencyScope, StringComparison.Ordinal);
+        Assert.DoesNotContain(clusterId, first.Snapshot.IdempotencyScope, StringComparison.Ordinal);
+
+        var created = await repository.CreateAsync(first.Snapshot);
+        var replay = await repository.CreateAsync(second.Snapshot);
+
+        Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+        Assert.Equal(MutationCreateOutcome.ExistingSameIntent, replay.Outcome);
+        Assert.Equal(created.Operation.OperationId, replay.Operation.OperationId);
+        Assert.Equal(64, replay.Operation.IdempotencyScope.Length);
+    }
+
+    [Fact]
     public async Task PostgreSql_repository_coordinates_concurrent_idempotency_cas_and_resource_claims_when_available()
     {
         var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
