@@ -32,6 +32,10 @@ public sealed class MutationOperation
         var resources = MutationPreviewHasher.NormalizeResources(intent.ResourceKeys);
         var preconditions = MutationPreviewHasher.NormalizePreconditions(intent.Preconditions);
         var digests = MutationPreviewHasher.NormalizeDigests(intent.MaterialDigests);
+        var authorizationTargets = MutationAuthorization.NormalizeTargets(
+            intent.Kind,
+            clusterId,
+            intent.AuthorizationTargets);
 
         if (previewExpiresAtUtc <= nowUtc)
         {
@@ -45,12 +49,16 @@ public sealed class MutationOperation
             ResourceKeys = resources,
             Preconditions = preconditions,
             MaterialDigests = digests,
+            AuthorizationTargets = authorizationTargets,
         };
         var effectiveRisk = MutationRiskClassifier.EnforceBuiltInFloor(
             intent.Kind,
             resources.Count,
             risk);
 
+        var confirmationChallenge = MutationAuthorization.BuildConfirmationChallenge(
+            effectiveRisk.ConfirmationMode,
+            authorizationTargets);
         var previewHash = MutationPreviewHasher.ComputeHash(
             normalizedIntent,
             effectiveRisk,
@@ -73,6 +81,8 @@ public sealed class MutationOperation
             ResourceKeys = resources,
             Preconditions = preconditions,
             MaterialDigests = digests,
+            AuthorizationTargets = authorizationTargets,
+            ConfirmationChallenge = confirmationChallenge,
             PreviewHash = previewHash,
             PreviewExpiresAtUtc = previewExpiresAtUtc,
             PolicyVersion = RequireBounded(policyVersion, nameof(policyVersion), 256),
@@ -97,7 +107,11 @@ public sealed class MutationOperation
         Transition(MutationOperationState.AwaitingConfirmation, nowUtc);
     }
 
-    public void Confirm(string principalId, string previewHash, DateTimeOffset nowUtc)
+    public void Confirm(
+        string principalId,
+        string previewHash,
+        DateTimeOffset nowUtc,
+        string? typedTargetChallenge = null)
     {
         RequireState(MutationOperationState.AwaitingConfirmation);
         RequireNotExpired(nowUtc);
@@ -109,9 +123,33 @@ public sealed class MutationOperation
             throw new MutationStateException("Only the requesting principal may confirm this mutation.");
         }
 
+        string? confirmedChallenge = null;
+        if (Snapshot.Risk.ConfirmationMode == MutationConfirmationMode.TypedTarget)
+        {
+            if (string.IsNullOrWhiteSpace(Snapshot.ConfirmationChallenge))
+            {
+                throw new MutationStateException(
+                    "Typed-target confirmation is required but no server challenge is available.");
+            }
+
+            confirmedChallenge = RequireBounded(
+                typedTargetChallenge ?? string.Empty,
+                nameof(typedTargetChallenge),
+                512);
+            if (!string.Equals(
+                    confirmedChallenge,
+                    Snapshot.ConfirmationChallenge,
+                    StringComparison.Ordinal))
+            {
+                throw new MutationStateException(
+                    "Typed-target confirmation does not match the server-derived target challenge.");
+            }
+        }
+
         Snapshot = Snapshot with
         {
             ConfirmedByPrincipalId = principal,
+            ConfirmedChallenge = confirmedChallenge,
             ConfirmedAtUtc = nowUtc,
         };
         Transition(
@@ -121,41 +159,57 @@ public sealed class MutationOperation
             nowUtc);
     }
 
-    public void Approve(string principalId, string previewHash, DateTimeOffset nowUtc)
+    public void Approve(
+        MutationApprovalAuthorizationEvidence evidence,
+        string previewHash,
+        DateTimeOffset nowUtc)
     {
         RequireState(MutationOperationState.AwaitingApproval);
         RequireNotExpired(nowUtc);
         RequirePreviewHash(previewHash);
+        RequireApprovalEvidence(evidence);
 
-        var principal = RequireBounded(principalId, nameof(principalId), 4096);
-        if (string.Equals(principal, Snapshot.RequesterPrincipalId, StringComparison.Ordinal))
+        if (string.Equals(
+                evidence.PrincipalId,
+                Snapshot.RequesterPrincipalId,
+                StringComparison.Ordinal))
         {
-            throw new MutationStateException("An independent approval must come from a distinct principal.");
+            throw new MutationStateException(
+                "An independent approval must come from a distinct authorized principal.");
         }
 
         Snapshot = Snapshot with
         {
-            ApprovedByPrincipalId = principal,
+            ApprovedByPrincipalId = evidence.PrincipalId,
+            ApprovalAuthorizationEvidenceHash = evidence.EvidenceHash,
             ApprovedAtUtc = nowUtc,
         };
         Transition(MutationOperationState.Ready, nowUtc);
     }
 
-    public void Reject(string principalId, string previewHash, DateTimeOffset nowUtc)
+    public void Reject(
+        MutationApprovalAuthorizationEvidence evidence,
+        string previewHash,
+        DateTimeOffset nowUtc)
     {
         RequireState(MutationOperationState.AwaitingApproval);
         RequireNotExpired(nowUtc);
         RequirePreviewHash(previewHash);
+        RequireApprovalEvidence(evidence);
 
-        var principal = RequireBounded(principalId, nameof(principalId), 4096);
-        if (string.Equals(principal, Snapshot.RequesterPrincipalId, StringComparison.Ordinal))
+        if (string.Equals(
+                evidence.PrincipalId,
+                Snapshot.RequesterPrincipalId,
+                StringComparison.Ordinal))
         {
-            throw new MutationStateException("The requesting principal cannot act as the independent rejector.");
+            throw new MutationStateException(
+                "The requesting principal cannot act as the independent rejector.");
         }
 
         Snapshot = Snapshot with
         {
-            RejectedByPrincipalId = principal,
+            RejectedByPrincipalId = evidence.PrincipalId,
+            RejectionAuthorizationEvidenceHash = evidence.EvidenceHash,
             RejectedAtUtc = nowUtc,
         };
         Transition(MutationOperationState.Rejected, nowUtc);
@@ -294,6 +348,21 @@ public sealed class MutationOperation
             Version = checked(Snapshot.Version + 1),
             UpdatedAtUtc = nowUtc,
         };
+    }
+
+    private void RequireApprovalEvidence(
+        MutationApprovalAuthorizationEvidence evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+
+        if (evidence.OperationId != Snapshot.OperationId ||
+            !string.Equals(evidence.PreviewHash, Snapshot.PreviewHash, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(evidence.PrincipalId) ||
+            string.IsNullOrWhiteSpace(evidence.EvidenceHash))
+        {
+            throw new MutationStateException(
+                "Approval authorization evidence does not match this mutation operation.");
+        }
     }
 
     private void RequireState(MutationOperationState expected)
