@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Kafdeck.Core.Security;
 
 namespace Kafdeck.Modules.Administration;
 
@@ -78,13 +79,19 @@ public sealed record MutationPrecondition(string Key, string Fingerprint);
 
 public sealed record MutationMaterialDigest(string Name, string Digest);
 
+public sealed record MutationAuthorizationTarget(
+    AuthorizationAction Action,
+    string ClusterId,
+    string ResourceName);
+
 public sealed record MutationIntentDescriptor(
     MutationOperationKind Kind,
     string ClusterId,
     string CanonicalIntent,
     IReadOnlyList<string> ResourceKeys,
     IReadOnlyList<MutationPrecondition>? Preconditions = null,
-    IReadOnlyList<MutationMaterialDigest>? MaterialDigests = null);
+    IReadOnlyList<MutationMaterialDigest>? MaterialDigests = null,
+    IReadOnlyList<MutationAuthorizationTarget>? AuthorizationTargets = null);
 
 public sealed record MutationRiskDecision(
     MutationRiskClass RiskClass,
@@ -105,16 +112,21 @@ public sealed record MutationOperationSnapshot
     public required IReadOnlyList<string> ResourceKeys { get; init; }
     public required IReadOnlyList<MutationPrecondition> Preconditions { get; init; }
     public required IReadOnlyList<MutationMaterialDigest> MaterialDigests { get; init; }
+    public required IReadOnlyList<MutationAuthorizationTarget> AuthorizationTargets { get; init; }
+    public string? ConfirmationChallenge { get; init; }
     public required string PreviewHash { get; init; }
     public required DateTimeOffset PreviewExpiresAtUtc { get; init; }
     public required string PolicyVersion { get; init; }
     public required string IdempotencyScope { get; init; }
     public required string IdempotencyKeyHash { get; init; }
     public string? ConfirmedByPrincipalId { get; init; }
+    public string? ConfirmedChallenge { get; init; }
     public DateTimeOffset? ConfirmedAtUtc { get; init; }
     public string? ApprovedByPrincipalId { get; init; }
+    public string? ApprovalAuthorizationEvidenceHash { get; init; }
     public DateTimeOffset? ApprovedAtUtc { get; init; }
     public string? RejectedByPrincipalId { get; init; }
+    public string? RejectionAuthorizationEvidenceHash { get; init; }
     public DateTimeOffset? RejectedAtUtc { get; init; }
     public long Version { get; init; }
     public long ExecutionClaimGeneration { get; init; }
@@ -194,6 +206,16 @@ public static class MutationIdempotency
         {
             Append(builder, "material-name", digest.Name);
             Append(builder, "material-digest", digest.Digest);
+        }
+
+        foreach (var target in MutationAuthorization.NormalizeTargets(
+                     intent.Kind,
+                     intent.ClusterId,
+                     intent.AuthorizationTargets))
+        {
+            Append(builder, "authorization-action", ((int)target.Action).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(builder, "authorization-cluster", target.ClusterId);
+            Append(builder, "authorization-resource", target.ResourceName);
         }
 
         Append(builder, "risk", ((int)risk.RiskClass).ToString(System.Globalization.CultureInfo.InvariantCulture));
