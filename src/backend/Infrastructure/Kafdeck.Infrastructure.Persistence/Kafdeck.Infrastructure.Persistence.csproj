@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Infrastructure.Persistence</AssemblyName>
+    <RootNamespace>Kafdeck.Infrastructure.Persistence</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Modules/Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kafdeck.Architecture.Tests" />
+  </ItemGroup>
+</Project>

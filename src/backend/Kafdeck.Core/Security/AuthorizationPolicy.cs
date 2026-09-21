@@ -18,6 +18,19 @@ public enum AuthorizationAction
     ConnectRead = 12,
     KsqlRead = 13,
     CatalogRead = 14,
+    TopicCreate = 15,
+    TopicAlter = 16,
+    TopicDelete = 17,
+    RecordProduce = 18,
+    ConsumerOffsetAlter = 19,
+    ConsumerDelete = 20,
+    SchemaCreate = 21,
+    SchemaAlter = 22,
+    SchemaDelete = 23,
+    ConnectCreate = 24,
+    ConnectAlter = 25,
+    ConnectDelete = 26,
+    RecordsPurge = 27,
 }
 
 public enum AuthorizationDecisionReason

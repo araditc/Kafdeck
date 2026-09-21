@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
@@ -17,9 +16,8 @@ public sealed class RecordExportOwnershipTests
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
         await using var destination = new SynchronouslyBlockingWriteStream();
-        var stopwatch = Stopwatch.StartNew();
 
-        var summary = await service.ExportAsync(
+        var export = service.ExportAsync(
             SafePage(),
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
@@ -28,9 +26,12 @@ public sealed class RecordExportOwnershipTests
             identity,
             destination);
 
+        await destination.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        var summary = await export.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+        Assert.True(destination.DisposeObserved);
     }
 
     [Fact]
@@ -38,10 +39,9 @@ public sealed class RecordExportOwnershipTests
     {
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
-        await using var destination = new LateCommitWriteStream(TimeSpan.FromSeconds(1));
-        var stopwatch = Stopwatch.StartNew();
+        await using var destination = new LateCommitWriteStream();
 
-        var summary = await service.ExportAsync(
+        var export = service.ExportAsync(
             SafePage(),
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
@@ -50,12 +50,16 @@ public sealed class RecordExportOwnershipTests
             identity,
             destination);
 
+        await destination.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        var summary = await export.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
         Assert.Equal(0, summary.ByteCount);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+        Assert.False(destination.Committed.IsCompleted);
 
-        var committedBytes = await destination.Committed.WaitAsync(TimeSpan.FromSeconds(2));
+        destination.Release();
+        var committedBytes = await destination.Committed.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(committedBytes > 0);
     }
 
@@ -162,7 +166,12 @@ public sealed class RecordExportOwnershipTests
     private sealed class SynchronouslyBlockingWriteStream : Stream
     {
         private readonly ManualResetEventSlim _release = new(false);
+        private readonly TaskCompletionSource<bool> _started =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         private bool _disposed;
+
+        public Task Started => _started.Task;
+        public bool DisposeObserved { get; private set; }
 
         public override bool CanRead => false;
         public override bool CanSeek => false;
@@ -182,6 +191,7 @@ public sealed class RecordExportOwnershipTests
 
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
+            _started.TrySetResult(true);
             _release.Wait();
             if (_disposed)
             {
@@ -195,6 +205,7 @@ public sealed class RecordExportOwnershipTests
         {
             if (disposing && !_disposed)
             {
+                DisposeObserved = true;
                 _disposed = true;
                 _release.Set();
                 _release.Dispose();
@@ -213,15 +224,17 @@ public sealed class RecordExportOwnershipTests
 
     private sealed class LateCommitWriteStream : Stream
     {
-        private readonly TimeSpan _delay;
-        private readonly TaskCompletionSource<int> _committed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _started =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<int> _committed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public LateCommitWriteStream(TimeSpan delay)
-        {
-            _delay = delay;
-        }
-
+        public Task Started => _started.Task;
         public Task<int> Committed => _committed.Task;
+
+        public void Release() => _release.TrySetResult(true);
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
@@ -240,7 +253,8 @@ public sealed class RecordExportOwnershipTests
 
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            await Task.Delay(_delay, CancellationToken.None).ConfigureAwait(false);
+            _started.TrySetResult(true);
+            await _release.Task.ConfigureAwait(false);
             _committed.TrySetResult(buffer.Length);
         }
 

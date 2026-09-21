@@ -331,10 +331,9 @@ public sealed class RecordMaskingAndExportTests
         var page = SafePage(SafeProjection(1, "one"));
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
-        await using var destination = new DelayedWriteStream(TimeSpan.FromSeconds(1));
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await using var destination = new CancellationAwareBlockingWriteStream();
 
-        var summary = await service.ExportAsync(
+        var export = service.ExportAsync(
             page,
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
@@ -343,10 +342,13 @@ public sealed class RecordMaskingAndExportTests
             identity,
             destination);
 
+        await destination.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        var summary = await export.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
         Assert.Equal(0, summary.ByteCount);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+        Assert.True(await destination.CancellationObserved.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     [Fact]
@@ -356,9 +358,8 @@ public sealed class RecordMaskingAndExportTests
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
         await using var destination = new NonCooperativeWriteStream();
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var summary = await service.ExportAsync(
+        var export = service.ExportAsync(
             page,
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
@@ -367,10 +368,16 @@ public sealed class RecordMaskingAndExportTests
             identity,
             destination);
 
+        await destination.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        var summary = await export.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
         Assert.Equal(0, summary.ByteCount);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+        Assert.False(destination.Completed.IsCompleted);
+
+        destination.Release();
+        Assert.True(await destination.Completed.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     [Fact]
@@ -379,10 +386,10 @@ public sealed class RecordMaskingAndExportTests
         var page = SafePage(SafeProjection(1, "one"));
         var service = new RecordExportService();
         var (evaluator, identity) = ExportAuthorization();
-        await using var destination = new DelayedWriteStream(TimeSpan.FromSeconds(1));
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+        await using var destination = new CancellationAwareBlockingWriteStream();
+        using var cancellation = new CancellationTokenSource();
 
-        var summary = await service.ExportAsync(
+        var export = service.ExportAsync(
             page,
             new RecordExportRequest(
                 RecordExportFormat.Ndjson,
@@ -392,9 +399,14 @@ public sealed class RecordMaskingAndExportTests
             destination,
             cancellation.Token);
 
+        await destination.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+        var summary = await export.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.Equal(RecordExportBudgetOutcome.Indeterminate, summary.Outcome);
         Assert.Equal(0, summary.RowCount);
         Assert.Equal(0, summary.ByteCount);
+        Assert.True(await destination.CancellationObserved.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     [Fact]
@@ -509,105 +521,92 @@ public sealed class RecordMaskingAndExportTests
             records.Length == 0 ? "none" : records[0].PolicyId,
             records.Length == 0 ? 1 : records[0].PolicyVersion);
 
-    private sealed class DelayedWriteStream : Stream
+    private sealed class CancellationAwareBlockingWriteStream : Stream
     {
-        private readonly MemoryStream _inner = new();
-        private readonly TimeSpan _delay;
+        private readonly TaskCompletionSource<bool> _started =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _cancellationObserved =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public DelayedWriteStream(TimeSpan delay)
-        {
-            _delay = delay;
-        }
+        public Task Started => _started.Task;
+        public Task<bool> CancellationObserved => _cancellationObserved.Task;
 
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
-        public override long Length => _inner.Length;
+        public override long Length => throw new NotSupportedException();
         public override long Position
         {
-            get => _inner.Position;
+            get => throw new NotSupportedException();
             set => throw new NotSupportedException();
         }
 
-        public override void Flush() => _inner.Flush();
+        public override void Flush() { }
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => _inner.SetLength(value);
-        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         public override async ValueTask WriteAsync(
             ReadOnlyMemory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            await Task.Delay(_delay, cancellationToken);
-            await _inner.WriteAsync(buffer, cancellationToken);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
+            _started.TrySetResult(true);
+            try
             {
-                _inner.Dispose();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
             }
-
-            base.Dispose(disposing);
-        }
-
-        public override async ValueTask DisposeAsync()
-        {
-            await _inner.DisposeAsync();
-            GC.SuppressFinalize(this);
+            catch (OperationCanceledException)
+            {
+                _cancellationObserved.TrySetResult(true);
+                throw;
+            }
         }
     }
 
     private sealed class NonCooperativeWriteStream : Stream
     {
-        private readonly MemoryStream _inner = new();
-        private bool _disposed;
+        private readonly TaskCompletionSource<bool> _started =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _completed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Started => _started.Task;
+        public Task<bool> Completed => _completed.Task;
+
+        public void Release() => _release.TrySetResult(true);
 
         public override bool CanRead => false;
         public override bool CanSeek => false;
-        public override bool CanWrite => !_disposed;
-        public override long Length => _inner.Length;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
         public override long Position
         {
-            get => _inner.Position;
+            get => throw new NotSupportedException();
             set => throw new NotSupportedException();
         }
 
-        public override void Flush() => _inner.Flush();
+        public override void Flush() { }
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => _inner.SetLength(value);
-        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         public override async ValueTask WriteAsync(
             ReadOnlyMemory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None).ConfigureAwait(false);
-            if (!_disposed)
-            {
-                await _inner.WriteAsync(buffer, CancellationToken.None).ConfigureAwait(false);
-            }
+            _started.TrySetResult(true);
+            await _release.Task.ConfigureAwait(false);
+            _completed.TrySetResult(true);
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && !_disposed)
-            {
-                _disposed = true;
-                _inner.Dispose();
-            }
-
+            // Deliberately non-cooperative: disposal does not release or cancel the pending write.
             base.Dispose(disposing);
-        }
-
-        public override ValueTask DisposeAsync()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-            return ValueTask.CompletedTask;
         }
     }
 }

@@ -22,7 +22,35 @@ public sealed record KafdeckOptions(
     DeploymentOptions Deployment,
     IReadOnlyList<ClusterProfile> Clusters,
     RecordDataOptions? Records = null,
-    TopicCatalogOptions? Catalog = null);
+    TopicCatalogOptions? Catalog = null,
+    AdministrationOptions? Administration = null);
+
+public enum MutationPersistenceProvider
+{
+    Sqlite = 1,
+    PostgreSql = 2,
+}
+
+public enum MutationExecutionMode
+{
+    Standalone = 1,
+    HighAvailability = 2,
+}
+
+public sealed record AdministrationOptions(MutationOptions Mutations);
+
+public sealed record MutationOptions(
+    bool Enabled,
+    MutationPersistenceOptions? Persistence,
+    SecretReference? MaterialDigestKey,
+    TimeSpan PreviewTtl,
+    int MaxConcurrentPerCluster);
+
+public sealed record MutationPersistenceOptions(
+    MutationPersistenceProvider Provider,
+    MutationExecutionMode ExecutionMode,
+    string? SqliteDatabasePath,
+    SecretReference? ConnectionString);
 
 public sealed record RecordDataOptions(
     RecordMaskingPolicyDefinition MaskingPolicy);

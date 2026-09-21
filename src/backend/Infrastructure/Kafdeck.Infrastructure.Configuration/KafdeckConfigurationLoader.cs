@@ -23,12 +23,14 @@ public static class KafdeckConfigurationLoader
             .ToArray();
         var records = LoadRecordData(configuration.GetSection("Kafdeck:Records"));
         var catalog = LoadTopicCatalog(configuration.GetSection("Kafdeck:Catalog"));
+        var administration = LoadAdministration(configuration.GetSection("Kafdeck:Administration"));
 
         return new KafdeckOptions(
             new DeploymentOptions(listenUrl, accessToken, accessMode, oidc),
             Array.AsReadOnly(clusters),
             records,
-            catalog);
+            catalog,
+            administration);
     }
 
     private static RecordDataOptions LoadRecordData(IConfigurationSection section)
@@ -190,6 +192,50 @@ public static class KafdeckConfigurationLoader
             ksqlDb);
     }
 
+    private static AdministrationOptions? LoadAdministration(IConfigurationSection section)
+    {
+        var mutations = section.GetSection("Mutations");
+        if (!mutations.GetChildren().Any())
+        {
+            return null;
+        }
+
+        var enabled = ParseOptionalBoolean(mutations["Enabled"], false, "Mutation Enabled");
+        var previewTtlSeconds = ParseOptionalInt(
+            mutations["PreviewTtlSeconds"],
+            300,
+            "Mutation preview TTL");
+        var maxConcurrentPerCluster = ParseOptionalInt(
+            mutations["MaxConcurrentPerCluster"],
+            2,
+            "Mutation max concurrent per cluster");
+
+        MutationPersistenceOptions? persistence = null;
+        var persistenceSection = mutations.GetSection("Persistence");
+        if (persistenceSection.GetChildren().Any())
+        {
+            persistence = new MutationPersistenceOptions(
+                ParseEnum(
+                    persistenceSection["Provider"],
+                    MutationPersistenceProvider.Sqlite,
+                    "Mutation persistence provider"),
+                ParseEnum(
+                    persistenceSection["ExecutionMode"],
+                    MutationExecutionMode.Standalone,
+                    "Mutation execution mode"),
+                NullIfBlank(persistenceSection["SqliteDatabasePath"]),
+                ParseOptionalSecret(persistenceSection["ConnectionString"]));
+        }
+
+        return new AdministrationOptions(
+            new MutationOptions(
+                enabled,
+                persistence,
+                ParseOptionalSecret(mutations["MaterialDigestKey"]),
+                TimeSpan.FromSeconds(previewTtlSeconds),
+                maxConcurrentPerCluster));
+    }
+
     private static TopicCatalogOptions? LoadTopicCatalog(IConfigurationSection section)
     {
         var topics = section
@@ -231,6 +277,21 @@ public static class KafdeckConfigurationLoader
         }
 
         return SecretReference.Parse(value);
+    }
+
+    private static int ParseOptionalInt(string? value, int defaultValue, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new KafdeckConfigurationException($"{fieldName} value must be an integer.");
     }
 
     private static bool ParseOptionalBoolean(string? value, bool defaultValue, string fieldName)

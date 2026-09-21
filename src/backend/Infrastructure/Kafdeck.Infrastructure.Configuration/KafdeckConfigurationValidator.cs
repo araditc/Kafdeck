@@ -26,6 +26,7 @@ public static class KafdeckConfigurationValidator
         ValidateDeployment(options.Deployment, errors);
         ValidateClusters(options.Clusters, errors);
         ValidateCatalog(options.Catalog, options.Clusters, errors);
+        ValidateAdministration(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
         {
@@ -163,6 +164,85 @@ public static class KafdeckConfigurationValidator
         else if (!oidc.Scopes.Contains("openid", StringComparer.Ordinal))
         {
             errors.Add("OIDC scopes must include 'openid'.");
+        }
+    }
+
+    private static void ValidateAdministration(
+        AdministrationOptions? administration,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        if (administration is null || !administration.Mutations.Enabled)
+        {
+            return;
+        }
+
+        var mutations = administration.Mutations;
+        if (deployment.Mode != AccessMode.Oidc)
+        {
+            errors.Add("Mutation mode requires OIDC access mode so every mutation has a canonical RBAC principal.");
+        }
+
+        if (mutations.MaterialDigestKey is null)
+        {
+            errors.Add("Mutation mode requires a material-digest key secret reference.");
+        }
+
+        if (mutations.PreviewTtl < TimeSpan.FromSeconds(30) ||
+            mutations.PreviewTtl > TimeSpan.FromMinutes(30))
+        {
+            errors.Add("Mutation preview TTL must be between 30 seconds and 30 minutes.");
+        }
+
+        if (mutations.MaxConcurrentPerCluster is < 1 or > 16)
+        {
+            errors.Add("Mutation max concurrency per cluster must be between 1 and 16.");
+        }
+
+        if (mutations.Persistence is null)
+        {
+            errors.Add("Mutation mode requires durable persistence configuration.");
+            return;
+        }
+
+        var persistence = mutations.Persistence;
+        switch (persistence.Provider)
+        {
+            case MutationPersistenceProvider.Sqlite:
+                if (persistence.ExecutionMode != MutationExecutionMode.Standalone)
+                {
+                    errors.Add("SQLite mutation persistence supports standalone execution only.");
+                }
+
+                if (string.IsNullOrWhiteSpace(persistence.SqliteDatabasePath) ||
+                    !Path.IsPathFullyQualified(persistence.SqliteDatabasePath))
+                {
+                    errors.Add("SQLite mutation persistence requires an absolute database path.");
+                }
+
+                if (persistence.ConnectionString is not null)
+                {
+                    errors.Add("SQLite mutation persistence must not configure a PostgreSQL connection-string secret.");
+                }
+
+                break;
+
+            case MutationPersistenceProvider.PostgreSql:
+                if (!string.IsNullOrWhiteSpace(persistence.SqliteDatabasePath))
+                {
+                    errors.Add("PostgreSQL mutation persistence must not configure a SQLite database path.");
+                }
+
+                if (persistence.ConnectionString is null)
+                {
+                    errors.Add("PostgreSQL mutation persistence requires a connection-string secret reference.");
+                }
+
+                break;
+
+            default:
+                errors.Add("Mutation persistence provider is unsupported.");
+                break;
         }
     }
 

@@ -14,9 +14,11 @@ using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Ecosystem;
 using Kafdeck.Infrastructure.Kafka;
+using Kafdeck.Infrastructure.Persistence;
 using Kafdeck.Infrastructure.SchemaRegistry;
 using Kafdeck.Infrastructure.Security;
 using Kafdeck.Modules.Clusters;
+using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Consumers;
 using Kafdeck.Modules.Records;
 using Kafdeck.Modules.Schemas;
@@ -29,6 +31,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
+var mutationOptions = kafdeckOptions.Administration?.Mutations;
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -36,6 +39,7 @@ var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
 builder.WebHost.UseUrls(kafdeckOptions.Deployment.ListenUrl);
 
 var secretResolver = new SecretResolver();
+
 var deploymentAccessToken =
     DeploymentAccessModePolicy.UsesDeploymentToken(kafdeckOptions.Deployment.Mode) &&
     kafdeckOptions.Deployment.AccessToken is not null
@@ -98,11 +102,78 @@ builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
     new ConfigurationTopicCatalogProvider(kafdeckOptions));
 builder.Services.AddSingleton<ApiTelemetry>();
 
+if (mutationOptions?.Enabled == true)
+{
+    var persistence = mutationOptions.Persistence ??
+                      throw new KafdeckConfigurationException(
+                          "Mutation persistence must be configured when mutation mode is enabled.");
+
+    builder.Services.AddSingleton<IMutationMaterialDigestService>(services =>
+        new HmacMutationMaterialDigestService(
+            services.GetRequiredService<SecretResolver>()
+                .Resolve(mutationOptions.MaterialDigestKey!)
+                .Reveal()));
+
+    builder.Services.AddSingleton<IMutationDbConnectionFactory>(services =>
+        persistence.Provider switch
+        {
+            MutationPersistenceProvider.Sqlite =>
+                new SqliteMutationDbConnectionFactory(persistence.SqliteDatabasePath!),
+            MutationPersistenceProvider.PostgreSql =>
+                new PostgreSqlMutationDbConnectionFactory(
+                    services.GetRequiredService<SecretResolver>()
+                        .Resolve(persistence.ConnectionString!)
+                        .Reveal()),
+            _ => throw new KafdeckConfigurationException(
+                "Unsupported mutation persistence provider."),
+        });
+
+    builder.Services.AddSingleton<IMutationOperationRepository>(services =>
+        new AdoMutationOperationRepository(
+            services.GetRequiredService<IMutationDbConnectionFactory>()));
+    builder.Services.AddSingleton<IMutationAuditSink, LoggingMutationAuditSink>();
+    builder.Services.AddSingleton<MutationApprovalAuthorizer>();
+    builder.Services.AddSingleton<IMutationPreDispatchGuard, FailClosedMutationPreDispatchGuard>();
+    builder.Services.AddSingleton(
+        new MutationExecutionHandlerRegistry(Array.Empty<IMutationExecutionHandler>()));
+    builder.Services.AddSingleton(
+        new MutationExecutorPolicy(
+            mutationOptions.MaxConcurrentPerCluster,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromMinutes(2)));
+    builder.Services.AddSingleton<MutationExecutor>();
+    builder.Services.AddSingleton<MutationRecoveryCoordinator>();
+    builder.Services.AddHostedService<MutationRecoveryHostedService>();
+}
+
 var app = builder.Build();
 
 app.Logger.LogInformation(
     "Kafdeck startup configuration: {@Configuration}",
     SafeConfigurationDiagnostics.Create(kafdeckOptions));
+
+if (mutationOptions?.Enabled == true)
+{
+    _ = app.Services.GetRequiredService<IMutationMaterialDigestService>();
+    var mutationRepository = app.Services.GetRequiredService<IMutationOperationRepository>();
+    await mutationRepository.InitializeAsync().ConfigureAwait(false);
+
+    var mutationRecovery = app.Services.GetRequiredService<MutationRecoveryCoordinator>();
+    var recoveredMutations = await mutationRecovery
+        .RecoverInterruptedExecutionsAsync(
+            ignoreActiveExecutionLeases:
+                mutationOptions.Persistence!.ExecutionMode == MutationExecutionMode.Standalone)
+        .ConfigureAwait(false);
+
+    app.Logger.LogInformation(
+        "Kafdeck mutation runtime reconciled {RecoveredMutationCount} interrupted execution(s).",
+        recoveredMutations);
+
+    app.Logger.LogInformation(
+        "Kafdeck mutation runtime initialized in fail-closed mode with persistence provider {PersistenceProvider} and execution mode {ExecutionMode}.",
+        mutationOptions.Persistence!.Provider,
+        mutationOptions.Persistence.ExecutionMode);
+}
 
 foreach (var cluster in kafdeckOptions.Clusters.Where(cluster =>
              cluster.SecurityProtocol is KafkaSecurityProtocol.Plaintext or KafkaSecurityProtocol.SaslPlaintext))
