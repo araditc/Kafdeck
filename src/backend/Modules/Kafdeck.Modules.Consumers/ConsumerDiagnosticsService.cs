@@ -162,7 +162,7 @@ public sealed class ConsumerDiagnosticsService
             return Projection(
                 group,
                 lag,
-                rates,
+                usableRates,
                 metricsAvailable,
                 historyAvailable,
                 ConsumerDiagnosticState.Inactive,
@@ -179,7 +179,7 @@ public sealed class ConsumerDiagnosticsService
             return Projection(
                 group,
                 lag,
-                rates,
+                usableRates,
                 metricsAvailable,
                 historyAvailable,
                 ConsumerDiagnosticState.Unknown,
@@ -196,7 +196,7 @@ public sealed class ConsumerDiagnosticsService
             return Projection(
                 group,
                 lag,
-                rates,
+                usableRates,
                 metricsAvailable,
                 historyAvailable,
                 ConsumerDiagnosticState.Healthy,
