@@ -5,7 +5,9 @@
   <Project Path="src/backend/Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />
   <Project Path="src/backend/Modules/Kafdeck.Modules.Records/Kafdeck.Modules.Records.csproj" />
   <Project Path="src/backend/Modules/Kafdeck.Modules.Consumers/Kafdeck.Modules.Consumers.csproj" />
+  <Project Path="src/backend/Modules/Kafdeck.Modules.Schemas/Kafdeck.Modules.Schemas.csproj" />
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/Kafdeck.Infrastructure.Kafka.csproj" />
+  <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Ecosystem/Kafdeck.Infrastructure.Ecosystem.csproj" />
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj" />
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj" />
