@@ -130,6 +130,9 @@ public sealed class MutationExecutor
     {
         public Task? Execution { get; set; }
         public MutationExecutionMaterial? Material { get; set; }
+        public Guid OperationId { get; set; }
+        public long ExecutionGeneration { get; set; }
+        public bool DurableClusterSlotHeld { get; set; }
     }
 
     private readonly IMutationOperationRepository _repository;
@@ -200,8 +203,7 @@ public sealed class MutationExecutor
             else
             {
                 _ = ObserveLateCompletionReleasePermitAndDisposeAsync(
-                    lateExecution.Execution,
-                    lateExecution.Material!,
+                    lateExecution,
                     semaphore);
             }
         }
@@ -265,10 +267,43 @@ public sealed class MutationExecutor
             throw;
         }
 
+        var clusterSlotAcquired = false;
         var resourceClaimsAcquired = false;
         var releaseResourceClaims = false;
         try
         {
+            var clusterSlot = await _repository.TryAcquireClusterExecutionSlotAsync(
+                operation.Snapshot.OperationId,
+                generation,
+                operation.Snapshot.ClusterId,
+                _policy.MaxConcurrentPerCluster,
+                claimExpiresAtUtc,
+                cancellationToken).ConfigureAwait(false);
+
+            if (clusterSlot.Outcome != MutationClusterSlotOutcome.Acquired)
+            {
+                var outcomeCode = clusterSlot.Outcome == MutationClusterSlotOutcome.Saturated
+                    ? "cluster_concurrency_saturated"
+                    : "invalid_execution_claim";
+
+                operation.Complete(
+                    MutationExecutionResultKind.FailedBeforeDispatch,
+                    outcomeCode,
+                    _timeProvider.GetUtcNow());
+                await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                await WriteAuditAsync(
+                    operation.Snapshot,
+                    MutationAuditEventType.Completed,
+                    outcomeCode,
+                    CancellationToken.None).ConfigureAwait(false);
+                return operation.Snapshot;
+            }
+
+            clusterSlotAcquired = true;
+            lateExecution.OperationId = operation.Snapshot.OperationId;
+            lateExecution.ExecutionGeneration = generation;
+            lateExecution.DurableClusterSlotHeld = true;
+
             var claimResult = await _repository.TryAcquireResourceClaimsAsync(
                 operation.Snapshot.OperationId,
                 generation,
@@ -481,7 +516,7 @@ public sealed class MutationExecutor
             {
                 lateExecution.Execution = providerOutcome.LateExecution;
                 lateExecution.Material = executionMaterial;
-                executionMaterial = null; // Outer permit observer owns material from here.
+                executionMaterial = null; // Outer permit observer owns material and durable slot from here.
             }
 
             if (providerResult.ResultKind == MutationExecutionResultKind.FailedBeforeDispatch)
@@ -522,6 +557,15 @@ public sealed class MutationExecutor
                     operation.Snapshot.OperationId,
                     generation,
                     CancellationToken.None).ConfigureAwait(false);
+            }
+
+            if (clusterSlotAcquired && lateExecution.Execution is null)
+            {
+                await _repository.ReleaseClusterExecutionSlotAsync(
+                    operation.Snapshot.OperationId,
+                    generation,
+                    CancellationToken.None).ConfigureAwait(false);
+                lateExecution.DurableClusterSlotHeld = false;
             }
         }
     }
@@ -574,24 +618,40 @@ public sealed class MutationExecutor
         }
     }
 
-    private static async Task ObserveLateCompletionReleasePermitAndDisposeAsync(
-        Task execution,
-        MutationExecutionMaterial material,
+    private async Task ObserveLateCompletionReleasePermitAndDisposeAsync(
+        LateExecutionPermitState lateExecution,
         SemaphoreSlim semaphore)
     {
         try
         {
-            await execution.ConfigureAwait(false);
+            await lateExecution.Execution!.ConfigureAwait(false);
         }
         catch
         {
             // The durable operation is already ExecutionUnknown. This observation exists
-            // only to consume a late task fault and retain the concurrency slot until the
-            // underlying provider call is truly no longer live.
+            // only to consume a late task fault and retain both local and cluster-wide
+            // concurrency capacity until the underlying provider call is truly no longer live.
         }
         finally
         {
-            material.Dispose();
+            if (lateExecution.DurableClusterSlotHeld)
+            {
+                try
+                {
+                    await _repository.ReleaseClusterExecutionSlotAsync(
+                        lateExecution.OperationId,
+                        lateExecution.ExecutionGeneration,
+                        CancellationToken.None).ConfigureAwait(false);
+                    lateExecution.DurableClusterSlotHeld = false;
+                }
+                catch
+                {
+                    // Fail safe: a release failure leaves durable capacity reserved rather
+                    // than allowing HA replicas to exceed the configured provider budget.
+                }
+            }
+
+            lateExecution.Material!.Dispose();
             semaphore.Release();
         }
     }
