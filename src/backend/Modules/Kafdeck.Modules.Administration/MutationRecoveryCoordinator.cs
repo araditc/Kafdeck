@@ -74,13 +74,20 @@ public sealed class MutationRecoveryCoordinator
                     $"Interrupted mutation '{snapshot.OperationId:D}' could not be reconciled: {saved.Outcome}.");
             }
 
-            if (snapshot.ExecutionClaimGeneration > 0 &&
-                operation.Snapshot.State != MutationOperationState.ExecutionUnknown)
+            if (snapshot.ExecutionClaimGeneration > 0)
             {
-                await _repository.ReleaseResourceClaimsAsync(
+                await _repository.ReleaseClusterExecutionSlotAsync(
                     snapshot.OperationId,
                     snapshot.ExecutionClaimGeneration,
                     CancellationToken.None).ConfigureAwait(false);
+
+                if (operation.Snapshot.State != MutationOperationState.ExecutionUnknown)
+                {
+                    await _repository.ReleaseResourceClaimsAsync(
+                        snapshot.OperationId,
+                        snapshot.ExecutionClaimGeneration,
+                        CancellationToken.None).ConfigureAwait(false);
+                }
             }
 
             await _audit.WriteAsync(
