@@ -12,6 +12,10 @@ public static class MutationLimits
     public const int MaxCanonicalIntentCharacters = 128 * 1024;
     public const int MaxExecutionMaterialItemBytes = 16 * 1024 * 1024;
     public const int MaxExecutionMaterialTotalBytes = 32 * 1024 * 1024;
+    public const int MaxProviderEvidenceEntries = 32;
+    public const int MaxProviderEvidenceKeyCharacters = 128;
+    public const int MaxProviderEvidenceValueCharacters = 1_024;
+    public const int MaxProviderEvidenceTotalCharacters = 8 * 1_024;
 }
 
 public enum MutationOperationKind
@@ -138,6 +142,8 @@ public sealed record MutationOperationSnapshot
     public DateTimeOffset? ExecutionClaimExpiresAtUtc { get; init; }
     public DateTimeOffset? DispatchStartedAtUtc { get; init; }
     public string? ResultCode { get; init; }
+    public IReadOnlyDictionary<string, string> SafeProviderEvidence { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
 }
