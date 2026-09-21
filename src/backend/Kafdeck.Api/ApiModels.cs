@@ -1,4 +1,5 @@
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.ReadViews;
 using Kafdeck.Modules.Clusters;
 
 namespace Kafdeck.Api;
@@ -7,6 +8,49 @@ public sealed record ApiEnvelope<T>(
     T Data,
     ApiObservation Observation,
     IReadOnlyList<ApiLimitation> Limitations);
+
+public sealed record ReadViewApiEnvelope<T>(
+    T Data,
+    bool Partial,
+    IReadOnlyList<ReadViewLimitationData> Limitations);
+
+public sealed record ReadViewLimitationData(
+    string Code,
+    string Message);
+
+public static class ReadViewApiMapper
+{
+    public static ReadViewApiEnvelope<T> Envelope<T>(ReadViewResult<T> result)
+    {
+        if (!result.IsSuccess || result.Value is null)
+        {
+            throw new InvalidOperationException("Read-view result must be successful before projection.");
+        }
+
+        var limitations = result.Limitations
+            .Select(item => new ReadViewLimitationData(item.Code, item.SafeMessage))
+            .ToArray();
+
+        return new ReadViewApiEnvelope<T>(
+            result.Value,
+            limitations.Length > 0,
+            limitations);
+    }
+
+    public static ReadViewApiEnvelope<T> Envelope<T>(
+        T value,
+        IReadOnlyList<ReadViewLimitation>? limitations = null)
+    {
+        var projected = (limitations ?? Array.Empty<ReadViewLimitation>())
+            .Select(item => new ReadViewLimitationData(item.Code, item.SafeMessage))
+            .ToArray();
+
+        return new ReadViewApiEnvelope<T>(
+            value,
+            projected.Length > 0,
+            projected);
+    }
+}
 
 public sealed record ApiObservation(
     DateTimeOffset ObservedAt,
@@ -136,6 +180,69 @@ public static class ApiProblemMapper
         "Cursor no longer matches the active snapshot",
         detail,
         "stale_cursor");
+
+    public static ApiProblemDefinition FromReadView(ReadViewFailure failure)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+
+        return failure.Category switch
+        {
+            ReadViewFailureCategory.NotConfigured => new(
+                StatusCodes.Status404NotFound,
+                "urn:kafdeck:problem:read-view-not-configured",
+                "Read view not configured",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.Unauthorized => new(
+                StatusCodes.Status403Forbidden,
+                "urn:kafdeck:problem:authorization-denied",
+                "Authorization denied",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.Unsupported => new(
+                StatusCodes.Status501NotImplemented,
+                "urn:kafdeck:problem:unsupported-capability",
+                "Read-view capability is unsupported",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.Unavailable => new(
+                StatusCodes.Status503ServiceUnavailable,
+                "urn:kafdeck:problem:upstream-unavailable",
+                "Read-view upstream unavailable",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.Timeout => new(
+                StatusCodes.Status504GatewayTimeout,
+                "urn:kafdeck:problem:operation-timeout",
+                "Read-view operation timed out",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.Cancelled => new(
+                StatusCodes.Status408RequestTimeout,
+                "urn:kafdeck:problem:operation-cancelled",
+                "Read-view operation was cancelled",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.ResponseTooLarge => new(
+                StatusCodes.Status422UnprocessableEntity,
+                "urn:kafdeck:problem:read-view-bound-exceeded",
+                "Read-view bound exceeded",
+                failure.SafeMessage,
+                failure.Code),
+            ReadViewFailureCategory.InvalidRequest => new(
+                StatusCodes.Status400BadRequest,
+                "urn:kafdeck:problem:invalid-read-view-request",
+                "Invalid read-view request",
+                failure.SafeMessage,
+                failure.Code),
+            _ => new(
+                StatusCodes.Status502BadGateway,
+                "urn:kafdeck:problem:invalid-upstream-response",
+                "Invalid read-view upstream response",
+                failure.SafeMessage,
+                failure.Code),
+        };
+    }
 
     public static ApiProblemDefinition FromKafka(KafkaFailure failure)
     {
