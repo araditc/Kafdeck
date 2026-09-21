@@ -305,7 +305,10 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
 
         if (persistedOperation is null ||
             persistedOperation.State != MutationOperationState.Executing ||
-            persistedOperation.ExecutionClaimGeneration != executionClaimGeneration)
+            persistedOperation.ExecutionClaimGeneration != executionClaimGeneration ||
+            persistedOperation.ExecutionClaimExpiresAtUtc is not { } persistedLeaseExpiry ||
+            persistedLeaseExpiry <= nowUtc ||
+            expiresAtUtc > persistedLeaseExpiry)
         {
             await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
             return new MutationResourceClaimResult(
@@ -319,8 +322,15 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 """
                 DELETE FROM kafdeck_mutation_resource_claims
                 WHERE expires_at_utc <= @now_utc
+                  AND operation_id NOT IN (
+                      SELECT operation_id
+                      FROM kafdeck_mutation_operations
+                      WHERE state IN (@executing_state, @unknown_state)
+                  )
                 """;
             AddParameter(purge, "@now_utc", FormatTimestamp(nowUtc));
+            AddParameter(purge, "@executing_state", (int)MutationOperationState.Executing);
+            AddParameter(purge, "@unknown_state", (int)MutationOperationState.ExecutionUnknown);
             await purge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
