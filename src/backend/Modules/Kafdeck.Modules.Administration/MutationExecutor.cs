@@ -214,18 +214,24 @@ public sealed class MutationExecutor
                 _timeProvider.GetUtcNow().Add(_policy.ResourceClaimTtl),
                 cancellationToken).ConfigureAwait(false);
 
-            if (claimResult.Outcome == MutationResourceClaimOutcome.Conflict)
+            if (claimResult.Outcome != MutationResourceClaimOutcome.Acquired)
             {
+                var outcomeCode = claimResult.Outcome == MutationResourceClaimOutcome.Conflict
+                    ? "resource_conflict"
+                    : "invalid_execution_claim";
+
                 operation.Complete(
                     MutationExecutionResultKind.FailedBeforeDispatch,
-                    "resource_conflict",
+                    outcomeCode,
                     _timeProvider.GetUtcNow());
-                await PersistNextAsync(operation, cancellationToken).ConfigureAwait(false);
+                await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
                 await WriteAuditAsync(
                     operation.Snapshot,
-                    MutationAuditEventType.ResourceConflict,
-                    "resource_conflict",
-                    cancellationToken).ConfigureAwait(false);
+                    claimResult.Outcome == MutationResourceClaimOutcome.Conflict
+                        ? MutationAuditEventType.ResourceConflict
+                        : MutationAuditEventType.Completed,
+                    outcomeCode,
+                    CancellationToken.None).ConfigureAwait(false);
                 return operation.Snapshot;
             }
 
@@ -309,18 +315,32 @@ public sealed class MutationExecutor
                 return operation.Snapshot;
             }
 
+            if (cancellationToken.IsCancellationRequested)
+            {
+                operation.Complete(
+                    MutationExecutionResultKind.FailedBeforeDispatch,
+                    "cancelled_before_dispatch",
+                    _timeProvider.GetUtcNow());
+                await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                await WriteAuditAsync(
+                    operation.Snapshot,
+                    MutationAuditEventType.Completed,
+                    "cancelled_before_dispatch",
+                    CancellationToken.None).ConfigureAwait(false);
+                return operation.Snapshot;
+            }
+
             operation.MarkDispatchStarted(_timeProvider.GetUtcNow());
-            await PersistNextAsync(operation, cancellationToken).ConfigureAwait(false);
+            await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
             await WriteAuditAsync(
                 operation.Snapshot,
                 MutationAuditEventType.DispatchStarted,
                 "dispatch_started",
-                cancellationToken).ConfigureAwait(false);
+                CancellationToken.None).ConfigureAwait(false);
 
             var providerResult = await ExecuteProviderAsync(
                 handler,
-                operation.Snapshot,
-                cancellationToken).ConfigureAwait(false);
+                operation.Snapshot).ConfigureAwait(false);
 
             if (providerResult.ResultKind == MutationExecutionResultKind.FailedBeforeDispatch)
             {
@@ -359,11 +379,11 @@ public sealed class MutationExecutor
 
     private async Task<MutationProviderResult> ExecuteProviderAsync(
         IMutationExecutionHandler handler,
-        MutationOperationSnapshot operation,
-        CancellationToken cancellationToken)
+        MutationOperationSnapshot operation)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_policy.OperationTimeout);
+        // After DispatchStarted is durable, execution is server-owned. A caller disconnect
+        // must not cancel an external mutation and create avoidable outcome ambiguity.
+        using var timeout = new CancellationTokenSource(_policy.OperationTimeout);
 
         try
         {
