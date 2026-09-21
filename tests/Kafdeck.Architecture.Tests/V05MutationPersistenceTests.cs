@@ -107,6 +107,76 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Sqlite_cluster_execution_slots_enforce_configured_cap_across_distinct_resources()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-cluster-slots-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                new FixedTimeProvider(Now));
+            await repository.InitializeAsync();
+
+            var first = CreateReadyOperation("slot-first", "cluster/prod/topic/first");
+            var second = CreateReadyOperation("slot-second", "cluster/prod/topic/second");
+            var firstCreated = await repository.CreateAsync(first.Snapshot);
+            var secondCreated = await repository.CreateAsync(second.Snapshot);
+
+            var firstAggregate = MutationOperation.Restore(firstCreated.Operation);
+            var secondAggregate = MutationOperation.Restore(secondCreated.Operation);
+            var firstGeneration = firstAggregate.ClaimExecution(Now, Now.AddMinutes(2));
+            var secondGeneration = secondAggregate.ClaimExecution(Now, Now.AddMinutes(2));
+
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    firstAggregate.Snapshot,
+                    firstCreated.Operation.Version)).Outcome);
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    secondAggregate.Snapshot,
+                    secondCreated.Operation.Version)).Outcome);
+
+            var firstSlot = await repository.TryAcquireClusterExecutionSlotAsync(
+                firstAggregate.Snapshot.OperationId,
+                firstGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddMinutes(2));
+            var secondSlot = await repository.TryAcquireClusterExecutionSlotAsync(
+                secondAggregate.Snapshot.OperationId,
+                secondGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddMinutes(2));
+
+            Assert.Equal(MutationClusterSlotOutcome.Acquired, firstSlot.Outcome);
+            Assert.Equal(MutationClusterSlotOutcome.Saturated, secondSlot.Outcome);
+
+            await repository.ReleaseClusterExecutionSlotAsync(
+                firstAggregate.Snapshot.OperationId,
+                firstGeneration);
+
+            var afterRelease = await repository.TryAcquireClusterExecutionSlotAsync(
+                secondAggregate.Snapshot.OperationId,
+                secondGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddMinutes(2));
+            Assert.Equal(MutationClusterSlotOutcome.Acquired, afterRelease.Outcome);
+
+            await repository.ReleaseClusterExecutionSlotAsync(
+                secondAggregate.Snapshot.OperationId,
+                secondGeneration);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Bounded_executor_dispatches_once_and_persists_verified_outcome()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-executor-{Guid.NewGuid():N}.db");
@@ -1092,6 +1162,14 @@ public sealed class V05MutationPersistenceTests
             created.Operation.Version);
         Assert.Equal(MutationSaveOutcome.Saved, saved.Outcome);
 
+        var clusterSlot = await repository.TryAcquireClusterExecutionSlotAsync(
+            aggregate.Snapshot.OperationId,
+            generation,
+            aggregate.Snapshot.ClusterId,
+            maxConcurrentPerCluster: 1,
+            Now.AddSeconds(20));
+        Assert.Equal(MutationClusterSlotOutcome.Acquired, clusterSlot.Outcome);
+
         var claimed = await repository.TryAcquireResourceClaimsAsync(
             aggregate.Snapshot.OperationId,
             generation,
@@ -1128,6 +1206,103 @@ public sealed class V05MutationPersistenceTests
         await repository.ReleaseResourceClaimsAsync(
             aggregate.Snapshot.OperationId,
             generation);
+        await repository.ReleaseClusterExecutionSlotAsync(
+            aggregate.Snapshot.OperationId,
+            generation);
+    }
+
+    [Fact]
+    public async Task PostgreSql_cluster_concurrency_cap_is_global_across_repository_instances_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var leftRepository = new AdoMutationOperationRepository(
+            new PostgreSqlMutationDbConnectionFactory(connectionString),
+            new FixedTimeProvider(Now));
+        var rightRepository = new AdoMutationOperationRepository(
+            new PostgreSqlMutationDbConnectionFactory(connectionString),
+            new FixedTimeProvider(Now));
+        await leftRepository.InitializeAsync();
+        await rightRepository.InitializeAsync();
+
+        var left = CreateReadyOperation(
+            $"pg-cluster-slot-left-{Guid.NewGuid():N}",
+            "cluster/prod/topic/left");
+        var right = CreateReadyOperation(
+            $"pg-cluster-slot-right-{Guid.NewGuid():N}",
+            "cluster/prod/topic/right");
+
+        var leftCreated = await leftRepository.CreateAsync(left.Snapshot);
+        var rightCreated = await rightRepository.CreateAsync(right.Snapshot);
+        Assert.Equal(MutationCreateOutcome.Created, leftCreated.Outcome);
+        Assert.Equal(MutationCreateOutcome.Created, rightCreated.Outcome);
+
+        var leftAggregate = MutationOperation.Restore(leftCreated.Operation);
+        var rightAggregate = MutationOperation.Restore(rightCreated.Operation);
+        var leftGeneration = leftAggregate.ClaimExecution(Now, Now.AddMinutes(2));
+        var rightGeneration = rightAggregate.ClaimExecution(Now, Now.AddMinutes(2));
+
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await leftRepository.TrySaveAsync(
+                leftAggregate.Snapshot,
+                leftCreated.Operation.Version)).Outcome);
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await rightRepository.TrySaveAsync(
+                rightAggregate.Snapshot,
+                rightCreated.Operation.Version)).Outcome);
+
+        var acquisitions = await Task.WhenAll(
+            leftRepository.TryAcquireClusterExecutionSlotAsync(
+                leftAggregate.Snapshot.OperationId,
+                leftGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddMinutes(2)),
+            rightRepository.TryAcquireClusterExecutionSlotAsync(
+                rightAggregate.Snapshot.OperationId,
+                rightGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddMinutes(2)));
+
+        Assert.Single(
+            acquisitions,
+            result => result.Outcome == MutationClusterSlotOutcome.Acquired);
+        Assert.Single(
+            acquisitions,
+            result => result.Outcome == MutationClusterSlotOutcome.Saturated);
+
+        var leftWon = acquisitions[0].Outcome == MutationClusterSlotOutcome.Acquired;
+        var winnerRepository = leftWon ? leftRepository : rightRepository;
+        var loserRepository = leftWon ? rightRepository : leftRepository;
+        var winnerOperation = leftWon ? leftAggregate.Snapshot : rightAggregate.Snapshot;
+        var loserOperation = leftWon ? rightAggregate.Snapshot : leftAggregate.Snapshot;
+        var winnerGeneration = leftWon ? leftGeneration : rightGeneration;
+        var loserGeneration = leftWon ? rightGeneration : leftGeneration;
+
+        await winnerRepository.ReleaseClusterExecutionSlotAsync(
+            winnerOperation.OperationId,
+            winnerGeneration);
+
+        var afterRelease = await loserRepository.TryAcquireClusterExecutionSlotAsync(
+            loserOperation.OperationId,
+            loserGeneration,
+            "prod",
+            maxConcurrentPerCluster: 1,
+            Now.AddMinutes(2));
+
+        Assert.Equal(MutationClusterSlotOutcome.Acquired, afterRelease.Outcome);
+        Assert.Equal(0, afterRelease.SlotNumber);
+
+        await loserRepository.ReleaseClusterExecutionSlotAsync(
+            loserOperation.OperationId,
+            loserGeneration);
     }
 
     [Fact]
