@@ -20,6 +20,7 @@ public sealed class MutationRecoveryCoordinator
 
     public async Task<int> RecoverInterruptedExecutionsAsync(
         int maxOperations = DefaultMaxRecoveryOperations,
+        bool ignoreActiveExecutionLeases = false,
         CancellationToken cancellationToken = default)
     {
         if (maxOperations is < 1 or > 10_000)
@@ -43,6 +44,14 @@ public sealed class MutationRecoveryCoordinator
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var nowUtc = _timeProvider.GetUtcNow();
+            if (!ignoreActiveExecutionLeases &&
+                snapshot.ExecutionClaimExpiresAtUtc is { } leaseExpiresAtUtc &&
+                leaseExpiresAtUtc > nowUtc)
+            {
+                continue;
+            }
+
             var operation = MutationOperation.Restore(snapshot);
             var code = snapshot.DispatchStartedAtUtc is null
                 ? "process_interrupted_before_dispatch"
@@ -53,7 +62,7 @@ public sealed class MutationRecoveryCoordinator
                     ? MutationExecutionResultKind.FailedBeforeDispatch
                     : MutationExecutionResultKind.ExecutionUnknown,
                 code,
-                _timeProvider.GetUtcNow());
+                nowUtc);
 
             var saved = await _repository.TrySaveAsync(
                 operation.Snapshot,
@@ -71,7 +80,8 @@ public sealed class MutationRecoveryCoordinator
                     $"Interrupted mutation '{snapshot.OperationId:D}' could not be reconciled: {saved.Outcome}.");
             }
 
-            if (snapshot.ExecutionClaimGeneration > 0)
+            if (snapshot.ExecutionClaimGeneration > 0 &&
+                operation.Snapshot.State != MutationOperationState.ExecutionUnknown)
             {
                 await _repository.ReleaseResourceClaimsAsync(
                     snapshot.OperationId,
