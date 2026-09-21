@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Infrastructure.Ecosystem</AssemblyName>
+    <RootNamespace>Kafdeck.Infrastructure.Ecosystem</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
+    <ProjectReference Include="../Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kafdeck.Architecture.Tests" />
+  </ItemGroup>
+</Project>
