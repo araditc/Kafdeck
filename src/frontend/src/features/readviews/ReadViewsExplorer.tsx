@@ -192,7 +192,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       <h3>ksqlDB</h3>
       {ksqlError && <p role="status">{ksqlError}</p>}
       {ksqlInfo && <p>Version: {ksqlInfo.data.version ?? 'Unknown'} · Kafka cluster: {ksqlInfo.data.kafkaClusterId ?? 'Unknown'} · Health: {ksqlInfo.data.state ?? 'Unknown'}</p>}
-      <p>v0.4 does not execute SQL or metadata statements. Metadata that requires statement execution is reported unsupported.</p>
+      <p>v0.4 exposes no SQL or metadata-statement execution surface. Metadata that would require statement execution is reported unsupported.</p>
     </section>
   </>;
 }
