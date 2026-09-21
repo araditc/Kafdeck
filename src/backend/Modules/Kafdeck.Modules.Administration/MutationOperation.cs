@@ -263,7 +263,11 @@ public sealed class MutationOperation
         };
     }
 
-    public void Complete(MutationExecutionResultKind result, string resultCode, DateTimeOffset nowUtc)
+    public void Complete(
+        MutationExecutionResultKind result,
+        string resultCode,
+        DateTimeOffset nowUtc,
+        IReadOnlyDictionary<string, string>? safeProviderEvidence = null)
     {
         RequireState(MutationOperationState.Executing);
         ArgumentException.ThrowIfNullOrWhiteSpace(resultCode);
@@ -289,7 +293,11 @@ public sealed class MutationOperation
             _ => throw new ArgumentOutOfRangeException(nameof(result), result, "Unsupported execution result."),
         };
 
-        Snapshot = Snapshot with { ResultCode = RequireBounded(resultCode, nameof(resultCode), 256) };
+        Snapshot = Snapshot with
+        {
+            ResultCode = RequireBounded(resultCode, nameof(resultCode), 256),
+            SafeProviderEvidence = MutationProviderEvidence.Normalize(safeProviderEvidence),
+        };
         Transition(target, nowUtc);
     }
 
