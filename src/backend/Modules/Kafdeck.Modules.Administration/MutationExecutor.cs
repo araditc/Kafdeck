@@ -214,15 +214,24 @@ public sealed class MutationExecutor
 
         if (claimed.Outcome != MutationSaveOutcome.Saved)
         {
+            executionMaterial.Dispose();
             return claimed.Operation ??
                    throw new MutationStateException("Mutation execution claim could not be persisted.");
         }
 
-        await WriteAuditAsync(
-            operation.Snapshot,
-            MutationAuditEventType.ExecutionClaimed,
-            "execution_claimed",
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await WriteAuditAsync(
+                operation.Snapshot,
+                MutationAuditEventType.ExecutionClaimed,
+                "execution_claimed",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            executionMaterial.Dispose();
+            throw;
+        }
 
         var resourceClaimsAcquired = false;
         var releaseResourceClaims = false;
