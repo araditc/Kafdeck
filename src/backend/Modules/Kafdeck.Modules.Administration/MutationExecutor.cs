@@ -122,6 +122,16 @@ public sealed record MutationExecutorPolicy
 
 public sealed class MutationExecutor
 {
+    private sealed record ProviderExecutionOutcome(
+        MutationProviderResult Result,
+        Task? LateExecution = null);
+
+    private sealed class LateExecutionPermitState
+    {
+        public Task? Execution { get; set; }
+        public MutationExecutionMaterial? Material { get; set; }
+    }
+
     private readonly IMutationOperationRepository _repository;
     private readonly IMutationAuditSink _audit;
     private readonly IMutationPreDispatchGuard _guard;
@@ -171,23 +181,36 @@ public sealed class MutationExecutor
 
         var semaphore = GetClusterSemaphore(initial.ClusterId);
         await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var lateExecution = new LateExecutionPermitState();
         try
         {
             return await ExecuteUnderClusterLimitAsync(
                     operationId,
                     executionMaterial,
+                    lateExecution,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
         finally
         {
-            semaphore.Release();
+            if (lateExecution.Execution is null)
+            {
+                semaphore.Release();
+            }
+            else
+            {
+                _ = ObserveLateCompletionReleasePermitAndDisposeAsync(
+                    lateExecution.Execution,
+                    lateExecution.Material!,
+                    semaphore);
+            }
         }
     }
 
     private async Task<MutationOperationSnapshot> ExecuteUnderClusterLimitAsync(
         Guid operationId,
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? executionMaterialInput,
+        LateExecutionPermitState lateExecution,
         CancellationToken cancellationToken)
     {
         var current = await _repository.GetAsync(operationId, cancellationToken).ConfigureAwait(false) ??
@@ -207,10 +230,19 @@ public sealed class MutationExecutor
         var claimExpiresAtUtc = claimNowUtc.Add(_policy.ResourceClaimTtl);
         var generation = operation.ClaimExecution(claimNowUtc, claimExpiresAtUtc);
 
-        var claimed = await _repository.TrySaveAsync(
-            operation.Snapshot,
-            expectedVersion,
-            cancellationToken).ConfigureAwait(false);
+        MutationSaveResult claimed;
+        try
+        {
+            claimed = await _repository.TrySaveAsync(
+                operation.Snapshot,
+                expectedVersion,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            executionMaterial.Dispose();
+            throw;
+        }
 
         if (claimed.Outcome != MutationSaveOutcome.Saved)
         {
@@ -393,9 +425,18 @@ public sealed class MutationExecutor
             var executionContext = new MutationExecutionContext(
                 operation.Snapshot,
                 executionMaterial);
-            var providerTask = ExecuteProviderAsync(handler, executionContext);
-            executionMaterial = null; // ExecuteProviderAsync owns disposal from this point.
-            var providerResult = await providerTask.ConfigureAwait(false);
+            var providerOutcome = await ExecuteProviderAsync(
+                    handler,
+                    executionContext)
+                .ConfigureAwait(false);
+            var providerResult = providerOutcome.Result;
+
+            if (providerOutcome.LateExecution is not null)
+            {
+                lateExecution.Execution = providerOutcome.LateExecution;
+                lateExecution.Material = executionMaterial;
+                executionMaterial = null; // Outer permit observer owns material from here.
+            }
 
             if (providerResult.ResultKind == MutationExecutionResultKind.FailedBeforeDispatch)
             {
@@ -436,7 +477,7 @@ public sealed class MutationExecutor
         }
     }
 
-    private async Task<MutationProviderResult> ExecuteProviderAsync(
+    private async Task<ProviderExecutionOutcome> ExecuteProviderAsync(
         IMutationExecutionHandler handler,
         MutationExecutionContext context)
     {
@@ -444,62 +485,45 @@ public sealed class MutationExecutor
         // must not cancel an external mutation and create avoidable outcome ambiguity.
         using var timeout = new CancellationTokenSource(_policy.OperationTimeout);
         Task<MutationProviderResult>? execution = null;
-        var deferMaterialDisposal = false;
 
         try
         {
             execution = handler.ExecuteAsync(context, timeout.Token);
-            return await execution
+            var result = await execution
                 .WaitAsync(_policy.OperationTimeout)
                 .ConfigureAwait(false);
+            return new ProviderExecutionOutcome(result);
         }
         catch (TimeoutException)
         {
             timeout.Cancel();
-            if (execution is not null && !execution.IsCompleted)
-            {
-                deferMaterialDisposal = true;
-                _ = ObserveLateCompletionAndDisposeAsync(
-                    execution,
-                    context.Material);
-            }
-
-            return new MutationProviderResult(
-                MutationExecutionResultKind.ExecutionUnknown,
-                "execution_timeout");
+            return new ProviderExecutionOutcome(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.ExecutionUnknown,
+                    "execution_timeout"),
+                execution is { IsCompleted: false } ? execution : null);
         }
         catch (OperationCanceledException)
         {
-            if (execution is not null && !execution.IsCompleted)
-            {
-                deferMaterialDisposal = true;
-                _ = ObserveLateCompletionAndDisposeAsync(
-                    execution,
-                    context.Material);
-            }
-
-            return new MutationProviderResult(
-                MutationExecutionResultKind.ExecutionUnknown,
-                "execution_cancelled_or_timeout");
+            return new ProviderExecutionOutcome(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.ExecutionUnknown,
+                    "execution_cancelled_or_timeout"),
+                execution is { IsCompleted: false } ? execution : null);
         }
         catch (Exception)
         {
-            return new MutationProviderResult(
-                MutationExecutionResultKind.ExecutionUnknown,
-                "provider_exception_after_dispatch");
-        }
-        finally
-        {
-            if (!deferMaterialDisposal)
-            {
-                context.Material.Dispose();
-            }
+            return new ProviderExecutionOutcome(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.ExecutionUnknown,
+                    "provider_exception_after_dispatch"));
         }
     }
 
-    private static async Task ObserveLateCompletionAndDisposeAsync(
+    private static async Task ObserveLateCompletionReleasePermitAndDisposeAsync(
         Task execution,
-        MutationExecutionMaterial material)
+        MutationExecutionMaterial material,
+        SemaphoreSlim semaphore)
     {
         try
         {
@@ -508,11 +532,13 @@ public sealed class MutationExecutor
         catch
         {
             // The durable operation is already ExecutionUnknown. This observation exists
-            // only to consume a late task fault without changing the persisted outcome.
+            // only to consume a late task fault and retain the concurrency slot until the
+            // underlying provider call is truly no longer live.
         }
         finally
         {
             material.Dispose();
+            semaphore.Release();
         }
     }
 
