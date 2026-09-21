@@ -54,29 +54,46 @@ public sealed class V05MutationPersistenceTests
                 confirmed.Snapshot.State,
                 staleSave.Operation!.State);
 
+            var executing = MutationOperation.Restore(saved.Operation!);
+            var executingGeneration = executing.ClaimExecution(Now.AddSeconds(3));
+            var executingSaved = await repository.TrySaveAsync(
+                executing.Snapshot,
+                saved.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, executingSaved.Outcome);
+
             var claim = await repository.TryAcquireResourceClaimsAsync(
-                confirmed.Snapshot.OperationId,
-                1,
-                confirmed.Snapshot.ResourceKeys,
+                executing.Snapshot.OperationId,
+                executingGeneration,
+                executing.Snapshot.ResourceKeys,
                 Now.AddMinutes(2));
             Assert.Equal(MutationResourceClaimOutcome.Acquired, claim.Outcome);
 
-            var other = CreateOperation("idem-2", "{\"value\":3}");
+            var other = CreateReadyOperation("idem-2");
+            var otherCreated = await repository.CreateAsync(other.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, otherCreated.Outcome);
+
+            var otherExecuting = MutationOperation.Restore(otherCreated.Operation);
+            var otherGeneration = otherExecuting.ClaimExecution(Now.AddSeconds(3));
+            var otherSaved = await repository.TrySaveAsync(
+                otherExecuting.Snapshot,
+                otherCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, otherSaved.Outcome);
+
             var blocked = await repository.TryAcquireResourceClaimsAsync(
-                other.Snapshot.OperationId,
-                1,
-                other.Snapshot.ResourceKeys,
+                otherExecuting.Snapshot.OperationId,
+                otherGeneration,
+                otherExecuting.Snapshot.ResourceKeys,
                 Now.AddMinutes(2));
             Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
 
             await repository.ReleaseResourceClaimsAsync(
-                confirmed.Snapshot.OperationId,
-                1);
+                executing.Snapshot.OperationId,
+                executingGeneration);
 
             var acquiredAfterRelease = await repository.TryAcquireResourceClaimsAsync(
-                other.Snapshot.OperationId,
-                1,
-                other.Snapshot.ResourceKeys,
+                otherExecuting.Snapshot.OperationId,
+                otherGeneration,
+                otherExecuting.Snapshot.ResourceKeys,
                 Now.AddMinutes(2));
             Assert.Equal(MutationResourceClaimOutcome.Acquired, acquiredAfterRelease.Outcome);
         }
@@ -363,37 +380,56 @@ public sealed class V05MutationPersistenceTests
         Assert.Single(casResults, item => item.Outcome == MutationSaveOutcome.Saved);
         Assert.Single(casResults, item => item.Outcome == MutationSaveOutcome.VersionConflict);
 
-        var winner = casResults.Single(item => item.Outcome == MutationSaveOutcome.Saved).Operation!;
-        var competingOperation = CreateOperation(
-            $"pg-claim-{Guid.NewGuid():N}",
-            "{\"provider\":\"postgres\",\"claim\":true}");
+        var holder = CreateReadyOperation($"pg-holder-{Guid.NewGuid():N}");
+        var holderCreated = await repository.CreateAsync(holder.Snapshot);
+        Assert.Equal(MutationCreateOutcome.Created, holderCreated.Outcome);
+
+        var holderExecuting = MutationOperation.Restore(holderCreated.Operation);
+        var holderGeneration = holderExecuting.ClaimExecution(Now.AddSeconds(2));
+        var holderSaved = await repository.TrySaveAsync(
+            holderExecuting.Snapshot,
+            holderCreated.Operation.Version);
+        Assert.Equal(MutationSaveOutcome.Saved, holderSaved.Outcome);
+
+        var competingOperation = CreateReadyOperation($"pg-claim-{Guid.NewGuid():N}");
+        var competingCreated = await repository.CreateAsync(competingOperation.Snapshot);
+        Assert.Equal(MutationCreateOutcome.Created, competingCreated.Outcome);
+
+        var competingExecuting = MutationOperation.Restore(competingCreated.Operation);
+        var competingGeneration = competingExecuting.ClaimExecution(Now.AddSeconds(2));
+        var competingSaved = await repository.TrySaveAsync(
+            competingExecuting.Snapshot,
+            competingCreated.Operation.Version);
+        Assert.Equal(MutationSaveOutcome.Saved, competingSaved.Outcome);
 
         var firstClaim = await repository.TryAcquireResourceClaimsAsync(
-            winner.OperationId,
-            1,
-            winner.ResourceKeys,
+            holderExecuting.Snapshot.OperationId,
+            holderGeneration,
+            holderExecuting.Snapshot.ResourceKeys,
             Now.AddMinutes(2));
         Assert.Equal(MutationResourceClaimOutcome.Acquired, firstClaim.Outcome);
 
         var blockedClaim = await repository.TryAcquireResourceClaimsAsync(
-            competingOperation.Snapshot.OperationId,
-            1,
-            competingOperation.Snapshot.ResourceKeys,
+            competingExecuting.Snapshot.OperationId,
+            competingGeneration,
+            competingExecuting.Snapshot.ResourceKeys,
             Now.AddMinutes(2));
         Assert.Equal(MutationResourceClaimOutcome.Conflict, blockedClaim.Outcome);
 
-        await repository.ReleaseResourceClaimsAsync(winner.OperationId, 1);
+        await repository.ReleaseResourceClaimsAsync(
+            holderExecuting.Snapshot.OperationId,
+            holderGeneration);
 
         var secondClaim = await repository.TryAcquireResourceClaimsAsync(
-            competingOperation.Snapshot.OperationId,
-            1,
-            competingOperation.Snapshot.ResourceKeys,
+            competingExecuting.Snapshot.OperationId,
+            competingGeneration,
+            competingExecuting.Snapshot.ResourceKeys,
             Now.AddMinutes(2));
         Assert.Equal(MutationResourceClaimOutcome.Acquired, secondClaim.Outcome);
 
         await repository.ReleaseResourceClaimsAsync(
-            competingOperation.Snapshot.OperationId,
-            1);
+            competingExecuting.Snapshot.OperationId,
+            competingGeneration);
     }
 
     private static MutationOperation CreateOperation(string idempotencyKey, string canonicalIntent)
