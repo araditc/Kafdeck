@@ -28,7 +28,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> Kafdeck's current operating posture is read-only. The released and v0.4 candidate capabilities do **not** create topics, produce/replay messages, alter consumer offsets, mutate schemas, restart connectors, or execute ksqlDB statements.
+> Kafdeck's **released** operating posture remains read-only. v0.4 is the current published release. The `main` branch now contains the unreleased v0.5 mutation-safety kernel, but no user-facing Kafka / Schema Registry / Connect mutation handler is enabled yet. Until the later v0.5 workstreams are admitted, Kafdeck does **not** expose topic creation/deletion, record production, consumer-offset mutation, schema mutation, connector mutation, record purge, or ksqlDB statement execution.
 
 ## Why Kafdeck?
 
@@ -51,7 +51,7 @@ Stable releases are published through [GitHub Releases](https://github.com/aradi
 | Operator Identity / OIDC / RBAC | Released in v0.2 |
 | Safe Data Explorer + Server-Side Masking | Released in v0.3 |
 | Consumers / Schemas / Ecosystem Read Views | Released in v0.4 |
-| Controlled Kafka mutations | Planned for v0.5; **not available today** |
+| Controlled Kafka mutations | v0.5 in development; safety kernel implemented on `main`, user-facing mutation surfaces **not available yet** |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
 
@@ -128,6 +128,31 @@ Released in v0.4:
 - no connector mutation,
 - no arbitrary SQL / ksqlDB statement execution.
 
+### v0.5 safe administration foundation
+
+Unreleased work on `main` now contains the mutation governance/runtime foundation required before any provider mutation surface can be admitted:
+
+- explicit mutation permissions; read access never implies write/admin access,
+- server-owned LOW / MODERATE / HIGH / CRITICAL risk floors,
+- immutable preview binding, confirmation and approval state,
+- distinct-principal approval requirements for CRITICAL operations,
+- durable idempotency and mutation operation state,
+- SQLite standalone persistence and PostgreSQL multi-instance/HA persistence,
+- durable resource conflict claims and cluster-wide execution slots,
+- `MaxConcurrentPerCluster` enforced across HA replicas rather than only per process,
+- restart-safe leases for late / `ExecutionUnknown` provider calls,
+- fail-closed timeout, partial-result and ambiguous-outcome semantics,
+- bounded, typed and non-secret durable provider evidence,
+- fail-closed mutation runtime registration with no generic provider command tunnel.
+
+This is **foundation, not an exposed administration feature**. Topic, record, consumer, Schema Registry, Kafka Connect and purge handlers are admitted in later v0.5 workstreams and remain unavailable until their own implementation/review gates pass.
+
+For the design and safety contract, see:
+- [RFC-0005](docs/rfcs/0005-v0.5-safe-administration-controlled-mutations.md)
+- [v0.5 implementation plan](docs/implementation/v0.5-implementation-plan.md)
+- [v0.5 mutation security boundary](docs/security/v0.5-mutation-security-boundary.md)
+- [ADR-0006 — Durable Mutation Operation State](docs/adr/0006-durable-mutation-operations.md)
+
 ### Topic catalog foundations
 
 - description,
@@ -163,6 +188,8 @@ flowchart LR
 ~~~
 
 The important part is what is **not** in this diagram: Kafdeck is not a Kafka producer proxy, broker plugin, consumer-group member for normal browsing, or mandatory data-plane gateway.
+
+The unreleased v0.5 mutation kernel is intentionally not represented as an available provider path above. Its fail-closed runtime remains without admitted provider mutation handlers until the corresponding v0.5 workstreams pass their own governance and test gates.
 
 A typical request flows like this:
 
@@ -594,6 +621,11 @@ Grant RecordRead and RecordExport only where payload access is explicitly requir
 Core rules include:
 
 - authorization is deny-by-default in OIDC mode;
+- v0.5 mutation mode is deny-by-default and requires an explicit mutation permission;
+- unreleased v0.5 mutation execution requires durable operation state; SQLite is standalone-only and PostgreSQL is required for HA mutation execution;
+- CRITICAL mutation flows require a distinct eligible approver and fail closed when that property cannot be established;
+- mutation concurrency is bounded per cluster across HA replicas through durable execution slots;
+- ambiguous post-dispatch outcomes are recorded as `ExecutionUnknown` rather than blindly retried;
 - metadata access does not imply record access;
 - record export is separate from record read;
 - masking is server-side and fail-closed;
