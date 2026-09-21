@@ -9,15 +9,19 @@ public sealed class KafkaSnapshotCoordinator
 {
     private const int SnapshotSweepInterval = 256;
     private readonly KafkaSnapshotPolicy _policy;
+    private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _globalBulkhead;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _clusterBulkheads = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<SnapshotKey, SnapshotEntry> _snapshots = new();
     private readonly ConcurrentDictionary<SnapshotKey, Lazy<Task<object>>> _refreshes = new();
     private int _observationsSinceSweep;
 
-    public KafkaSnapshotCoordinator(KafkaSnapshotPolicy? policy = null)
+    public KafkaSnapshotCoordinator(
+        KafkaSnapshotPolicy? policy = null,
+        TimeProvider? timeProvider = null)
     {
         _policy = policy ?? new KafkaSnapshotPolicy();
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _globalBulkhead = new SemaphoreSlim(_policy.GlobalConcurrency, _policy.GlobalConcurrency);
     }
 
@@ -33,7 +37,7 @@ public sealed class KafkaSnapshotCoordinator
         ArgumentNullException.ThrowIfNull(read);
         if (ttl <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(ttl));
 
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         SweepExpiredSnapshotsIfDue(now);
         var key = new SnapshotKey(clusterId, resourceKey, typeof(T));
         if (TryGetFresh(key, now, out KafkaResult<T> fresh)) return fresh;
@@ -91,7 +95,7 @@ public sealed class KafkaSnapshotCoordinator
         var clusterBulkhead = _clusterBulkheads.GetOrAdd(clusterId, _ =>
             new SemaphoreSlim(_policy.PerClusterConcurrency, _policy.PerClusterConcurrency));
 
-        var deadlineAtUtc = DateTimeOffset.UtcNow + _policy.OperationDeadline;
+        var deadlineAtUtc = _timeProvider.GetUtcNow() + _policy.OperationDeadline;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(callerCancellation);
         deadline.CancelAfter(_policy.OperationDeadline);
 
@@ -130,7 +134,7 @@ public sealed class KafkaSnapshotCoordinator
                         observedAt, freshUntil, staleAfter, ObservationSource.Live));
                 }
 
-                if (live.Failure?.IsRetryable == true && TryGetStale(key, DateTimeOffset.UtcNow, out KafkaResult<T> stale))
+                if (live.Failure?.IsRetryable == true && TryGetStale(key, _timeProvider.GetUtcNow(), out KafkaResult<T> stale))
                     return stale;
 
                 return live;

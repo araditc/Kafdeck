@@ -59,13 +59,26 @@ public sealed class KafkaSnapshotCoordinatorTests
     [Fact]
     public async Task Retryable_refresh_failure_can_serve_explicit_stale_snapshot()
     {
-        var coordinator = new KafkaSnapshotCoordinator();
+        var clock = new MutableTestTimeProvider(DateTimeOffset.UtcNow);
+        var coordinator = new KafkaSnapshotCoordinator(timeProvider: clock);
         var calls = 0;
         var ttl = TimeSpan.FromSeconds(1);
-        Task<KafkaResult<string>> Read(KafkaOperationContext _, CancellationToken __) { var attempt = Interlocked.Increment(ref calls); return Task.FromResult(attempt == 1 ? Success("last-known-good") : RetryableFailure()); }
+
+        Task<KafkaResult<string>> Read(KafkaOperationContext _, CancellationToken __)
+        {
+            var attempt = Interlocked.Increment(ref calls);
+            var now = clock.GetUtcNow();
+            return Task.FromResult(
+                attempt == 1
+                    ? Success("last-known-good", now)
+                    : RetryableFailure(now));
+        }
+
         var initial = await coordinator.ObserveAsync("cluster-a", "topics", ttl, Read);
         Assert.Equal(ObservationSource.Live, initial.Observation.Source);
-        await Task.Delay(TimeSpan.FromMilliseconds(1200));
+
+        clock.Advance(ttl + TimeSpan.FromMilliseconds(1));
+
         var stale = await coordinator.ObserveAsync("cluster-a", "topics", ttl, Read);
         Assert.True(stale.IsSuccess);
         Assert.Equal("last-known-good", stale.Value);
@@ -148,8 +161,44 @@ public sealed class KafkaSnapshotCoordinatorTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new KafkaSnapshotPolicy(operationDeadline: TimeSpan.FromMilliseconds(500)));
     }
 
-    private static KafkaResult<string> Success(string value) { var now = DateTimeOffset.UtcNow; return KafkaResult<string>.Success(value, new ObservationMetadata(now, now, now, ObservationSource.Live)); }
-    private static KafkaResult<string> RetryableFailure() { var now = DateTimeOffset.UtcNow; return KafkaResult<string>.Failed(new KafkaFailure(KafkaFailureCategory.Unavailable, "test_unavailable", "Kafka is temporarily unavailable.", IsRetryable: true), new ObservationMetadata(now, now, now, ObservationSource.Live)); }
+    private static KafkaResult<string> Success(string value) => Success(value, DateTimeOffset.UtcNow);
+    private static KafkaResult<string> Success(string value, DateTimeOffset now) =>
+        KafkaResult<string>.Success(
+            value,
+            new ObservationMetadata(now, now, now, ObservationSource.Live));
+
+    private static KafkaResult<string> RetryableFailure() => RetryableFailure(DateTimeOffset.UtcNow);
+    private static KafkaResult<string> RetryableFailure(DateTimeOffset now) =>
+        KafkaResult<string>.Failed(
+            new KafkaFailure(
+                KafkaFailureCategory.Unavailable,
+                "test_unavailable",
+                "Kafka is temporarily unavailable.",
+                IsRetryable: true),
+            new ObservationMetadata(now, now, now, ObservationSource.Live));
+
     private static TaskCompletionSource<bool> NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private sealed class MutableTestTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _utcNow;
+
+        public MutableTestTimeProvider(DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public void Advance(TimeSpan delta)
+        {
+            if (delta < TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(delta));
+            }
+
+            _utcNow = _utcNow.Add(delta);
+        }
+    }
     private static void UpdateMaximum(ref int maximum, int candidate) { while (true) { var snapshot = Volatile.Read(ref maximum); if (snapshot >= candidate) return; if (Interlocked.CompareExchange(ref maximum, candidate, snapshot) == snapshot) return; } }
 }
