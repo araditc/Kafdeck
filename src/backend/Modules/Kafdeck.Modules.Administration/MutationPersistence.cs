@@ -33,6 +33,19 @@ public sealed record MutationResourceClaimResult(
     MutationResourceClaimOutcome Outcome,
     string? ConflictingResourceKey = null);
 
+public enum MutationLeaseRenewOutcome
+{
+    Renewed = 1,
+    NotFound = 2,
+    VersionConflict = 3,
+    InvalidExecutionClaim = 4,
+    Expired = 5,
+}
+
+public sealed record MutationLeaseRenewResult(
+    MutationLeaseRenewOutcome Outcome,
+    MutationOperationSnapshot? Operation);
+
 public interface IMutationOperationRepository
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
@@ -66,6 +79,11 @@ public interface IMutationOperationRepository
         long executionClaimGeneration,
         IReadOnlyList<string> resourceKeys,
         DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<MutationLeaseRenewResult> TryRenewExecutionLeaseAsync(
+        MutationOperationSnapshot operation,
+        long expectedVersion,
         CancellationToken cancellationToken = default);
 
     Task ReleaseResourceClaimsAsync(
