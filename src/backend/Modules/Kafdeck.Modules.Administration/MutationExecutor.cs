@@ -463,11 +463,10 @@ public sealed class MutationExecutor
 
             operation.MarkDispatchStarted(_timeProvider.GetUtcNow());
             await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
-            await WriteAuditAsync(
+            await TryWritePostDispatchAuditAsync(
                 operation.Snapshot,
                 MutationAuditEventType.DispatchStarted,
-                "dispatch_started",
-                CancellationToken.None).ConfigureAwait(false);
+                "dispatch_started").ConfigureAwait(false);
 
             var executionContext = new MutationExecutionContext(
                 operation.Snapshot,
@@ -498,17 +497,19 @@ public sealed class MutationExecutor
                 _timeProvider.GetUtcNow(),
                 providerResult.SafeEvidence);
 
-            // Once external dispatch may have occurred, caller cancellation must not erase
-            // the durable outcome classification. Persist/audit under an internal token.
+            // Once external dispatch may have occurred, caller cancellation or audit
+            // failure must not erase the durable outcome classification or retain a
+            // resource claim for a terminal known outcome.
             await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
-            await WriteAuditAsync(
-                operation.Snapshot,
-                MutationAuditEventType.Completed,
-                providerResult.ResultCode,
-                CancellationToken.None).ConfigureAwait(false);
 
             releaseResourceClaims =
                 operation.Snapshot.State != MutationOperationState.ExecutionUnknown;
+
+            await TryWritePostDispatchAuditAsync(
+                operation.Snapshot,
+                MutationAuditEventType.Completed,
+                providerResult.ResultCode).ConfigureAwait(false);
+
             return operation.Snapshot;
         }
         finally
@@ -536,7 +537,12 @@ public sealed class MutationExecutor
 
         try
         {
-            execution = handler.ExecuteAsync(context, timeout.Token);
+            execution = Task.Run(
+                async () => await handler
+                    .ExecuteAsync(context, timeout.Token)
+                    .ConfigureAwait(false),
+                CancellationToken.None);
+
             var result = await execution
                 .WaitAsync(_policy.OperationTimeout)
                 .ConfigureAwait(false);
@@ -650,6 +656,26 @@ public sealed class MutationExecutor
             _ => new SemaphoreSlim(
                 _policy.MaxConcurrentPerCluster,
                 _policy.MaxConcurrentPerCluster));
+    }
+
+    private async ValueTask TryWritePostDispatchAuditAsync(
+        MutationOperationSnapshot snapshot,
+        MutationAuditEventType eventType,
+        string outcomeCode)
+    {
+        try
+        {
+            await WriteAuditAsync(
+                snapshot,
+                eventType,
+                outcomeCode,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Dispatch/outcome state is already durable. Audit sink availability must not
+            // convert a known execution path into ExecutionUnknown or retain claims.
+        }
     }
 
     private ValueTask WriteAuditAsync(
