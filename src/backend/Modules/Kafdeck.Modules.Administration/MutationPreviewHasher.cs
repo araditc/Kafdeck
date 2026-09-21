@@ -38,6 +38,14 @@ public static class MutationPreviewHasher
         }
 
         Append(builder, "risk", ((int)risk.RiskClass).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var reason in risk.Reasons
+                     .Select(value => RequireBounded(value, "Risk reason", 512))
+                     .Distinct(StringComparer.Ordinal)
+                     .OrderBy(value => value, StringComparer.Ordinal))
+        {
+            Append(builder, "risk-reason", reason);
+        }
+
         Append(builder, "confirmation", ((int)risk.ConfirmationMode).ToString(System.Globalization.CultureInfo.InvariantCulture));
         Append(builder, "independent-approval", risk.RequiresIndependentApproval ? "1" : "0");
         Append(builder, "policy", policyVersion);
