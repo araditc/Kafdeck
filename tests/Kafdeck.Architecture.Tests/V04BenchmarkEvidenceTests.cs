@@ -113,17 +113,25 @@ public sealed class V04BenchmarkEvidenceTests
                 100));
         }
 
+        Kafdeck.Core.Ecosystem.ConnectConnectorDetail? lastProjection = null;
+        var projectedFieldCount = 0;
+
         var stopwatch = Stopwatch.StartNew();
         for (var index = 0; index < MeasurementIterations; index++)
         {
-            AssertProjection(KafkaConnectReadAdapter.ProjectConnector(
+            lastProjection = KafkaConnectReadAdapter.ProjectConnector(
                 "payments",
                 statusDocument.RootElement,
                 configDocument.RootElement,
-                100));
+                100);
+            projectedFieldCount += lastProjection.SafeConfiguration.Count;
         }
 
         stopwatch.Stop();
+
+        Assert.NotNull(lastProjection);
+        Assert.Equal(configEntries.Count * MeasurementIterations, projectedFieldCount);
+        AssertProjection(lastProjection);
         Report("connect_fail_closed_projection_67_fields", MeasurementIterations, stopwatch.Elapsed);
     }
 
