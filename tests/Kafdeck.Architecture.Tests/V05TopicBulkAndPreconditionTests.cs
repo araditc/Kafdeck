@@ -66,7 +66,7 @@ public sealed class V05TopicBulkAndPreconditionTests
                     Observation())),
             Topics = (_, _, _) => Task.FromResult(
                 KafkaResult<IReadOnlyList<TopicSummary>>.Success(
-                    new[] { new TopicSummary("blocked", false, 1, 1) },
+                    new[] { new TopicSummary("blocked", 1, false) },
                     Observation())),
         };
 
@@ -95,7 +95,7 @@ public sealed class V05TopicBulkAndPreconditionTests
             Topics = (_, _, _) => Task.FromResult(
                 KafkaResult<IReadOnlyList<TopicSummary>>.Success(
                     topicExists
-                        ? new[] { new TopicSummary("orders", false, 1, 1) }
+                        ? new[] { new TopicSummary("orders", 1, false) }
                         : Array.Empty<TopicSummary>(),
                     Observation())),
         };
@@ -178,8 +178,8 @@ public sealed class V05TopicBulkAndPreconditionTests
             1,
             new[]
             {
-                new BrokerMetadata(1, "localhost", 9092, null),
-                new BrokerMetadata(2, "localhost", 9093, null),
+                new BrokerMetadata(1, "localhost", 9092, null, true),
+                new BrokerMetadata(2, "localhost", 9093, null, false),
             });
 
     private static ObservationMetadata Observation()
