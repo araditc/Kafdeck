@@ -277,7 +277,8 @@ public sealed class V05MutationPersistenceTests
             var audit = new CapturingMutationAuditSink();
             var recovery = new MutationRecoveryCoordinator(repository, audit, time);
 
-            var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+            var recovered = await recovery.RecoverInterruptedExecutionsAsync(
+                ignoreActiveExecutionLeases: true);
 
             Assert.Equal(1, recovered);
             var persisted = await repository.GetAsync(created.Operation.OperationId);
@@ -309,7 +310,7 @@ public sealed class V05MutationPersistenceTests
             Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
 
             var aggregate = MutationOperation.Restore(created.Operation);
-            aggregate.ClaimExecution(Now.AddSeconds(1));
+            aggregate.ClaimExecution(Now.AddSeconds(1), Now.AddMinutes(2));
             var claimed = await repository.TrySaveAsync(
                 aggregate.Snapshot,
                 created.Operation.Version);
@@ -332,6 +333,129 @@ public sealed class V05MutationPersistenceTests
             Assert.Equal(MutationOperationState.ExecutionUnknown, persisted!.State);
             Assert.Equal("process_interrupted_after_dispatch", persisted.ResultCode);
             Assert.Contains(audit.Events, item => item.OutcomeCode == "process_interrupted_after_dispatch");
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Ha_recovery_respects_active_execution_lease_then_recovers_after_expiry()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-ha-recovery-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repositoryTime = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                repositoryTime);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("ha-recovery");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var aggregate = MutationOperation.Restore(created.Operation);
+            aggregate.ClaimExecution(Now.AddSeconds(1), Now.AddMinutes(2));
+            var saved = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                created.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, saved.Outcome);
+
+            var audit = new CapturingMutationAuditSink();
+            var activeLeaseRecovery = new MutationRecoveryCoordinator(
+                repository,
+                audit,
+                new FixedTimeProvider(Now.AddMinutes(1)));
+
+            var skipped = await activeLeaseRecovery.RecoverInterruptedExecutionsAsync();
+            Assert.Equal(0, skipped);
+            Assert.Equal(
+                MutationOperationState.Executing,
+                (await repository.GetAsync(created.Operation.OperationId))!.State);
+
+            var expiredLeaseRecovery = new MutationRecoveryCoordinator(
+                repository,
+                audit,
+                new FixedTimeProvider(Now.AddMinutes(3)));
+
+            var recovered = await expiredLeaseRecovery.RecoverInterruptedExecutionsAsync();
+            Assert.Equal(1, recovered);
+            Assert.Equal(
+                MutationOperationState.FailedBeforeDispatch,
+                (await repository.GetAsync(created.Operation.OperationId))!.State);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Unknown_execution_retains_resource_claim_after_lease_expiry()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-unknown-claim-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new MutableTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("unknown-holder");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var aggregate = MutationOperation.Restore(created.Operation);
+            var generation = aggregate.ClaimExecution(Now.AddSeconds(1), Now.AddMinutes(2));
+            var claimed = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                created.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, claimed.Outcome);
+
+            var resourceClaim = await repository.TryAcquireResourceClaimsAsync(
+                aggregate.Snapshot.OperationId,
+                generation,
+                aggregate.Snapshot.ResourceKeys,
+                Now.AddMinutes(2));
+            Assert.Equal(MutationResourceClaimOutcome.Acquired, resourceClaim.Outcome);
+
+            aggregate.MarkDispatchStarted(Now.AddSeconds(2));
+            var dispatched = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                claimed.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, dispatched.Outcome);
+
+            var recovery = new MutationRecoveryCoordinator(
+                repository,
+                new CapturingMutationAuditSink(),
+                new FixedTimeProvider(Now.AddMinutes(3)));
+            var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+            Assert.Equal(1, recovered);
+
+            time.SetUtcNow(Now.AddMinutes(3));
+
+            var competitor = CreateReadyOperation("unknown-competitor");
+            var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, competitorCreated.Outcome);
+
+            var competitorAggregate = MutationOperation.Restore(competitorCreated.Operation);
+            var competitorGeneration = competitorAggregate.ClaimExecution(
+                Now.AddMinutes(3),
+                Now.AddMinutes(5));
+            var competitorSaved = await repository.TrySaveAsync(
+                competitorAggregate.Snapshot,
+                competitorCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, competitorSaved.Outcome);
+
+            var blocked = await repository.TryAcquireResourceClaimsAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration,
+                competitorAggregate.Snapshot.ResourceKeys,
+                Now.AddMinutes(5));
+            Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
         }
         finally
         {
@@ -490,6 +614,23 @@ public sealed class V05MutationPersistenceTests
         }
 
         public override DateTimeOffset GetUtcNow() => _now;
+    }
+
+    private sealed class MutableTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now;
+
+        public MutableTimeProvider(DateTimeOffset now)
+        {
+            _now = now;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void SetUtcNow(DateTimeOffset now)
+        {
+            _now = now;
+        }
     }
 
     private sealed class AllowedGuard : IMutationPreDispatchGuard
