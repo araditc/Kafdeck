@@ -762,6 +762,50 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 persisted);
         }
 
+        string? persistedSlotCluster = null;
+        int? persistedSlotNumber = null;
+        DateTimeOffset? persistedSlotExpiry = null;
+        await using (var slot = connection.CreateCommand())
+        {
+            slot.Transaction = transaction;
+            slot.CommandText =
+                """
+                SELECT cluster_id, slot_number, expires_at_utc
+                FROM kafdeck_mutation_cluster_slots
+                WHERE operation_id = @operation_id
+                  AND execution_generation = @execution_generation
+                """;
+            AddParameter(slot, "@operation_id", operation.OperationId.ToString("D"));
+            AddParameter(slot, "@execution_generation", operation.ExecutionClaimGeneration);
+
+            await using var reader = await slot.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                persistedSlotCluster = reader.GetString(0);
+                persistedSlotNumber = reader.GetInt32(1);
+                persistedSlotExpiry = DateTimeOffset.Parse(
+                    reader.GetString(2),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind);
+
+                if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    persistedSlotNumber = null;
+                }
+            }
+        }
+
+        if (persistedSlotNumber is null ||
+            persistedSlotExpiry is null ||
+            persistedSlotExpiry <= nowUtc ||
+            !string.Equals(persistedSlotCluster, persisted.ClusterId, StringComparison.Ordinal))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.InvalidExecutionClaim,
+                persisted);
+        }
+
         await using (var updateOperation = connection.CreateCommand())
         {
             updateOperation.Transaction = transaction;
@@ -809,6 +853,33 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
 
             var updatedClaims = await updateClaims.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             if (updatedClaims != expectedResources.Length)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new MutationLeaseRenewResult(
+                    MutationLeaseRenewOutcome.InvalidExecutionClaim,
+                    persisted);
+            }
+        }
+
+        await using (var updateSlot = connection.CreateCommand())
+        {
+            updateSlot.Transaction = transaction;
+            updateSlot.CommandText =
+                """
+                UPDATE kafdeck_mutation_cluster_slots
+                SET expires_at_utc = @expires_at_utc
+                WHERE cluster_id = @cluster_id
+                  AND slot_number = @slot_number
+                  AND operation_id = @operation_id
+                  AND execution_generation = @execution_generation
+                """;
+            AddParameter(updateSlot, "@expires_at_utc", FormatTimestamp(requestedExpiry));
+            AddParameter(updateSlot, "@cluster_id", persistedSlotCluster!);
+            AddParameter(updateSlot, "@slot_number", persistedSlotNumber.Value);
+            AddParameter(updateSlot, "@operation_id", operation.OperationId.ToString("D"));
+            AddParameter(updateSlot, "@execution_generation", operation.ExecutionClaimGeneration);
+
+            if (await updateSlot.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 return new MutationLeaseRenewResult(
