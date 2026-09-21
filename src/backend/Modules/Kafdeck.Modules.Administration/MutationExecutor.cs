@@ -301,12 +301,15 @@ public sealed class MutationExecutor
                 providerResult.ResultKind,
                 providerResult.ResultCode,
                 _timeProvider.GetUtcNow());
-            await PersistNextAsync(operation, cancellationToken).ConfigureAwait(false);
+
+            // Once external dispatch may have occurred, caller cancellation must not erase
+            // the durable outcome classification. Persist/audit under an internal token.
+            await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
             await WriteAuditAsync(
                 operation.Snapshot,
                 MutationAuditEventType.Completed,
                 providerResult.ResultCode,
-                cancellationToken).ConfigureAwait(false);
+                CancellationToken.None).ConfigureAwait(false);
 
             return operation.Snapshot;
         }
