@@ -141,6 +141,7 @@ if (mutationOptions?.Enabled == true)
             TimeSpan.FromSeconds(30),
             TimeSpan.FromMinutes(2)));
     builder.Services.AddSingleton<MutationExecutor>();
+    builder.Services.AddSingleton<MutationRecoveryCoordinator>();
 }
 
 var app = builder.Build();
@@ -154,6 +155,15 @@ if (mutationOptions?.Enabled == true)
     _ = app.Services.GetRequiredService<IMutationMaterialDigestService>();
     var mutationRepository = app.Services.GetRequiredService<IMutationOperationRepository>();
     await mutationRepository.InitializeAsync().ConfigureAwait(false);
+
+    var mutationRecovery = app.Services.GetRequiredService<MutationRecoveryCoordinator>();
+    var recoveredMutations = await mutationRecovery
+        .RecoverInterruptedExecutionsAsync()
+        .ConfigureAwait(false);
+
+    app.Logger.LogInformation(
+        "Kafdeck mutation runtime reconciled {RecoveredMutationCount} interrupted execution(s).",
+        recoveredMutations);
 
     app.Logger.LogInformation(
         "Kafdeck mutation runtime initialized in fail-closed mode with persistence provider {PersistenceProvider} and execution mode {ExecutionMode}.",
