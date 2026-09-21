@@ -55,7 +55,7 @@ public sealed class V05MutationPersistenceTests
                 staleSave.Operation!.State);
 
             var executing = MutationOperation.Restore(saved.Operation!);
-            var executingGeneration = executing.ClaimExecution(Now.AddSeconds(3));
+            var executingGeneration = executing.ClaimExecution(Now.AddSeconds(3), Now.AddMinutes(2));
             var executingSaved = await repository.TrySaveAsync(
                 executing.Snapshot,
                 saved.Operation!.Version);
@@ -73,7 +73,7 @@ public sealed class V05MutationPersistenceTests
             Assert.Equal(MutationCreateOutcome.Created, otherCreated.Outcome);
 
             var otherExecuting = MutationOperation.Restore(otherCreated.Operation);
-            var otherGeneration = otherExecuting.ClaimExecution(Now.AddSeconds(3));
+            var otherGeneration = otherExecuting.ClaimExecution(Now.AddSeconds(3), Now.AddMinutes(2));
             var otherSaved = await repository.TrySaveAsync(
                 otherExecuting.Snapshot,
                 otherCreated.Operation.Version);
@@ -176,7 +176,7 @@ public sealed class V05MutationPersistenceTests
                 invalidBeforeClaim.Outcome);
 
             var aggregate = MutationOperation.Restore(created.Operation);
-            var generation = aggregate.ClaimExecution(Now.AddSeconds(1));
+            var generation = aggregate.ClaimExecution(Now.AddSeconds(1), Now.AddMinutes(2));
             var saved = await repository.TrySaveAsync(
                 aggregate.Snapshot,
                 created.Operation.Version);
@@ -268,7 +268,7 @@ public sealed class V05MutationPersistenceTests
             Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
 
             var aggregate = MutationOperation.Restore(created.Operation);
-            aggregate.ClaimExecution(Now.AddSeconds(1));
+            aggregate.ClaimExecution(Now.AddSeconds(1), Now.AddMinutes(2));
             var claimed = await repository.TrySaveAsync(
                 aggregate.Snapshot,
                 created.Operation.Version);
@@ -385,7 +385,7 @@ public sealed class V05MutationPersistenceTests
         Assert.Equal(MutationCreateOutcome.Created, holderCreated.Outcome);
 
         var holderExecuting = MutationOperation.Restore(holderCreated.Operation);
-        var holderGeneration = holderExecuting.ClaimExecution(Now.AddSeconds(2));
+        var holderGeneration = holderExecuting.ClaimExecution(Now.AddSeconds(2), Now.AddMinutes(2));
         var holderSaved = await repository.TrySaveAsync(
             holderExecuting.Snapshot,
             holderCreated.Operation.Version);
@@ -396,7 +396,7 @@ public sealed class V05MutationPersistenceTests
         Assert.Equal(MutationCreateOutcome.Created, competingCreated.Outcome);
 
         var competingExecuting = MutationOperation.Restore(competingCreated.Operation);
-        var competingGeneration = competingExecuting.ClaimExecution(Now.AddSeconds(2));
+        var competingGeneration = competingExecuting.ClaimExecution(Now.AddSeconds(2), Now.AddMinutes(2));
         var competingSaved = await repository.TrySaveAsync(
             competingExecuting.Snapshot,
             competingCreated.Operation.Version);
