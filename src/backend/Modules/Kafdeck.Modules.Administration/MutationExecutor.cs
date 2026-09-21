@@ -448,7 +448,8 @@ public sealed class MutationExecutor
             operation.Complete(
                 providerResult.ResultKind,
                 providerResult.ResultCode,
-                _timeProvider.GetUtcNow());
+                _timeProvider.GetUtcNow(),
+                providerResult.SafeEvidence);
 
             // Once external dispatch may have occurred, caller cancellation must not erase
             // the durable outcome classification. Persist/audit under an internal token.
