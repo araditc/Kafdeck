@@ -32,7 +32,8 @@ public sealed class EcosystemReadAdapterTests
                   "connector.class":"example.PaymentsConnector",
                   "api.key":"supersecret-key",
                   "db.password":"supersecret-password",
-                  "topics":"payments"
+                  "topics":"payments",
+                  "connection.url":"jdbc:postgresql://user:secret@db.example/payments"
                 }
                 """),
                 _ => Json(HttpStatusCode.NotFound, "{}"),
@@ -53,6 +54,7 @@ public sealed class EcosystemReadAdapterTests
         Assert.Equal("[REDACTED]", detail.Value!.SafeConfiguration["api.key"]);
         Assert.Equal("[REDACTED]", detail.Value.SafeConfiguration["db.password"]);
         Assert.Equal("payments", detail.Value.SafeConfiguration["topics"]);
+        Assert.Equal("[REDACTED]", detail.Value.SafeConfiguration["connection.url"]);
         Assert.DoesNotContain("supersecret", detail.Value.Tasks[0].SafeTrace, StringComparison.OrdinalIgnoreCase);
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
     }

@@ -13,6 +13,9 @@ test('AppShell exposes product identity and accessible operator landmarks', () =
   assert.match(markup, /Open Source Kafka Control Plane/);
   assert.match(markup, /<label for="cluster-selector">Cluster<\/label>/);
   assert.match(markup, /aria-label="Kafdeck sections"/);
+  assert.match(markup, /href="#consumers"/);
+  assert.match(markup, /href="#schemas"/);
+  assert.match(markup, /href="#ecosystem"/);
 });
 
 test('cluster switching clears cluster-scoped state', () => {

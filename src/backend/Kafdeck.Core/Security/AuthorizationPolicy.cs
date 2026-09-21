@@ -369,6 +369,40 @@ public sealed class AuthorizationPolicyEvaluator
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
     }
 
+    public bool HasApplicablePermission(
+        OperatorIdentity? identity,
+        AuthorizationAction action,
+        string? clusterId = null)
+    {
+        if (identity is null)
+        {
+            return false;
+        }
+
+        var roleIds = ResolveRoleIds(identity);
+        foreach (var roleId in roleIds)
+        {
+            var role = _snapshot.Roles[roleId];
+            foreach (var permission in role.Permissions)
+            {
+                if (permission.Action != action)
+                {
+                    continue;
+                }
+
+                if (permission.ClusterIds.Count > 0 &&
+                    (string.IsNullOrWhiteSpace(clusterId) || !permission.ClusterIds.Contains(clusterId)))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public AuthorizationDecision Evaluate(OperatorIdentity? identity, AuthorizationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

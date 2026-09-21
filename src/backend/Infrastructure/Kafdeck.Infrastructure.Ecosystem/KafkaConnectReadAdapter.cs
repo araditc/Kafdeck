@@ -246,9 +246,9 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 throw new ResponseBoundExceededException();
             }
 
-            safeConfig[property.Name] = IsSecretKey(property.Name)
-                ? "[REDACTED]"
-                : SafeConfigValue(property.Value);
+            safeConfig[property.Name] = IsExplicitlySafeConfigKey(property.Name)
+                ? SafeConfigValue(property.Value)
+                : "[REDACTED]";
         }
 
         return new ConnectConnectorDetail(
@@ -257,6 +257,22 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             workerId,
             tasks,
             safeConfig);
+    }
+
+    internal static bool IsExplicitlySafeConfigKey(string key)
+    {
+        var normalized = key.Trim().ToLowerInvariant();
+
+        return normalized is
+            "connector.class" or
+            "name" or
+            "tasks.max" or
+            "topics" or
+            "topics.regex" or
+            "key.converter" or
+            "value.converter" or
+            "header.converter" or
+            "errors.tolerance";
     }
 
     internal static bool IsSecretKey(string key)
