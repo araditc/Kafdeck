@@ -40,7 +40,8 @@ public static class MutationPreviewHasher
         var authorizationTargets = MutationAuthorization.NormalizeTargets(
             intent.Kind,
             intent.ClusterId,
-            intent.AuthorizationTargets);
+            intent.AuthorizationTargets,
+            intent.ResourceKeys);
         foreach (var target in authorizationTargets)
         {
             Append(builder, "authorization-action", ((int)target.Action).ToString(System.Globalization.CultureInfo.InvariantCulture));
