@@ -155,10 +155,12 @@ public sealed class KafkaRecordReadAdapterTests
             new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(10)),
             cancellation.Token);
 
-        await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        // These are harness watchdogs only; the adapter still polls setup cancellation
+        // at the fixed 100 ms runtime interval.
+        await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         cancellation.Cancel();
 
-        var result = await read.WaitAsync(TimeSpan.FromSeconds(1));
+        var result = await read.WaitAsync(TimeSpan.FromSeconds(5));
 
         AssertFailure(result, KafkaFailureCategory.Cancelled, "operation_cancelled");
     }

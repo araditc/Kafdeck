@@ -281,24 +281,17 @@ public sealed class V05TopicAdministrationTests
         };
         var reads = new FakeKafkaAdministrationPort
         {
-            Metadata = (_, topic, _, _) =>
+            Topics = (_, _, _) =>
             {
                 var call = Interlocked.Increment(ref calls);
-                if (call == 1)
-                {
-                    return Task.FromResult(
-                        KafkaResult<TopicMetadata>.Success(
-                            Topic(topic, partitions: 1),
-                            Observation()));
-                }
+                IReadOnlyList<TopicSummary> topics =
+                    call == 1
+                        ? new[] { new TopicSummary("orders", false) }
+                        : Array.Empty<TopicSummary>();
 
                 return Task.FromResult(
-                    KafkaResult<TopicMetadata>.Failed(
-                        new KafkaFailure(
-                            KafkaFailureCategory.ProtocolError,
-                            "kafka_unknowntopicorpart",
-                            "Topic is not present.",
-                            false),
+                    KafkaResult<IReadOnlyList<TopicSummary>>.Success(
+                        topics,
                         Observation()));
             },
         };
