@@ -195,3 +195,43 @@ Accepted scope includes consumer groups/members/assignments/committed offsets/la
 ### Execution
 
 W25–W31 may proceed autonomously under protected-main governance. Dependency-valid stacked work may continue while a review gate is pending; no approval may be fabricated. Tag/publication requires a separate explicit v0.4 release decision.
+
+
+## Gate 5 — v0.5 Safe Administration & Controlled Mutations
+
+- **Date:** 2026-09-21
+- **Status:** SCOPE ACCEPTED
+- **Authority:** Project Owner
+- **Scope issue:** #121
+- **Tracker:** #122
+- **RFC:** RFC-0005 planning package
+
+### Accepted decision
+
+Kafdeck v0.5 is **Safe Administration & Controlled Mutations**.
+
+The accepted scope introduces governed topic, record-production, consumer-offset/group, Schema Registry, Kafka Connect and DeleteRecords mutation capabilities behind the common server-authoritative pipeline:
+
+`Request -> Authentication -> Authorization -> Capability Check -> Validation -> Risk Classification -> Preview -> Confirmation/Approval -> Execute -> Verify -> Audit`
+
+### Accepted invariants
+
+- explicit mutation authorization actions; read permission never implies write/admin permission,
+- LOW / MODERATE / HIGH / CRITICAL server-owned risk classes,
+- preview binding and stale-preview rejection,
+- durable idempotency / operation state,
+- truthful ambiguous/partial execution semantics,
+- no blind retry after potentially successful external dispatch,
+- no generic Kafka/provider command tunnel,
+- no durable plaintext record-payload or connector-secret staging by default,
+- CRITICAL operations require a distinct eligible approver,
+- irreversible operations are never represented as generally reversible,
+- release/tag/publication remains separately approval-bound.
+
+### Owner approval
+
+> **v0.5 Safe Administration & Controlled Mutations با mutation pipeline، risk classes، hard safety invariants، explicit authorization actions و non-goals این scope تأیید است؛ planning package را کامل کن و implementation را فقط بعد از governed planning admission فعال کن.**
+
+### Implementation gate
+
+Implementation remains blocked until the RFC-0005 planning package receives fresh exact-head required checks, fresh required CODEOWNER approval, resolved required review threads and protected-main merge. After admission, W32-W40 may proceed autonomously under Issue #122. v0.5 release/publication requires a later explicit owner decision.
