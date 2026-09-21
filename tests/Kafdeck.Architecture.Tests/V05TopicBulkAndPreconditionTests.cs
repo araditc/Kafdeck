@@ -56,6 +56,40 @@ public sealed class V05TopicBulkAndPreconditionTests
     }
 
     [Fact]
+    public async Task Bulk_materialization_enforces_configured_maximum_below_hard_cap()
+    {
+        var reads = new FakeKafkaAdministrationPort
+        {
+            Cluster = (_, _, _) => Task.FromResult(
+                KafkaResult<ClusterMetadata>.Success(
+                    Cluster(),
+                    Observation())),
+            Topics = (_, _, _) => Task.FromResult(
+                KafkaResult<IReadOnlyList<TopicSummary>>.Success(
+                    Array.Empty<TopicSummary>(),
+                    Observation())),
+        };
+
+        var materializer = new TopicBulkMutationMaterializer(
+            new TopicMutationPlanner(reads),
+            maxTargets: 2);
+
+        var rejected = await materializer.PlanCreatesAsync(
+            new[] { Create("alpha"), Create("beta"), Create("gamma") });
+
+        Assert.False(rejected.IsSuccess);
+        Assert.Null(rejected.Plan);
+        Assert.Equal(
+            TopicMutationPlanningFailureCode.InvalidInput,
+            rejected.Failure!.Code);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new TopicBulkMutationMaterializer(
+                new TopicMutationPlanner(reads),
+                TopicMutationPolicy.MaxBulkTopics + 1));
+    }
+
+    [Fact]
     public async Task Bulk_materialization_returns_no_partial_plan_when_any_target_is_stale()
     {
         var reads = new FakeKafkaAdministrationPort

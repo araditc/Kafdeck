@@ -38,10 +38,21 @@ public sealed record TopicBulkMutationPlanningResult<TMutation>(
 public sealed class TopicBulkMutationMaterializer
 {
     private readonly TopicMutationPlanner _planner;
+    private readonly int _maxTargets;
 
-    public TopicBulkMutationMaterializer(TopicMutationPlanner planner)
+    public TopicBulkMutationMaterializer(
+        TopicMutationPlanner planner,
+        int maxTargets = TopicMutationPolicy.MaxBulkTopics)
     {
         _planner = planner ?? throw new ArgumentNullException(nameof(planner));
+        if (maxTargets is < 1 or > TopicMutationPolicy.MaxBulkTopics)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxTargets),
+                $"Bulk topic mutation maximum must be between 1 and {TopicMutationPolicy.MaxBulkTopics}.");
+        }
+
+        _maxTargets = maxTargets;
     }
 
     public Task<TopicBulkMutationPlanningResult<TopicCreateMutation>> PlanCreatesAsync(
@@ -102,10 +113,10 @@ public sealed class TopicBulkMutationMaterializer
         ArgumentNullException.ThrowIfNull(normalize);
         ArgumentNullException.ThrowIfNull(plan);
 
-        if (requests.Count is < 1 or > TopicMutationPolicy.MaxBulkTopics)
+        if (requests.Count is < 1 || requests.Count > _maxTargets)
         {
             return Invalid<TMutation>(
-                $"Bulk topic mutation requires between 1 and {TopicMutationPolicy.MaxBulkTopics} explicit targets.");
+                $"Bulk topic mutation requires between 1 and {_maxTargets} explicit targets.");
         }
 
         var normalizedByTopic = new SortedDictionary<string, TMutation>(StringComparer.Ordinal);
