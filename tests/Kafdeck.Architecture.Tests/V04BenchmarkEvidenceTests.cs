@@ -137,7 +137,7 @@ public sealed class V04BenchmarkEvidenceTests
 
     private static string BuildSchema(string marker)
     {
-        var lines = Enumerable.Range(0, 124)
+        var lines = Enumerable.Range(0, 122)
             .Select(index => $"    \"field_{index}\": {{ \"type\": \"string\" }},")
             .ToList();
 
