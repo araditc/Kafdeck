@@ -1,5 +1,5 @@
 {
-  "version": "v0.4",
-  "title": "Kafdeck v0.4 — Consumers, Schemas & Ecosystem Read Views",
-  "notes": "docs/releases/v0.4.md"
+  "version": "v0.3",
+  "title": "Kafdeck v0.3 — Safe Data Explorer + Server-Side Masking",
+  "notes": "docs/releases/v0.3.md"
 }
