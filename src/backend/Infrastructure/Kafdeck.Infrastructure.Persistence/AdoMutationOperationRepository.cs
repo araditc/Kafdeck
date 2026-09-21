@@ -33,7 +33,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """,
             """
             INSERT INTO kafdeck_schema_info (component, schema_version)
-            VALUES ('mutation-operations', 1)
+            VALUES ('mutation-operations', 2)
             ON CONFLICT (component) DO NOTHING
             """,
             """
@@ -44,6 +44,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 canonical_intent_hash TEXT NOT NULL,
                 version BIGINT NOT NULL,
                 state INTEGER NOT NULL,
+                execution_claim_expires_at_utc TEXT NULL,
                 snapshot_json TEXT NOT NULL,
                 created_at_utc TEXT NOT NULL,
                 updated_at_utc TEXT NOT NULL,
@@ -53,6 +54,13 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """
             CREATE INDEX IF NOT EXISTS ix_kafdeck_mutation_operations_state
             ON kafdeck_mutation_operations (state, updated_at_utc)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_kafdeck_mutation_operations_recovery
+            ON kafdeck_mutation_operations (
+                state,
+                execution_claim_expires_at_utc,
+                updated_at_utc)
             """,
             """
             CREATE TABLE IF NOT EXISTS kafdeck_mutation_resource_claims (
@@ -83,7 +91,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             WHERE component = 'mutation-operations'
             """;
         var version = await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 1)
+        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 2)
         {
             throw new InvalidOperationException(
                 "Mutation persistence schema version is unsupported. Refusing to start mutation mode.");
@@ -110,6 +118,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 canonical_intent_hash,
                 version,
                 state,
+                execution_claim_expires_at_utc,
                 snapshot_json,
                 created_at_utc,
                 updated_at_utc)
@@ -120,6 +129,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 @canonical_intent_hash,
                 @version,
                 @state,
+                @execution_claim_expires_at_utc,
                 @snapshot_json,
                 @created_at_utc,
                 @updated_at_utc)
@@ -131,6 +141,12 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         AddParameter(insert, "@canonical_intent_hash", operation.CanonicalIntentHash);
         AddParameter(insert, "@version", operation.Version);
         AddParameter(insert, "@state", (int)operation.State);
+        AddParameter(
+            insert,
+            "@execution_claim_expires_at_utc",
+            operation.ExecutionClaimExpiresAtUtc is { } leaseExpiry
+                ? FormatTimestamp(leaseExpiry)
+                : null);
         AddParameter(insert, "@snapshot_json", Serialize(operation));
         AddParameter(insert, "@created_at_utc", FormatTimestamp(operation.CreatedAtUtc));
         AddParameter(insert, "@updated_at_utc", FormatTimestamp(operation.UpdatedAtUtc));
@@ -219,6 +235,50 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         return Array.AsReadOnly(items.ToArray());
     }
 
+    public async Task<IReadOnlyList<MutationOperationSnapshot>> ListRecoverableExecutionsAsync(
+        DateTimeOffset nowUtc,
+        bool includeActiveLeases,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 10_001)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_mutation_operations
+            WHERE state = @state
+              AND (
+                  @include_active = 1
+                  OR execution_claim_expires_at_utc IS NULL
+                  OR execution_claim_expires_at_utc <= @now_utc
+              )
+            ORDER BY updated_at_utc, operation_id
+            LIMIT @limit
+            """;
+        AddParameter(command, "@state", (int)MutationOperationState.Executing);
+        AddParameter(command, "@include_active", includeActiveLeases ? 1 : 0);
+        AddParameter(command, "@now_utc", FormatTimestamp(nowUtc));
+        AddParameter(command, "@limit", limit);
+
+        var items = new List<MutationOperationSnapshot>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var json = reader.GetString(0);
+            items.Add(
+                JsonSerializer.Deserialize<MutationOperationSnapshot>(json, JsonOptions) ??
+                throw new InvalidOperationException("Persisted mutation snapshot could not be deserialized."));
+        }
+
+        return Array.AsReadOnly(items.ToArray());
+    }
+
     public async Task<MutationSaveResult> TrySaveAsync(
         MutationOperationSnapshot operation,
         long expectedVersion,
@@ -239,6 +299,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             UPDATE kafdeck_mutation_operations
             SET version = @new_version,
                 state = @state,
+                execution_claim_expires_at_utc = @execution_claim_expires_at_utc,
                 snapshot_json = @snapshot_json,
                 updated_at_utc = @updated_at_utc
             WHERE operation_id = @operation_id
@@ -246,6 +307,12 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """;
         AddParameter(command, "@new_version", operation.Version);
         AddParameter(command, "@state", (int)operation.State);
+        AddParameter(
+            command,
+            "@execution_claim_expires_at_utc",
+            operation.ExecutionClaimExpiresAtUtc is { } leaseExpiry
+                ? FormatTimestamp(leaseExpiry)
+                : null);
         AddParameter(command, "@snapshot_json", Serialize(operation));
         AddParameter(command, "@updated_at_utc", FormatTimestamp(operation.UpdatedAtUtc));
         AddParameter(command, "@operation_id", operation.OperationId.ToString("D"));
@@ -301,6 +368,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             connection,
             transaction,
             operationId,
+            _connectionFactory.SupportsSelectForUpdate,
             cancellationToken).ConfigureAwait(false);
 
         if (persistedOperation is null ||
@@ -423,6 +491,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         DbConnection connection,
         DbTransaction transaction,
         Guid operationId,
+        bool lockForUpdate,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -432,7 +501,8 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             SELECT snapshot_json
             FROM kafdeck_mutation_operations
             WHERE operation_id = @operation_id
-            """;
+            """ +
+            (lockForUpdate ? " FOR UPDATE" : string.Empty);
         AddParameter(command, "@operation_id", operationId.ToString("D"));
         return await ReadSingleSnapshotAsync(command, cancellationToken).ConfigureAwait(false);
     }
@@ -511,11 +581,11 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
     private static string FormatTimestamp(DateTimeOffset timestamp) =>
         timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
-    private static void AddParameter(DbCommand command, string name, object value)
+    private static void AddParameter(DbCommand command, string name, object? value)
     {
         var parameter = command.CreateParameter();
         parameter.ParameterName = name;
-        parameter.Value = value;
+        parameter.Value = value ?? DBNull.Value;
         command.Parameters.Add(parameter);
     }
 }
