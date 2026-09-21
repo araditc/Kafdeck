@@ -34,6 +34,7 @@ public static class V03RecordApiContract
           { "name": "direction", "in": "query", "schema": { "type": "string", "enum": ["forward", "previous"] } },
           { "name": "maxRecords", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } },
           { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } },
+          { "name": "decode", "in": "query", "schema": { "type": "boolean", "default": false } },
           { "name": "filterLanguage", "in": "query", "schema": { "type": "string", "enum": ["cel", "jq"] } },
           { "name": "filter", "in": "query", "schema": { "type": "string" } }
         ],
@@ -56,6 +57,7 @@ public static class V03RecordApiContract
           { "name": "partition", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 0 } },
           { "name": "maxRecords", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } },
           { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } },
+          { "name": "decode", "in": "query", "schema": { "type": "boolean", "default": false } },
           { "name": "filterLanguage", "in": "query", "schema": { "type": "string", "enum": ["cel", "jq"] } },
           { "name": "filter", "in": "query", "schema": { "type": "string" } }
         ],
@@ -77,7 +79,8 @@ public static class V03RecordApiContract
           { "name": "partition", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 0 } },
           { "name": "format", "in": "query", "schema": { "type": "string", "enum": ["json", "ndjson", "csv"] } },
           { "name": "maxRecords", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } },
-          { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } }
+          { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } },
+          { "name": "decode", "in": "query", "schema": { "type": "boolean", "default": false } }
         ],
         "responses": {
           "200": { "description": "Bounded masked JSON, NDJSON, or CSV stream" },
