@@ -33,7 +33,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             """,
             """
             INSERT INTO kafdeck_schema_info (component, schema_version)
-            VALUES ('mutation-operations', 2)
+            VALUES ('mutation-operations', 3)
             ON CONFLICT (component) DO NOTHING
             """,
             """
@@ -61,6 +61,21 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 state,
                 execution_claim_expires_at_utc,
                 updated_at_utc)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS kafdeck_mutation_cluster_slots (
+                cluster_id TEXT NOT NULL,
+                slot_number INTEGER NOT NULL,
+                operation_id TEXT NOT NULL,
+                execution_generation BIGINT NOT NULL,
+                expires_at_utc TEXT NOT NULL,
+                PRIMARY KEY (cluster_id, slot_number),
+                UNIQUE (operation_id, execution_generation)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_kafdeck_mutation_cluster_slots_operation
+            ON kafdeck_mutation_cluster_slots (operation_id, execution_generation)
             """,
             """
             CREATE TABLE IF NOT EXISTS kafdeck_mutation_resource_claims (
@@ -91,7 +106,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             WHERE component = 'mutation-operations'
             """;
         var version = await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 2)
+        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 3)
         {
             throw new InvalidOperationException(
                 "Mutation persistence schema version is unsupported. Refusing to start mutation mode.");
@@ -328,6 +343,171 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         return current is null
             ? new MutationSaveResult(MutationSaveOutcome.NotFound, null)
             : new MutationSaveResult(MutationSaveOutcome.VersionConflict, current);
+    }
+
+    public async Task<MutationClusterSlotResult> TryAcquireClusterExecutionSlotAsync(
+        Guid operationId,
+        long executionClaimGeneration,
+        string clusterId,
+        int maxConcurrentPerCluster,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+        if (executionClaimGeneration <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(executionClaimGeneration));
+        }
+
+        if (maxConcurrentPerCluster is < 1 or > 16)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxConcurrentPerCluster));
+        }
+
+        var normalizedClusterId = clusterId.Trim();
+        var nowUtc = _timeProvider.GetUtcNow();
+        if (expiresAtUtc <= nowUtc)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expiresAtUtc));
+        }
+
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        var persisted = await GetByOperationIdAsync(
+            connection,
+            transaction,
+            operationId,
+            _connectionFactory.SupportsSelectForUpdate,
+            cancellationToken).ConfigureAwait(false);
+
+        if (persisted is null ||
+            persisted.State != MutationOperationState.Executing ||
+            persisted.ExecutionClaimGeneration != executionClaimGeneration ||
+            !string.Equals(persisted.ClusterId, normalizedClusterId, StringComparison.Ordinal) ||
+            persisted.ExecutionClaimExpiresAtUtc is not { } persistedLeaseExpiry ||
+            persistedLeaseExpiry <= nowUtc ||
+            expiresAtUtc > persistedLeaseExpiry)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationClusterSlotResult(
+                MutationClusterSlotOutcome.InvalidExecutionClaim);
+        }
+
+        await using (var purge = connection.CreateCommand())
+        {
+            purge.Transaction = transaction;
+            purge.CommandText =
+                """
+                DELETE FROM kafdeck_mutation_cluster_slots
+                WHERE cluster_id = @cluster_id
+                  AND expires_at_utc <= @now_utc
+                  AND operation_id NOT IN (
+                      SELECT operation_id
+                      FROM kafdeck_mutation_operations
+                      WHERE state IN (@executing_state, @unknown_state)
+                  )
+                """;
+            AddParameter(purge, "@cluster_id", normalizedClusterId);
+            AddParameter(purge, "@now_utc", FormatTimestamp(nowUtc));
+            AddParameter(purge, "@executing_state", (int)MutationOperationState.Executing);
+            AddParameter(purge, "@unknown_state", (int)MutationOperationState.ExecutionUnknown);
+            await purge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var existing = connection.CreateCommand())
+        {
+            existing.Transaction = transaction;
+            existing.CommandText =
+                """
+                SELECT slot_number
+                FROM kafdeck_mutation_cluster_slots
+                WHERE operation_id = @operation_id
+                  AND execution_generation = @execution_generation
+                """;
+            AddParameter(existing, "@operation_id", operationId.ToString("D"));
+            AddParameter(existing, "@execution_generation", executionClaimGeneration);
+
+            var currentSlot = await existing.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (currentSlot is not null and not DBNull)
+            {
+                var slotNumber = Convert.ToInt32(currentSlot, CultureInfo.InvariantCulture);
+                if (slotNumber < 0 || slotNumber >= maxConcurrentPerCluster)
+                {
+                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                    return new MutationClusterSlotResult(
+                        MutationClusterSlotOutcome.InvalidExecutionClaim);
+                }
+
+                await using var renew = connection.CreateCommand();
+                renew.Transaction = transaction;
+                renew.CommandText =
+                    """
+                    UPDATE kafdeck_mutation_cluster_slots
+                    SET expires_at_utc = @expires_at_utc
+                    WHERE cluster_id = @cluster_id
+                      AND slot_number = @slot_number
+                      AND operation_id = @operation_id
+                      AND execution_generation = @execution_generation
+                    """;
+                AddParameter(renew, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+                AddParameter(renew, "@cluster_id", normalizedClusterId);
+                AddParameter(renew, "@slot_number", slotNumber);
+                AddParameter(renew, "@operation_id", operationId.ToString("D"));
+                AddParameter(renew, "@execution_generation", executionClaimGeneration);
+
+                if (await renew.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                {
+                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                    return new MutationClusterSlotResult(
+                        MutationClusterSlotOutcome.InvalidExecutionClaim);
+                }
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return new MutationClusterSlotResult(
+                    MutationClusterSlotOutcome.Acquired,
+                    slotNumber);
+            }
+        }
+
+        for (var slotNumber = 0; slotNumber < maxConcurrentPerCluster; slotNumber++)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText =
+                """
+                INSERT INTO kafdeck_mutation_cluster_slots (
+                    cluster_id,
+                    slot_number,
+                    operation_id,
+                    execution_generation,
+                    expires_at_utc)
+                VALUES (
+                    @cluster_id,
+                    @slot_number,
+                    @operation_id,
+                    @execution_generation,
+                    @expires_at_utc)
+                ON CONFLICT (cluster_id, slot_number) DO NOTHING
+                """;
+            AddParameter(insert, "@cluster_id", normalizedClusterId);
+            AddParameter(insert, "@slot_number", slotNumber);
+            AddParameter(insert, "@operation_id", operationId.ToString("D"));
+            AddParameter(insert, "@execution_generation", executionClaimGeneration);
+            AddParameter(insert, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+
+            if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return new MutationClusterSlotResult(
+                    MutationClusterSlotOutcome.Acquired,
+                    slotNumber);
+            }
+        }
+
+        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+        return new MutationClusterSlotResult(
+            MutationClusterSlotOutcome.Saturated);
     }
 
     public async Task<MutationResourceClaimResult> TryAcquireResourceClaimsAsync(
@@ -641,6 +821,24 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         return new MutationLeaseRenewResult(
             MutationLeaseRenewOutcome.Renewed,
             operation);
+    }
+
+    public async Task ReleaseClusterExecutionSlotAsync(
+        Guid operationId,
+        long executionClaimGeneration,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            DELETE FROM kafdeck_mutation_cluster_slots
+            WHERE operation_id = @operation_id
+              AND execution_generation = @execution_generation
+            """;
+        AddParameter(command, "@operation_id", operationId.ToString("D"));
+        AddParameter(command, "@execution_generation", executionClaimGeneration);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task ReleaseResourceClaimsAsync(
