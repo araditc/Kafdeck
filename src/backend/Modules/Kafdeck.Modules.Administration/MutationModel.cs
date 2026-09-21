@@ -155,6 +155,39 @@ public static class MutationIdempotency
             .ToLowerInvariant();
     }
 
+    internal static string HashRequestIntent(MutationIntentDescriptor intent)
+    {
+        ArgumentNullException.ThrowIfNull(intent);
+
+        var builder = new StringBuilder(1024);
+        Append(builder, "kind", ((int)intent.Kind).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Append(builder, "cluster", intent.ClusterId.Trim());
+        Append(builder, "intent", HashCanonicalIntent(intent.CanonicalIntent));
+
+        foreach (var resource in MutationPreviewHasher.NormalizeResources(intent.ResourceKeys))
+        {
+            Append(builder, "resource", resource);
+        }
+
+        foreach (var digest in MutationPreviewHasher.NormalizeDigests(intent.MaterialDigests))
+        {
+            Append(builder, "material-name", digest.Name);
+            Append(builder, "material-digest", digest.Digest);
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
+            .ToLowerInvariant();
+    }
+
+    private static void Append(StringBuilder builder, string key, string value)
+    {
+        builder
+            .Append(key)
+            .Append('=')
+            .Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(value)))
+            .Append('\n');
+    }
+
     private static string Encode(string value) =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 }
