@@ -56,6 +56,7 @@ public static class MutationRiskClassifier
         MutationRiskDecision proposed)
     {
         ArgumentNullException.ThrowIfNull(proposed);
+        ArgumentNullException.ThrowIfNull(proposed.Reasons);
 
         if (!Enum.IsDefined(proposed.RiskClass) ||
             !Enum.IsDefined(proposed.ConfirmationMode))
