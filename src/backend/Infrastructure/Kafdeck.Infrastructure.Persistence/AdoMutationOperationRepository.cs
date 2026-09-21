@@ -469,6 +469,180 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         return new MutationResourceClaimResult(MutationResourceClaimOutcome.Acquired);
     }
 
+    public async Task<MutationLeaseRenewResult> TryRenewExecutionLeaseAsync(
+        MutationOperationSnapshot operation,
+        long expectedVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (expectedVersion < 0 ||
+            operation.Version != checked(expectedVersion + 1) ||
+            operation.State != MutationOperationState.Executing ||
+            operation.ExecutionClaimGeneration <= 0 ||
+            operation.DispatchStartedAtUtc is not null ||
+            operation.ExecutionClaimExpiresAtUtc is not { } requestedExpiry)
+        {
+            throw new ArgumentException(
+                "Execution lease renewal requires one valid pre-dispatch Executing transition.",
+                nameof(operation));
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow();
+        if (requestedExpiry <= nowUtc)
+        {
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.Expired,
+                operation);
+        }
+
+        var expectedResources = operation.ResourceKeys
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        var persisted = await GetByOperationIdAsync(
+            connection,
+            transaction,
+            operation.OperationId,
+            _connectionFactory.SupportsSelectForUpdate,
+            cancellationToken).ConfigureAwait(false);
+
+        if (persisted is null)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(MutationLeaseRenewOutcome.NotFound, null);
+        }
+
+        if (persisted.Version != expectedVersion)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.VersionConflict,
+                persisted);
+        }
+
+        if (persisted.State != MutationOperationState.Executing ||
+            persisted.ExecutionClaimGeneration != operation.ExecutionClaimGeneration ||
+            persisted.DispatchStartedAtUtc is not null)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.InvalidExecutionClaim,
+                persisted);
+        }
+
+        if (persisted.ExecutionClaimExpiresAtUtc is not { } persistedExpiry ||
+            persistedExpiry <= nowUtc)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.Expired,
+                persisted);
+        }
+
+        if (requestedExpiry < persistedExpiry)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.InvalidExecutionClaim,
+                persisted);
+        }
+
+        var persistedClaimKeys = new List<string>();
+        await using (var claims = connection.CreateCommand())
+        {
+            claims.Transaction = transaction;
+            claims.CommandText =
+                """
+                SELECT resource_key
+                FROM kafdeck_mutation_resource_claims
+                WHERE operation_id = @operation_id
+                  AND execution_generation = @execution_generation
+                ORDER BY resource_key
+                """;
+            AddParameter(claims, "@operation_id", operation.OperationId.ToString("D"));
+            AddParameter(claims, "@execution_generation", operation.ExecutionClaimGeneration);
+
+            await using var reader = await claims.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                persistedClaimKeys.Add(reader.GetString(0));
+            }
+        }
+
+        if (!persistedClaimKeys.SequenceEqual(expectedResources, StringComparer.Ordinal))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationLeaseRenewResult(
+                MutationLeaseRenewOutcome.InvalidExecutionClaim,
+                persisted);
+        }
+
+        await using (var updateOperation = connection.CreateCommand())
+        {
+            updateOperation.Transaction = transaction;
+            updateOperation.CommandText =
+                """
+                UPDATE kafdeck_mutation_operations
+                SET version = @new_version,
+                    execution_claim_expires_at_utc = @execution_claim_expires_at_utc,
+                    snapshot_json = @snapshot_json,
+                    updated_at_utc = @updated_at_utc
+                WHERE operation_id = @operation_id
+                  AND version = @expected_version
+                  AND state = @executing_state
+                """;
+            AddParameter(updateOperation, "@new_version", operation.Version);
+            AddParameter(updateOperation, "@execution_claim_expires_at_utc", FormatTimestamp(requestedExpiry));
+            AddParameter(updateOperation, "@snapshot_json", Serialize(operation));
+            AddParameter(updateOperation, "@updated_at_utc", FormatTimestamp(operation.UpdatedAtUtc));
+            AddParameter(updateOperation, "@operation_id", operation.OperationId.ToString("D"));
+            AddParameter(updateOperation, "@expected_version", expectedVersion);
+            AddParameter(updateOperation, "@executing_state", (int)MutationOperationState.Executing);
+
+            if (await updateOperation.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new MutationLeaseRenewResult(
+                    MutationLeaseRenewOutcome.VersionConflict,
+                    persisted);
+            }
+        }
+
+        await using (var updateClaims = connection.CreateCommand())
+        {
+            updateClaims.Transaction = transaction;
+            updateClaims.CommandText =
+                """
+                UPDATE kafdeck_mutation_resource_claims
+                SET expires_at_utc = @expires_at_utc
+                WHERE operation_id = @operation_id
+                  AND execution_generation = @execution_generation
+                """;
+            AddParameter(updateClaims, "@expires_at_utc", FormatTimestamp(requestedExpiry));
+            AddParameter(updateClaims, "@operation_id", operation.OperationId.ToString("D"));
+            AddParameter(updateClaims, "@execution_generation", operation.ExecutionClaimGeneration);
+
+            var updatedClaims = await updateClaims.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            if (updatedClaims != expectedResources.Length)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new MutationLeaseRenewResult(
+                    MutationLeaseRenewOutcome.InvalidExecutionClaim,
+                    persisted);
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new MutationLeaseRenewResult(
+            MutationLeaseRenewOutcome.Renewed,
+            operation);
+    }
+
     public async Task ReleaseResourceClaimsAsync(
         Guid operationId,
         long executionClaimGeneration,
