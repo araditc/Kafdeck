@@ -1,5 +1,6 @@
 using System.Reflection;
 using Kafdeck.Core;
+using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Topics;
 using Xunit;
@@ -31,6 +32,7 @@ public sealed class DependencyDirectionTests
     {
         typeof(ClustersModuleMarker).Assembly,
         typeof(TopicsModuleMarker).Assembly,
+        typeof(AdministrationModuleMarker).Assembly,
     };
 
     private static void AssertNoForbiddenReferences(Assembly assembly, params string[] forbiddenPrefixes)
