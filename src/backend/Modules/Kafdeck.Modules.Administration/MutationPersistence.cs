@@ -50,6 +50,12 @@ public interface IMutationOperationRepository
         int limit,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<MutationOperationSnapshot>> ListRecoverableExecutionsAsync(
+        DateTimeOffset nowUtc,
+        bool includeActiveLeases,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     Task<MutationSaveResult> TrySaveAsync(
         MutationOperationSnapshot operation,
         long expectedVersion,
