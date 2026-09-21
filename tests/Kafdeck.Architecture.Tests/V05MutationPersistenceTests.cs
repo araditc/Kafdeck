@@ -264,6 +264,52 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Executor_renews_execution_and_resource_lease_immediately_before_dispatch()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-pre-dispatch-renew-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new MutableTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("pre-dispatch-renew");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var handler = new RecordingHandler(MutationOperationKind.TopicCreate);
+            var guard = new AdvancingAllowedGuard(
+                time,
+                Now.AddSeconds(19));
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                guard,
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor.ExecuteAsync(operation.Snapshot.OperationId);
+
+            Assert.Equal(MutationOperationState.AppliedVerified, result.State);
+            Assert.Equal(Now.AddSeconds(39), result.ExecutionClaimExpiresAtUtc);
+            Assert.NotNull(result.DispatchStartedAtUtc);
+            Assert.True(result.DispatchStartedAtUtc >= Now.AddSeconds(19));
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Provider_ignoring_cancellation_times_out_to_unknown_and_keeps_conflict_claim()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-provider-timeout-{Guid.NewGuid():N}.db");
@@ -1064,6 +1110,29 @@ public sealed class V05MutationPersistenceTests
         public void SetUtcNow(DateTimeOffset now)
         {
             _now = now;
+        }
+    }
+
+    private sealed class AdvancingAllowedGuard : IMutationPreDispatchGuard
+    {
+        private readonly MutableTimeProvider _timeProvider;
+        private readonly DateTimeOffset _advanceTo;
+
+        public AdvancingAllowedGuard(
+            MutableTimeProvider timeProvider,
+            DateTimeOffset advanceTo)
+        {
+            _timeProvider = timeProvider;
+            _advanceTo = advanceTo;
+        }
+
+        public Task<MutationPreDispatchGuardResult> ValidateAsync(
+            MutationOperationSnapshot operation,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _timeProvider.SetUtcNow(_advanceTo);
+            return Task.FromResult(MutationPreDispatchGuardResult.Allowed);
         }
     }
 
