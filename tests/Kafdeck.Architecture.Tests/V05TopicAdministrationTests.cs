@@ -286,7 +286,7 @@ public sealed class V05TopicAdministrationTests
                 var call = Interlocked.Increment(ref calls);
                 IReadOnlyList<TopicSummary> topics =
                     call == 1
-                        ? new[] { new TopicSummary("orders", false) }
+                        ? new[] { new TopicSummary("orders", 1, false) }
                         : Array.Empty<TopicSummary>();
 
                 return Task.FromResult(
