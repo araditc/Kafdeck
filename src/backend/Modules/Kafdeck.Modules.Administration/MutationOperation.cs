@@ -24,7 +24,10 @@ public sealed class MutationOperation
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
 
         var clusterId = RequireBounded(intent.ClusterId, nameof(intent.ClusterId), 256);
-        var canonicalIntent = RequireBounded(intent.CanonicalIntent, nameof(intent.CanonicalIntent), 128 * 1024);
+        var canonicalIntent = RequireBounded(
+            intent.CanonicalIntent,
+            nameof(intent.CanonicalIntent),
+            MutationLimits.MaxCanonicalIntentCharacters);
         var requester = RequireBounded(requesterPrincipalId, nameof(requesterPrincipalId), 4096);
         var resources = MutationPreviewHasher.NormalizeResources(intent.ResourceKeys);
         var preconditions = MutationPreviewHasher.NormalizePreconditions(intent.Preconditions);
