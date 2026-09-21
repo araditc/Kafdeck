@@ -12,5 +12,6 @@
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj" />
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
   <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj" />
+  <Project Path="src/backend/Infrastructure/Kafdeck.Infrastructure.Persistence/Kafdeck.Infrastructure.Persistence.csproj" />
   <Project Path="tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj" />
 </Solution>
