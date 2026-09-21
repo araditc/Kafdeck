@@ -1,0 +1,116 @@
+namespace Kafdeck.Api;
+
+public static class V03RecordApiContract
+{
+    public const string BasePath = "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records";
+
+    public static readonly IReadOnlyList<ApiRouteDefinition> ProductRoutes =
+    [
+        new("GET", BasePath, "v03-records-browse"),
+        new("GET", BasePath + "/tail", "v03-records-tail"),
+        new("GET", BasePath + "/export", "v03-records-export"),
+    ];
+
+    public const string OpenApiJson = """
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kafdeck Safe Data Explorer API",
+    "version": "0.3.0",
+    "description": "Bounded read-only Kafka record inspection. record.read is separate from metadata access, record.export is separately authorized, and active server-side masking is applied before browser, API, tail, or export output. No produce, replay, offset commit, payload persistence, or unbounded scan operation is exposed."
+  },
+  "paths": {
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records": {
+      "get": {
+        "operationId": "v03-records-browse",
+        "description": "Read one bounded, masked page from an explicitly selected topic partition and anchor.",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "partition", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "anchor", "in": "query", "schema": { "type": "string", "enum": ["earliest", "latest"] } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "timestampUtc", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "direction", "in": "query", "schema": { "type": "string", "enum": ["forward", "previous"] } },
+          { "name": "maxRecords", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } },
+          { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } },
+          { "name": "decode", "in": "query", "schema": { "type": "boolean", "default": false } },
+          { "name": "filterLanguage", "in": "query", "schema": { "type": "string", "enum": ["cel", "jq"] } },
+          { "name": "filter", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Masked bounded record page with explicit budget and limitation metadata" },
+          "400": { "description": "Invalid or over-budget query" },
+          "401": { "description": "Operator authentication required" },
+          "403": { "description": "Denied by Kafdeck record.read policy or downstream Kafka ACL" },
+          "501": { "description": "Record capability unsupported" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records/tail": {
+      "get": {
+        "operationId": "v03-records-tail",
+        "description": "Open a bounded server-sent-event live tail. Disconnect cancels underlying work and all record frames are server-side masked.",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "partition", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "maxRecords", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } },
+          { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } },
+          { "name": "decode", "in": "query", "schema": { "type": "boolean", "default": false } },
+          { "name": "filterLanguage", "in": "query", "schema": { "type": "string", "enum": ["cel", "jq"] } },
+          { "name": "filter", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "text/event-stream containing only masked safe projections" },
+          "400": { "description": "Invalid or over-budget query" },
+          "401": { "description": "Operator authentication required" },
+          "403": { "description": "Denied by Kafdeck record.read policy or downstream Kafka ACL" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records/export": {
+      "get": {
+        "operationId": "v03-records-export",
+        "description": "Stream a bounded export from the already-authorized and already-masked projection. record.export is required in addition to record.read.",
+        "parameters": [
+          { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "partition", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "format", "in": "query", "schema": { "type": "string", "enum": ["json", "ndjson", "csv"] } },
+          { "name": "maxRecords", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } },
+          { "name": "maxBytes", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 16777216 } },
+          { "name": "decode", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": { "description": "Bounded masked JSON, NDJSON, or CSV stream" },
+          "400": { "description": "Invalid or over-budget query" },
+          "401": { "description": "Operator authentication required" },
+          "403": { "description": "Denied by Kafdeck record.read/record.export policy or downstream Kafka ACL" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "oidcSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "Kafdeck.Session",
+        "description": "Server-managed Kafdeck OIDC operator session."
+      },
+      "deploymentToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Kafdeck-Access-Token",
+        "description": "Legacy deployment access boundary; not an operator identity."
+      }
+    }
+  },
+  "security": [
+    { "oidcSession": [] },
+    { "deploymentToken": [] }
+  ]
+}
+""";
+}

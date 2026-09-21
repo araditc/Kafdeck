@@ -175,6 +175,87 @@ public sealed class ConfigurationSecurityBoundaryTests
         Assert.DoesNotContain("ClientSecret", json, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public void Loader_parses_read_only_schema_registry_profile_from_secret_references()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Kafdeck:Deployment:ListenUrl"] = "http://127.0.0.1:8080",
+            ["Kafdeck:Clusters:0:Id"] = "prod",
+            ["Kafdeck:Clusters:0:BootstrapServers:0"] = "broker.example:9092",
+            ["Kafdeck:Clusters:0:SecurityProtocol"] = "Plaintext",
+            ["Kafdeck:Clusters:0:SchemaRegistry:Url"] = "https://registry.example",
+            ["Kafdeck:Clusters:0:SchemaRegistry:Username"] = "env:KAFDECK_SR_USER",
+            ["Kafdeck:Clusters:0:SchemaRegistry:Password"] = "env:KAFDECK_SR_PASSWORD",
+        };
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var options = KafdeckConfigurationLoader.Load(configuration);
+
+        Assert.Single(options.Clusters);
+        Assert.NotNull(options.Clusters[0].SchemaRegistry);
+        Assert.Equal("https://registry.example", options.Clusters[0].SchemaRegistry!.Url);
+
+        KafdeckConfigurationValidator.ValidateAndThrow(options);
+
+        var diagnosticJson = JsonSerializer.Serialize(SafeConfigurationDiagnostics.Create(options));
+        Assert.Contains("SchemaRegistryConfigured", diagnosticJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("KAFDECK_SR_USER", diagnosticJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("KAFDECK_SR_PASSWORD", diagnosticJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Remote_schema_registry_basic_auth_requires_https()
+    {
+        var cluster = new ClusterProfile(
+            "prod",
+            ["broker.example:9092"],
+            KafkaSecurityProtocol.Plaintext,
+            null,
+            null,
+            new SchemaRegistryProfile(
+                "http://registry.example",
+                SecretReference.Parse("env:KAFDECK_SR_USER"),
+                SecretReference.Parse("env:KAFDECK_SR_PASSWORD")));
+
+        var options = new KafdeckOptions(
+            new DeploymentOptions("http://127.0.0.1:8080", null),
+            [cluster]);
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains("requires HTTPS", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Schema_registry_basic_auth_requires_username_and_password_together()
+    {
+        var cluster = new ClusterProfile(
+            "prod",
+            ["broker.example:9092"],
+            KafkaSecurityProtocol.Plaintext,
+            null,
+            null,
+            new SchemaRegistryProfile(
+                "https://registry.example",
+                SecretReference.Parse("env:KAFDECK_SR_USER"),
+                null));
+
+        var options = new KafdeckOptions(
+            new DeploymentOptions("http://127.0.0.1:8080", null),
+            [cluster]);
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains("requires both username and password", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Tls_verification_cannot_be_silently_disabled()
     {

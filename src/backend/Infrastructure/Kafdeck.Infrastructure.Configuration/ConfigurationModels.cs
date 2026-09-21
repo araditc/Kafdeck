@@ -1,3 +1,4 @@
+using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -19,7 +20,11 @@ public enum SaslMechanism
 
 public sealed record KafdeckOptions(
     DeploymentOptions Deployment,
-    IReadOnlyList<ClusterProfile> Clusters);
+    IReadOnlyList<ClusterProfile> Clusters,
+    RecordDataOptions? Records = null);
+
+public sealed record RecordDataOptions(
+    RecordMaskingPolicyDefinition MaskingPolicy);
 
 public sealed record DeploymentOptions(
     string ListenUrl,
@@ -49,7 +54,13 @@ public sealed record ClusterProfile(
     IReadOnlyList<string> BootstrapServers,
     KafkaSecurityProtocol SecurityProtocol,
     TlsProfile? Tls,
-    SaslProfile? Sasl);
+    SaslProfile? Sasl,
+    SchemaRegistryProfile? SchemaRegistry = null);
+
+public sealed record SchemaRegistryProfile(
+    string Url,
+    SecretReference? Username,
+    SecretReference? Password);
 
 public sealed record TlsProfile(
     bool VerifyServerCertificate,

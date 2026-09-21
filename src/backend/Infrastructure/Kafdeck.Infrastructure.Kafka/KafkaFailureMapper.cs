@@ -45,6 +45,9 @@ internal static class KafkaFailureMapper
             ErrorCode.Local_UnsupportedFeature =>
                 Failure(KafkaFailureCategory.NotSupported, error.Code, "Kafka does not support the requested capability.", false),
 
+            ErrorCode.OffsetOutOfRange =>
+                OffsetOutOfRange(),
+
             _ => Failure(
                 KafkaFailureCategory.ProtocolError,
                 error.Code,
@@ -64,6 +67,9 @@ internal static class KafkaFailureMapper
 
     public static KafkaFailure InvalidConfiguration() =>
         new(KafkaFailureCategory.InvalidConfiguration, "invalid_configuration", "Kafka client configuration is invalid.", false);
+
+    public static KafkaFailure OffsetOutOfRange() =>
+        new(KafkaFailureCategory.ProtocolError, "offset_out_of_range", "The requested Kafka record offset is outside the available partition range.", false);
 
     public static KafkaFailure Unknown() =>
         new(KafkaFailureCategory.Unknown, "unknown_kafka_failure", "Kafka operation failed.", false);

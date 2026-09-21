@@ -1,3 +1,4 @@
+using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Microsoft.Extensions.Configuration;
 
@@ -20,10 +21,46 @@ public static class KafdeckConfigurationLoader
             .GetChildren()
             .Select(LoadCluster)
             .ToArray();
+        var records = LoadRecordData(configuration.GetSection("Kafdeck:Records"));
 
         return new KafdeckOptions(
             new DeploymentOptions(listenUrl, accessToken, accessMode, oidc),
-            Array.AsReadOnly(clusters));
+            Array.AsReadOnly(clusters),
+            records);
+    }
+
+    private static RecordDataOptions LoadRecordData(IConfigurationSection section)
+    {
+        var masking = section.GetSection("Masking");
+        var policyId = masking["PolicyId"] ?? "default";
+        var version = int.TryParse(masking["Version"], out var parsedVersion) ? parsedVersion : 1;
+        var maskKey = ParseOptionalBoolean(masking["MaskKey"], false, "Records masking MaskKey");
+        var keyReplacement = masking["KeyReplacement"] ?? "[REDACTED]";
+
+        var structuredRules = masking
+            .GetSection("StructuredRules")
+            .GetChildren()
+            .Select(rule => new RecordStructuredMaskRule(
+                rule["Path"] ?? string.Empty,
+                rule["Replacement"] ?? "[REDACTED]"))
+            .ToArray();
+
+        var headerRules = masking
+            .GetSection("HeaderRules")
+            .GetChildren()
+            .Select(rule => new RecordHeaderMaskRule(
+                rule["Name"] ?? string.Empty,
+                rule["Replacement"] ?? "[REDACTED]"))
+            .ToArray();
+
+        return new RecordDataOptions(
+            new RecordMaskingPolicyDefinition(
+                policyId,
+                version,
+                Array.AsReadOnly(structuredRules),
+                Array.AsReadOnly(headerRules),
+                maskKey,
+                keyReplacement));
     }
 
     private static AccessMode ParseAccessMode(string? value, SecretReference? accessToken)
@@ -110,12 +147,23 @@ public static class KafdeckConfigurationLoader
                 ParseRequiredSecret(saslSection["Password"], "SASL password"));
         }
 
+        var registrySection = section.GetSection("SchemaRegistry");
+        SchemaRegistryProfile? schemaRegistry = null;
+        if (registrySection.GetChildren().Any())
+        {
+            schemaRegistry = new SchemaRegistryProfile(
+                registrySection["Url"] ?? string.Empty,
+                ParseOptionalSecret(registrySection["Username"]),
+                ParseOptionalSecret(registrySection["Password"]));
+        }
+
         return new ClusterProfile(
             id,
             Array.AsReadOnly(bootstrapServers),
             securityProtocol,
             tls,
-            sasl);
+            sasl,
+            schemaRegistry);
     }
 
     private static SecretReference? ParseOptionalSecret(string? value) =>
@@ -129,6 +177,21 @@ public static class KafdeckConfigurationLoader
         }
 
         return SecretReference.Parse(value);
+    }
+
+    private static bool ParseOptionalBoolean(string? value, bool defaultValue, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (bool.TryParse(value, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new KafdeckConfigurationException($"{fieldName} value must be true or false.");
     }
 
     private static TEnum ParseEnum<TEnum>(string? value, TEnum defaultValue, string fieldName)

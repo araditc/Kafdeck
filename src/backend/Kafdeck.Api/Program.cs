@@ -4,11 +4,14 @@ using System.Text.Json.Serialization;
 using Kafdeck.Api;
 using Kafdeck.Core;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Kafka;
+using Kafdeck.Infrastructure.SchemaRegistry;
 using Kafdeck.Infrastructure.Security;
 using Kafdeck.Modules.Clusters;
+using Kafdeck.Modules.Records;
 using Kafdeck.Modules.Topics;
 
 Activity.DefaultIdFormat = ActivityIdFormat.W3C;
@@ -18,6 +21,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
+var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
+    kafdeckOptions.Records?.MaskingPolicy ??
+    new RecordMaskingPolicyDefinition("default", 1));
 
 builder.WebHost.UseUrls(kafdeckOptions.Deployment.ListenUrl);
 
@@ -42,6 +48,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.AddSingleton(kafdeckOptions);
 builder.Services.AddSingleton(secretResolver);
+builder.Services.AddSingleton(maskingPolicy);
 var authorizationPolicy = AuthorizationPolicyCompiler.Compile(
     AuthorizationPolicyConfigurationLoader.Load(builder.Configuration));
 builder.Services.AddSingleton(authorizationPolicy);
@@ -53,6 +60,16 @@ builder.Services.AddSingleton<KafkaSnapshotCoordinator>(services =>
     new KafkaSnapshotCoordinator(services.GetRequiredService<KafkaSnapshotPolicy>()));
 builder.Services.AddSingleton<IKafkaAdministrationPort>(_ =>
     new ConfluentKafkaAdministrationAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IKafkaRecordReadPort>(_ =>
+    new ConfluentKafkaRecordReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IRecordSchemaReadPort>(_ =>
+    new ConfluentSchemaRegistryReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IRecordDecodePort>(services =>
+    new ConfluentRecordDecoder(services.GetRequiredService<IRecordSchemaReadPort>()));
+builder.Services.AddSingleton<RecordFilterService>();
+builder.Services.AddSingleton<RecordLiveTailService>();
+builder.Services.AddSingleton<RecordMaskingService>();
+builder.Services.AddSingleton<RecordExportService>();
 builder.Services.AddSingleton<ClusterExplorerService>();
 builder.Services.AddSingleton<TopicExplorerService>();
 builder.Services.AddSingleton<ApiTelemetry>();
@@ -112,6 +129,7 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 }
 
 app.MapKafdeckV01(kafdeckOptions);
+app.MapKafdeckRecordEndpoints(kafdeckOptions);
 app.MapFallbackToFile("index.html");
 
 app.Run();

@@ -107,8 +107,13 @@
       },
       "Newtonsoft.Json": {
         "type": "Transitive",
-        "resolved": "13.0.3",
-        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
+      },
+      "System.CodeDom": {
+        "type": "Transitive",
+        "resolved": "10.0.10",
+        "contentHash": "lru5igKxs4OgWKfMeOpMAYpfB1tNSSXHk2zyiSDO/h0u8RVAhN6KqW9d3ANybDB+ePIHg6HM/NlE8HlpOk4k5A=="
       },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "Transitive",
@@ -162,12 +167,12 @@
       "kafdeck.api": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[1.0.0, )",
-          "Kafdeck.Infrastructure.Kafka": "[1.0.0, )",
-          "Kafdeck.Infrastructure.Security": "[1.0.0, )",
-          "Kafdeck.Modules.Clusters": "[1.0.0, )",
-          "Kafdeck.Modules.Topics": "[1.0.0, )",
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Kafka": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Security": "[0.2.0, )",
+          "Kafdeck.Modules.Clusters": "[0.2.0, )",
+          "Kafdeck.Modules.Topics": "[0.2.0, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )"
         }
       },
@@ -177,33 +182,58 @@
       "kafdeck.infrastructure.configuration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0, )"
+          "Kafdeck.Core": "[0.2.0, )"
         }
       },
       "kafdeck.infrastructure.kafka": {
         "type": "Project",
         "dependencies": {
           "Confluent.Kafka": "[2.15.1, )",
-          "Kafdeck.Core": "[1.0.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[1.0.0, )"
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
+        }
+      },
+      "kafdeck.infrastructure.schemaregistry": {
+        "type": "Project",
+        "dependencies": {
+          "Apache.Avro": "[1.12.2, )",
+          "Google.Protobuf": "[3.36.2, )",
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
         }
       },
       "kafdeck.infrastructure.security": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0, )"
+          "Kafdeck.Core": "[0.2.0, )"
         }
       },
       "kafdeck.modules.clusters": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0, )"
+          "Kafdeck.Core": "[0.2.0, )"
+        }
+      },
+      "kafdeck.modules.records": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )"
         }
       },
       "kafdeck.modules.topics": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0, )"
+          "Kafdeck.Core": "[0.2.0, )"
+        }
+      },
+      "Apache.Avro": {
+        "type": "CentralTransitive",
+        "requested": "[1.12.2, )",
+        "resolved": "1.12.2",
+        "contentHash": "/QiCsVWTCCv1Gvx1JsXwEsgQPBtY/+Ncj0UL3EzVjlgU/SFRT0p86w4d6QOr2s1+uFmLLfqzMCiDU36WrqPoGQ==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.4",
+          "System.CodeDom": "10.0.10"
         }
       },
       "Confluent.Kafka": {
@@ -214,6 +244,12 @@
         "dependencies": {
           "librdkafka.redist": "2.15.1"
         }
+      },
+      "Google.Protobuf": {
+        "type": "CentralTransitive",
+        "requested": "[3.36.2, )",
+        "resolved": "3.36.2",
+        "contentHash": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ=="
       },
       "Microsoft.AspNetCore.Authentication.OpenIdConnect": {
         "type": "CentralTransitive",
