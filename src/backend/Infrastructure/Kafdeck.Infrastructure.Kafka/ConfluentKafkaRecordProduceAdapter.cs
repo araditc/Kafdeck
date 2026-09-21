@@ -63,6 +63,12 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
             }
 
             var producer = _producers.GetProducer(request.ClusterId);
+
+            // W32 has already durably marked DispatchStarted before invoking this port.
+            // Do not cancel the delivery-report task from the handler token: librdkafka may
+            // still deliver an enqueued message after the caller stops waiting. Keeping this
+            // task alive lets W32 retain its late-execution cluster slot until the broker
+            // outcome is actually observed (bounded by MessageTimeoutMs).
             var delivery = await producer
                 .ProduceAsync(
                     request.TopicName,
@@ -72,7 +78,7 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
                         Value = value,
                         Headers = headers,
                     },
-                    cancellationToken)
+                    CancellationToken.None)
                 .ConfigureAwait(false);
 
             return delivery.Status switch

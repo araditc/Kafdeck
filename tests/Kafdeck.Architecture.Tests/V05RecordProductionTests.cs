@@ -37,8 +37,9 @@ public sealed class V05RecordProductionTests
         Assert.NotNull(result.Plan);
         Assert.NotNull(result.ExecutionMaterial);
         Assert.Equal(MutationRiskClass.Moderate, result.Plan!.Risk.RiskClass);
-        Assert.Equal(AuthorizationAction.RecordProduce, result.Plan.Intent.AuthorizationTargets!.Single().Action);
-        Assert.Equal("orders", result.Plan.Intent.AuthorizationTargets.Single().ResourceName);
+        var target = Assert.Single(result.Plan.Intent.AuthorizationTargets!);
+        Assert.Equal(AuthorizationAction.RecordProduce, target.Action);
+        Assert.Equal("orders", target.ResourceName);
         Assert.Single(result.Plan.Intent.MaterialDigests!);
 
         var durable = JsonSerializer.Serialize(result.Plan);
