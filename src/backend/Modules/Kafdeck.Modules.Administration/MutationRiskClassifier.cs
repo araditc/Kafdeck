@@ -11,9 +11,11 @@ public static class MutationRiskClassifier
     public static MutationRiskDecision Classify(MutationRiskInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        if (input.TargetCount <= 0)
+        if (input.TargetCount <= 0 || input.TargetCount > MutationLimits.MaxResourceKeys)
         {
-            throw new ArgumentOutOfRangeException(nameof(input), "Mutation target count must be positive.");
+            throw new ArgumentOutOfRangeException(
+                nameof(input),
+                $"Mutation target count must be between 1 and {MutationLimits.MaxResourceKeys}.");
         }
 
         var risk = BaseRisk(input.OperationKind);
