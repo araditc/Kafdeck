@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using Kafdeck.Modules.Administration;
 
@@ -50,15 +51,14 @@ internal static class RecordProductionMaterialCodec
         RecordProductionCanonicalRecord expected)
     {
         ArgumentNullException.ThrowIfNull(expected);
-        using var stream = new MemoryStream(envelope.ToArray(), writable: false);
-        using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
+        var position = 0;
 
         try
         {
-            if (reader.ReadInt32() != Version)
+            if (ReadInt32(envelope.Span, ref position) != Version)
                 throw Invalid();
 
-            var keyLength = reader.ReadInt32();
+            var keyLength = ReadInt32(envelope.Span, ref position);
             if (keyLength < -1 ||
                 (keyLength == -1) != !expected.KeyBytes.HasValue ||
                 (keyLength >= 0 && expected.KeyBytes != keyLength) ||
@@ -69,9 +69,9 @@ internal static class RecordProductionMaterialCodec
 
             ReadOnlyMemory<byte>? key = keyLength < 0
                 ? null
-                : new ReadOnlyMemory<byte>(ReadExact(reader, keyLength));
+                : ReadSlice(envelope, ref position, keyLength);
 
-            var valueLength = reader.ReadInt32();
+            var valueLength = ReadInt32(envelope.Span, ref position);
             if (valueLength != expected.ValueBytes ||
                 valueLength < 0 ||
                 valueLength > RecordProductionPolicy.HardMaxValueBytes)
@@ -79,9 +79,9 @@ internal static class RecordProductionMaterialCodec
                 throw Invalid();
             }
 
-            var value = new ReadOnlyMemory<byte>(ReadExact(reader, valueLength));
+            var value = ReadSlice(envelope, ref position, valueLength);
 
-            var headerCount = reader.ReadInt32();
+            var headerCount = ReadInt32(envelope.Span, ref position);
             if (headerCount != expected.Headers.Count ||
                 headerCount < 0 ||
                 headerCount > RecordProductionPolicy.HardMaxHeadersPerRecord)
@@ -92,33 +92,34 @@ internal static class RecordProductionMaterialCodec
             var headers = new Dictionary<string, ReadOnlyMemory<byte>>(headerCount, StringComparer.Ordinal);
             for (var index = 0; index < headerCount; index++)
             {
-                var nameLength = reader.ReadInt32();
+                var nameLength = ReadInt32(envelope.Span, ref position);
                 if (nameLength is < 1 or > 1024)
                     throw Invalid();
 
-                var name = Encoding.UTF8.GetString(ReadExact(reader, nameLength));
+                var nameBytes = ReadSlice(envelope, ref position, nameLength);
+                var name = Encoding.UTF8.GetString(nameBytes.Span);
                 var expectedHeader = expected.Headers[index];
                 if (!string.Equals(name, expectedHeader.Name, StringComparison.Ordinal))
                     throw Invalid();
 
-                var headerValueLength = reader.ReadInt32();
+                var headerValueLength = ReadInt32(envelope.Span, ref position);
                 if (headerValueLength != expectedHeader.ValueBytes || headerValueLength < 0)
                     throw Invalid();
 
                 if (!headers.TryAdd(
                         name,
-                        new ReadOnlyMemory<byte>(ReadExact(reader, headerValueLength))))
+                        ReadSlice(envelope, ref position, headerValueLength)))
                 {
                     throw Invalid();
                 }
             }
 
-            if (stream.Position != stream.Length)
+            if (position != envelope.Length)
                 throw Invalid();
 
             return new RecordProduceMutation(clusterId, topicName, key, value, headers);
         }
-        catch (EndOfStreamException)
+        catch (ArgumentOutOfRangeException)
         {
             throw Invalid();
         }
@@ -128,12 +129,28 @@ internal static class RecordProductionMaterialCodec
         }
     }
 
-    private static byte[] ReadExact(BinaryReader reader, int count)
+    private static int ReadInt32(ReadOnlySpan<byte> value, ref int position)
     {
-        if (count < 0) throw Invalid();
-        var value = reader.ReadBytes(count);
-        if (value.Length != count) throw new EndOfStreamException();
-        return value;
+        if (position < 0 || value.Length - position < sizeof(int))
+            throw Invalid();
+
+        var result = BinaryPrimitives.ReadInt32LittleEndian(
+            value.Slice(position, sizeof(int)));
+        position += sizeof(int);
+        return result;
+    }
+
+    private static ReadOnlyMemory<byte> ReadSlice(
+        ReadOnlyMemory<byte> value,
+        ref int position,
+        int length)
+    {
+        if (length < 0 || position < 0 || value.Length - position < length)
+            throw Invalid();
+
+        var result = value.Slice(position, length);
+        position += length;
+        return result;
     }
 
     private static MutationStateException Invalid() =>

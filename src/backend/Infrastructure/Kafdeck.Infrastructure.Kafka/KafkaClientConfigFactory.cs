@@ -25,6 +25,28 @@ internal static class KafkaClientConfigFactory
         return config;
     }
 
+    public static ProducerConfig CreateRecordProducer(
+        ClusterProfile profile,
+        SecretResolver secretResolver)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(secretResolver);
+
+        var config = new ProducerConfig
+        {
+            BootstrapServers = string.Join(",", profile.BootstrapServers),
+            ClientId = $"kafdeck-record-produce-{profile.Id}",
+            EnableIdempotence = true,
+            Acks = Acks.All,
+            AllowAutoCreateTopics = false,
+            MessageTimeoutMs = 15_000,
+            RequestTimeoutMs = 10_000,
+        };
+
+        ApplySecurity(config, profile, secretResolver);
+        return config;
+    }
+
     public static ConsumerConfig CreateRecordConsumer(
         ClusterProfile profile,
         SecretResolver secretResolver)
