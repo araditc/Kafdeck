@@ -11,8 +11,11 @@
     <ProjectReference Include="../Modules/Kafdeck.Modules.Clusters/Kafdeck.Modules.Clusters.csproj" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Records/Kafdeck.Modules.Records.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Modules/Kafdeck.Modules.Consumers/Kafdeck.Modules.Consumers.csproj" />
+    <ProjectReference Include="../Modules/Kafdeck.Modules.Schemas/Kafdeck.Modules.Schemas.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Kafka/Kafdeck.Infrastructure.Kafka.csproj" />
+    <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Ecosystem/Kafdeck.Infrastructure.Ecosystem.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj" />
   </ItemGroup>
