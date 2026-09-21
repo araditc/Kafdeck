@@ -9,6 +9,8 @@ public static class MutationLimits
     public const int MaxPreconditions = 2_048;
     public const int MaxMaterialDigests = 64;
     public const int MaxCanonicalIntentCharacters = 128 * 1024;
+    public const int MaxExecutionMaterialItemBytes = 16 * 1024 * 1024;
+    public const int MaxExecutionMaterialTotalBytes = 32 * 1024 * 1024;
 }
 
 public enum MutationOperationKind
@@ -163,11 +165,16 @@ public static class MutationIdempotency
             .ToLowerInvariant();
     }
 
-    internal static string HashRequestIntent(MutationIntentDescriptor intent)
+    internal static string HashAdmittedIntent(
+        MutationIntentDescriptor intent,
+        MutationRiskDecision risk,
+        string policyVersion)
     {
         ArgumentNullException.ThrowIfNull(intent);
+        ArgumentNullException.ThrowIfNull(risk);
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
 
-        var builder = new StringBuilder(1024);
+        var builder = new StringBuilder(2048);
         Append(builder, "kind", ((int)intent.Kind).ToString(System.Globalization.CultureInfo.InvariantCulture));
         Append(builder, "cluster", intent.ClusterId.Trim());
         Append(builder, "intent", HashCanonicalIntent(intent.CanonicalIntent));
@@ -177,11 +184,31 @@ public static class MutationIdempotency
             Append(builder, "resource", resource);
         }
 
+        foreach (var precondition in MutationPreviewHasher.NormalizePreconditions(intent.Preconditions))
+        {
+            Append(builder, "precondition-key", precondition.Key);
+            Append(builder, "precondition-fingerprint", precondition.Fingerprint);
+        }
+
         foreach (var digest in MutationPreviewHasher.NormalizeDigests(intent.MaterialDigests))
         {
             Append(builder, "material-name", digest.Name);
             Append(builder, "material-digest", digest.Digest);
         }
+
+        Append(builder, "risk", ((int)risk.RiskClass).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var reason in risk.Reasons
+                     .Where(reason => !string.IsNullOrWhiteSpace(reason))
+                     .Select(reason => reason.Trim())
+                     .Distinct(StringComparer.Ordinal)
+                     .OrderBy(reason => reason, StringComparer.Ordinal))
+        {
+            Append(builder, "risk-reason", reason);
+        }
+
+        Append(builder, "confirmation", ((int)risk.ConfirmationMode).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Append(builder, "independent-approval", risk.RequiresIndependentApproval ? "1" : "0");
+        Append(builder, "policy-version", policyVersion.Trim());
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
             .ToLowerInvariant();
