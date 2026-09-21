@@ -57,6 +57,14 @@ public sealed record MutationClusterSlotResult(
     MutationClusterSlotOutcome Outcome,
     int? SlotNumber = null);
 
+public enum MutationClusterSlotRenewOutcome
+{
+    Renewed = 1,
+    NotFound = 2,
+    InvalidExecutionClaim = 3,
+    Expired = 4,
+}
+
 public interface IMutationOperationRepository
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
@@ -90,6 +98,13 @@ public interface IMutationOperationRepository
         long executionClaimGeneration,
         string clusterId,
         int maxConcurrentPerCluster,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<MutationClusterSlotRenewOutcome> TryRenewClusterExecutionSlotAsync(
+        Guid operationId,
+        long executionClaimGeneration,
+        string clusterId,
         DateTimeOffset expiresAtUtc,
         CancellationToken cancellationToken = default);
 
