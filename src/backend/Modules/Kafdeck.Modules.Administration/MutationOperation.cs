@@ -59,7 +59,7 @@ public sealed class MutationOperation
             Risk = risk,
             State = MutationOperationState.Previewed,
             CanonicalIntent = canonicalIntent,
-            CanonicalIntentHash = MutationIdempotency.HashCanonicalIntent(canonicalIntent),
+            CanonicalIntentHash = MutationIdempotency.HashRequestIntent(normalizedIntent),
             ResourceKeys = resources,
             Preconditions = preconditions,
             MaterialDigests = digests,
@@ -192,6 +192,13 @@ public sealed class MutationOperation
     {
         RequireState(MutationOperationState.Executing);
         ArgumentException.ThrowIfNullOrWhiteSpace(resultCode);
+
+        if (result != MutationExecutionResultKind.FailedBeforeDispatch &&
+            Snapshot.DispatchStartedAtUtc is null)
+        {
+            throw new MutationStateException(
+                "A post-dispatch mutation result cannot be recorded before dispatch starts.");
+        }
 
         var target = result switch
         {
