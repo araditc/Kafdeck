@@ -369,7 +369,8 @@ public sealed class MutationExecutor
         }
         finally
         {
-            if (resourceClaimsAcquired)
+            if (resourceClaimsAcquired &&
+                operation.Snapshot.State != MutationOperationState.ExecutionUnknown)
             {
                 await _repository.ReleaseResourceClaimsAsync(
                     operation.Snapshot.OperationId,
@@ -386,13 +387,34 @@ public sealed class MutationExecutor
         // After DispatchStarted is durable, execution is server-owned. A caller disconnect
         // must not cancel an external mutation and create avoidable outcome ambiguity.
         using var timeout = new CancellationTokenSource(_policy.OperationTimeout);
+        Task<MutationProviderResult>? execution = null;
 
         try
         {
-            return await handler.ExecuteAsync(operation, timeout.Token).ConfigureAwait(false);
+            execution = handler.ExecuteAsync(operation, timeout.Token);
+            return await execution
+                .WaitAsync(_policy.OperationTimeout)
+                .ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            timeout.Cancel();
+            if (execution is not null)
+            {
+                _ = ObserveLateCompletionAsync(execution);
+            }
+
+            return new MutationProviderResult(
+                MutationExecutionResultKind.ExecutionUnknown,
+                "execution_timeout");
         }
         catch (OperationCanceledException)
         {
+            if (execution is not null && !execution.IsCompleted)
+            {
+                _ = ObserveLateCompletionAsync(execution);
+            }
+
             return new MutationProviderResult(
                 MutationExecutionResultKind.ExecutionUnknown,
                 "execution_cancelled_or_timeout");
@@ -402,6 +424,19 @@ public sealed class MutationExecutor
             return new MutationProviderResult(
                 MutationExecutionResultKind.ExecutionUnknown,
                 "provider_exception_after_dispatch");
+        }
+    }
+
+    private static async Task ObserveLateCompletionAsync(Task execution)
+    {
+        try
+        {
+            await execution.ConfigureAwait(false);
+        }
+        catch
+        {
+            // The durable operation is already ExecutionUnknown. This observation exists
+            // only to consume a late task fault without changing the persisted outcome.
         }
     }
 
