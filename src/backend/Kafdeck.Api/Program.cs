@@ -39,6 +39,8 @@ var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
 builder.WebHost.UseUrls(kafdeckOptions.Deployment.ListenUrl);
 
 var secretResolver = new SecretResolver();
+builder.Services.AddSingleton(secretResolver);
+
 var deploymentAccessToken =
     DeploymentAccessModePolicy.UsesDeploymentToken(kafdeckOptions.Deployment.Mode) &&
     kafdeckOptions.Deployment.AccessToken is not null
