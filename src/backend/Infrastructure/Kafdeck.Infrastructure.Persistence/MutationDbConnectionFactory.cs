@@ -6,12 +6,16 @@ namespace Kafdeck.Infrastructure.Persistence;
 
 public interface IMutationDbConnectionFactory
 {
+    bool SupportsSelectForUpdate { get; }
+
     ValueTask<DbConnection> OpenAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class SqliteMutationDbConnectionFactory : IMutationDbConnectionFactory
 {
     private readonly string _connectionString;
+
+    public bool SupportsSelectForUpdate => false;
 
     public SqliteMutationDbConnectionFactory(string databasePath)
     {
@@ -46,6 +50,8 @@ public sealed class SqliteMutationDbConnectionFactory : IMutationDbConnectionFac
 public sealed class PostgreSqlMutationDbConnectionFactory : IMutationDbConnectionFactory
 {
     private readonly string _connectionString;
+
+    public bool SupportsSelectForUpdate => true;
 
     public PostgreSqlMutationDbConnectionFactory(string connectionString)
     {
