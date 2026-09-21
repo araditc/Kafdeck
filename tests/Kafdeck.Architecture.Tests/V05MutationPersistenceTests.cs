@@ -1199,8 +1199,15 @@ public sealed class V05MutationPersistenceTests
                 generation,
                 aggregate.Snapshot.ClusterId,
                 maxConcurrentPerCluster: 1,
-                Now.AddMinutes(4));
+                Now.AddMinutes(2));
             Assert.Equal(MutationClusterSlotOutcome.Acquired, slot.Outcome);
+
+            var renewedSlot = await repository.TryRenewClusterExecutionSlotAsync(
+                aggregate.Snapshot.OperationId,
+                generation,
+                aggregate.Snapshot.ClusterId,
+                Now.AddMinutes(4));
+            Assert.Equal(MutationClusterSlotRenewOutcome.Renewed, renewedSlot);
 
             aggregate.MarkDispatchStarted(Now.AddSeconds(1));
             Assert.Equal(
