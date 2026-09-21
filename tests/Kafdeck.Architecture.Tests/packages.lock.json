@@ -265,6 +265,19 @@
         "dependencies": {
           "Kafdeck.Core": "[0.2.0, )"
         }
+      },
+      "kafdeck.modules.schemas": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )"
+        }
+      },
+      "kafdeck.infrastructure.ecosystem": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
+        }
       }
     }
   }
