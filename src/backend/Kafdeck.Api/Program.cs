@@ -132,6 +132,7 @@ if (mutationOptions?.Enabled == true)
         new AdoMutationOperationRepository(
             services.GetRequiredService<IMutationDbConnectionFactory>()));
     builder.Services.AddSingleton<IMutationAuditSink, LoggingMutationAuditSink>();
+    builder.Services.AddSingleton<MutationApprovalAuthorizer>();
     builder.Services.AddSingleton<IMutationPreDispatchGuard, FailClosedMutationPreDispatchGuard>();
     builder.Services.AddSingleton(
         new MutationExecutionHandlerRegistry(Array.Empty<IMutationExecutionHandler>()));
