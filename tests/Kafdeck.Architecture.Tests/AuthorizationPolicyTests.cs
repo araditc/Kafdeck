@@ -291,19 +291,57 @@ public sealed class AuthorizationPolicyTests
     }
 
     [Fact]
-    public void Permission_vocabulary_contains_record_reads_but_no_mutation_actions()
+    public void Permission_vocabulary_exposes_only_explicit_v05_mutation_actions()
     {
-        Assert.Contains(nameof(AuthorizationAction.RecordRead), Enum.GetNames<AuthorizationAction>());
-        Assert.Contains(nameof(AuthorizationAction.RecordExport), Enum.GetNames<AuthorizationAction>());
+        var names = Enum.GetNames<AuthorizationAction>();
 
-        var forbidden = new[] { "write", "create", "delete", "alter", "produce", "replay", "commit", "reset" };
+        Assert.Contains(nameof(AuthorizationAction.RecordRead), names);
+        Assert.Contains(nameof(AuthorizationAction.RecordExport), names);
 
-        foreach (var action in Enum.GetNames<AuthorizationAction>())
+        var expectedMutations = new[]
         {
-            Assert.DoesNotContain(
-                forbidden,
-                term => action.Contains(term, StringComparison.OrdinalIgnoreCase));
-        }
+            nameof(AuthorizationAction.TopicCreate),
+            nameof(AuthorizationAction.TopicAlter),
+            nameof(AuthorizationAction.TopicDelete),
+            nameof(AuthorizationAction.RecordProduce),
+            nameof(AuthorizationAction.ConsumerOffsetAlter),
+            nameof(AuthorizationAction.ConsumerDelete),
+            nameof(AuthorizationAction.SchemaCreate),
+            nameof(AuthorizationAction.SchemaAlter),
+            nameof(AuthorizationAction.SchemaDelete),
+            nameof(AuthorizationAction.ConnectCreate),
+            nameof(AuthorizationAction.ConnectAlter),
+            nameof(AuthorizationAction.ConnectDelete),
+            nameof(AuthorizationAction.RecordsPurge),
+        };
+
+        Assert.All(expectedMutations, action => Assert.Contains(action, names));
+        Assert.DoesNotContain(names, action => string.Equals(action, "Admin", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, action => string.Equals(action, "Write", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Read_permission_does_not_imply_mutation_permission()
+    {
+        var evaluator = CreateEvaluator(
+            roles: new[]
+            {
+                Role("viewer", Permission(AuthorizationAction.TopicRead)),
+            },
+            subjects: new[]
+            {
+                new AuthorizationSubjectBindingDefinition(
+                    "https://idp.example",
+                    "alice",
+                    new[] { "viewer" }),
+            });
+
+        var decision = evaluator.Evaluate(
+            Identity("https://idp.example", "alice"),
+            new AuthorizationRequest(AuthorizationAction.TopicDelete, "prod", "payments"));
+
+        Assert.False(decision.IsAllowed);
+        Assert.Equal(AuthorizationDecisionReason.ActionDenied, decision.Reason);
     }
 
     [Fact]
