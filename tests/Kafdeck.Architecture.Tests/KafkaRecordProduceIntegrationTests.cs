@@ -89,7 +89,7 @@ public sealed class KafkaRecordProduceIntegrationTests
         new(
             null,
             Encoding.UTF8.GetBytes(value),
-            new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal));
+            Array.Empty<RecordProductionHeaderInput>());
 
     private static bool RunKafkaIntegration() =>
         string.Equals(

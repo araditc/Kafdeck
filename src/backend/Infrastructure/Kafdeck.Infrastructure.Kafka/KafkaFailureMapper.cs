@@ -32,6 +32,7 @@ internal static class KafkaFailureMapper
 
             ErrorCode.Local_TimedOut or
             ErrorCode.Local_TimedOutQueue or
+            ErrorCode.Local_MsgTimedOut or
             ErrorCode.RequestTimedOut =>
                 Failure(KafkaFailureCategory.Timeout, error.Code, "Kafka operation exceeded its deadline.", true),
 

@@ -183,15 +183,22 @@ public sealed class RecordProductionPlanner
                     return FailAndDispose(material, RecordProductionPlanningFailureCode.LimitExceeded,
                         "Record headers exceed the configured count ceiling.", ordinal);
 
-                var headers = new List<KeyValuePair<string, ReadOnlyMemory<byte>>>(input.Headers.Count);
-                var canonicalHeaders = new List<RecordProductionCanonicalHeader>(input.Headers.Count);
-                foreach (var pair in input.Headers.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                var normalizedHeaders = new List<KeyValuePair<string, ReadOnlyMemory<byte>>>(input.Headers.Count);
+                var seenHeaderNames = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var header in input.Headers)
                 {
+                    if (header is null)
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.InvalidInput,
+                            "Record contains a null Kafka header.",
+                            ordinal);
+
                     string name;
                     try
                     {
                         name = RecordProductionValidation.RequireIdentifier(
-                            pair.Key,
+                            header.Name,
                             "Kafka header name",
                             RecordProductionPolicy.HardMaxHeaderNameCharacters);
                     }
@@ -204,9 +211,27 @@ public sealed class RecordProductionPlanner
                             ordinal);
                     }
 
-                    headers.Add(new KeyValuePair<string, ReadOnlyMemory<byte>>(name, pair.Value));
-                    canonicalHeaders.Add(new RecordProductionCanonicalHeader(name, pair.Value.Length));
-                    totalBytes = checked(totalBytes + Encoding.UTF8.GetByteCount(name) + pair.Value.Length);
+                    if (!seenHeaderNames.Add(name))
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.InvalidInput,
+                            "Duplicate Kafka header names are not admitted for governed production.",
+                            ordinal);
+
+                    normalizedHeaders.Add(
+                        new KeyValuePair<string, ReadOnlyMemory<byte>>(name, header.Value));
+                }
+
+                normalizedHeaders.Sort(
+                    static (left, right) => StringComparer.Ordinal.Compare(left.Key, right.Key));
+
+                var headers = new List<KeyValuePair<string, ReadOnlyMemory<byte>>>(normalizedHeaders.Count);
+                var canonicalHeaders = new List<RecordProductionCanonicalHeader>(normalizedHeaders.Count);
+                foreach (var pair in normalizedHeaders)
+                {
+                    headers.Add(pair);
+                    canonicalHeaders.Add(new RecordProductionCanonicalHeader(pair.Key, pair.Value.Length));
+                    totalBytes = checked(totalBytes + Encoding.UTF8.GetByteCount(pair.Key) + pair.Value.Length);
                 }
 
                 totalBytes = checked(
@@ -222,15 +247,31 @@ public sealed class RecordProductionPlanner
                 string? schemaFingerprint = null;
                 if (request.SchemaValidation is not null)
                 {
-                    var validation = await _schemaValidator!.ValidateAsync(
-                            new RecordProductionSchemaValidationContext(
-                                clusterId,
-                                topicName,
-                                ordinal,
-                                input.Value,
-                                request.SchemaValidation),
-                            cancellationToken)
-                        .ConfigureAwait(false);
+                    RecordProductionSchemaValidationResult validation;
+                    try
+                    {
+                        validation = await _schemaValidator!.ValidateAsync(
+                                new RecordProductionSchemaValidationContext(
+                                    clusterId,
+                                    topicName,
+                                    ordinal,
+                                    input.Value,
+                                    request.SchemaValidation),
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.SchemaValidationUnavailable,
+                            "Schema validation is currently unavailable.",
+                            ordinal);
+                    }
 
                     try
                     {

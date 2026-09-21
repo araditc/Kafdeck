@@ -28,9 +28,11 @@ public sealed class V05RecordProductionTests
             Request(
                 Encoding.UTF8.GetBytes(sentinel),
                 key: Encoding.UTF8.GetBytes("private-key"),
-                headers: new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+                headers: new[]
                 {
-                    ["trace"] = Encoding.UTF8.GetBytes("private-header"),
+                    new RecordProductionHeaderInput(
+                        "trace",
+                        Encoding.UTF8.GetBytes("private-header")),
                 }));
 
         Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
@@ -84,6 +86,56 @@ public sealed class V05RecordProductionTests
     }
 
     [Fact]
+    public async Task Planner_rejects_duplicate_header_names_instead_of_collapsing_them()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            "0123456789abcdef0123456789abcdef");
+        var planner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest);
+
+        using var result = await planner.PlanAsync(
+            new RecordProductionRequest(
+                "prod",
+                "orders",
+                new[]
+                {
+                    new RecordProductionRecordInput(
+                        null,
+                        Encoding.UTF8.GetBytes("payload"),
+                        new[]
+                        {
+                            new RecordProductionHeaderInput("trace", Encoding.UTF8.GetBytes("a")),
+                            new RecordProductionHeaderInput("trace", Encoding.UTF8.GetBytes("b")),
+                        }),
+                }));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.InvalidInput, result.Failure!.Code);
+    }
+
+    [Fact]
+    public async Task High_risk_policy_requiring_delayed_approval_fails_closed_for_ephemeral_payload()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            "0123456789abcdef0123456789abcdef");
+        var planner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            policy: new RecordProductionPolicy(
+                maxRecords: 4,
+                highRiskRecordCount: 1,
+                requireIndependentApprovalForHighRisk: true));
+
+        using var result = await planner.PlanAsync(Request(Encoding.UTF8.GetBytes("payload")));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            RecordProductionPlanningFailureCode.PolicyApprovalUnsupported,
+            result.Failure!.Code);
+    }
+
+    [Fact]
     public async Task Schema_validation_is_fail_closed_and_safe()
     {
         using var digest = new HmacMutationMaterialDigestService(
@@ -125,6 +177,28 @@ public sealed class V05RecordProductionTests
         Assert.True(accepted.IsSuccess);
         Assert.Equal("valid", accepted.Plan!.Canonical.Records[0].SchemaValidationCode);
         Assert.Equal(new string('a', 64), accepted.Plan.Canonical.Records[0].SchemaFingerprint);
+    }
+
+    [Fact]
+    public async Task Schema_validator_exception_is_mapped_to_safe_unavailable_outcome()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            "0123456789abcdef0123456789abcdef");
+        var planner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            new ThrowingSchemaValidator());
+
+        using var result = await planner.PlanAsync(
+            Request(
+                Encoding.UTF8.GetBytes("payload-secret"),
+                schema: new RecordProductionSchemaRequest("registry", "orders-value")));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            RecordProductionPlanningFailureCode.SchemaValidationUnavailable,
+            result.Failure!.Code);
+        Assert.DoesNotContain("payload-secret", result.Failure.SafeMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -278,7 +352,7 @@ public sealed class V05RecordProductionTests
     private static RecordProductionRequest Request(
         byte[] value,
         byte[]? key = null,
-        IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? headers = null,
+        IReadOnlyList<RecordProductionHeaderInput>? headers = null,
         RecordProductionSchemaRequest? schema = null) =>
         new(
             "prod",
@@ -288,7 +362,7 @@ public sealed class V05RecordProductionTests
                 new RecordProductionRecordInput(
                     key,
                     value,
-                    headers ?? new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)),
+                    headers ?? Array.Empty<RecordProductionHeaderInput>()),
             },
             schema);
 
@@ -296,7 +370,7 @@ public sealed class V05RecordProductionTests
         new(
             null,
             Encoding.UTF8.GetBytes(value),
-            new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal));
+            Array.Empty<RecordProductionHeaderInput>());
 
     private static MutationProviderResult Ack(int partition, long offset) =>
         new(
@@ -323,6 +397,14 @@ public sealed class V05RecordProductionTests
             RecordProduceMutation request,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(_results.Dequeue());
+    }
+
+    private sealed class ThrowingSchemaValidator : IRecordProductionSchemaValidator
+    {
+        public Task<RecordProductionSchemaValidationResult> ValidateAsync(
+            RecordProductionSchemaValidationContext context,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("provider-secret-detail");
     }
 
     private sealed class FakeSchemaValidator : IRecordProductionSchemaValidator

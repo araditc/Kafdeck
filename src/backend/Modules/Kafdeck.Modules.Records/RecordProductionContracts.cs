@@ -44,7 +44,8 @@ public sealed record RecordProductionPolicy
         int maxValueBytes = 1024 * 1024,
         long maxTotalBytes = 1024 * 1024,
         int highRiskRecordCount = 32,
-        long highRiskTotalBytes = 8L * 1024 * 1024)
+        long highRiskTotalBytes = 8L * 1024 * 1024,
+        bool requireIndependentApprovalForHighRisk = false)
     {
         if (maxRecords is < 1 or > HardMaxRecords)
             throw new ArgumentOutOfRangeException(nameof(maxRecords));
@@ -68,6 +69,7 @@ public sealed record RecordProductionPolicy
         MaxTotalBytes = maxTotalBytes;
         HighRiskRecordCount = highRiskRecordCount;
         HighRiskTotalBytes = highRiskTotalBytes;
+        RequireIndependentApprovalForHighRisk = requireIndependentApprovalForHighRisk;
     }
 
     public int MaxRecords { get; }
@@ -77,6 +79,7 @@ public sealed record RecordProductionPolicy
     public long MaxTotalBytes { get; }
     public int HighRiskRecordCount { get; }
     public long HighRiskTotalBytes { get; }
+    public bool RequireIndependentApprovalForHighRisk { get; }
 
     public MutationRiskDecision ClassifyRisk(int recordCount, long totalBytes)
     {
@@ -95,14 +98,18 @@ public sealed record RecordProductionPolicy
                     .OrderBy(value => value, StringComparer.Ordinal)
                     .ToArray()),
             MutationConfirmationMode.TypedTarget,
-            false);
+            RequireIndependentApprovalForHighRisk);
     }
 }
+
+public sealed record RecordProductionHeaderInput(
+    string Name,
+    ReadOnlyMemory<byte> Value);
 
 public sealed record RecordProductionRecordInput(
     ReadOnlyMemory<byte>? Key,
     ReadOnlyMemory<byte> Value,
-    IReadOnlyDictionary<string, ReadOnlyMemory<byte>> Headers);
+    IReadOnlyList<RecordProductionHeaderInput> Headers);
 
 public sealed record RecordProductionSchemaRequest(
     string ValidatorId,
@@ -264,7 +271,7 @@ public static class RecordProductionTemplateMaterializer
         RecordProductionTemplateDefinition definition,
         IReadOnlyDictionary<string, string> variables,
         ReadOnlyMemory<byte>? key = null,
-        IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? headers = null,
+        IReadOnlyList<RecordProductionHeaderInput>? headers = null,
         RecordProductionSchemaRequest? schemaValidation = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -323,7 +330,7 @@ public static class RecordProductionTemplateMaterializer
                 new RecordProductionRecordInput(
                     key,
                     valueBytes,
-                    headers ?? new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)),
+                    headers ?? Array.Empty<RecordProductionHeaderInput>()),
             },
             schemaValidation,
             new RecordProductionTemplateIdentity(templateId, definition.Version));
