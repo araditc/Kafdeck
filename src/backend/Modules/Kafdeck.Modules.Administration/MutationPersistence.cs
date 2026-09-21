@@ -26,6 +26,7 @@ public enum MutationResourceClaimOutcome
 {
     Acquired = 1,
     Conflict = 2,
+    InvalidExecutionClaim = 3,
 }
 
 public sealed record MutationResourceClaimResult(
