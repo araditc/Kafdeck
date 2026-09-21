@@ -294,16 +294,19 @@ public sealed class TopicMutationExecutionService
                 mutation.ClusterId,
                 async (operation, token) =>
                 {
-                    var metadata = await _reads.GetTopicMetadataAsync(
+                    var topics = await _reads.ListTopicsAsync(
                             mutation.ClusterId,
-                            mutation.TopicName,
                             operation,
                             token)
                         .ConfigureAwait(false);
 
-                    return !metadata.IsSuccess &&
-                           metadata.Failure is not null &&
-                           IsTopicMissing(metadata.Failure);
+                    return topics.IsSuccess &&
+                           topics.Value is not null &&
+                           !topics.Value.Any(topic =>
+                               string.Equals(
+                                   topic.Name,
+                                   mutation.TopicName,
+                                   StringComparison.Ordinal));
                 },
                 Verified(
                     "topic_delete_verified",

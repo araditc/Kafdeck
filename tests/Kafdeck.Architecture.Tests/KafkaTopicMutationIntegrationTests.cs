@@ -119,14 +119,14 @@ public sealed class KafkaTopicMutationIntegrationTests
             await EventuallyAsync(
                 async () =>
                 {
-                    var metadata = await reads.GetTopicMetadataAsync(
+                    var topics = await reads.ListTopicsAsync(
                         profile.Id,
-                        topicName,
                         Operation(),
                         cancellation.Token);
-                    return !metadata.IsSuccess &&
-                           metadata.Failure is not null &&
-                           IsMissing(metadata.Failure);
+                    return topics.IsSuccess &&
+                           topics.Value is not null &&
+                           !topics.Value.Any(topic =>
+                               string.Equals(topic.Name, topicName, StringComparison.Ordinal));
                 },
                 cancellation.Token);
         }
@@ -167,12 +167,6 @@ public sealed class KafkaTopicMutationIntegrationTests
 
     private static KafkaOperationContext Operation() =>
         new(DateTimeOffset.UtcNow.AddSeconds(10));
-
-    private static bool IsMissing(KafkaFailure failure) =>
-        failure.Code is
-            "kafka_unknowntopicorpart" or
-            "kafka_local_unknowntopic" or
-            "kafka_resourcenotfound";
 
     private static bool RunKafkaIntegration() =>
         string.Equals(
