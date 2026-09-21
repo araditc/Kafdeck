@@ -388,7 +388,8 @@ public sealed class V05MutationPersistenceTests
             var audit = new CapturingMutationAuditSink();
             var recovery = new MutationRecoveryCoordinator(repository, audit, time);
 
-            var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+            var recovered = await recovery.RecoverInterruptedExecutionsAsync(
+                ignoreActiveExecutionLeases: true);
 
             Assert.Equal(1, recovered);
             var persisted = await repository.GetAsync(created.Operation.OperationId);
