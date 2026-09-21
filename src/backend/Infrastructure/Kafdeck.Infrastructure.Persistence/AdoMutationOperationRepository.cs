@@ -402,16 +402,9 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 DELETE FROM kafdeck_mutation_cluster_slots
                 WHERE cluster_id = @cluster_id
                   AND expires_at_utc <= @now_utc
-                  AND operation_id NOT IN (
-                      SELECT operation_id
-                      FROM kafdeck_mutation_operations
-                      WHERE state IN (@executing_state, @unknown_state)
-                  )
                 """;
             AddParameter(purge, "@cluster_id", normalizedClusterId);
             AddParameter(purge, "@now_utc", FormatTimestamp(nowUtc));
-            AddParameter(purge, "@executing_state", (int)MutationOperationState.Executing);
-            AddParameter(purge, "@unknown_state", (int)MutationOperationState.ExecutionUnknown);
             await purge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -529,6 +522,111 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
         return new MutationClusterSlotResult(
             MutationClusterSlotOutcome.Saturated);
+    }
+
+    public async Task<MutationClusterSlotRenewOutcome> TryRenewClusterExecutionSlotAsync(
+        Guid operationId,
+        long executionClaimGeneration,
+        string clusterId,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+        if (executionClaimGeneration <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(executionClaimGeneration));
+        }
+
+        var normalizedClusterId = clusterId.Trim();
+        var nowUtc = _timeProvider.GetUtcNow();
+        if (expiresAtUtc <= nowUtc)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expiresAtUtc));
+        }
+
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        var persisted = await GetByOperationIdAsync(
+            connection,
+            transaction,
+            operationId,
+            _connectionFactory.SupportsSelectForUpdate,
+            cancellationToken).ConfigureAwait(false);
+
+        if (persisted is null)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return MutationClusterSlotRenewOutcome.NotFound;
+        }
+
+        if (persisted.ExecutionClaimGeneration != executionClaimGeneration ||
+            !string.Equals(persisted.ClusterId, normalizedClusterId, StringComparison.Ordinal) ||
+            persisted.State is not (
+                MutationOperationState.Executing or
+                MutationOperationState.ExecutionUnknown))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return MutationClusterSlotRenewOutcome.InvalidExecutionClaim;
+        }
+
+        await using var current = connection.CreateCommand();
+        current.Transaction = transaction;
+        current.CommandText =
+            """
+            SELECT expires_at_utc
+            FROM kafdeck_mutation_cluster_slots
+            WHERE cluster_id = @cluster_id
+              AND operation_id = @operation_id
+              AND execution_generation = @execution_generation
+            """;
+        AddParameter(current, "@cluster_id", normalizedClusterId);
+        AddParameter(current, "@operation_id", operationId.ToString("D"));
+        AddParameter(current, "@execution_generation", executionClaimGeneration);
+
+        var currentExpiryValue = await current.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        if (currentExpiryValue is null or DBNull)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return MutationClusterSlotRenewOutcome.NotFound;
+        }
+
+        var currentExpiry = DateTimeOffset.Parse(
+            Convert.ToString(currentExpiryValue, CultureInfo.InvariantCulture)!,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind);
+
+        if (currentExpiry <= nowUtc)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return MutationClusterSlotRenewOutcome.Expired;
+        }
+
+        await using var renew = connection.CreateCommand();
+        renew.Transaction = transaction;
+        renew.CommandText =
+            """
+            UPDATE kafdeck_mutation_cluster_slots
+            SET expires_at_utc = @expires_at_utc
+            WHERE cluster_id = @cluster_id
+              AND operation_id = @operation_id
+              AND execution_generation = @execution_generation
+              AND expires_at_utc = @current_expires_at_utc
+            """;
+        AddParameter(renew, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+        AddParameter(renew, "@cluster_id", normalizedClusterId);
+        AddParameter(renew, "@operation_id", operationId.ToString("D"));
+        AddParameter(renew, "@execution_generation", executionClaimGeneration);
+        AddParameter(renew, "@current_expires_at_utc", FormatTimestamp(currentExpiry));
+
+        if (await renew.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return MutationClusterSlotRenewOutcome.InvalidExecutionClaim;
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return MutationClusterSlotRenewOutcome.Renewed;
     }
 
     public async Task<MutationResourceClaimResult> TryAcquireResourceClaimsAsync(
