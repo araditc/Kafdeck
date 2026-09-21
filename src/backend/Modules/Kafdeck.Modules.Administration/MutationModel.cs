@@ -108,6 +108,7 @@ public sealed record MutationOperationSnapshot
     public DateTimeOffset? RejectedAtUtc { get; init; }
     public long Version { get; init; }
     public long ExecutionClaimGeneration { get; init; }
+    public DateTimeOffset? ExecutionClaimExpiresAtUtc { get; init; }
     public DateTimeOffset? DispatchStartedAtUtc { get; init; }
     public string? ResultCode { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
