@@ -30,5 +30,6 @@
     <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Ecosystem/Kafdeck.Infrastructure.Ecosystem.csproj" />
     <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj" />
     <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj" />
+    <ProjectReference Include="../../src/backend/Infrastructure/Kafdeck.Infrastructure.Persistence/Kafdeck.Infrastructure.Persistence.csproj" />
   </ItemGroup>
 </Project>
