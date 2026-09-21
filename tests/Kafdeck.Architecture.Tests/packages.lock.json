@@ -195,7 +195,8 @@
         "dependencies": {
           "Confluent.Kafka": "[2.15.1, )",
           "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
         }
       },
       "kafdeck.infrastructure.schemaregistry": {
@@ -229,7 +230,8 @@
       "kafdeck.modules.topics": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )"
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
         }
       },
       "Apache.Avro": {

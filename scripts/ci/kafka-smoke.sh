@@ -88,6 +88,13 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
   --filter 'FullyQualifiedName~KafkaAdapterIntegrationTests&FullyQualifiedName!~KafkaAdapterIntegrationTestsAuthorization'
 
+# W33 mutation evidence runs before restricted ACL fixtures are installed. The
+# test uses only the four admitted typed topic mutation operations and verifies
+# each post-condition through the read-only administration adapter.
+KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
+  --filter FullyQualifiedName~KafkaTopicMutationIntegrationTests
+
 # Explicitly retain metadata Describe while denying DescribeConfigs so the second
 # pass exercises genuine partial access rather than a total authorization failure.
 docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck_restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null
