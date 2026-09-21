@@ -37,6 +37,25 @@ public static class MutationPreviewHasher
             Append(builder, "material-digest", digest.Digest);
         }
 
+        var authorizationTargets = MutationAuthorization.NormalizeTargets(
+            intent.Kind,
+            intent.ClusterId,
+            intent.AuthorizationTargets);
+        foreach (var target in authorizationTargets)
+        {
+            Append(builder, "authorization-action", ((int)target.Action).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(builder, "authorization-cluster", target.ClusterId);
+            Append(builder, "authorization-resource", target.ResourceName);
+        }
+
+        var confirmationChallenge = MutationAuthorization.BuildConfirmationChallenge(
+            risk.ConfirmationMode,
+            authorizationTargets);
+        if (confirmationChallenge is not null)
+        {
+            Append(builder, "confirmation-challenge", confirmationChallenge);
+        }
+
         Append(builder, "risk", ((int)risk.RiskClass).ToString(System.Globalization.CultureInfo.InvariantCulture));
         foreach (var reason in risk.Reasons
                      .Select(value => RequireBounded(value, "Risk reason", 512))
