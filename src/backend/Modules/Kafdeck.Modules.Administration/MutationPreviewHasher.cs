@@ -63,6 +63,13 @@ public static class MutationPreviewHasher
             throw new ArgumentException("Mutation must target at least one concrete resource.", nameof(resources));
         }
 
+        if (resources.Count > MutationLimits.MaxResourceKeys)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(resources),
+                $"Mutation must not target more than {MutationLimits.MaxResourceKeys} resource keys.");
+        }
+
         var normalized = resources
             .Select(resource => RequireBounded(resource, "Resource key", 1024))
             .Distinct(StringComparer.Ordinal)
@@ -75,7 +82,15 @@ public static class MutationPreviewHasher
     internal static IReadOnlyList<MutationPrecondition> NormalizePreconditions(
         IReadOnlyList<MutationPrecondition>? preconditions)
     {
-        var normalized = (preconditions ?? Array.Empty<MutationPrecondition>())
+        var items = preconditions ?? Array.Empty<MutationPrecondition>();
+        if (items.Count > MutationLimits.MaxPreconditions)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(preconditions),
+                $"Mutation must not contain more than {MutationLimits.MaxPreconditions} preconditions.");
+        }
+
+        var normalized = items
             .Select(item => new MutationPrecondition(
                 RequireBounded(item.Key, "Precondition key", 512),
                 RequireBounded(item.Fingerprint, "Precondition fingerprint", 1024)))
@@ -89,7 +104,15 @@ public static class MutationPreviewHasher
     internal static IReadOnlyList<MutationMaterialDigest> NormalizeDigests(
         IReadOnlyList<MutationMaterialDigest>? digests)
     {
-        var normalized = (digests ?? Array.Empty<MutationMaterialDigest>())
+        var items = digests ?? Array.Empty<MutationMaterialDigest>();
+        if (items.Count > MutationLimits.MaxMaterialDigests)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(digests),
+                $"Mutation must not contain more than {MutationLimits.MaxMaterialDigests} material digests.");
+        }
+
+        var normalized = items
             .Select(item => new MutationMaterialDigest(
                 RequireBounded(item.Name, "Material digest name", 256),
                 RequireBounded(item.Digest, "Material digest", 512)))
