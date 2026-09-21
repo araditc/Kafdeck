@@ -490,6 +490,34 @@ public sealed class V05MutationKernelTests
     }
 
     [Fact]
+    public void Idempotency_scope_is_fixed_size_and_binds_principal_cluster_and_operation_kind()
+    {
+        var longPrincipal = "oidc:" + new string('a', 3_500);
+        var first = MutationIdempotency.BuildScope(
+            longPrincipal,
+            "production-cluster",
+            MutationOperationKind.TopicCreate);
+        var replay = MutationIdempotency.BuildScope(
+            longPrincipal,
+            "production-cluster",
+            MutationOperationKind.TopicCreate);
+        var differentCluster = MutationIdempotency.BuildScope(
+            longPrincipal,
+            "other-cluster",
+            MutationOperationKind.TopicCreate);
+        var differentKind = MutationIdempotency.BuildScope(
+            longPrincipal,
+            "production-cluster",
+            MutationOperationKind.TopicDelete);
+
+        Assert.Equal(first, replay);
+        Assert.Equal(64, first.Length);
+        Assert.DoesNotContain(longPrincipal, first, StringComparison.Ordinal);
+        Assert.NotEqual(first, differentCluster);
+        Assert.NotEqual(first, differentKind);
+    }
+
+    [Fact]
     public void Idempotency_key_hash_is_stable_but_not_plaintext()
     {
         const string key = "client-request-123";
