@@ -414,6 +414,53 @@ public sealed class MutationExecutor
                 return operation.Snapshot;
             }
 
+            var renewalNowUtc = _timeProvider.GetUtcNow();
+            var renewalExpectedVersion = operation.Snapshot.Version;
+            try
+            {
+                operation.RenewExecutionLease(
+                    renewalNowUtc,
+                    renewalNowUtc.Add(_policy.ResourceClaimTtl));
+            }
+            catch (MutationStateException)
+            {
+                operation.Complete(
+                    MutationExecutionResultKind.FailedBeforeDispatch,
+                    "execution_lease_expired_before_dispatch",
+                    renewalNowUtc);
+                var expiredSave = await _repository.TrySaveAsync(
+                    operation.Snapshot,
+                    renewalExpectedVersion,
+                    CancellationToken.None).ConfigureAwait(false);
+
+                if (expiredSave.Outcome == MutationSaveOutcome.Saved)
+                {
+                    await WriteAuditAsync(
+                        operation.Snapshot,
+                        MutationAuditEventType.Completed,
+                        "execution_lease_expired_before_dispatch",
+                        CancellationToken.None).ConfigureAwait(false);
+                    releaseResourceClaims = true;
+                    return operation.Snapshot;
+                }
+
+                return expiredSave.Operation ??
+                       throw new MutationStateException(
+                           "Expired execution lease could not be reconciled before dispatch.");
+            }
+
+            var renewedLease = await _repository.TryRenewExecutionLeaseAsync(
+                operation.Snapshot,
+                renewalExpectedVersion,
+                CancellationToken.None).ConfigureAwait(false);
+
+            if (renewedLease.Outcome != MutationLeaseRenewOutcome.Renewed)
+            {
+                return renewedLease.Operation ??
+                       throw new MutationStateException(
+                           $"Execution lease renewal failed before dispatch: {renewedLease.Outcome}.");
+            }
+
             operation.MarkDispatchStarted(_timeProvider.GetUtcNow());
             await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
             await WriteAuditAsync(
