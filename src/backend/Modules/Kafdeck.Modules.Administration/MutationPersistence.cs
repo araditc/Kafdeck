@@ -46,6 +46,17 @@ public sealed record MutationLeaseRenewResult(
     MutationLeaseRenewOutcome Outcome,
     MutationOperationSnapshot? Operation);
 
+public enum MutationClusterSlotOutcome
+{
+    Acquired = 1,
+    Saturated = 2,
+    InvalidExecutionClaim = 3,
+}
+
+public sealed record MutationClusterSlotResult(
+    MutationClusterSlotOutcome Outcome,
+    int? SlotNumber = null);
+
 public interface IMutationOperationRepository
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
@@ -74,6 +85,14 @@ public interface IMutationOperationRepository
         long expectedVersion,
         CancellationToken cancellationToken = default);
 
+    Task<MutationClusterSlotResult> TryAcquireClusterExecutionSlotAsync(
+        Guid operationId,
+        long executionClaimGeneration,
+        string clusterId,
+        int maxConcurrentPerCluster,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken = default);
+
     Task<MutationResourceClaimResult> TryAcquireResourceClaimsAsync(
         Guid operationId,
         long executionClaimGeneration,
@@ -84,6 +103,11 @@ public interface IMutationOperationRepository
     Task<MutationLeaseRenewResult> TryRenewExecutionLeaseAsync(
         MutationOperationSnapshot operation,
         long expectedVersion,
+        CancellationToken cancellationToken = default);
+
+    Task ReleaseClusterExecutionSlotAsync(
+        Guid operationId,
+        long executionClaimGeneration,
         CancellationToken cancellationToken = default);
 
     Task ReleaseResourceClaimsAsync(
