@@ -147,3 +147,51 @@ Historical Gate 2 text remains unchanged as auditable approval evidence.
 ### Implementation gate
 
 Implementation begins only after the RFC-0003 planning package receives exact-head CI, independent review, resolved required review threads and governed merge.
+
+## Gate 4 — v0.4 Consumers, Schemas & Ecosystem Read Views
+
+- **Date:** 2026-09-21
+- **Status:** ACCEPTED
+- **Authority:** Project Owner
+- **Scope issue:** #99
+- **Tracker:** #100
+- **RFC:** RFC-0004 planning package
+
+### Accepted decision
+
+Kafdeck v0.4 is **Consumers, Schemas & Ecosystem Read Views**.
+
+Accepted scope includes consumer groups/members/assignments/committed offsets/lag, evidence-based diagnostics, read-only Schema Registry subject/version/reference/diff/compatibility inspection, read-only Kafka Connect status, safe ksqlDB discovery/metadata where configured, topic catalog foundations, API/UI parity, bounded provider isolation and release evidence.
+
+### Implementation decisions
+
+1. v0.4 remains fully non-mutating.
+2. New permissions are independent: `consumer.read`, `schema.read`, `connect.read`, `ksql.read`, `catalog.read`.
+3. No v0.4 action implies `record.read` or `record.export`.
+4. Produce/consume rate data is shown only from an explicit trustworthy metrics provider; otherwise it is unavailable.
+5. Historical rebalance/progress analysis is shown only with an explicit history provider; v0.4 has no mandatory durable history store.
+6. v0.4 supports at most one optional Connect profile and one optional ksqlDB profile per Kafka cluster; multi-Connect remains later roadmap work.
+7. ksqlDB arbitrary statement/query execution is excluded.
+8. Ecosystem URLs are deployment-configured, validated origins; there is no generic proxy endpoint.
+9. Connector secret-like fields are redacted server-side.
+10. Topic catalog foundations are configuration-backed descriptive metadata and do not affect authorization.
+
+### Hard invariants
+
+- no Kafka mutation or produce/replay,
+- no consumer-offset mutation/commit,
+- no Schema Registry mutation,
+- no Connect mutation,
+- no ksqlDB query execution/mutation,
+- no unbounded polling/listing,
+- no arbitrary server-side code execution,
+- no masking bypass,
+- v0.3 payload authorization/masking/export controls remain unchanged.
+
+### Owner approval
+
+> **v0.4 Consumers / Schemas / Ecosystem Read Views تأیید است؛ طراحی و اجرای کامل آن را شروع کن.**
+
+### Execution
+
+W25–W31 may proceed autonomously under protected-main governance. Dependency-valid stacked work may continue while a review gate is pending; no approval may be fabricated. Tag/publication requires a separate explicit v0.4 release decision.
