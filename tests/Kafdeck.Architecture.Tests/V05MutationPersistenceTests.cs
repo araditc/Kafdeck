@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Kafdeck.Infrastructure.Persistence;
 using Kafdeck.Modules.Administration;
 using Xunit;
@@ -126,6 +129,7 @@ public sealed class V05MutationPersistenceTests
                 audit,
                 new AllowedGuard(),
                 new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
                 new MutationExecutorPolicy(
                     maxConcurrentPerCluster: 1,
                     operationTimeout: TimeSpan.FromSeconds(1),
@@ -226,6 +230,7 @@ public sealed class V05MutationPersistenceTests
                 new CapturingMutationAuditSink(),
                 new AllowedGuard(),
                 new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
                 new MutationExecutorPolicy(
                     maxConcurrentPerCluster: 1,
                     operationTimeout: TimeSpan.FromSeconds(5),
@@ -273,6 +278,7 @@ public sealed class V05MutationPersistenceTests
                 new CapturingMutationAuditSink(),
                 new AllowedGuard(),
                 new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
                 new MutationExecutorPolicy(
                     maxConcurrentPerCluster: 1,
                     operationTimeout: TimeSpan.FromSeconds(1),
@@ -307,6 +313,166 @@ public sealed class V05MutationPersistenceTests
             Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
 
             handler.Complete.TrySetResult(true);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Ephemeral_execution_material_is_digest_validated_and_never_persisted()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-material-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var digestService = new TestMaterialDigestService();
+            var secret = Encoding.UTF8.GetBytes("record-secret-payload");
+            var digest = digestService.ComputeDigest(secret);
+            var risk = MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.RecordProduce));
+
+            var operation = MutationOperation.CreatePreview(
+                "oidc:https://idp.example|alice",
+                new MutationIntentDescriptor(
+                    MutationOperationKind.RecordProduce,
+                    "prod",
+                    "{\"topic\":\"payments\"}",
+                    new[] { "cluster/prod/topic/payments" },
+                    MaterialDigests: new[]
+                    {
+                        new MutationMaterialDigest("value", digest),
+                    }),
+                risk,
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                "material-ok");
+            operation.OpenForConfirmation(Now);
+            operation.Confirm(
+                operation.Snapshot.RequesterPrincipalId,
+                operation.Snapshot.PreviewHash,
+                Now);
+
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var persistedJson = JsonSerializer.Serialize(created.Operation);
+            Assert.DoesNotContain(
+                "record-secret-payload",
+                persistedJson,
+                StringComparison.Ordinal);
+
+            var handler = new MaterialRecordingHandler(
+                MutationOperationKind.RecordProduce,
+                "value",
+                secret);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                digestService,
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor.ExecuteAsync(
+                operation.Snapshot.OperationId,
+                new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+                {
+                    ["value"] = secret,
+                });
+
+            Assert.Equal(MutationOperationState.AppliedVerified, result.State);
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Ephemeral_execution_material_mismatch_fails_before_dispatch()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-material-mismatch-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var digestService = new TestMaterialDigestService();
+            var expected = Encoding.UTF8.GetBytes("expected-secret");
+            var wrong = Encoding.UTF8.GetBytes("wrong-secret");
+            var risk = MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.RecordProduce));
+
+            var operation = MutationOperation.CreatePreview(
+                "oidc:https://idp.example|alice",
+                new MutationIntentDescriptor(
+                    MutationOperationKind.RecordProduce,
+                    "prod",
+                    "{\"topic\":\"payments\"}",
+                    new[] { "cluster/prod/topic/payments" },
+                    MaterialDigests: new[]
+                    {
+                        new MutationMaterialDigest(
+                            "value",
+                            digestService.ComputeDigest(expected)),
+                    }),
+                risk,
+                "v0.5-p1",
+                Now.AddMinutes(5),
+                Now,
+                "material-mismatch");
+            operation.OpenForConfirmation(Now);
+            operation.Confirm(
+                operation.Snapshot.RequesterPrincipalId,
+                operation.Snapshot.PreviewHash,
+                Now);
+
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var handler = new MaterialRecordingHandler(
+                MutationOperationKind.RecordProduce,
+                "value",
+                expected);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                digestService,
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor.ExecuteAsync(
+                operation.Snapshot.OperationId,
+                new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+                {
+                    ["value"] = wrong,
+                });
+
+            Assert.Equal(MutationOperationState.FailedBeforeDispatch, result.State);
+            Assert.Equal("execution_material_mismatch", result.ResultCode);
+            Assert.Equal(0, handler.CallCount);
+            Assert.Null(result.DispatchStartedAtUtc);
         }
         finally
         {
@@ -719,7 +885,7 @@ public sealed class V05MutationPersistenceTests
         public int CallCount { get; private set; }
 
         public Task<MutationProviderResult> ExecuteAsync(
-            MutationOperationSnapshot operation,
+            MutationExecutionContext context,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -743,7 +909,7 @@ public sealed class V05MutationPersistenceTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<MutationProviderResult> ExecuteAsync(
-            MutationOperationSnapshot operation,
+            MutationExecutionContext context,
             CancellationToken cancellationToken = default)
         {
             await Complete.Task.ConfigureAwait(false);
@@ -769,7 +935,7 @@ public sealed class V05MutationPersistenceTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<MutationProviderResult> ExecuteAsync(
-            MutationOperationSnapshot operation,
+            MutationExecutionContext context,
             CancellationToken cancellationToken = default)
         {
             CallCount++;
@@ -787,6 +953,46 @@ public sealed class V05MutationPersistenceTests
             return new MutationProviderResult(
                 MutationExecutionResultKind.AppliedVerified,
                 "verified");
+        }
+    }
+
+    private sealed class TestMaterialDigestService : IMutationMaterialDigestService
+    {
+        public string ComputeDigest(ReadOnlySpan<byte> material) =>
+            Convert.ToHexString(SHA256.HashData(material)).ToLowerInvariant();
+    }
+
+    private sealed class MaterialRecordingHandler : IMutationExecutionHandler
+    {
+        private readonly string _materialName;
+        private readonly byte[] _expected;
+
+        public MaterialRecordingHandler(
+            MutationOperationKind operationKind,
+            string materialName,
+            byte[] expected)
+        {
+            OperationKind = operationKind;
+            _materialName = materialName;
+            _expected = expected;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+        public int CallCount { get; private set; }
+
+        public Task<MutationProviderResult> ExecuteAsync(
+            MutationExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CallCount++;
+            Assert.Equal(
+                _expected,
+                context.Material.GetRequired(_materialName).ToArray());
+
+            return Task.FromResult(new MutationProviderResult(
+                MutationExecutionResultKind.AppliedVerified,
+                "material_verified"));
         }
     }
 
