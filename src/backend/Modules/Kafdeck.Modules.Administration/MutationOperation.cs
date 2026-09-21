@@ -52,9 +52,13 @@ public sealed class MutationOperation
             MaterialDigests = digests,
             AuthorizationTargets = authorizationTargets,
         };
+        var riskContext = intent.RiskContext ?? new MutationRiskContext();
         var effectiveRisk = MutationRiskClassifier.EnforceBuiltInFloor(
-            intent.Kind,
-            resources.Count,
+            new MutationRiskInput(
+                intent.Kind,
+                resources.Count,
+                riskContext.PermanentDelete,
+                riskContext.DurabilitySensitiveChange),
             risk);
 
         var confirmationChallenge = MutationAuthorization.BuildConfirmationChallenge(
