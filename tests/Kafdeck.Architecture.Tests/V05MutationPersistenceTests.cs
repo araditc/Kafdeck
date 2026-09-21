@@ -177,6 +177,192 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Expired_execution_unknown_cluster_slot_is_reclaimed_after_process_heartbeat_stops()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-unknown-slot-reclaim-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new MutableTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var holder = CreateReadyOperation(
+                "unknown-slot-holder",
+                "cluster/prod/topic/holder");
+            var competitor = CreateReadyOperation(
+                "unknown-slot-competitor",
+                "cluster/prod/topic/competitor");
+
+            var holderCreated = await repository.CreateAsync(holder.Snapshot);
+            var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+
+            var holderAggregate = MutationOperation.Restore(holderCreated.Operation);
+            var holderGeneration = holderAggregate.ClaimExecution(
+                Now,
+                Now.AddSeconds(20));
+            var holderClaimed = await repository.TrySaveAsync(
+                holderAggregate.Snapshot,
+                holderCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, holderClaimed.Outcome);
+
+            var holderSlot = await repository.TryAcquireClusterExecutionSlotAsync(
+                holderAggregate.Snapshot.OperationId,
+                holderGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddSeconds(20));
+            Assert.Equal(MutationClusterSlotOutcome.Acquired, holderSlot.Outcome);
+
+            holderAggregate.MarkDispatchStarted(Now.AddSeconds(1));
+            var holderDispatched = await repository.TrySaveAsync(
+                holderAggregate.Snapshot,
+                holderClaimed.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, holderDispatched.Outcome);
+
+            holderAggregate.Complete(
+                MutationExecutionResultKind.ExecutionUnknown,
+                "execution_timeout",
+                Now.AddSeconds(2));
+            var holderUnknown = await repository.TrySaveAsync(
+                holderAggregate.Snapshot,
+                holderDispatched.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, holderUnknown.Outcome);
+            Assert.Equal(MutationOperationState.ExecutionUnknown, holderUnknown.Operation!.State);
+
+            var competitorAggregate = MutationOperation.Restore(competitorCreated.Operation);
+            var competitorGeneration = competitorAggregate.ClaimExecution(
+                Now,
+                Now.AddSeconds(60));
+            var competitorClaimed = await repository.TrySaveAsync(
+                competitorAggregate.Snapshot,
+                competitorCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, competitorClaimed.Outcome);
+
+            time.SetUtcNow(Now.AddSeconds(21));
+
+            var reclaimed = await repository.TryAcquireClusterExecutionSlotAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddSeconds(60));
+
+            Assert.Equal(MutationClusterSlotOutcome.Acquired, reclaimed.Outcome);
+            Assert.Equal(0, reclaimed.SlotNumber);
+
+            await repository.ReleaseClusterExecutionSlotAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Execution_unknown_cluster_slot_heartbeat_prevents_reclaim_until_renewed_lease_expires()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-unknown-slot-heartbeat-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new MutableTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var holder = CreateReadyOperation(
+                "unknown-heartbeat-holder",
+                "cluster/prod/topic/holder");
+            var competitor = CreateReadyOperation(
+                "unknown-heartbeat-competitor",
+                "cluster/prod/topic/competitor");
+
+            var holderCreated = await repository.CreateAsync(holder.Snapshot);
+            var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+
+            var holderAggregate = MutationOperation.Restore(holderCreated.Operation);
+            var holderGeneration = holderAggregate.ClaimExecution(
+                Now,
+                Now.AddSeconds(20));
+            var holderClaimed = await repository.TrySaveAsync(
+                holderAggregate.Snapshot,
+                holderCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, holderClaimed.Outcome);
+
+            Assert.Equal(
+                MutationClusterSlotOutcome.Acquired,
+                (await repository.TryAcquireClusterExecutionSlotAsync(
+                    holderAggregate.Snapshot.OperationId,
+                    holderGeneration,
+                    "prod",
+                    maxConcurrentPerCluster: 1,
+                    Now.AddSeconds(20))).Outcome);
+
+            holderAggregate.MarkDispatchStarted(Now.AddSeconds(1));
+            var holderDispatched = await repository.TrySaveAsync(
+                holderAggregate.Snapshot,
+                holderClaimed.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, holderDispatched.Outcome);
+
+            holderAggregate.Complete(
+                MutationExecutionResultKind.ExecutionUnknown,
+                "execution_timeout",
+                Now.AddSeconds(2));
+            var holderUnknown = await repository.TrySaveAsync(
+                holderAggregate.Snapshot,
+                holderDispatched.Operation!.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, holderUnknown.Outcome);
+
+            var competitorAggregate = MutationOperation.Restore(competitorCreated.Operation);
+            var competitorGeneration = competitorAggregate.ClaimExecution(
+                Now,
+                Now.AddSeconds(60));
+            var competitorClaimed = await repository.TrySaveAsync(
+                competitorAggregate.Snapshot,
+                competitorCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, competitorClaimed.Outcome);
+
+            time.SetUtcNow(Now.AddSeconds(10));
+            var renewed = await repository.TryRenewClusterExecutionSlotAsync(
+                holderAggregate.Snapshot.OperationId,
+                holderGeneration,
+                "prod",
+                Now.AddSeconds(30));
+            Assert.Equal(MutationClusterSlotRenewOutcome.Renewed, renewed);
+
+            time.SetUtcNow(Now.AddSeconds(21));
+            var stillHeld = await repository.TryAcquireClusterExecutionSlotAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddSeconds(60));
+            Assert.Equal(MutationClusterSlotOutcome.Saturated, stillHeld.Outcome);
+
+            time.SetUtcNow(Now.AddSeconds(31));
+            var reclaimed = await repository.TryAcquireClusterExecutionSlotAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration,
+                "prod",
+                maxConcurrentPerCluster: 1,
+                Now.AddSeconds(60));
+            Assert.Equal(MutationClusterSlotOutcome.Acquired, reclaimed.Outcome);
+
+            await repository.ReleaseClusterExecutionSlotAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Bounded_executor_dispatches_once_and_persists_verified_outcome()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-executor-{Guid.NewGuid():N}.db");
