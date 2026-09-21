@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0, Gate 1, Gate 2 accepted; v0.2 released; v0.3 scope accepted**  
+Status: **Gate 0, Gate 1, Gate 2 accepted; v0.1-v0.3 released**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -61,7 +61,7 @@ Exit criteria remain those accepted by Gate 1/RFC-0001.
 The Gate 2 capability order remains authoritative, but its original version-number mapping was superseded by later owner decisions.
 
 - Issue #57 advanced **Operator Identity/RBAC** into v0.2; v0.2 is released.
-- Issue #75 accepted **Safe Data Explorer + Server-Side Masking** as v0.3.
+- Issue #75 accepted **Safe Data Explorer + Server-Side Masking** as v0.3; v0.3 is released.
 - Consumers/Schemas/Ecosystem Read Views therefore move to v0.4.
 - v0.5+ sequencing remains unchanged unless a later approved scope decision supersedes it.
 
@@ -85,7 +85,7 @@ Capabilities delivered:
 
 v0.2 introduced no Kafka mutation and no payload browsing. RFC-0002 and the v0.2 release evidence remain authoritative for its exact contract.
 
-## v0.3 — Safe Data Explorer + Server-Side Masking — ACCEPTED SCOPE
+## v0.3 — Safe Data Explorer + Server-Side Masking — RELEASED
 
 Goal: inspect Kafka record data under the released v0.2 identity/RBAC boundary without creating an unbounded consumer, payload database, or data-exfiltration bypass.
 
