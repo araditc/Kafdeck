@@ -26,6 +26,17 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         var statements = new[]
         {
             """
+            CREATE TABLE IF NOT EXISTS kafdeck_schema_info (
+                component TEXT PRIMARY KEY,
+                schema_version INTEGER NOT NULL
+            )
+            """,
+            """
+            INSERT INTO kafdeck_schema_info (component, schema_version)
+            VALUES ('mutation-operations', 1)
+            ON CONFLICT (component) DO NOTHING
+            """,
+            """
             CREATE TABLE IF NOT EXISTS kafdeck_mutation_operations (
                 operation_id TEXT PRIMARY KEY,
                 idempotency_scope TEXT NOT NULL,
@@ -62,6 +73,20 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             await using var command = connection.CreateCommand();
             command.CommandText = statement;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var versionCommand = connection.CreateCommand();
+        versionCommand.CommandText =
+            """
+            SELECT schema_version
+            FROM kafdeck_schema_info
+            WHERE component = 'mutation-operations'
+            """;
+        var version = await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 1)
+        {
+            throw new InvalidOperationException(
+                "Mutation persistence schema version is unsupported. Refusing to start mutation mode.");
         }
     }
 
@@ -272,6 +297,21 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
+        var persistedOperation = await GetByOperationIdAsync(
+            connection,
+            transaction,
+            operationId,
+            cancellationToken).ConfigureAwait(false);
+
+        if (persistedOperation is null ||
+            persistedOperation.State != MutationOperationState.Executing ||
+            persistedOperation.ExecutionClaimGeneration != executionClaimGeneration)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new MutationResourceClaimResult(
+                MutationResourceClaimOutcome.InvalidExecutionClaim);
+        }
+
         await using (var purge = connection.CreateCommand())
         {
             purge.Transaction = transaction;
@@ -367,6 +407,24 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         AddParameter(command, "@operation_id", operationId.ToString("D"));
         AddParameter(command, "@execution_generation", executionClaimGeneration);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<MutationOperationSnapshot?> GetByOperationIdAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_mutation_operations
+            WHERE operation_id = @operation_id
+            """;
+        AddParameter(command, "@operation_id", operationId.ToString("D"));
+        return await ReadSingleSnapshotAsync(command, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<MutationOperationSnapshot?> GetByIdempotencyAsync(
