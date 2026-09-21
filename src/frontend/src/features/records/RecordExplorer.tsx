@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiProblem, kafdeckApi, type RecordAnchorProjection, type RecordQuery, type RecordSafePage, type RecordSafeProjection } from '../../shared/api.js';
 
 interface Props { clusterId: string; topicName: string; partitions: number[]; }
-type ViewMode = 'structured' | 'text' | 'hex';
+export type ViewMode = 'structured' | 'text' | 'hex';
+
+export function withRecordProjectionPreference(query: RecordQuery, mode: ViewMode): RecordQuery {
+  return { ...query, decode: mode === 'structured' };
+}
+
+export function activeRecordPageQuery(displayedQuery: RecordQuery | null, baseQuery: RecordQuery): RecordQuery {
+  return displayedQuery ?? baseQuery;
+}
 
 function recordError(reason: unknown) {
   if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return 'Record access is denied by Kafdeck policy.';
@@ -59,6 +67,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   const [filterLanguage, setFilterLanguage] = useState<'cel' | 'jq'>('cel');
   const [viewMode, setViewMode] = useState<ViewMode>('structured');
   const [page, setPage] = useState<RecordSafePage | null>(null);
+  const [displayedQuery, setDisplayedQuery] = useState<RecordQuery | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tailing, setTailing] = useState(false);
@@ -78,7 +87,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   useEffect(() => {
     stopBrowse();
     if (!partitions.includes(partition)) setPartition(partitions[0] ?? 0);
-    setPage(null); setError(null); stopTail();
+    setPage(null); setDisplayedQuery(null); setError(null); stopTail();
     // Topic/cluster changes invalidate all payload state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId, topicName, partitions.join(',')]);
@@ -94,15 +103,15 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
       : anchorKind === 'timestamp'
         ? { timestampUtc: anchorValue ? new Date(anchorValue).toISOString() : new Date().toISOString() }
         : { anchor: anchorKind };
-    return {
+    return withRecordProjectionPreference({
       partition,
       ...anchor,
       direction: 'forward',
       maxRecords,
       ...(keyPrefix ? { keyPrefix } : {}),
       ...(filter ? { filter, filterLanguage } : {}),
-    };
-  }, [anchorKind, anchorValue, filter, filterLanguage, keyPrefix, maxRecords, partition]);
+    }, viewMode);
+  }, [anchorKind, anchorValue, filter, filterLanguage, keyPrefix, maxRecords, partition, viewMode]);
 
   async function load(query: RecordQuery) {
     stopBrowse();
@@ -111,7 +120,10 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
     setLoading(true); setError(null);
     try {
       const result = await kafdeckApi.getRecords(clusterId, topicName, query, controller.signal);
-      if (browseController.current === controller) setPage(result);
+      if (browseController.current === controller) {
+        setPage(result);
+        setDisplayedQuery(query);
+      }
     } catch (reason) {
       if (!isAbort(reason) && browseController.current === controller) setError(recordError(reason));
     } finally {
@@ -131,6 +143,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
       await kafdeckApi.tailRecords(clusterId, topicName, tailQuery, frame => {
         if (tailController.current !== controller) return;
         if (frame.kind === 'records' && frame.page) {
+          setDisplayedQuery(tailQuery);
           setPage(previous => previous ? { ...frame.page!, records: [...previous.records, ...frame.page!.records].slice(-maxRecords) } : frame.page);
         } else if (frame.kind === 'error' && frame.failure) setError(frame.failure.message);
         else if (frame.kind === 'admissionDenied') setError('Live-tail admission limit reached.');
@@ -146,21 +159,26 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   async function exportPage(format: 'json' | 'ndjson' | 'csv') {
     setError(null);
     try {
-      const blob = await kafdeckApi.exportRecords(clusterId, topicName, baseQuery, format);
+      const blob = await kafdeckApi.exportRecords(
+        clusterId,
+        topicName,
+        activeRecordPageQuery(displayedQuery, baseQuery),
+        format);
       const url = URL.createObjectURL(blob); const link = document.createElement('a');
       link.href = url; link.download = `${topicName}-${partition}.${format === 'ndjson' ? 'ndjson' : format}`;
       document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
     } catch (reason) { setError(recordError(reason)); }
   }
 
-  const previousQuery = page?.previousAnchor ? { ...baseQuery, ...anchorQuery(page.previousAnchor), direction: 'previous' as const } : null;
-  const nextQuery = page?.nextAnchor ? { ...baseQuery, ...anchorQuery(page.nextAnchor), direction: 'forward' as const } : null;
+  const pageQuery = activeRecordPageQuery(displayedQuery, baseQuery);
+  const previousQuery = page?.previousAnchor ? { ...pageQuery, ...anchorQuery(page.previousAnchor), direction: 'previous' as const } : null;
+  const nextQuery = page?.nextAnchor ? { ...pageQuery, ...anchorQuery(page.nextAnchor), direction: 'forward' as const } : null;
 
   return <section aria-labelledby="record-explorer-title">
     <h4 id="record-explorer-title">Safe Data Explorer</h4>
     <p>Payload access is separately authorized, bounded and server-side masked before it reaches this browser.</p>
     <div>
-      <label>Partition <select value={partition} onChange={event => { stopBrowse(); stopTail(); setPage(null); setError(null); setPartition(Number(event.target.value)); }}>{partitions.map(value => <option key={value} value={value}>{value}</option>)}</select></label>{' '}
+      <label>Partition <select value={partition} onChange={event => { stopBrowse(); stopTail(); setPage(null); setDisplayedQuery(null); setError(null); setPartition(Number(event.target.value)); }}>{partitions.map(value => <option key={value} value={value}>{value}</option>)}</select></label>{' '}
       <label>Start <select value={anchorKind} onChange={event => setAnchorKind(event.target.value as typeof anchorKind)}><option value="latest">Latest</option><option value="earliest">Earliest</option><option value="offset">Offset</option><option value="timestamp">Timestamp</option></select></label>{' '}
       {anchorKind === 'offset' && <label>Offset <input type="number" min="0" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}
       {anchorKind === 'timestamp' && <label>Timestamp <input type="datetime-local" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}{' '}
