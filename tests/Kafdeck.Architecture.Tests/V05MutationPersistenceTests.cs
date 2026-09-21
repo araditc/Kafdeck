@@ -140,8 +140,15 @@ public sealed class V05MutationPersistenceTests
 
             Assert.Equal(MutationOperationState.AppliedVerified, result.State);
             Assert.Equal(1, handler.CallCount);
+            Assert.Equal("3", result.SafeProviderEvidence["partition"]);
+            Assert.Equal("42", result.SafeProviderEvidence["offset"]);
             Assert.Contains(audit.Events, item => item.EventType == MutationAuditEventType.DispatchStarted);
             Assert.Contains(audit.Events, item => item.EventType == MutationAuditEventType.Completed);
+
+            var reloaded = await repository.GetAsync(operation.Snapshot.OperationId);
+            Assert.NotNull(reloaded);
+            Assert.Equal("3", reloaded!.SafeProviderEvidence["partition"]);
+            Assert.Equal("42", reloaded.SafeProviderEvidence["offset"]);
 
             var replay = await executor.ExecuteAsync(operation.Snapshot.OperationId);
             Assert.Equal(MutationOperationState.AppliedVerified, replay.State);
@@ -1089,7 +1096,12 @@ public sealed class V05MutationPersistenceTests
             CallCount++;
             return Task.FromResult(new MutationProviderResult(
                 MutationExecutionResultKind.AppliedVerified,
-                "verified"));
+                "verified",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["partition"] = "3",
+                    ["offset"] = "42",
+                }));
         }
     }
 
