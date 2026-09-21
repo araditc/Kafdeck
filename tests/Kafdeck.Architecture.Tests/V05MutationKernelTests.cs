@@ -520,6 +520,37 @@ public sealed class V05MutationKernelTests
     }
 
     [Fact]
+    public void Provider_evidence_is_bounded_and_rejects_secret_like_keys()
+    {
+        var normalized = MutationProviderEvidence.Normalize(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["partition"] = "3",
+                ["offset"] = "42",
+                ["verification.state"] = "observed",
+            });
+
+        Assert.Equal("3", normalized["partition"]);
+        Assert.Equal("42", normalized["offset"]);
+        Assert.Equal("observed", normalized["verification.state"]);
+
+        Assert.Throws<MutationStateException>(() =>
+            MutationProviderEvidence.Normalize(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["password"] = "should-never-be-durable",
+                }));
+
+        Assert.Throws<MutationStateException>(() =>
+            MutationProviderEvidence.Normalize(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["verification"] =
+                        new string('x', MutationLimits.MaxProviderEvidenceValueCharacters + 1),
+                }));
+    }
+
+    [Fact]
     public void Mutation_configuration_defaults_to_disabled()
     {
         var configuration = new ConfigurationBuilder()
