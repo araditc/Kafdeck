@@ -201,6 +201,74 @@ public sealed class V05MutationKernelTests
     }
 
     [Fact]
+    public void Idempotency_admitted_hash_binds_preconditions_risk_and_policy()
+    {
+        var intent = new MutationIntentDescriptor(
+            MutationOperationKind.TopicAlter,
+            "prod",
+            "{\"change\":\"same\"}",
+            new[] { "cluster/prod/topic/payments" },
+            new[] { new MutationPrecondition("config", "fingerprint-a") });
+
+        var baseline = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            intent,
+            MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.TopicAlter)),
+            "policy-v1",
+            Now.AddMinutes(5),
+            Now,
+            "idem-admitted");
+
+        var differentPrecondition = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            intent with
+            {
+                Preconditions =
+                    new[] { new MutationPrecondition("config", "fingerprint-b") },
+            },
+            MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.TopicAlter)),
+            "policy-v1",
+            Now.AddMinutes(5),
+            Now,
+            "idem-admitted");
+
+        var raisedRisk = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            intent,
+            new MutationRiskDecision(
+                MutationRiskClass.High,
+                new[] { "policy_raise" },
+                MutationConfirmationMode.TypedTarget,
+                false),
+            "policy-v1",
+            Now.AddMinutes(5),
+            Now,
+            "idem-admitted");
+
+        var differentPolicy = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            intent,
+            MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.TopicAlter)),
+            "policy-v2",
+            Now.AddMinutes(5),
+            Now,
+            "idem-admitted");
+
+        Assert.NotEqual(
+            baseline.Snapshot.CanonicalIntentHash,
+            differentPrecondition.Snapshot.CanonicalIntentHash);
+        Assert.NotEqual(
+            baseline.Snapshot.CanonicalIntentHash,
+            raisedRisk.Snapshot.CanonicalIntentHash);
+        Assert.NotEqual(
+            baseline.Snapshot.CanonicalIntentHash,
+            differentPolicy.Snapshot.CanonicalIntentHash);
+    }
+
+    [Fact]
     public void Post_dispatch_outcomes_require_dispatch_marker()
     {
         var operation = ReadyOperation(MutationOperationKind.TopicCreate);
@@ -214,6 +282,92 @@ public sealed class V05MutationKernelTests
             MutationExecutionResultKind.ExecutionUnknown,
             "unknown",
             Now.AddSeconds(4)));
+    }
+
+    [Fact]
+    public void Preview_factory_cannot_lower_topic_delete_below_critical()
+    {
+        var maliciouslyWeak = new MutationRiskDecision(
+            MutationRiskClass.Low,
+            new[] { "client_claimed_low" },
+            MutationConfirmationMode.Explicit,
+            false);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            Intent(
+                new[] { "cluster/prod/topic/payments" },
+                MutationOperationKind.TopicDelete),
+            maliciouslyWeak,
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "risk-floor-delete");
+
+        Assert.Equal(MutationRiskClass.Critical, operation.Snapshot.Risk.RiskClass);
+        Assert.Equal(
+            MutationConfirmationMode.TypedTarget,
+            operation.Snapshot.Risk.ConfirmationMode);
+        Assert.True(operation.Snapshot.Risk.RequiresIndependentApproval);
+
+        operation.OpenForConfirmation(Now.AddSeconds(1));
+        operation.Confirm(
+            operation.Snapshot.RequesterPrincipalId,
+            operation.Snapshot.PreviewHash,
+            Now.AddSeconds(2));
+
+        Assert.Equal(
+            MutationOperationState.AwaitingApproval,
+            operation.Snapshot.State);
+    }
+
+    [Fact]
+    public void Preview_factory_applies_bulk_floor_and_preserves_stricter_policy()
+    {
+        var weakBulk = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            Intent(
+                new[]
+                {
+                    "cluster/prod/topic/a",
+                    "cluster/prod/topic/b",
+                },
+                MutationOperationKind.TopicCreate),
+            new MutationRiskDecision(
+                MutationRiskClass.Low,
+                new[] { "client_low" },
+                MutationConfirmationMode.Explicit,
+                false),
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "risk-floor-bulk");
+
+        Assert.Equal(MutationRiskClass.Moderate, weakBulk.Snapshot.Risk.RiskClass);
+
+        var stricterPolicy = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            Intent(
+                new[] { "cluster/prod/topic/a" },
+                MutationOperationKind.TopicCreate),
+            new MutationRiskDecision(
+                MutationRiskClass.High,
+                new[] { "deployment_policy_raise" },
+                MutationConfirmationMode.TypedTarget,
+                true),
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "risk-policy-raise");
+
+        Assert.Equal(MutationRiskClass.High, stricterPolicy.Snapshot.Risk.RiskClass);
+        Assert.Equal(
+            MutationConfirmationMode.TypedTarget,
+            stricterPolicy.Snapshot.Risk.ConfirmationMode);
+        Assert.True(stricterPolicy.Snapshot.Risk.RequiresIndependentApproval);
+        Assert.Contains(
+            "deployment_policy_raise",
+            stricterPolicy.Snapshot.Risk.Reasons);
     }
 
     [Fact]
