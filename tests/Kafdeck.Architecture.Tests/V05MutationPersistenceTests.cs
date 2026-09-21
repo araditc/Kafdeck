@@ -950,6 +950,72 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task PostgreSql_atomic_lease_renewal_prevents_recovery_after_previous_expiry_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var time = new MutableTimeProvider(Now);
+        var repository = new AdoMutationOperationRepository(
+            new PostgreSqlMutationDbConnectionFactory(connectionString),
+            time);
+        await repository.InitializeAsync();
+
+        var holder = CreateReadyOperation($"pg-renew-{Guid.NewGuid():N}");
+        var created = await repository.CreateAsync(holder.Snapshot);
+        Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+        var aggregate = MutationOperation.Restore(created.Operation);
+        var generation = aggregate.ClaimExecution(
+            Now,
+            Now.AddSeconds(20));
+        var saved = await repository.TrySaveAsync(
+            aggregate.Snapshot,
+            created.Operation.Version);
+        Assert.Equal(MutationSaveOutcome.Saved, saved.Outcome);
+
+        var claimed = await repository.TryAcquireResourceClaimsAsync(
+            aggregate.Snapshot.OperationId,
+            generation,
+            aggregate.Snapshot.ResourceKeys,
+            Now.AddSeconds(20));
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, claimed.Outcome);
+
+        time.SetUtcNow(Now.AddSeconds(19));
+        var renewalExpectedVersion = aggregate.Snapshot.Version;
+        aggregate.RenewExecutionLease(
+            time.GetUtcNow(),
+            Now.AddSeconds(39));
+
+        var renewed = await repository.TryRenewExecutionLeaseAsync(
+            aggregate.Snapshot,
+            renewalExpectedVersion);
+        Assert.Equal(MutationLeaseRenewOutcome.Renewed, renewed.Outcome);
+        Assert.Equal(Now.AddSeconds(39), renewed.Operation!.ExecutionClaimExpiresAtUtc);
+
+        time.SetUtcNow(Now.AddSeconds(21));
+        var recovery = new MutationRecoveryCoordinator(
+            repository,
+            new CapturingMutationAuditSink(),
+            time);
+
+        var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+        Assert.Equal(0, recovered);
+
+        var persisted = await repository.GetAsync(aggregate.Snapshot.OperationId);
+        Assert.NotNull(persisted);
+        Assert.Equal(MutationOperationState.Executing, persisted!.State);
+        Assert.Equal(Now.AddSeconds(39), persisted.ExecutionClaimExpiresAtUtc);
+
+        await repository.ReleaseResourceClaimsAsync(
+            aggregate.Snapshot.OperationId,
+            generation);
+    }
+
+    [Fact]
     public async Task PostgreSql_claim_recovery_race_leaves_no_orphan_resource_claim_when_available()
     {
         var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
