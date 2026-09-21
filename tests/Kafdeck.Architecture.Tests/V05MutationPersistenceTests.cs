@@ -481,6 +481,59 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Recoverable_query_filters_active_leases_before_applying_limit()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-recovery-filter-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                new FixedTimeProvider(Now));
+            await repository.InitializeAsync();
+
+            var expired = CreateReadyOperation("recover-expired");
+            var expiredCreated = await repository.CreateAsync(expired.Snapshot);
+            var expiredAggregate = MutationOperation.Restore(expiredCreated.Operation);
+            expiredAggregate.ClaimExecution(Now, Now.AddMinutes(1));
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    expiredAggregate.Snapshot,
+                    expiredCreated.Operation.Version)).Outcome);
+
+            var active = CreateReadyOperation("recover-active");
+            var activeCreated = await repository.CreateAsync(active.Snapshot);
+            var activeAggregate = MutationOperation.Restore(activeCreated.Operation);
+            activeAggregate.ClaimExecution(Now, Now.AddMinutes(5));
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    activeAggregate.Snapshot,
+                    activeCreated.Operation.Version)).Outcome);
+
+            var recoverable = await repository.ListRecoverableExecutionsAsync(
+                Now.AddMinutes(2),
+                includeActiveLeases: false,
+                limit: 1);
+
+            Assert.Single(recoverable);
+            Assert.Equal(
+                expiredAggregate.Snapshot.OperationId,
+                recoverable[0].OperationId);
+
+            var includingActive = await repository.ListRecoverableExecutionsAsync(
+                Now.AddMinutes(2),
+                includeActiveLeases: true,
+                limit: 3);
+            Assert.Equal(2, includingActive.Count);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Recovery_marks_interrupted_pre_dispatch_execution_as_failed_before_dispatch()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-recovery-pre-{Guid.NewGuid():N}.db");
@@ -784,6 +837,83 @@ public sealed class V05MutationPersistenceTests
         await repository.ReleaseResourceClaimsAsync(
             competingExecuting.Snapshot.OperationId,
             competingGeneration);
+    }
+
+    [Fact]
+    public async Task PostgreSql_claim_recovery_race_leaves_no_orphan_resource_claim_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var repository = new AdoMutationOperationRepository(
+            new PostgreSqlMutationDbConnectionFactory(connectionString),
+            new FixedTimeProvider(Now));
+        await repository.InitializeAsync();
+
+        var holder = CreateReadyOperation($"pg-race-holder-{Guid.NewGuid():N}");
+        var created = await repository.CreateAsync(holder.Snapshot);
+        Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+        var aggregate = MutationOperation.Restore(created.Operation);
+        var generation = aggregate.ClaimExecution(
+            Now.AddSeconds(1),
+            Now.AddMinutes(2));
+        var saved = await repository.TrySaveAsync(
+            aggregate.Snapshot,
+            created.Operation.Version);
+        Assert.Equal(MutationSaveOutcome.Saved, saved.Outcome);
+
+        var recovery = new MutationRecoveryCoordinator(
+            repository,
+            new CapturingMutationAuditSink(),
+            new FixedTimeProvider(Now.AddMinutes(3)));
+
+        var claimTask = repository.TryAcquireResourceClaimsAsync(
+            aggregate.Snapshot.OperationId,
+            generation,
+            aggregate.Snapshot.ResourceKeys,
+            Now.AddMinutes(2));
+        var recoveryTask = recovery.RecoverInterruptedExecutionsAsync();
+
+        await Task.WhenAll(claimTask, recoveryTask);
+
+        Assert.Contains(
+            claimTask.Result.Outcome,
+            new[]
+            {
+                MutationResourceClaimOutcome.Acquired,
+                MutationResourceClaimOutcome.InvalidExecutionClaim,
+            });
+
+        var persisted = await repository.GetAsync(aggregate.Snapshot.OperationId);
+        Assert.NotNull(persisted);
+        Assert.Equal(MutationOperationState.FailedBeforeDispatch, persisted!.State);
+
+        var competitor = CreateReadyOperation($"pg-race-competitor-{Guid.NewGuid():N}");
+        var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+        var competitorAggregate = MutationOperation.Restore(competitorCreated.Operation);
+        var competitorGeneration = competitorAggregate.ClaimExecution(
+            Now.AddSeconds(2),
+            Now.AddMinutes(5));
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await repository.TrySaveAsync(
+                competitorAggregate.Snapshot,
+                competitorCreated.Operation.Version)).Outcome);
+
+        var competitorClaim = await repository.TryAcquireResourceClaimsAsync(
+            competitorAggregate.Snapshot.OperationId,
+            competitorGeneration,
+            competitorAggregate.Snapshot.ResourceKeys,
+            Now.AddMinutes(5));
+
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, competitorClaim.Outcome);
+        await repository.ReleaseResourceClaimsAsync(
+            competitorAggregate.Snapshot.OperationId,
+            competitorGeneration);
     }
 
     private static MutationOperation CreateOperation(string idempotencyKey, string canonicalIntent)
