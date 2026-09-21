@@ -28,11 +28,22 @@ public static class MutationAuthorization
     public static IReadOnlyList<MutationAuthorizationTarget> NormalizeTargets(
         MutationOperationKind kind,
         string clusterId,
-        IReadOnlyList<MutationAuthorizationTarget>? targets)
+        IReadOnlyList<MutationAuthorizationTarget>? targets,
+        IReadOnlyList<string>? fallbackResourceKeys = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
         var normalizedCluster = RequireBounded(clusterId, "Authorization cluster ID", 256);
-        var items = targets ?? Array.Empty<MutationAuthorizationTarget>();
+        var expectedAction = ExpectedAction(kind);
+
+        IReadOnlyList<MutationAuthorizationTarget> items =
+            targets is { Count: > 0 }
+                ? targets
+                : (fallbackResourceKeys ?? Array.Empty<string>())
+                    .Select(resourceKey => new MutationAuthorizationTarget(
+                        expectedAction,
+                        normalizedCluster,
+                        resourceKey))
+                    .ToArray();
 
         if (items.Count == 0 || items.Count > MutationLimits.MaxResourceKeys)
         {
@@ -40,8 +51,6 @@ public static class MutationAuthorization
                 nameof(targets),
                 $"Mutation authorization targets must contain between 1 and {MutationLimits.MaxResourceKeys} items.");
         }
-
-        var expectedAction = ExpectedAction(kind);
         var normalized = items
             .Select(target =>
             {
