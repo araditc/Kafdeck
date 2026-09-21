@@ -879,9 +879,11 @@ public sealed class V05MutationPersistenceTests
         var recoveryTask = recovery.RecoverInterruptedExecutionsAsync();
 
         await Task.WhenAll(claimTask, recoveryTask);
+        var claimResult = await claimTask;
+        _ = await recoveryTask;
 
         Assert.Contains(
-            claimTask.Result.Outcome,
+            claimResult.Outcome,
             new[]
             {
                 MutationResourceClaimOutcome.Acquired,
