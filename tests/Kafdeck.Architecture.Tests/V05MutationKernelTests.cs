@@ -78,6 +78,78 @@ public sealed class V05MutationKernelTests
     }
 
     [Fact]
+    public void Idempotency_intent_hash_binds_resource_targets_and_material_digests()
+    {
+        var risk = MutationRiskClassifier.Classify(
+            new MutationRiskInput(MutationOperationKind.RecordProduce));
+
+        var first = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            new MutationIntentDescriptor(
+                MutationOperationKind.RecordProduce,
+                "prod",
+                "{\"template\":\"same\"}",
+                new[] { "cluster/prod/topic/a" },
+                MaterialDigests: new[] { new MutationMaterialDigest("value", "digest-a") }),
+            risk,
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "idem-shared");
+
+        var differentTarget = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            new MutationIntentDescriptor(
+                MutationOperationKind.RecordProduce,
+                "prod",
+                "{\"template\":\"same\"}",
+                new[] { "cluster/prod/topic/b" },
+                MaterialDigests: new[] { new MutationMaterialDigest("value", "digest-a") }),
+            risk,
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "idem-shared");
+
+        var differentMaterial = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            new MutationIntentDescriptor(
+                MutationOperationKind.RecordProduce,
+                "prod",
+                "{\"template\":\"same\"}",
+                new[] { "cluster/prod/topic/a" },
+                MaterialDigests: new[] { new MutationMaterialDigest("value", "digest-b") }),
+            risk,
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "idem-shared");
+
+        Assert.NotEqual(
+            first.Snapshot.CanonicalIntentHash,
+            differentTarget.Snapshot.CanonicalIntentHash);
+        Assert.NotEqual(
+            first.Snapshot.CanonicalIntentHash,
+            differentMaterial.Snapshot.CanonicalIntentHash);
+    }
+
+    [Fact]
+    public void Post_dispatch_outcomes_require_dispatch_marker()
+    {
+        var operation = ReadyOperation(MutationOperationKind.TopicCreate);
+        operation.ClaimExecution(Now.AddSeconds(3), Now.AddMinutes(2));
+
+        Assert.Throws<MutationStateException>(() => operation.Complete(
+            MutationExecutionResultKind.AppliedVerified,
+            "verified",
+            Now.AddSeconds(4)));
+        Assert.Throws<MutationStateException>(() => operation.Complete(
+            MutationExecutionResultKind.ExecutionUnknown,
+            "unknown",
+            Now.AddSeconds(4)));
+    }
+
+    [Fact]
     public void Critical_operation_requires_distinct_approver()
     {
         var risk = MutationRiskClassifier.Classify(
