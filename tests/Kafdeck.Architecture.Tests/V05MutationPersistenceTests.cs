@@ -252,6 +252,69 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Provider_ignoring_cancellation_times_out_to_unknown_and_keeps_conflict_claim()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-provider-timeout-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("timeout-holder");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var handler = new IgnoringCancellationHandler(MutationOperationKind.TopicCreate);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor
+                .ExecuteAsync(operation.Snapshot.OperationId)
+                .WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(MutationOperationState.ExecutionUnknown, result.State);
+            Assert.Equal("execution_timeout", result.ResultCode);
+
+            var competitor = CreateReadyOperation("timeout-competitor");
+            var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, competitorCreated.Outcome);
+
+            var competitorAggregate = MutationOperation.Restore(competitorCreated.Operation);
+            var competitorGeneration = competitorAggregate.ClaimExecution(
+                Now.AddSeconds(2),
+                Now.AddSeconds(20));
+            var competitorSaved = await repository.TrySaveAsync(
+                competitorAggregate.Snapshot,
+                competitorCreated.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, competitorSaved.Outcome);
+
+            var blocked = await repository.TryAcquireResourceClaimsAsync(
+                competitorAggregate.Snapshot.OperationId,
+                competitorGeneration,
+                competitorAggregate.Snapshot.ResourceKeys,
+                Now.AddSeconds(20));
+            Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
+
+            handler.Complete.TrySetResult(true);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Recovery_marks_interrupted_pre_dispatch_execution_as_failed_before_dispatch()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-recovery-pre-{Guid.NewGuid():N}.db");
@@ -666,6 +729,28 @@ public sealed class V05MutationPersistenceTests
         }
     }
 
+
+    private sealed class IgnoringCancellationHandler : IMutationExecutionHandler
+    {
+        public IgnoringCancellationHandler(MutationOperationKind operationKind)
+        {
+            OperationKind = operationKind;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+        public TaskCompletionSource<bool> Complete { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<MutationProviderResult> ExecuteAsync(
+            MutationOperationSnapshot operation,
+            CancellationToken cancellationToken = default)
+        {
+            await Complete.Task.ConfigureAwait(false);
+            return new MutationProviderResult(
+                MutationExecutionResultKind.AppliedVerified,
+                "late_verified");
+        }
+    }
 
     private sealed class BlockingRecordingHandler : IMutationExecutionHandler
     {
