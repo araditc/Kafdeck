@@ -68,7 +68,7 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
                     request.TopicName,
                     new Message<byte[], byte[]>
                     {
-                        Key = key,
+                        Key = key!,
                         Value = value,
                         Headers = headers,
                     },

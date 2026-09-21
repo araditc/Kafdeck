@@ -46,8 +46,11 @@ public sealed class RecordProductionPlanner
         _plannerPolicy = plannerPolicy ?? RecordProductionPlannerPolicy.Default;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
-        if (_plannerPolicy.ObservationTimeout is < TimeSpan.FromSeconds(1) or > TimeSpan.FromSeconds(30))
+        if (_plannerPolicy.ObservationTimeout < TimeSpan.FromSeconds(1) ||
+            _plannerPolicy.ObservationTimeout > TimeSpan.FromSeconds(30))
+        {
             throw new ArgumentOutOfRangeException(nameof(plannerPolicy));
+        }
         RecordProductionValidation.RequireIdentifier(
             _plannerPolicy.PolicyVersion,
             "Record production policy version",
@@ -367,6 +370,11 @@ public sealed class RecordProductionPlanner
         int? ordinal = null) =>
         RecordProductionPlanningResult.Failed(
             new RecordProductionPlanningFailure(code, message, ordinal));
+
+    private static RecordProductionPlanningResult Failed(
+        RecordProductionPlanningFailure failure) =>
+        RecordProductionPlanningResult.Failed(
+            failure ?? throw new ArgumentNullException(nameof(failure)));
 
     private static RecordProductionPlanningResult FailAndDispose(
         Dictionary<string, byte[]> material,
