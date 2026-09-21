@@ -5,6 +5,8 @@ using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Records;
+using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Extensions.Options;
 
 namespace Kafdeck.Api;
 
@@ -48,7 +50,7 @@ public static class KafdeckRecordEndpoints
             var query = RecordHttpQuery.Parse(http.Request.Query, clusterId, topicName, partition);
             var plan = RecordFilterCompiler.Compile(query.Filter);
             var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + query.Read.Budget.MaxDuration);
-            var filtered = await filterService.FilterPageAsync(query.Read, plan, operation, maskingPolicy.RequiresStructuredValue, cancellationToken).ConfigureAwait(false);
+            var filtered = await filterService.FilterPageAsync(query.Read, plan, operation, maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue, cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null) return ApiResults.Problem(ApiProblemMapper.FromKafka(filtered.Failure!));
 
             var safe = maskingService.Apply(query.Read, filtered.Value, maskingPolicy);
@@ -64,7 +66,7 @@ public static class KafdeckRecordEndpoints
     private static async Task TailAsync(
         string clusterId, string topicName, int partition, HttpContext http, KafdeckOptions options,
         RecordLiveTailService tailService, RecordMaskingService maskingService, CompiledRecordMaskingPolicy maskingPolicy,
-        ISecurityAuditSink auditSink, CancellationToken cancellationToken)
+        IOptions<HttpJsonOptions> jsonOptions, ISecurityAuditSink auditSink, CancellationToken cancellationToken)
     {
         if (!IsConfiguredCluster(options, clusterId))
         {
@@ -100,7 +102,7 @@ public static class KafdeckRecordEndpoints
         http.Response.Headers.CacheControl = "no-store";
         http.Response.Headers.Append("X-Accel-Buffering", "no");
 
-        await foreach (var frame in tailService.TailAsync(tailRequest, maskingPolicy.RequiresStructuredValue, cancellationToken).ConfigureAwait(false))
+        await foreach (var frame in tailService.TailAsync(tailRequest, maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue, cancellationToken).ConfigureAwait(false))
         {
             object payload;
             if (frame.Kind == RecordTailFrameKind.Records && frame.Page is not null)
@@ -123,7 +125,12 @@ public static class KafdeckRecordEndpoints
             }
 
             await http.Response.WriteAsync("data: ", cancellationToken).ConfigureAwait(false);
-            await JsonSerializer.SerializeAsync(http.Response.Body, payload, payload.GetType(), cancellationToken: cancellationToken).ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(
+                http.Response.Body,
+                payload,
+                payload.GetType(),
+                jsonOptions.Value.SerializerOptions,
+                cancellationToken).ConfigureAwait(false);
             await http.Response.WriteAsync("\n\n", cancellationToken).ConfigureAwait(false);
             await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
             if (frame.Kind is RecordTailFrameKind.KafkaFailure or RecordTailFrameKind.AdmissionDenied or RecordTailFrameKind.Completed) break;
@@ -147,7 +154,7 @@ public static class KafdeckRecordEndpoints
             var query = RecordHttpQuery.Parse(http.Request.Query, clusterId, topicName, partition);
             var plan = RecordFilterCompiler.Compile(query.Filter);
             var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + query.Read.Budget.MaxDuration);
-            var filtered = await filterService.FilterPageAsync(query.Read, plan, operation, maskingPolicy.RequiresStructuredValue, cancellationToken).ConfigureAwait(false);
+            var filtered = await filterService.FilterPageAsync(query.Read, plan, operation, maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue, cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null)
             {
                 await WriteProblemAsync(http, ApiProblemMapper.FromKafka(filtered.Failure!), cancellationToken).ConfigureAwait(false);
@@ -239,7 +246,7 @@ public static class KafdeckRecordEndpoints
 
     private sealed record RecordTailSafeFrame(string Kind, RecordSafePage? Page, object? Failure);
 
-    private sealed record RecordHttpQuery(RecordReadRequest Read, RecordFilterRequest Filter)
+    private sealed record RecordHttpQuery(RecordReadRequest Read, RecordFilterRequest Filter, bool RequireDecodedValue)
     {
         public static RecordHttpQuery Parse(IQueryCollection query, string clusterId, string topicName, int partition, bool forceForward = false)
         {
@@ -260,7 +267,8 @@ public static class KafdeckRecordEndpoints
             RecordStructuredFilter? structured = null;
             var expression = EmptyToNull(query["filter"]);
             if (expression is not null) structured = new RecordStructuredFilter(ParseFilterLanguage(query["filterLanguage"]), expression);
-            return new RecordHttpQuery(read, new RecordFilterRequest(preFilter, structured));
+            var requireDecodedValue = ParseBoolean(query["decode"], "decode");
+            return new RecordHttpQuery(read, new RecordFilterRequest(preFilter, structured), requireDecodedValue);
         }
 
         public static RecordExportFormat ParseExportFormat(string? value)
@@ -308,6 +316,13 @@ public static class KafdeckRecordEndpoints
                 return Array.Empty<RecordHeaderPredicate>();
             }
             return [new RecordHeaderPredicate(name, equals, prefix)];
+        }
+
+        private static bool ParseBoolean(string? value, string name)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            if (bool.TryParse(value, out var parsed)) return parsed;
+            throw new ArgumentException($"{name} must be true or false.");
         }
 
         private static int ParseInt(string? value, int fallback) => string.IsNullOrWhiteSpace(value) ? fallback : int.Parse(value, NumberStyles.None, CultureInfo.InvariantCulture);
