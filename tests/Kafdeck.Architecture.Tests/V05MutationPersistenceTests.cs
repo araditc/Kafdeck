@@ -321,6 +321,63 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Timed_out_provider_retains_cluster_concurrency_slot_until_late_task_finishes()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-late-permit-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var first = CreateReadyOperation(
+                "late-permit-first",
+                "cluster/prod/topic/first");
+            var second = CreateReadyOperation(
+                "late-permit-second",
+                "cluster/prod/topic/second");
+            Assert.Equal(MutationCreateOutcome.Created, (await repository.CreateAsync(first.Snapshot)).Outcome);
+            Assert.Equal(MutationCreateOutcome.Created, (await repository.CreateAsync(second.Snapshot)).Outcome);
+
+            var handler = new FirstCallIgnoresCancellationHandler(MutationOperationKind.TopicCreate);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var firstResult = await executor
+                .ExecuteAsync(first.Snapshot.OperationId)
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(MutationOperationState.ExecutionUnknown, firstResult.State);
+            Assert.Equal(1, handler.CallCount);
+
+            var secondExecution = executor.ExecuteAsync(second.Snapshot.OperationId);
+            await Task.Delay(150);
+            Assert.False(secondExecution.IsCompleted);
+            Assert.Equal(1, handler.CallCount);
+
+            handler.ReleaseFirst.TrySetResult(true);
+
+            var secondResult = await secondExecution.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(MutationOperationState.AppliedVerified, secondResult.State);
+            Assert.Equal(2, handler.CallCount);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Ephemeral_execution_material_is_digest_validated_and_never_persisted()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-material-{Guid.NewGuid():N}.db");
@@ -918,7 +975,10 @@ public sealed class V05MutationPersistenceTests
             competitorGeneration);
     }
 
-    private static MutationOperation CreateOperation(string idempotencyKey, string canonicalIntent)
+    private static MutationOperation CreateOperation(
+        string idempotencyKey,
+        string canonicalIntent,
+        string resourceKey = "cluster/prod/topic/payments")
     {
         var risk = MutationRiskClassifier.Classify(
             new MutationRiskInput(MutationOperationKind.TopicCreate));
@@ -926,7 +986,7 @@ public sealed class V05MutationPersistenceTests
             MutationOperationKind.TopicCreate,
             "prod",
             canonicalIntent,
-            new[] { "cluster/prod/topic/payments" },
+            new[] { resourceKey },
             new[] { new MutationPrecondition("topic", "absent") });
 
         var operation = MutationOperation.CreatePreview(
@@ -941,9 +1001,14 @@ public sealed class V05MutationPersistenceTests
         return operation;
     }
 
-    private static MutationOperation CreateReadyOperation(string idempotencyKey)
+    private static MutationOperation CreateReadyOperation(
+        string idempotencyKey,
+        string resourceKey = "cluster/prod/topic/payments")
     {
-        var operation = CreateOperation(idempotencyKey, "{\"operation\":\"create-topic\"}");
+        var operation = CreateOperation(
+            idempotencyKey,
+            "{\"operation\":\"create-topic\"}",
+            resourceKey);
         operation.Confirm(
             operation.Snapshot.RequesterPrincipalId,
             operation.Snapshot.PreviewHash,
@@ -1048,6 +1113,38 @@ public sealed class V05MutationPersistenceTests
             return new MutationProviderResult(
                 MutationExecutionResultKind.AppliedVerified,
                 "late_verified");
+        }
+    }
+
+    private sealed class FirstCallIgnoresCancellationHandler : IMutationExecutionHandler
+    {
+        public FirstCallIgnoresCancellationHandler(MutationOperationKind operationKind)
+        {
+            OperationKind = operationKind;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+        public int CallCount { get; private set; }
+        public TaskCompletionSource<bool> ReleaseFirst { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<MutationProviderResult> ExecuteAsync(
+            MutationExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            if (CallCount == 1)
+            {
+                await ReleaseFirst.Task.ConfigureAwait(false);
+                return new MutationProviderResult(
+                    MutationExecutionResultKind.AppliedVerified,
+                    "late_first");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return new MutationProviderResult(
+                MutationExecutionResultKind.AppliedVerified,
+                "verified_second");
         }
     }
 
