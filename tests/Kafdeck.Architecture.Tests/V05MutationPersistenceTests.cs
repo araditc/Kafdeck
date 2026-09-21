@@ -1746,6 +1746,59 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Sequential_idle_clusters_do_not_exhaust_local_tracked_cluster_cap()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-cluster-eviction-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var handler = new RecordingHandler(MutationOperationKind.TopicCreate);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20),
+                    maxTrackedClusters: 2),
+                time);
+
+            foreach (var clusterId in new[] { "cluster-a", "cluster-b", "cluster-c" })
+            {
+                var operation = CreateReadyOperation(
+                    $"cluster-eviction-{clusterId}",
+                    $"cluster/{clusterId}/topic/payments",
+                    clusterId);
+                var created = await repository.CreateAsync(operation.Snapshot);
+                Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+                var result = await executor.ExecuteAsync(
+                    operation.Snapshot.OperationId);
+
+                Assert.Equal(
+                    MutationOperationState.AppliedVerified,
+                    result.State);
+            }
+
+            Assert.Equal(3, handler.CallCount);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task PostgreSql_claim_recovery_race_leaves_no_orphan_resource_claim_when_available()
     {
         var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
@@ -1827,13 +1880,14 @@ public sealed class V05MutationPersistenceTests
     private static MutationOperation CreateOperation(
         string idempotencyKey,
         string canonicalIntent,
-        string resourceKey = "cluster/prod/topic/payments")
+        string resourceKey = "cluster/prod/topic/payments",
+        string clusterId = "prod")
     {
         var risk = MutationRiskClassifier.Classify(
             new MutationRiskInput(MutationOperationKind.TopicCreate));
         var intent = new MutationIntentDescriptor(
             MutationOperationKind.TopicCreate,
-            "prod",
+            clusterId,
             canonicalIntent,
             new[] { resourceKey },
             new[] { new MutationPrecondition("topic", "absent") });
@@ -1852,12 +1906,14 @@ public sealed class V05MutationPersistenceTests
 
     private static MutationOperation CreateReadyOperation(
         string idempotencyKey,
-        string resourceKey = "cluster/prod/topic/payments")
+        string resourceKey = "cluster/prod/topic/payments",
+        string clusterId = "prod")
     {
         var operation = CreateOperation(
             idempotencyKey,
             "{\"operation\":\"create-topic\"}",
-            resourceKey);
+            resourceKey,
+            clusterId);
         operation.Confirm(
             operation.Snapshot.RequesterPrincipalId,
             operation.Snapshot.PreviewHash,
