@@ -200,6 +200,17 @@ public sealed class MutationOperation
         Transition(target, nowUtc);
     }
 
+    public void MarkStaleBeforeDispatch(DateTimeOffset nowUtc)
+    {
+        RequireState(MutationOperationState.Executing);
+        if (Snapshot.DispatchStartedAtUtc is not null)
+        {
+            throw new MutationStateException("A dispatched mutation cannot be reclassified as a stale preview.");
+        }
+
+        Transition(MutationOperationState.StalePreview, nowUtc);
+    }
+
     public void MarkStalePreview(DateTimeOffset nowUtc)
     {
         if (Snapshot.State is not (
