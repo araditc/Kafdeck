@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 4 accepted; v0.1-v0.3 released; v0.4 active**  
+Status: **Gate 0–Gate 5 scope accepted; v0.1-v0.4 released; v0.5 planning proposed for governed admission**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -120,7 +120,7 @@ Not in v0.3:
 
 Invariant: an active masking rule cannot be bypassed by browser/API/export/raw/hex paths.
 
-## v0.4 — Consumers, Schemas & Ecosystem Read Views — ACCEPTED / ACTIVE
+## v0.4 — Consumers, Schemas & Ecosystem Read Views — RELEASED
 
 Capabilities:
 - Consumer groups, state, members and assignments
@@ -137,7 +137,7 @@ Capabilities:
 
 Scope authority: Issue #99 / Gate 4 / RFC-0004. v0.4 remains read-only: no consumer-offset, Schema Registry, Connect, ksqlDB, Kafka topic/configuration, or record mutation is introduced.
 
-## v0.5 — Safe Administration & Controlled Mutations
+## v0.5 — Safe Administration & Controlled Mutations — SCOPE ACCEPTED
 
 Initial mutations:
 - Create/alter/delete topics
@@ -156,6 +156,10 @@ All mutations use:
 `Request -> Authorization -> Validation -> Risk Classification -> Preview -> Confirmation/Approval -> Execute -> Verify -> Audit`
 
 Risk classes: LOW, MODERATE, HIGH, CRITICAL.
+
+Scope authority: **Issue #121 / Gate 5 / RFC-0005 planning package**. Implementation is permitted only after that planning package is admitted through protected-main governance. Issue #122 tracks W32-W40.
+
+Mutation mode requires durable Kafdeck operation persistence. CRITICAL operations require a distinct eligible approver; a deployment that cannot establish that property fails closed for CRITICAL mutation.
 
 Irreversible operations such as topic deletion and record purge are never represented as generally reversible.
 
