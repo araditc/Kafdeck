@@ -133,6 +133,107 @@ public sealed class V05MutationPersistenceTests
     }
 
 
+
+    [Fact]
+    public async Task Resource_claim_requires_matching_persisted_execution_generation()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-claim-fence-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                new FixedTimeProvider(Now));
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("claim-fence");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var invalidBeforeClaim = await repository.TryAcquireResourceClaimsAsync(
+                created.Operation.OperationId,
+                1,
+                created.Operation.ResourceKeys,
+                Now.AddMinutes(2));
+            Assert.Equal(
+                MutationResourceClaimOutcome.InvalidExecutionClaim,
+                invalidBeforeClaim.Outcome);
+
+            var aggregate = MutationOperation.Restore(created.Operation);
+            var generation = aggregate.ClaimExecution(Now.AddSeconds(1));
+            var saved = await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                created.Operation.Version);
+            Assert.Equal(MutationSaveOutcome.Saved, saved.Outcome);
+
+            var wrongGeneration = await repository.TryAcquireResourceClaimsAsync(
+                aggregate.Snapshot.OperationId,
+                generation + 1,
+                aggregate.Snapshot.ResourceKeys,
+                Now.AddMinutes(2));
+            Assert.Equal(
+                MutationResourceClaimOutcome.InvalidExecutionClaim,
+                wrongGeneration.Outcome);
+
+            var valid = await repository.TryAcquireResourceClaimsAsync(
+                aggregate.Snapshot.OperationId,
+                generation,
+                aggregate.Snapshot.ResourceKeys,
+                Now.AddMinutes(2));
+            Assert.Equal(MutationResourceClaimOutcome.Acquired, valid.Outcome);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Caller_cancellation_after_dispatch_does_not_cancel_server_owned_provider_execution()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-dispatch-owner-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("dispatch-owner");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var handler = new BlockingRecordingHandler(MutationOperationKind.TopicCreate);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(5),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            using var caller = new CancellationTokenSource();
+            var execution = executor.ExecuteAsync(operation.Snapshot.OperationId, caller.Token);
+
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            caller.Cancel();
+            handler.Complete.TrySetResult(true);
+
+            var result = await execution.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(MutationOperationState.AppliedVerified, result.State);
+            Assert.False(handler.ProviderCancellationObserved);
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
     [Fact]
     public async Task Recovery_marks_interrupted_pre_dispatch_execution_as_failed_before_dispatch()
     {
@@ -385,6 +486,44 @@ public sealed class V05MutationPersistenceTests
             return Task.FromResult(new MutationProviderResult(
                 MutationExecutionResultKind.AppliedVerified,
                 "verified"));
+        }
+    }
+
+
+    private sealed class BlockingRecordingHandler : IMutationExecutionHandler
+    {
+        public BlockingRecordingHandler(MutationOperationKind operationKind)
+        {
+            OperationKind = operationKind;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+        public int CallCount { get; private set; }
+        public bool ProviderCancellationObserved { get; private set; }
+        public TaskCompletionSource<bool> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> Complete { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<MutationProviderResult> ExecuteAsync(
+            MutationOperationSnapshot operation,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            Started.TrySetResult(true);
+            try
+            {
+                await Complete.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                ProviderCancellationObserved = true;
+                throw;
+            }
+
+            return new MutationProviderResult(
+                MutationExecutionResultKind.AppliedVerified,
+                "verified");
         }
     }
 
