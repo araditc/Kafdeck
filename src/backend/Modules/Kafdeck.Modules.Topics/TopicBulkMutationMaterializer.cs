@@ -115,6 +115,11 @@ public sealed class TopicBulkMutationMaterializer
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (request is null)
+            {
+                return Invalid<TMutation>("Bulk topic mutation contains a null target.");
+            }
+
             TMutation normalized;
             try
             {
@@ -124,9 +129,15 @@ public sealed class TopicBulkMutationMaterializer
             {
                 return TopicBulkMutationPlanningResult<TMutation>.Failed(
                     new TopicBulkMutationPlanningFailure(
-                        TopicName(request),
+                        TopicNameOrNull(request),
                         exception.Code,
                         exception.Message));
+            }
+            catch (ArgumentException)
+            {
+                return Invalid<TMutation>(
+                    "Bulk topic mutation contains an invalid target.",
+                    TopicNameOrNull(request));
             }
 
             var targetCluster = ClusterId(normalized);
@@ -242,14 +253,26 @@ public sealed class TopicBulkMutationMaterializer
                 "Unsupported topic mutation type."),
         };
 
-    private static string? TopicName<TMutation>(TMutation? mutation) =>
+    private static string TopicName<TMutation>(TMutation mutation) =>
         mutation switch
         {
             TopicCreateMutation value => value.TopicName,
             TopicAlterMutation value => value.TopicName,
             TopicIncreasePartitionsMutation value => value.TopicName,
             TopicDeleteMutation value => value.TopicName,
-            null => null,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mutation),
+                typeof(TMutation).Name,
+                "Unsupported topic mutation type."),
+        };
+
+    private static string? TopicNameOrNull<TMutation>(TMutation? mutation) =>
+        mutation switch
+        {
+            TopicCreateMutation value => value.TopicName,
+            TopicAlterMutation value => value.TopicName,
+            TopicIncreasePartitionsMutation value => value.TopicName,
+            TopicDeleteMutation value => value.TopicName,
             _ => null,
         };
 }
