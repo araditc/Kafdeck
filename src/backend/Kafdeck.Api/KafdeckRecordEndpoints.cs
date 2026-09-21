@@ -66,7 +66,7 @@ public static class KafdeckRecordEndpoints
     private static async Task TailAsync(
         string clusterId, string topicName, int partition, HttpContext http, KafdeckOptions options,
         RecordLiveTailService tailService, RecordMaskingService maskingService, CompiledRecordMaskingPolicy maskingPolicy,
-        IOptions<HttpJsonOptions> jsonOptions, ISecurityAuditSink auditSink, CancellationToken cancellationToken)
+        IOptions<JsonOptions> jsonOptions, ISecurityAuditSink auditSink, CancellationToken cancellationToken)
     {
         if (!IsConfiguredCluster(options, clusterId))
         {
