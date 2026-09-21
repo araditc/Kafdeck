@@ -282,6 +282,12 @@
           "Kafdeck.Core": "[0.2.0, )",
           "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
         }
+      },
+      "kafdeck.modules.administration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )"
+        }
       }
     }
   }
