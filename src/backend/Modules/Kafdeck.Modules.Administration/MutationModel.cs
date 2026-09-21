@@ -84,6 +84,10 @@ public sealed record MutationAuthorizationTarget(
     string ClusterId,
     string ResourceName);
 
+public sealed record MutationRiskContext(
+    bool PermanentDelete = false,
+    bool DurabilitySensitiveChange = false);
+
 public sealed record MutationIntentDescriptor(
     MutationOperationKind Kind,
     string ClusterId,
@@ -91,7 +95,8 @@ public sealed record MutationIntentDescriptor(
     IReadOnlyList<string> ResourceKeys,
     IReadOnlyList<MutationPrecondition>? Preconditions = null,
     IReadOnlyList<MutationMaterialDigest>? MaterialDigests = null,
-    IReadOnlyList<MutationAuthorizationTarget>? AuthorizationTargets = null);
+    IReadOnlyList<MutationAuthorizationTarget>? AuthorizationTargets = null,
+    MutationRiskContext? RiskContext = null);
 
 public sealed record MutationRiskDecision(
     MutationRiskClass RiskClass,
