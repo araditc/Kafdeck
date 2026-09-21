@@ -124,6 +124,83 @@ public sealed class ConsumerDiagnosticsServiceTests
         Assert.DoesNotContain(projection.Evidence, item => item.Code == "consumer_non_decreasing_lag_history");
     }
 
+
+    [Fact]
+    public void Current_lag_progress_prevents_stalled_classification()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var projection = ConsumerDiagnosticsService.Evaluate(
+            Group(ConsumerGroupState.Stable),
+            Lag(50),
+            new ConsumerRateObservation(
+                ProduceRecordsPerSecond: 5,
+                ConsumeRecordsPerSecond: 0,
+                TimeSpan.FromMinutes(1),
+                now,
+                "fixture"),
+            [
+                new ConsumerHistoryObservation(now.AddMinutes(-2), "Stable", 90, "fixture"),
+                new ConsumerHistoryObservation(now.AddMinutes(-1), "Stable", 100, "fixture"),
+            ],
+            TimeSpan.FromMinutes(1),
+            evaluatedAt: now);
+
+        Assert.Equal(ConsumerDiagnosticState.Unknown, projection.State);
+        Assert.DoesNotContain(projection.Evidence, item => item.Code == "consumer_non_decreasing_lag_history");
+    }
+
+    [Fact]
+    public void Stale_positive_rate_is_not_presented_as_current_activity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var projection = ConsumerDiagnosticsService.Evaluate(
+            Group(ConsumerGroupState.Stable),
+            Lag(50),
+            new ConsumerRateObservation(
+                ProduceRecordsPerSecond: 20,
+                ConsumeRecordsPerSecond: 10,
+                TimeSpan.FromMinutes(1),
+                now.AddMinutes(-5),
+                "fixture"),
+            history: null,
+            TimeSpan.FromMinutes(1),
+            metricsAvailable: true,
+            historyAvailable: false,
+            evaluatedAt: now);
+
+        Assert.Equal(ConsumerDiagnosticState.Unknown, projection.State);
+        Assert.Null(projection.Rates);
+        Assert.Contains(projection.Limitations, item => item.Code == "consumer_metrics_stale");
+    }
+
+    [Theory]
+    [InlineData(-1d)]
+    [InlineData(double.NaN)]
+    [InlineData(double.NegativeInfinity)]
+    public void Invalid_nonpositive_rates_never_count_as_zero_rate_stall_evidence(double consumeRate)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var projection = ConsumerDiagnosticsService.Evaluate(
+            Group(ConsumerGroupState.Stable),
+            Lag(100),
+            new ConsumerRateObservation(
+                ProduceRecordsPerSecond: 1,
+                ConsumeRecordsPerSecond: consumeRate,
+                TimeSpan.FromMinutes(1),
+                now,
+                "fixture"),
+            [
+                new ConsumerHistoryObservation(now.AddMinutes(-2), "Stable", 90, "fixture"),
+                new ConsumerHistoryObservation(now.AddMinutes(-1), "Stable", 100, "fixture"),
+            ],
+            TimeSpan.FromMinutes(1),
+            evaluatedAt: now);
+
+        Assert.Equal(ConsumerDiagnosticState.Unknown, projection.State);
+        Assert.Contains(projection.Limitations, item => item.Code == "consumer_metrics_invalid");
+        Assert.DoesNotContain(projection.Evidence, item => item.Code == "consumer_zero_consume_rate");
+    }
+
     [Fact]
     public async Task Default_optional_providers_report_not_configured()
     {
