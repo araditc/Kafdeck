@@ -343,12 +343,12 @@ public sealed class MutationExecutor
                     "execution_material_mismatch",
                     _timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.Completed,
                     "execution_material_mismatch",
                     CancellationToken.None).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -366,12 +366,12 @@ public sealed class MutationExecutor
                     "pre_dispatch_cancelled",
                     _timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.Completed,
                     "pre_dispatch_cancelled",
                     CancellationToken.None).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
             catch (Exception)
@@ -381,12 +381,12 @@ public sealed class MutationExecutor
                     "pre_dispatch_guard_failed",
                     _timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.Completed,
                     "pre_dispatch_guard_failed",
                     CancellationToken.None).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -394,12 +394,12 @@ public sealed class MutationExecutor
             {
                 operation.MarkStaleBeforeDispatch(_timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, cancellationToken).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.StalePreview,
                     guard.ResultCode,
                     cancellationToken).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -410,12 +410,12 @@ public sealed class MutationExecutor
                     guard.ResultCode,
                     _timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, cancellationToken).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.Completed,
                     guard.ResultCode,
                     cancellationToken).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -426,12 +426,12 @@ public sealed class MutationExecutor
                     "mutation_handler_not_admitted",
                     _timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, cancellationToken).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.Completed,
                     "mutation_handler_not_admitted",
                     cancellationToken).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -442,12 +442,12 @@ public sealed class MutationExecutor
                     "cancelled_before_dispatch",
                     _timeProvider.GetUtcNow());
                 await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 await WriteAuditAsync(
                     operation.Snapshot,
                     MutationAuditEventType.Completed,
                     "cancelled_before_dispatch",
                     CancellationToken.None).ConfigureAwait(false);
-                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -472,12 +472,12 @@ public sealed class MutationExecutor
 
                 if (expiredSave.Outcome == MutationSaveOutcome.Saved)
                 {
+                    releaseResourceClaims = true;
                     await WriteAuditAsync(
                         operation.Snapshot,
                         MutationAuditEventType.Completed,
                         "execution_lease_expired_before_dispatch",
                         CancellationToken.None).ConfigureAwait(false);
-                    releaseResourceClaims = true;
                     return operation.Snapshot;
                 }
 
@@ -528,15 +528,27 @@ public sealed class MutationExecutor
                     "invalid_pre_dispatch_result_after_dispatch");
             }
 
-            operation.Complete(
-                providerResult.ResultKind,
-                providerResult.ResultCode,
-                _timeProvider.GetUtcNow(),
-                providerResult.SafeEvidence);
+            var terminalOutcomeCode = providerResult.ResultCode;
+            try
+            {
+                operation.Complete(
+                    providerResult.ResultKind,
+                    providerResult.ResultCode,
+                    _timeProvider.GetUtcNow(),
+                    providerResult.SafeEvidence);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException or MutationStateException)
+            {
+                terminalOutcomeCode = "malformed_provider_result";
+                operation.Complete(
+                    MutationExecutionResultKind.ExecutionUnknown,
+                    terminalOutcomeCode,
+                    _timeProvider.GetUtcNow());
+            }
 
-            // Once external dispatch may have occurred, caller cancellation or audit
-            // failure must not erase the durable outcome classification or retain a
-            // resource claim for a terminal known outcome.
+            // Once external dispatch may have occurred, caller cancellation, malformed
+            // provider output, or audit failure must not erase the durable outcome.
             await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
 
             releaseResourceClaims =
@@ -545,7 +557,7 @@ public sealed class MutationExecutor
             await TryWritePostDispatchAuditAsync(
                 operation.Snapshot,
                 MutationAuditEventType.Completed,
-                providerResult.ResultCode).ConfigureAwait(false);
+                terminalOutcomeCode).ConfigureAwait(false);
 
             return operation.Snapshot;
         }
