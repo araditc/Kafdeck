@@ -374,6 +374,121 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Synchronously_blocking_handler_invocation_is_bounded_by_operation_timeout()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-sync-handler-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("sync-handler-timeout");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            using var handler = new SynchronouslyBlockingHandler(
+                MutationOperationKind.TopicCreate);
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var execution = executor.ExecuteAsync(operation.Snapshot.OperationId);
+
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var result = await execution.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(MutationOperationState.ExecutionUnknown, result.State);
+            Assert.Equal("execution_timeout", result.ResultCode);
+            Assert.Equal(1, handler.CallCount);
+
+            handler.Release();
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Post_dispatch_audit_failure_does_not_abort_provider_or_retain_known_outcome_claim()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-audit-after-dispatch-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("post-dispatch-audit");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var handler = new RecordingHandler(MutationOperationKind.TopicCreate);
+            var audit = new ThrowingPostDispatchAuditSink();
+            var executor = new MutationExecutor(
+                repository,
+                audit,
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(new[] { handler }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor.ExecuteAsync(operation.Snapshot.OperationId);
+
+            Assert.Equal(MutationOperationState.AppliedVerified, result.State);
+            Assert.Equal(1, handler.CallCount);
+            Assert.True(audit.DispatchAuditAttempted);
+            Assert.True(audit.CompletedAuditAttempted);
+
+            var competitor = CreateReadyOperation("post-dispatch-audit-competitor");
+            var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, competitorCreated.Outcome);
+
+            var competitorAggregate = MutationOperation.Restore(competitorCreated.Operation);
+            var generation = competitorAggregate.ClaimExecution(
+                Now.AddSeconds(2),
+                Now.AddSeconds(20));
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    competitorAggregate.Snapshot,
+                    competitorCreated.Operation.Version)).Outcome);
+
+            var claim = await repository.TryAcquireResourceClaimsAsync(
+                competitorAggregate.Snapshot.OperationId,
+                generation,
+                competitorAggregate.Snapshot.ResourceKeys,
+                Now.AddSeconds(20));
+
+            Assert.Equal(MutationResourceClaimOutcome.Acquired, claim.Outcome);
+            await repository.ReleaseResourceClaimsAsync(
+                competitorAggregate.Snapshot.OperationId,
+                generation);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Timed_out_provider_retains_cluster_concurrency_slot_until_late_task_finishes()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-late-permit-{Guid.NewGuid():N}.db");
@@ -1295,6 +1410,46 @@ public sealed class V05MutationPersistenceTests
         }
     }
 
+    private sealed class SynchronouslyBlockingHandler :
+        IMutationExecutionHandler,
+        IDisposable
+    {
+        private readonly ManualResetEventSlim _release = new(false);
+
+        public SynchronouslyBlockingHandler(MutationOperationKind operationKind)
+        {
+            OperationKind = operationKind;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+        public int CallCount { get; private set; }
+        public TaskCompletionSource<bool> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<MutationProviderResult> ExecuteAsync(
+            MutationExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            Started.TrySetResult(true);
+
+            // Deliberately blocks before returning Task and ignores cancellation.
+            _release.Wait();
+
+            return Task.FromResult(new MutationProviderResult(
+                MutationExecutionResultKind.AppliedVerified,
+                "late_sync_verified"));
+        }
+
+        public void Release() => _release.Set();
+
+        public void Dispose()
+        {
+            _release.Set();
+            _release.Dispose();
+        }
+    }
+
     private sealed class BlockingRecordingHandler : IMutationExecutionHandler
     {
         public BlockingRecordingHandler(MutationOperationKind operationKind)
@@ -1369,6 +1524,34 @@ public sealed class V05MutationPersistenceTests
             return Task.FromResult(new MutationProviderResult(
                 MutationExecutionResultKind.AppliedVerified,
                 "material_verified"));
+        }
+    }
+
+    private sealed class ThrowingPostDispatchAuditSink : IMutationAuditSink
+    {
+        public bool DispatchAuditAttempted { get; private set; }
+        public bool CompletedAuditAttempted { get; private set; }
+
+        public ValueTask WriteAsync(
+            MutationAuditEvent auditEvent,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (auditEvent.EventType == MutationAuditEventType.DispatchStarted)
+            {
+                DispatchAuditAttempted = true;
+                throw new InvalidOperationException("simulated dispatch audit sink failure");
+            }
+
+            if (auditEvent.EventType == MutationAuditEventType.Completed &&
+                auditEvent.State == MutationOperationState.AppliedVerified)
+            {
+                CompletedAuditAttempted = true;
+                throw new InvalidOperationException("simulated terminal audit sink failure");
+            }
+
+            return ValueTask.CompletedTask;
         }
     }
 
