@@ -65,7 +65,12 @@ public static class KafdeckReadViewEndpoints
                         group.GroupId))
                     .ToArray();
 
-                return Results.Ok(ReadViewApiMapper.Envelope(visible, result.Limitations));
+                return Results.Ok(ReadViewApiMapper.Envelope(
+                    visible,
+                    AddAuthorizationFilterLimitation(
+                        result.Limitations,
+                        result.Value.Count,
+                        visible.Length)));
             })
             .WithName("v04-consumer-groups-list")
             .RequireKafdeckCollectionAuthorization(AuthorizationAction.ConsumerRead, "clusterId");
@@ -164,7 +169,12 @@ public static class KafdeckReadViewEndpoints
                         subject.Subject))
                     .ToArray();
 
-                return Results.Ok(ReadViewApiMapper.Envelope(visible, result.Limitations));
+                return Results.Ok(ReadViewApiMapper.Envelope(
+                    visible,
+                    AddAuthorizationFilterLimitation(
+                        result.Limitations,
+                        result.Value.Count,
+                        visible.Length)));
             })
             .WithName("v04-schema-subjects-list")
             .RequireKafdeckCollectionAuthorization(AuthorizationAction.SchemaRead, "clusterId");
@@ -322,7 +332,12 @@ public static class KafdeckReadViewEndpoints
                         connector.Name))
                     .ToArray();
 
-                return Results.Ok(ReadViewApiMapper.Envelope(visible, result.Limitations));
+                return Results.Ok(ReadViewApiMapper.Envelope(
+                    visible,
+                    AddAuthorizationFilterLimitation(
+                        result.Limitations,
+                        result.Value.Count,
+                        visible.Length)));
             })
             .WithName("v04-connect-connectors-list")
             .RequireKafdeckCollectionAuthorization(AuthorizationAction.ConnectRead, "clusterId");
@@ -433,6 +448,25 @@ public static class KafdeckReadViewEndpoints
         }
 
         return Results.Ok(ReadViewApiMapper.Envelope(result));
+    }
+
+
+    private static IReadOnlyList<ReadViewLimitation> AddAuthorizationFilterLimitation(
+        IReadOnlyList<ReadViewLimitation> limitations,
+        int upstreamCount,
+        int visibleCount)
+    {
+        if (visibleCount >= upstreamCount)
+        {
+            return limitations;
+        }
+
+        var combined = new List<ReadViewLimitation>(limitations.Count + 1);
+        combined.AddRange(limitations);
+        combined.Add(new ReadViewLimitation(
+            "authorization_filtered",
+            "One or more resources were omitted because the authenticated operator is not authorized to view them."));
+        return combined;
     }
 
     private static bool IsAllowed(
