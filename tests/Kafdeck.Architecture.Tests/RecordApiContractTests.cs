@@ -40,6 +40,14 @@ public sealed class RecordApiContractTests
             var operations = path.Value.EnumerateObject().Select(property => property.Name).ToArray();
             Assert.Contains("get", operations);
             Assert.DoesNotContain(operations, operation => operation is "post" or "put" or "patch" or "delete");
+
+            var parameters = path.Value
+                .GetProperty("get")
+                .GetProperty("parameters")
+                .EnumerateArray()
+                .Select(parameter => parameter.GetProperty("name").GetString())
+                .ToArray();
+            Assert.Contains("decode", parameters);
         });
 
         var schemes = document.RootElement
@@ -57,6 +65,23 @@ public sealed class RecordApiContractTests
         var security = document.RootElement.GetProperty("security").EnumerateArray().ToArray();
         Assert.Contains(security, requirement => requirement.TryGetProperty("oidcSession", out _));
         Assert.Contains(security, requirement => requirement.TryGetProperty("deploymentToken", out _));
+    }
+
+
+    [Fact]
+    public void Record_endpoint_preserves_HTTP_JSON_contract_for_SSE_and_structured_decode()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(
+            root,
+            "src",
+            "backend",
+            "Kafdeck.Api",
+            "KafdeckRecordEndpoints.cs"));
+
+        Assert.Contains("jsonOptions.Value.SerializerOptions", source, StringComparison.Ordinal);
+        Assert.Contains("query.RequireDecodedValue", source, StringComparison.Ordinal);
+        Assert.Contains("ParseBoolean(query[\"decode\"], \"decode\")", source, StringComparison.Ordinal);
     }
 
     [Fact]
