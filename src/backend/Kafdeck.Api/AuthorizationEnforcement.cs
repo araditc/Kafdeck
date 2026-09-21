@@ -80,6 +80,26 @@ public static class KafdeckAuthorizationEndpointExtensions
             var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
             var outcome = authorization.AuthorizeCollection(http.User, action, clusterId);
 
+            if (outcome == KafdeckAuthorizationOutcome.Forbidden)
+            {
+                var audit = http.RequestServices.GetRequiredService<ISecurityAuditSink>();
+                var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
+                    ? SecurityAuditPrincipal.FromOperator(session.Identity)
+                    : SecurityAuditPrincipal.Anonymous;
+
+                await audit.WriteAsync(
+                    new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.AuthorizationDenied,
+                        principal,
+                        session?.SessionId.Value.ToString("N"),
+                        clusterId,
+                        null,
+                        SecurityAuditOutcome.Denied,
+                        "rbac_denied_collection"),
+                    http.RequestAborted).ConfigureAwait(false);
+            }
+
             return outcome switch
             {
                 KafdeckAuthorizationOutcome.Allowed => await next(invocation).ConfigureAwait(false),
