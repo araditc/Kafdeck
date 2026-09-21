@@ -44,6 +44,11 @@ public interface IMutationOperationRepository
         Guid operationId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<MutationOperationSnapshot>> ListByStateAsync(
+        MutationOperationState state,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     Task<MutationSaveResult> TrySaveAsync(
         MutationOperationSnapshot operation,
         long expectedVersion,
