@@ -133,8 +133,14 @@ public sealed class MutationOperation
                     "Typed-target confirmation is required but no server challenge is available.");
             }
 
+            if (string.IsNullOrWhiteSpace(typedTargetChallenge))
+            {
+                throw new MutationStateException(
+                    "Typed-target confirmation requires the server-derived target challenge.");
+            }
+
             confirmedChallenge = RequireBounded(
-                typedTargetChallenge ?? string.Empty,
+                typedTargetChallenge,
                 nameof(typedTargetChallenge),
                 512);
             if (!string.Equals(
