@@ -3,15 +3,23 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Kafdeck.Api;
 using Kafdeck.Core;
+using Kafdeck.Core.Catalog;
+using Kafdeck.Core.Consumers;
+using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.ReadViews;
 using Kafdeck.Core.Records;
+using Kafdeck.Core.Schemas;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
+using Kafdeck.Infrastructure.Ecosystem;
 using Kafdeck.Infrastructure.Kafka;
 using Kafdeck.Infrastructure.SchemaRegistry;
 using Kafdeck.Infrastructure.Security;
 using Kafdeck.Modules.Clusters;
+using Kafdeck.Modules.Consumers;
 using Kafdeck.Modules.Records;
+using Kafdeck.Modules.Schemas;
 using Kafdeck.Modules.Topics;
 
 Activity.DefaultIdFormat = ActivityIdFormat.W3C;
@@ -62,8 +70,18 @@ builder.Services.AddSingleton<IKafkaAdministrationPort>(_ =>
     new ConfluentKafkaAdministrationAdapter(kafdeckOptions.Clusters, secretResolver));
 builder.Services.AddSingleton<IKafkaRecordReadPort>(_ =>
     new ConfluentKafkaRecordReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IConsumerGroupReadPort>(_ =>
+    new ConfluentKafkaConsumerGroupReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<ConsumerExplorerService>();
+builder.Services.AddSingleton<IMetricsObservationPort, UnavailableMetricsObservationPort>();
+builder.Services.AddSingleton<IHistoryObservationPort, UnavailableHistoryObservationPort>();
+builder.Services.AddSingleton<ConsumerDiagnosticsService>();
 builder.Services.AddSingleton<IRecordSchemaReadPort>(_ =>
     new ConfluentSchemaRegistryReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<ISchemaCatalogReadPort>(_ =>
+    new ConfluentSchemaCatalogReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<SchemaDiffService>();
+builder.Services.AddSingleton<SchemaExplorerService>();
 builder.Services.AddSingleton<IRecordDecodePort>(services =>
     new ConfluentRecordDecoder(services.GetRequiredService<IRecordSchemaReadPort>()));
 builder.Services.AddSingleton<RecordFilterService>();
@@ -72,6 +90,12 @@ builder.Services.AddSingleton<RecordMaskingService>();
 builder.Services.AddSingleton<RecordExportService>();
 builder.Services.AddSingleton<ClusterExplorerService>();
 builder.Services.AddSingleton<TopicExplorerService>();
+builder.Services.AddSingleton<IConnectReadPort>(_ =>
+    new KafkaConnectReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IKsqlMetadataReadPort>(_ =>
+    new KsqlDbMetadataReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
+    new ConfigurationTopicCatalogProvider(kafdeckOptions));
 builder.Services.AddSingleton<ApiTelemetry>();
 
 var app = builder.Build();
@@ -130,6 +154,7 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 
 app.MapKafdeckV01(kafdeckOptions);
 app.MapKafdeckRecordEndpoints(kafdeckOptions);
+app.MapKafdeckV04ReadViews(kafdeckOptions);
 app.MapFallbackToFile("index.html");
 
 app.Run();
