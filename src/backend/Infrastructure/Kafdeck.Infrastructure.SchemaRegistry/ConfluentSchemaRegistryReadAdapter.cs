@@ -56,7 +56,7 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
         : this(
             clusterProfiles,
             secretResolver,
-            static _ => new HttpClientHandler(),
+            static _ => new HttpClientHandler { AllowAutoRedirect = false },
             cacheOptions,
             timeProvider)
     {
