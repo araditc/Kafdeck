@@ -1404,7 +1404,7 @@ public sealed class V05MutationPersistenceTests
             new FixedTimeProvider(Now));
         await repository.InitializeAsync();
 
-        var longResourceKey = new string('界', MutationLimits.MaxResourceKeyCharacters);
+        var longResourceKey = new string('界', 1_024);
         var risk = MutationRiskClassifier.Classify(
             new MutationRiskInput(MutationOperationKind.TopicCreate));
 
