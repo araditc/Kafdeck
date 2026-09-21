@@ -81,6 +81,67 @@ public sealed class AuthorizationEnforcementTests
         Assert.Equal(KafdeckAuthorizationOutcome.Forbidden, outcome);
     }
 
+
+    [Fact]
+    public void Collection_preflight_requires_an_applicable_action_in_the_cluster()
+    {
+        var service = CreateService(AccessMode.Oidc);
+        var principal = CreateOperatorPrincipal("alice");
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Allowed,
+            service.AuthorizeCollection(
+                principal,
+                AuthorizationAction.ConsumerRead,
+                "prod"));
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Forbidden,
+            service.AuthorizeCollection(
+                principal,
+                AuthorizationAction.ConsumerRead,
+                "secret"));
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Forbidden,
+            service.AuthorizeCollection(
+                principal,
+                AuthorizationAction.SchemaRead,
+                "prod"));
+    }
+
+    [Fact]
+    public void Collection_preflight_does_not_bypass_per_resource_patterns()
+    {
+        var service = CreateService(AccessMode.Oidc);
+        var principal = CreateOperatorPrincipal("alice");
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Allowed,
+            service.AuthorizeCollection(
+                principal,
+                AuthorizationAction.ConsumerRead,
+                "prod"));
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Allowed,
+            service.Authorize(
+                principal,
+                new AuthorizationRequest(
+                    AuthorizationAction.ConsumerRead,
+                    "prod",
+                    "payments-worker")));
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Forbidden,
+            service.Authorize(
+                principal,
+                new AuthorizationRequest(
+                    AuthorizationAction.ConsumerRead,
+                    "prod",
+                    "audit-worker")));
+    }
+
     private static KafdeckAuthorizationService CreateService(AccessMode mode)
     {
         var definition = new AuthorizationPolicyDefinition(
@@ -95,6 +156,10 @@ public sealed class AuthorizationEnforcementTests
                             new[] { "prod" }),
                         new AuthorizationPermissionDefinition(
                             AuthorizationAction.TopicRead,
+                            new[] { "prod" },
+                            new[] { "payments*" }),
+                        new AuthorizationPermissionDefinition(
+                            AuthorizationAction.ConsumerRead,
                             new[] { "prod" },
                             new[] { "payments*" }),
                     }),
