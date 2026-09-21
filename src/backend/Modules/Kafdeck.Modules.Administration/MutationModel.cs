@@ -3,6 +3,14 @@ using System.Text;
 
 namespace Kafdeck.Modules.Administration;
 
+public static class MutationLimits
+{
+    public const int MaxResourceKeys = 1_024;
+    public const int MaxPreconditions = 2_048;
+    public const int MaxMaterialDigests = 64;
+    public const int MaxCanonicalIntentCharacters = 128 * 1024;
+}
+
 public enum MutationOperationKind
 {
     TopicCreate = 1,
