@@ -207,6 +207,7 @@ public sealed class MutationExecutor
             cancellationToken).ConfigureAwait(false);
 
         var resourceClaimsAcquired = false;
+        var releaseResourceClaims = false;
         try
         {
             var claimResult = await _repository.TryAcquireResourceClaimsAsync(
@@ -258,6 +259,7 @@ public sealed class MutationExecutor
                     MutationAuditEventType.Completed,
                     "pre_dispatch_cancelled",
                     CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
             catch (Exception)
@@ -272,6 +274,7 @@ public sealed class MutationExecutor
                     MutationAuditEventType.Completed,
                     "pre_dispatch_guard_failed",
                     CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -284,6 +287,7 @@ public sealed class MutationExecutor
                     MutationAuditEventType.StalePreview,
                     guard.ResultCode,
                     cancellationToken).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -299,6 +303,7 @@ public sealed class MutationExecutor
                     MutationAuditEventType.Completed,
                     guard.ResultCode,
                     cancellationToken).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -314,6 +319,7 @@ public sealed class MutationExecutor
                     MutationAuditEventType.Completed,
                     "mutation_handler_not_admitted",
                     cancellationToken).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -329,6 +335,7 @@ public sealed class MutationExecutor
                     MutationAuditEventType.Completed,
                     "cancelled_before_dispatch",
                     CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
                 return operation.Snapshot;
             }
 
@@ -365,12 +372,13 @@ public sealed class MutationExecutor
                 providerResult.ResultCode,
                 CancellationToken.None).ConfigureAwait(false);
 
+            releaseResourceClaims =
+                operation.Snapshot.State != MutationOperationState.ExecutionUnknown;
             return operation.Snapshot;
         }
         finally
         {
-            if (resourceClaimsAcquired &&
-                operation.Snapshot.State != MutationOperationState.ExecutionUnknown)
+            if (resourceClaimsAcquired && releaseResourceClaims)
             {
                 await _repository.ReleaseResourceClaimsAsync(
                     operation.Snapshot.OperationId,
