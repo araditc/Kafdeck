@@ -70,6 +70,23 @@ public sealed class V04ReadViewApiContractTests
             Assert.Contains("get", operations);
             Assert.DoesNotContain(operations, method =>
                 method is "post" or "put" or "patch" or "delete");
+
+            var declaredPathParameters = pathItem.TryGetProperty("parameters", out var parameters)
+                ? parameters.EnumerateArray()
+                    .Where(parameter =>
+                        parameter.GetProperty("in").GetString() == "path" &&
+                        parameter.GetProperty("required").GetBoolean())
+                    .Select(parameter => parameter.GetProperty("name").GetString())
+                    .Where(name => name is not null)
+                    .Select(name => name!)
+                    .ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (System.Text.RegularExpressions.Match match in
+                     System.Text.RegularExpressions.Regex.Matches(normalized, @"\{(?<name>[^}]+)\}"))
+            {
+                Assert.Contains(match.Groups["name"].Value, declaredPathParameters);
+            }
         }
     }
 
