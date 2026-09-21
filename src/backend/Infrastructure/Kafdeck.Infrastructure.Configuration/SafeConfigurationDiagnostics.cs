@@ -9,6 +9,9 @@ public sealed record SafeConfigurationDiagnostic(
     bool DeploymentTokenConfigured,
     bool OidcConfigured,
     int TopicCatalogEntryCount,
+    bool MutationModeEnabled,
+    MutationPersistenceProvider? MutationPersistenceProvider,
+    MutationExecutionMode? MutationExecutionMode,
     IReadOnlyList<SafeClusterDiagnostic> Clusters);
 
 public sealed record SafeClusterDiagnostic(
@@ -50,6 +53,9 @@ public static class SafeConfigurationDiagnostics
             options.Deployment.AccessToken is not null,
             options.Deployment.Oidc is not null,
             options.Catalog?.Topics.Count ?? 0,
+            options.Administration?.Mutations.Enabled ?? false,
+            options.Administration?.Mutations.Persistence?.Provider,
+            options.Administration?.Mutations.Persistence?.ExecutionMode,
             Array.AsReadOnly(clusterDiagnostics));
     }
 }
