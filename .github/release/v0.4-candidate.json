@@ -2,6 +2,6 @@
   "version": "v0.4",
   "title": "Kafdeck v0.4 — Consumers, Schemas & Ecosystem Read Views",
   "notes": "docs/releases/v0.4.md",
-  "status": "candidate",
-  "publicationRequiresOwnerApproval": true
+  "status": "approved",
+  "publicationRequiresOwnerApproval": false
 }
