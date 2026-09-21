@@ -545,6 +545,20 @@ public sealed class V05MutationKernelTests
             MutationProviderEvidence.Normalize(
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
+                    ["error.detail"] = "Bearer should-never-be-durable",
+                }));
+
+        Assert.Throws<MutationStateException>(() =>
+            MutationProviderEvidence.Normalize(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["verification.state"] = "Bearer should-never-be-durable",
+                }));
+
+        Assert.Throws<MutationStateException>(() =>
+            MutationProviderEvidence.Normalize(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
                     ["verification"] =
                         new string('x', MutationLimits.MaxProviderEvidenceValueCharacters + 1),
                 }));
