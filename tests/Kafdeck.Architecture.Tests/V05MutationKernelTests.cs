@@ -27,6 +27,53 @@ public sealed class V05MutationKernelTests
     }
 
     [Fact]
+    public void Preview_enforcement_preserves_permanent_delete_and_durability_context()
+    {
+        var weak = new MutationRiskDecision(
+            MutationRiskClass.Low,
+            new[] { "client_proposed_low" },
+            MutationConfirmationMode.Explicit,
+            false);
+
+        var permanentDelete = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            new MutationIntentDescriptor(
+                MutationOperationKind.SchemaDelete,
+                "prod",
+                "{\"subject\":\"payments\",\"permanent\":true}",
+                new[] { "cluster/prod/schema/payments" },
+                RiskContext: new MutationRiskContext(PermanentDelete: true)),
+            weak,
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "risk-permanent-delete");
+
+        Assert.Equal(MutationRiskClass.Critical, permanentDelete.Snapshot.Risk.RiskClass);
+        Assert.True(permanentDelete.Snapshot.Risk.RequiresIndependentApproval);
+        Assert.Equal(MutationConfirmationMode.TypedTarget, permanentDelete.Snapshot.Risk.ConfirmationMode);
+        Assert.Contains("permanent_delete", permanentDelete.Snapshot.Risk.Reasons);
+
+        var durabilityChange = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            new MutationIntentDescriptor(
+                MutationOperationKind.TopicAlter,
+                "prod",
+                "{\"min.insync.replicas\":1}",
+                new[] { "cluster/prod/topic/payments" },
+                RiskContext: new MutationRiskContext(DurabilitySensitiveChange: true)),
+            weak,
+            "v0.5-p1",
+            Now.AddMinutes(5),
+            Now,
+            "risk-durability");
+
+        Assert.Equal(MutationRiskClass.High, durabilityChange.Snapshot.Risk.RiskClass);
+        Assert.Equal(MutationConfirmationMode.TypedTarget, durabilityChange.Snapshot.Risk.ConfirmationMode);
+        Assert.Contains("durability_sensitive_change", durabilityChange.Snapshot.Risk.Reasons);
+    }
+
+    [Fact]
     public void Bulk_scope_can_only_raise_risk()
     {
         var single = MutationRiskClassifier.Classify(
