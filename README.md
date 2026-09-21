@@ -4,7 +4,7 @@
 
 Kafdeck is a secure, vendor-neutral, operations-first control plane for Apache Kafka.
 
-**v0.1 Cluster Explorer, v0.2 Operator Identity/RBAC, and v0.3 Safe Data Explorer + Server-Side Masking are released.** Kafdeck remains outside the Kafka data path and preserves a no-mutation posture in v0.3.
+**v0.1 Cluster Explorer, v0.2 Operator Identity/RBAC, and v0.3 Safe Data Explorer + Server-Side Masking are released. v0.4 Consumers, Schemas & Ecosystem Read Views is active.** Kafdeck remains outside the Kafka data path and v0.4 preserves the no-mutation posture.
 
 ## v0.1 highlights
 
@@ -38,6 +38,16 @@ Kafdeck is a secure, vendor-neutral, operations-first control plane for Apache K
 - explicit record/byte/time/rate/concurrency budgets,
 - API/UI parity and release benchmark evidence,
 - no Kafka produce/replay/offset mutation/payload persistence by default.
+
+## v0.4 active scope
+
+- consumer groups, members, assignments, committed offsets and lag,
+- evidence-based consumer diagnostics,
+- read-only Schema Registry subjects/versions/references/diff/compatibility inspection,
+- read-only Kafka Connect status,
+- safe ksqlDB discovery/metadata when configured,
+- configuration-backed topic catalog foundations,
+- no offset/schema/connect/ksql/Kafka mutation.
 
 Release notes and release evidence are under `docs/releases/`. Operator and upgrade guidance is under `docs/operator/`.
 
