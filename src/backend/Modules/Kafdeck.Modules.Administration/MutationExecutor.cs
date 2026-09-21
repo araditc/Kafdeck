@@ -121,7 +121,7 @@ public sealed record MutationExecutorPolicy
 public sealed class MutationExecutor
 {
     private sealed record ProviderExecutionOutcome(
-        MutationProviderResult Result,
+        MutationProviderResult? Result,
         Task? LateExecution = null);
 
     private sealed class LateExecutionPermitState
@@ -545,7 +545,13 @@ public sealed class MutationExecutor
                 executionMaterial = null; // Outer permit observer owns material and durable slot from here.
             }
 
-            if (providerResult.ResultKind == MutationExecutionResultKind.FailedBeforeDispatch)
+            if (providerResult is null)
+            {
+                providerResult = new MutationProviderResult(
+                    MutationExecutionResultKind.ExecutionUnknown,
+                    "malformed_provider_result");
+            }
+            else if (providerResult.ResultKind == MutationExecutionResultKind.FailedBeforeDispatch)
             {
                 providerResult = new MutationProviderResult(
                     MutationExecutionResultKind.ExecutionUnknown,

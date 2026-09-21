@@ -791,6 +791,52 @@ public sealed class V05MutationPersistenceTests
     }
 
     [Fact]
+    public async Task Null_provider_result_is_durably_classified_as_execution_unknown()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-null-provider-{Guid.NewGuid():N}.db");
+        try
+        {
+            var time = new FixedTimeProvider(Now);
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                time);
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("null-provider-result");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var executor = new MutationExecutor(
+                repository,
+                new CapturingMutationAuditSink(),
+                new AllowedGuard(),
+                new MutationExecutionHandlerRegistry(
+                    new[] { new NullResultHandler(MutationOperationKind.TopicCreate) }),
+                new TestMaterialDigestService(),
+                new MutationExecutorPolicy(
+                    maxConcurrentPerCluster: 1,
+                    operationTimeout: TimeSpan.FromSeconds(1),
+                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                time);
+
+            var result = await executor.ExecuteAsync(operation.Snapshot.OperationId);
+
+            Assert.Equal(MutationOperationState.ExecutionUnknown, result.State);
+            Assert.Equal("malformed_provider_result", result.ResultCode);
+            Assert.Empty(result.SafeProviderEvidence);
+
+            var reloaded = await repository.GetAsync(operation.Snapshot.OperationId);
+            Assert.NotNull(reloaded);
+            Assert.Equal(MutationOperationState.ExecutionUnknown, reloaded!.State);
+            Assert.Equal("malformed_provider_result", reloaded.ResultCode);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Pre_dispatch_terminal_audit_failure_still_releases_resource_claim()
     {
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-predispatch-audit-{Guid.NewGuid():N}.db");
@@ -1118,6 +1164,74 @@ public sealed class V05MutationPersistenceTests
                 includeActiveLeases: true,
                 limit: 3);
             Assert.Equal(2, includingActive.Count);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Recovery_preserves_live_cluster_slot_even_after_operation_lease_expires()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"kafdeck-recovery-live-slot-{Guid.NewGuid():N}.db");
+        try
+        {
+            var repository = new AdoMutationOperationRepository(
+                new SqliteMutationDbConnectionFactory(path),
+                new FixedTimeProvider(Now));
+            await repository.InitializeAsync();
+
+            var operation = CreateReadyOperation("recovery-live-slot");
+            var created = await repository.CreateAsync(operation.Snapshot);
+            Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+            var aggregate = MutationOperation.Restore(created.Operation);
+            var generation = aggregate.ClaimExecution(Now, Now.AddMinutes(2));
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    aggregate.Snapshot,
+                    created.Operation.Version)).Outcome);
+
+            var slot = await repository.TryAcquireClusterExecutionSlotAsync(
+                aggregate.Snapshot.OperationId,
+                generation,
+                aggregate.Snapshot.ClusterId,
+                maxConcurrentPerCluster: 1,
+                Now.AddMinutes(4));
+            Assert.Equal(MutationClusterSlotOutcome.Acquired, slot.Outcome);
+
+            aggregate.MarkDispatchStarted(Now.AddSeconds(1));
+            Assert.Equal(
+                MutationSaveOutcome.Saved,
+                (await repository.TrySaveAsync(
+                    aggregate.Snapshot,
+                    aggregate.Snapshot.Version - 1)).Outcome);
+
+            var recoveryWhileSlotLive = new MutationRecoveryCoordinator(
+                repository,
+                new CapturingMutationAuditSink(),
+                new FixedTimeProvider(Now.AddMinutes(3)));
+
+            Assert.Equal(
+                0,
+                await recoveryWhileSlotLive.RecoverInterruptedExecutionsAsync());
+            Assert.Equal(
+                MutationOperationState.Executing,
+                (await repository.GetAsync(created.Operation.OperationId))!.State);
+
+            var recoveryAfterSlotExpiry = new MutationRecoveryCoordinator(
+                repository,
+                new CapturingMutationAuditSink(),
+                new FixedTimeProvider(Now.AddMinutes(5)));
+
+            Assert.Equal(
+                1,
+                await recoveryAfterSlotExpiry.RecoverInterruptedExecutionsAsync());
+            Assert.Equal(
+                MutationOperationState.ExecutionUnknown,
+                (await repository.GetAsync(created.Operation.OperationId))!.State);
         }
         finally
         {
@@ -2011,6 +2125,21 @@ public sealed class V05MutationPersistenceTests
                     MutationPreDispatchGuardOutcome.AuthorizationDenied,
                     "authorization_denied"));
         }
+    }
+
+    private sealed class NullResultHandler : IMutationExecutionHandler
+    {
+        public NullResultHandler(MutationOperationKind operationKind)
+        {
+            OperationKind = operationKind;
+        }
+
+        public MutationOperationKind OperationKind { get; }
+
+        public Task<MutationProviderResult> ExecuteAsync(
+            MutationExecutionContext context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<MutationProviderResult>(null!);
     }
 
     private sealed class MalformedResultHandler : IMutationExecutionHandler

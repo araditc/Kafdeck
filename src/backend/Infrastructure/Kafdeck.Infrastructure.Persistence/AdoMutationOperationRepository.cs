@@ -268,15 +268,21 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT snapshot_json
-            FROM kafdeck_mutation_operations
-            WHERE state = @state
+            SELECT operation.snapshot_json
+            FROM kafdeck_mutation_operations AS operation
+            WHERE operation.state = @state
               AND (
                   @include_active = 1
-                  OR execution_claim_expires_at_utc IS NULL
-                  OR execution_claim_expires_at_utc <= @now_utc
+                  OR operation.execution_claim_expires_at_utc IS NULL
+                  OR operation.execution_claim_expires_at_utc <= @now_utc
               )
-            ORDER BY updated_at_utc, operation_id
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM kafdeck_mutation_cluster_slots AS slot
+                  WHERE slot.operation_id = operation.operation_id
+                    AND slot.expires_at_utc > @now_utc
+              )
+            ORDER BY operation.updated_at_utc, operation.operation_id
             LIMIT @limit
             """;
         AddParameter(command, "@state", (int)MutationOperationState.Executing);
