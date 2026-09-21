@@ -132,6 +132,7 @@ public sealed class MutationExecutor
         public MutationExecutionMaterial? Material { get; set; }
         public Guid OperationId { get; set; }
         public long ExecutionGeneration { get; set; }
+        public string? ClusterId { get; set; }
         public bool DurableClusterSlotHeld { get; set; }
     }
 
@@ -302,6 +303,7 @@ public sealed class MutationExecutor
             clusterSlotAcquired = true;
             lateExecution.OperationId = operation.Snapshot.OperationId;
             lateExecution.ExecutionGeneration = generation;
+            lateExecution.ClusterId = operation.Snapshot.ClusterId;
             lateExecution.DurableClusterSlotHeld = true;
 
             var claimResult = await _repository.TryAcquireResourceClaimsAsync(
@@ -622,15 +624,63 @@ public sealed class MutationExecutor
         LateExecutionPermitState lateExecution,
         SemaphoreSlim semaphore)
     {
+        var execution = lateExecution.Execution!;
+        var heartbeatInterval = TimeSpan.FromTicks(
+            Math.Max(
+                TimeSpan.FromSeconds(1).Ticks,
+                _policy.ResourceClaimTtl.Ticks / 4));
+
         try
         {
-            await lateExecution.Execution!.ConfigureAwait(false);
+            while (!execution.IsCompleted)
+            {
+                var heartbeatDelay = Task.Delay(heartbeatInterval);
+                var completed = await Task
+                    .WhenAny(execution, heartbeatDelay)
+                    .ConfigureAwait(false);
+
+                if (ReferenceEquals(completed, execution))
+                {
+                    break;
+                }
+
+                if (!lateExecution.DurableClusterSlotHeld ||
+                    string.IsNullOrWhiteSpace(lateExecution.ClusterId))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var renewOutcome = await _repository.TryRenewClusterExecutionSlotAsync(
+                        lateExecution.OperationId,
+                        lateExecution.ExecutionGeneration,
+                        lateExecution.ClusterId,
+                        _timeProvider.GetUtcNow().Add(_policy.ResourceClaimTtl),
+                        CancellationToken.None).ConfigureAwait(false);
+
+                    if (renewOutcome != MutationClusterSlotRenewOutcome.Renewed)
+                    {
+                        // The durable lease no longer belongs to this execution. Keep the
+                        // local process permit until the provider task finishes, but do not
+                        // pretend the shared lease still exists.
+                        lateExecution.DurableClusterSlotHeld = false;
+                    }
+                }
+                catch
+                {
+                    // A transient store outage also prevents healthy peers from acquiring
+                    // new durable slots. Keep the local permit and retry on the next heartbeat.
+                }
+            }
+
+            await execution.ConfigureAwait(false);
         }
         catch
         {
             // The durable operation is already ExecutionUnknown. This observation exists
-            // only to consume a late task fault and retain both local and cluster-wide
-            // concurrency capacity until the underlying provider call is truly no longer live.
+            // only to consume a late task fault and retain concurrency capacity while the
+            // underlying provider call is truly still live.
         }
         finally
         {
@@ -646,8 +696,7 @@ public sealed class MutationExecutor
                 }
                 catch
                 {
-                    // Fail safe: a release failure leaves durable capacity reserved rather
-                    // than allowing HA replicas to exceed the configured provider budget.
+                    // The lease has an expiry and is reclaimable after heartbeat stops.
                 }
             }
 
