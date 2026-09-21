@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace Kafdeck.Modules.Administration;
 
 public enum MutationPreDispatchGuardOutcome
@@ -136,6 +134,18 @@ public sealed class MutationExecutor
         public bool DurableClusterSlotHeld { get; set; }
     }
 
+    private sealed class ClusterSemaphoreEntry
+    {
+        public ClusterSemaphoreEntry(int permits)
+        {
+            Semaphore = new SemaphoreSlim(permits, permits);
+            ReferenceCount = 1;
+        }
+
+        public SemaphoreSlim Semaphore { get; }
+        public int ReferenceCount { get; set; }
+    }
+
     private readonly IMutationOperationRepository _repository;
     private readonly IMutationAuditSink _audit;
     private readonly IMutationPreDispatchGuard _guard;
@@ -143,7 +153,8 @@ public sealed class MutationExecutor
     private readonly IMutationMaterialDigestService _materialDigestService;
     private readonly MutationExecutorPolicy _policy;
     private readonly TimeProvider _timeProvider;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _clusterSemaphores =
+    private readonly object _clusterSemaphoreGate = new();
+    private readonly Dictionary<string, ClusterSemaphoreEntry> _clusterSemaphores =
         new(StringComparer.Ordinal);
 
     public MutationExecutor(
@@ -183,11 +194,16 @@ public sealed class MutationExecutor
             return initial;
         }
 
-        var semaphore = GetClusterSemaphore(initial.ClusterId);
-        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var clusterEntry = AcquireClusterSemaphore(initial.ClusterId);
+        var permitAcquired = false;
         var lateExecution = new LateExecutionPermitState();
         try
         {
+            await clusterEntry.Semaphore
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            permitAcquired = true;
+
             return await ExecuteUnderClusterLimitAsync(
                     operationId,
                     executionMaterial,
@@ -199,13 +215,21 @@ public sealed class MutationExecutor
         {
             if (lateExecution.Execution is null)
             {
-                semaphore.Release();
+                if (permitAcquired)
+                {
+                    clusterEntry.Semaphore.Release();
+                }
+
+                ReleaseClusterSemaphore(
+                    initial.ClusterId,
+                    clusterEntry);
             }
             else
             {
                 _ = ObserveLateCompletionReleasePermitAndDisposeAsync(
                     lateExecution,
-                    semaphore);
+                    initial.ClusterId,
+                    clusterEntry);
             }
         }
     }
@@ -634,7 +658,8 @@ public sealed class MutationExecutor
 
     private async Task ObserveLateCompletionReleasePermitAndDisposeAsync(
         LateExecutionPermitState lateExecution,
-        SemaphoreSlim semaphore)
+        string clusterId,
+        ClusterSemaphoreEntry clusterEntry)
     {
         var execution = lateExecution.Execution!;
         var heartbeatInterval = TimeSpan.FromTicks(
@@ -713,7 +738,8 @@ public sealed class MutationExecutor
             }
 
             lateExecution.Material!.Dispose();
-            semaphore.Release();
+            clusterEntry.Semaphore.Release();
+            ReleaseClusterSemaphore(clusterId, clusterEntry);
         }
     }
 
@@ -760,23 +786,59 @@ public sealed class MutationExecutor
         }
     }
 
-    private SemaphoreSlim GetClusterSemaphore(string clusterId)
+    private ClusterSemaphoreEntry AcquireClusterSemaphore(string clusterId)
     {
-        if (_clusterSemaphores.TryGetValue(clusterId, out var existing))
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        lock (_clusterSemaphoreGate)
         {
-            return existing;
+            if (_clusterSemaphores.TryGetValue(clusterId, out var existing))
+            {
+                existing.ReferenceCount = checked(existing.ReferenceCount + 1);
+                return existing;
+            }
+
+            if (_clusterSemaphores.Count >= _policy.MaxTrackedClusters)
+            {
+                throw new InvalidOperationException(
+                    "Mutation executor active-cluster limit has been reached.");
+            }
+
+            var created = new ClusterSemaphoreEntry(
+                _policy.MaxConcurrentPerCluster);
+            _clusterSemaphores.Add(clusterId, created);
+            return created;
+        }
+    }
+
+    private void ReleaseClusterSemaphore(
+        string clusterId,
+        ClusterSemaphoreEntry entry)
+    {
+        var dispose = false;
+
+        lock (_clusterSemaphoreGate)
+        {
+            if (!_clusterSemaphores.TryGetValue(clusterId, out var current) ||
+                !ReferenceEquals(current, entry) ||
+                entry.ReferenceCount <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Mutation executor cluster semaphore ownership is inconsistent.");
+            }
+
+            entry.ReferenceCount--;
+            if (entry.ReferenceCount == 0)
+            {
+                _clusterSemaphores.Remove(clusterId);
+                dispose = true;
+            }
         }
 
-        if (_clusterSemaphores.Count >= _policy.MaxTrackedClusters)
+        if (dispose)
         {
-            throw new InvalidOperationException("Mutation executor cluster limit has been reached.");
+            entry.Semaphore.Dispose();
         }
-
-        return _clusterSemaphores.GetOrAdd(
-            clusterId,
-            _ => new SemaphoreSlim(
-                _policy.MaxConcurrentPerCluster,
-                _policy.MaxConcurrentPerCluster));
     }
 
     private async ValueTask TryWritePostDispatchAuditAsync(
