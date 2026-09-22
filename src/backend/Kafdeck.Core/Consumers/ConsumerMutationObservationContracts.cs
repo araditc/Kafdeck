@@ -5,7 +5,8 @@ namespace Kafdeck.Core.Consumers;
 public sealed record ConsumerMutationObservationTarget(
     string Topic,
     int Partition,
-    DateTimeOffset? ResolveTimestampUtc = null);
+    DateTimeOffset? ResolveTimestampUtc = null,
+    bool RequireStableOffset = true);
 
 public sealed record ConsumerMutationPartitionObservation(
     string Topic,
