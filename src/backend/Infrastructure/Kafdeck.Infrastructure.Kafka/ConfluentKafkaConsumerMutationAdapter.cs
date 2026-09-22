@@ -408,9 +408,13 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                 evidence);
         }
 
+        var resultCode = safeCodes.Length == 1
+            ? $"{operationCode}_{safeCodes[0]}"
+            : $"{operationCode}_rejected";
+
         return new MutationProviderResult(
             MutationExecutionResultKind.FailedDefinitive,
-            $"{operationCode}_rejected",
+            resultCode,
             evidence);
     }
 
