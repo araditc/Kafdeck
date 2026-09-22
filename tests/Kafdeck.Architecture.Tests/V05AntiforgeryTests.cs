@@ -58,6 +58,7 @@ public sealed class V05AntiforgeryTests
 
         var endpoint = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
             .Single(item => string.Equals(
                 item.RoutePattern.RawText,
                 "/mutation",
