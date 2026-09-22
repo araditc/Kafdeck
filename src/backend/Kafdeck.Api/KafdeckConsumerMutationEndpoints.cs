@@ -20,10 +20,29 @@ public static class KafdeckConsumerMutationEndpoints
                     string groupId,
                     ConsumerOffsetAlterPreviewRequest request,
                     HttpContext context,
+                    MutationRequestAuthorizationService authorization,
                     ConsumerMutationPlanner planner,
                     MutationAdmissionService admission,
                     CancellationToken cancellationToken) =>
                 {
+                    var directTargets =
+                        MutationDirectRouteAuthorization.ConsumerOffsetAlter(
+                            clusterId,
+                            groupId,
+                            request.Targets);
+                    if (directTargets is not null)
+                    {
+                        var denied = Preflight(
+                            context,
+                            authorization,
+                            directTargets,
+                            "Consumer offset mutation access denied");
+                        if (denied is not null)
+                        {
+                            return denied;
+                        }
+                    }
+
                     var planning = await planner
                         .PlanOffsetAlterAsync(
                             new ConsumerOffsetAlterRequest(
@@ -44,9 +63,6 @@ public static class KafdeckConsumerMutationEndpoints
                         : PlanningProblem(planning.Failure!);
                 })
             .WithName("v05-consumer-offset-alter-preview")
-            .RequireKafdeckCollectionAuthorization(
-                AuthorizationAction.ConsumerOffsetAlter,
-                "clusterId")
             .RequireKafdeckAntiforgery();
 
         app.MapPost(
@@ -56,10 +72,30 @@ public static class KafdeckConsumerMutationEndpoints
                     string groupId,
                     ConsumerDeletePreviewRequest request,
                     HttpContext context,
+                    MutationRequestAuthorizationService authorization,
                     ConsumerMutationPlanner planner,
                     MutationAdmissionService admission,
                     CancellationToken cancellationToken) =>
                 {
+                    var directTargets =
+                        MutationDirectRouteAuthorization.ConsumerDelete(
+                            clusterId,
+                            groupId,
+                            request.Mode,
+                            request.Targets);
+                    if (directTargets is not null)
+                    {
+                        var denied = Preflight(
+                            context,
+                            authorization,
+                            directTargets,
+                            "Consumer delete mutation access denied");
+                        if (denied is not null)
+                        {
+                            return denied;
+                        }
+                    }
+
                     var planning = await planner
                         .PlanDeleteAsync(
                             new ConsumerDeleteRequest(
@@ -81,12 +117,33 @@ public static class KafdeckConsumerMutationEndpoints
                         : PlanningProblem(planning.Failure!);
                 })
             .WithName("v05-consumer-delete-preview")
-            .RequireKafdeckCollectionAuthorization(
-                AuthorizationAction.ConsumerDelete,
-                "clusterId")
             .RequireKafdeckAntiforgery();
 
         return app;
+    }
+
+    private static IResult? Preflight(
+        HttpContext context,
+        MutationRequestAuthorizationService authorization,
+        IReadOnlyList<MutationAuthorizationTarget> targets,
+        string forbiddenTitle)
+    {
+        var outcome = authorization.AuthorizeTargets(
+            context.User,
+            targets);
+
+        return outcome switch
+        {
+            KafdeckAuthorizationOutcome.Allowed => null,
+            KafdeckAuthorizationOutcome.Unauthenticated => Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                type: "urn:kafdeck:problem:operator-authentication-required",
+                title: "Operator authentication required"),
+            _ => Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                type: "urn:kafdeck:problem:mutation-authorization-denied",
+                title: forbiddenTitle),
+        };
     }
 
     private static async Task<IResult> AdmitAsync(
