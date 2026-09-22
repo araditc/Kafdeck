@@ -79,7 +79,10 @@ public sealed class KafkaConsumerMutationIntegrationTests
 
             var service = new ConsumerMutationExecutionService(
                 mutations,
-                observations);
+                observations,
+                new ConsumerMutationVerificationPolicy(
+                    TimeSpan.FromSeconds(15),
+                    TimeSpan.FromMilliseconds(250)));
             var altered = await service.AlterOffsetsAsync(
                 alterPlan.Plan.Canonical,
                 cancellation.Token);
