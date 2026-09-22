@@ -69,6 +69,8 @@ public sealed record RecordProductionPolicy
             throw new ArgumentOutOfRangeException(nameof(maxKeyBytes));
         if (maxValueBytes is < 1 or > HardMaxValueBytes)
             throw new ArgumentOutOfRangeException(nameof(maxValueBytes));
+        if (maxTotalBytes is < 1 or > HardMaxTotalBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
 
         var effectiveMaxHeaderValueBytes = maxHeaderValueBytes ?? maxValueBytes;
         var effectiveMaxTotalKeyBytes = maxTotalKeyBytes ?? maxTotalBytes;
@@ -88,8 +90,6 @@ public sealed record RecordProductionPolicy
             throw new ArgumentOutOfRangeException(nameof(maxTotalValueBytes));
         if (effectiveMaxTotalHeaderBytes is < 0 or > HardMaxTotalHeaderBytes)
             throw new ArgumentOutOfRangeException(nameof(maxTotalHeaderBytes));
-        if (maxTotalBytes is < 1 or > HardMaxTotalBytes)
-            throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
         if (effectiveMaxExecutionMaterialBytes is < 1 or > HardMaxExecutionMaterialBytes)
             throw new ArgumentOutOfRangeException(nameof(maxExecutionMaterialBytes));
         if (highRiskRecordCount is < 1 or > HardMaxRecords)
