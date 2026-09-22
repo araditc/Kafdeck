@@ -104,8 +104,9 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                                 [groupId],
                                 new DeleteGroupsOptions
                                 {
+                                    // librdkafka rejects operation.timeout for
+                                    // DeleteGroups with Local_InvalidArg.
                                     RequestTimeout = _requestTimeout,
-                                    OperationTimeout = _operationTimeout,
                                 })
                             .WaitAsync(cancellationToken)
                             .ConfigureAwait(false);
