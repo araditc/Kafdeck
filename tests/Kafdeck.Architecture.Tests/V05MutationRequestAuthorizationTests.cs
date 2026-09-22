@@ -3,6 +3,8 @@ using Kafdeck.Api;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Administration;
+using Kafdeck.Modules.Consumers;
+using Kafdeck.Modules.Records;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -90,15 +92,143 @@ public sealed class V05MutationRequestAuthorizationTests
         Assert.Equal(KafdeckAuthorizationOutcome.Unauthenticated, outcome);
     }
 
+    [Fact]
+    public void Consumer_direct_route_preflight_requires_exact_group_and_every_explicit_topic()
+    {
+        var targets = MutationDirectRouteAuthorization.ConsumerOffsetAlter(
+            "prod",
+            "payments-worker",
+            new[]
+            {
+                new ConsumerOffsetAlterTargetInput(
+                    "payments.allowed",
+                    0,
+                    new ConsumerOffsetSelector(
+                        ConsumerOffsetSelectorKind.Absolute,
+                        Value: 10)),
+                new ConsumerOffsetAlterTargetInput(
+                    "payments.denied",
+                    1,
+                    new ConsumerOffsetSelector(
+                        ConsumerOffsetSelectorKind.Latest)),
+            });
+
+        Assert.NotNull(targets);
+        Assert.Contains(targets!, target =>
+            target.ResourceName == "consumer-group/payments-worker");
+        Assert.Contains(targets!, target =>
+            target.ResourceName == "topic/payments.allowed");
+        Assert.Contains(targets!, target =>
+            target.ResourceName == "topic/payments.denied");
+
+        var service = CreateService(
+            new AuthorizationPermissionDefinition(
+                AuthorizationAction.ConsumerOffsetAlter,
+                new[] { "prod" },
+                new[]
+                {
+                    "consumer-group/payments-worker",
+                    "topic/payments.allowed",
+                }));
+
+        var outcome = service.AuthorizeTargets(
+            CreateOperatorPrincipal("alice"),
+            targets!);
+
+        Assert.Equal(KafdeckAuthorizationOutcome.Forbidden, outcome);
+    }
+
+    [Fact]
+    public void Whole_group_delete_preflight_requires_the_exact_group_before_inventory_observation()
+    {
+        var targets = MutationDirectRouteAuthorization.ConsumerDelete(
+            "prod",
+            "payments-worker",
+            ConsumerDeleteMode.Group,
+            targets: null);
+
+        var target = Assert.Single(targets!);
+        Assert.Equal(AuthorizationAction.ConsumerDelete, target.Action);
+        Assert.Equal("prod", target.ClusterId);
+        Assert.Equal("consumer-group/payments-worker", target.ResourceName);
+    }
+
+    [Fact]
+    public void Purge_direct_route_preflight_requires_every_exact_topic_before_watermark_observation()
+    {
+        var targets = MutationDirectRouteAuthorization.RecordsPurge(
+            "prod",
+            new[]
+            {
+                new RecordsPurgeTargetInput(
+                    "payments.allowed",
+                    0,
+                    new RecordsPurgeSelector(
+                        RecordsPurgeSelectorKind.Absolute,
+                        BeforeOffset: 10)),
+                new RecordsPurgeTargetInput(
+                    "payments.denied",
+                    1,
+                    new RecordsPurgeSelector(
+                        RecordsPurgeSelectorKind.Absolute,
+                        BeforeOffset: 20)),
+            });
+
+        Assert.NotNull(targets);
+        Assert.Equal(
+            new[] { "payments.allowed", "payments.denied" },
+            targets!.Select(target => target.ResourceName).ToArray());
+
+        var service = CreateService(
+            new AuthorizationPermissionDefinition(
+                AuthorizationAction.RecordsPurge,
+                new[] { "prod" },
+                new[] { "payments.allowed" }));
+
+        var outcome = service.AuthorizeTargets(
+            CreateOperatorPrincipal("alice"),
+            targets);
+
+        Assert.Equal(KafdeckAuthorizationOutcome.Forbidden, outcome);
+    }
+
+    [Fact]
+    public void Malformed_direct_route_targets_do_not_produce_authorization_targets()
+    {
+        Assert.Null(MutationDirectRouteAuthorization.ConsumerOffsetAlter(
+            "prod",
+            "payments-worker",
+            new[]
+            {
+                new ConsumerOffsetAlterTargetInput(
+                    "../invalid",
+                    0,
+                    new ConsumerOffsetSelector(
+                        ConsumerOffsetSelectorKind.Latest)),
+            }));
+
+        Assert.Null(MutationDirectRouteAuthorization.RecordsPurge(
+            "prod",
+            new[]
+            {
+                new RecordsPurgeTargetInput(
+                    "bad/topic",
+                    0,
+                    new RecordsPurgeSelector(
+                        RecordsPurgeSelectorKind.Absolute,
+                        BeforeOffset: 10)),
+            }));
+    }
+
     private static MutationRequestAuthorizationService CreateService(
-        AuthorizationPermissionDefinition permission)
+        params AuthorizationPermissionDefinition[] permissions)
     {
         var definition = new AuthorizationPolicyDefinition(
             new[]
             {
                 new AuthorizationRoleDefinition(
                     "mutation-operator",
-                    new[] { permission }),
+                    permissions),
             },
             new[]
             {
