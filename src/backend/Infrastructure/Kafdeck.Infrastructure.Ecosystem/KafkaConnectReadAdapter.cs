@@ -259,41 +259,11 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             safeConfig);
     }
 
-    internal static bool IsExplicitlySafeConfigKey(string key)
-    {
-        var normalized = key.Trim().ToLowerInvariant();
+    internal static bool IsExplicitlySafeConfigKey(string key) =>
+        ConnectSafeConfigurationPolicy.IsExplicitlySafeConfigKey(key);
 
-        return normalized is
-            "connector.class" or
-            "name" or
-            "tasks.max" or
-            "topics" or
-            "topics.regex" or
-            "key.converter" or
-            "value.converter" or
-            "header.converter" or
-            "errors.tolerance";
-    }
-
-    internal static bool IsSecretKey(string key)
-    {
-        var normalized = new string(
-            key.Trim()
-                .ToLowerInvariant()
-                .Where(char.IsLetterOrDigit)
-                .ToArray());
-
-        return normalized.Contains("password", StringComparison.Ordinal) ||
-               normalized.Contains("passwd", StringComparison.Ordinal) ||
-               normalized.Contains("secret", StringComparison.Ordinal) ||
-               normalized.Contains("token", StringComparison.Ordinal) ||
-               normalized.Contains("credential", StringComparison.Ordinal) ||
-               normalized.Contains("sasljaasconfig", StringComparison.Ordinal) ||
-               normalized.Contains("privatekey", StringComparison.Ordinal) ||
-               normalized.EndsWith("apikey", StringComparison.Ordinal) ||
-               normalized.EndsWith("accesskey", StringComparison.Ordinal) ||
-               normalized.EndsWith("clientsecret", StringComparison.Ordinal);
-    }
+    internal static bool IsSecretKey(string key) =>
+        ConnectSafeConfigurationPolicy.IsSecretKey(key);
 
     internal static string? SanitizeTrace(string? trace)
     {

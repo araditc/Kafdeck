@@ -145,7 +145,7 @@ public sealed record ConnectCreateMutation(
 public sealed record ConnectAlterMutation(
     string ClusterId,
     string ConnectorName,
-    IReadOnlyDictionary<string, string?> Changes);
+    IReadOnlyDictionary<string, string> Configuration);
 
 public sealed record ConnectControlMutation(
     string ClusterId,
