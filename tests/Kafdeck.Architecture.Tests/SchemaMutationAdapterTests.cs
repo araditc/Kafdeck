@@ -119,11 +119,11 @@ public sealed class SchemaMutationAdapterTests
         Assert.All(
             handler.Bodies.Take(2),
             body => Assert.Contains(
-                ""schema"",
+                "\"schema\"",
                 body,
                 StringComparison.Ordinal));
         Assert.Contains(
-            ""compatibility":"FULL"",
+            "\"compatibility\":\"FULL\"",
             handler.Bodies[2],
             StringComparison.Ordinal);
     }
