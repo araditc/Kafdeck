@@ -196,6 +196,6 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       <p>v0.4 exposes no SQL or metadata-statement execution surface. Metadata that would require statement execution is reported unsupported.</p>
     </section>
 
-    <MutationOperationsPanel />
+    <MutationOperationsPanel clusterId={clusterId} />
   </>;
 }
