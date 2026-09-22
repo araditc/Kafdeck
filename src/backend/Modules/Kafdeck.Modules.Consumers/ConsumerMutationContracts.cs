@@ -110,6 +110,9 @@ public sealed record ConsumerOffsetAlterCanonicalIntent(
     string GroupId,
     ConsumerGroupState GroupState,
     string GroupFingerprint,
+    long TotalBackwardDistance,
+    long TotalForwardDistance,
+    int MissingCommittedOffsetCount,
     IReadOnlyList<ConsumerOffsetCanonicalTarget> Targets);
 
 public sealed record ConsumerDeleteCanonicalIntent(
@@ -172,6 +175,12 @@ public sealed record ConsumerMutationPolicy
         {
             throw new ArgumentOutOfRangeException(nameof(observationTimeout));
         }
+        if (!requireEmptyGroup)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(requireEmptyGroup),
+                "Governed Kafka consumer mutation requires an empty group.");
+        }
 
         MaxTargets = maxTargets;
         ObservationTimeout = effectiveObservationTimeout;
@@ -179,7 +188,7 @@ public sealed record ConsumerMutationPolicy
             policyVersion,
             "Consumer mutation policy version",
             256);
-        RequireEmptyGroup = requireEmptyGroup;
+        RequireEmptyGroup = true;
     }
 
     public int MaxTargets { get; }
