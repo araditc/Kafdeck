@@ -116,6 +116,22 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                 if (group.Error.IsError)
                     throw new KafkaException(group.Error);
 
+                var mappedState =
+                    ConfluentKafkaConsumerGroupReadAdapter.MapState(group.State);
+                if (mappedState == CoreConsumerGroupState.Dead)
+                {
+                    // Kafka DescribeGroups represents a non-existent/deleted
+                    // consumer group as DEAD. Treat that structured state as
+                    // absence so delete verification does not wait forever for
+                    // a GroupIdNotFound error that Kafka may never return.
+                    return new ConsumerMutationObservation(
+                        groupId,
+                        false,
+                        CoreConsumerGroupState.Dead,
+                        Array.Empty<ConsumerMemberProjection>(),
+                        Array.Empty<ConsumerMutationPartitionObservation>());
+                }
+
                 var members = group.Members
                     .OrderBy(member => member.ConsumerId, StringComparer.Ordinal)
                     .Select(member => new ConsumerMemberProjection(
@@ -137,7 +153,7 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                     return new ConsumerMutationObservation(
                         group.GroupId,
                         true,
-                        ConfluentKafkaConsumerGroupReadAdapter.MapState(group.State),
+                        mappedState,
                         members,
                         Array.Empty<ConsumerMutationPartitionObservation>());
                 }
@@ -264,7 +280,7 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                 return new ConsumerMutationObservation(
                     group.GroupId,
                     true,
-                    ConfluentKafkaConsumerGroupReadAdapter.MapState(group.State),
+                    mappedState,
                     members,
                     observations);
             });
