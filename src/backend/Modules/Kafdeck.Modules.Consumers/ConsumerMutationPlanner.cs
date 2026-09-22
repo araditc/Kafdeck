@@ -85,6 +85,9 @@ public sealed class ConsumerMutationPlanner
 
         var canonicalTargets = new List<ConsumerOffsetCanonicalTarget>(
             normalizedTargets!.Count);
+        long totalBackwardDistance = 0;
+        long totalForwardDistance = 0;
+        var missingCommittedOffsetCount = 0;
         var preconditions = new List<MutationPrecondition>(
             normalizedTargets.Count + 1)
         {
@@ -115,7 +118,36 @@ public sealed class ConsumerMutationPlanner
                     .Failed(resolved.Failure);
             }
 
-            canonicalTargets.Add(resolved.Target!);
+            var canonicalTarget = resolved.Target!;
+            canonicalTargets.Add(canonicalTarget);
+            try
+            {
+                if (!canonicalTarget.DeltaFromCommitted.HasValue)
+                {
+                    missingCommittedOffsetCount++;
+                }
+                else if (canonicalTarget.DeltaFromCommitted.Value < 0)
+                {
+                    totalBackwardDistance = checked(
+                        totalBackwardDistance -
+                        canonicalTarget.DeltaFromCommitted.Value);
+                }
+                else if (canonicalTarget.DeltaFromCommitted.Value > 0)
+                {
+                    totalForwardDistance = checked(
+                        totalForwardDistance +
+                        canonicalTarget.DeltaFromCommitted.Value);
+                }
+            }
+            catch (OverflowException)
+            {
+                return ConsumerMutationPlanningResult<ConsumerOffsetAlterCanonicalIntent>
+                    .Failed(new ConsumerMutationPlanningFailure(
+                        ConsumerMutationPlanningFailureCode.OffsetOutOfRange,
+                        "Aggregate consumer offset movement exceeds the supported range.",
+                        ordinal));
+            }
+
             preconditions.Add(
                 new MutationPrecondition(
                     $"consumer.partition/{ordinal:D4}",
@@ -129,6 +161,9 @@ public sealed class ConsumerMutationPlanner
             observation.Value.State,
             ConsumerMutationCanonicalization.GroupPreconditionFingerprint(
                 observation.Value),
+            totalBackwardDistance,
+            totalForwardDistance,
+            missingCommittedOffsetCount,
             Array.AsReadOnly(canonicalTargets.ToArray()));
 
         var intent = BuildIntent(
@@ -690,6 +725,7 @@ public sealed class ConsumerMutationPlanner
         int ordinal)
     {
         if (observed.Partition < 0 ||
+            observed.CommittedOffset is < 0 ||
             observed.LowWatermark < 0 ||
             observed.HighWatermark < observed.LowWatermark)
         {
