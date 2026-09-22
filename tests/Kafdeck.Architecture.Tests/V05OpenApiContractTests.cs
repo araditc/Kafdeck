@@ -66,7 +66,7 @@ public sealed class V05OpenApiContractTests
     }
 
     [Fact]
-    public void W39_openapi_status_schema_does_not_publish_durable_raw_material_or_internal_authorization_state()
+    public void W39_openapi_status_schema_publishes_only_safe_execution_requirement_not_material_internals()
     {
         using var document = JsonDocument.Parse(KafdeckV05OpenApi.Document);
         var properties = document.RootElement
@@ -74,6 +74,13 @@ public sealed class V05OpenApiContractTests
             .GetProperty("schemas")
             .GetProperty("MutationStatus")
             .GetProperty("properties");
+
+        Assert.Equal(
+            "boolean",
+            properties
+                .GetProperty("requiresExecutionMaterial")
+                .GetProperty("type")
+                .GetString());
 
         foreach (var forbidden in new[]
                  {
