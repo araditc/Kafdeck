@@ -327,11 +327,14 @@ public sealed class ConsumerMutationPlanner
                         ordinal));
             }
 
-            var rangeFailure = ValidateObservedRange(observed, ordinal);
-            if (rangeFailure is not null)
+            if (request.Mode != ConsumerDeleteMode.Group)
             {
-                return ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>
-                    .Failed(rangeFailure);
+                var rangeFailure = ValidateObservedRange(observed, ordinal);
+                if (rangeFailure is not null)
+                {
+                    return ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>
+                        .Failed(rangeFailure);
+                }
             }
 
             canonicalTargets.Add(
@@ -657,9 +660,9 @@ public sealed class ConsumerMutationPlanner
                 ConsumerOffsetSelectorKind.Absolute =>
                     target.Selector.Value!.Value,
                 ConsumerOffsetSelectorKind.Earliest =>
-                    observed.LowWatermark,
+                    observed.LowWatermark!.Value,
                 ConsumerOffsetSelectorKind.Latest =>
-                    observed.HighWatermark,
+                    observed.HighWatermark!.Value,
                 ConsumerOffsetSelectorKind.Timestamp =>
                     observed.TimestampResolvedOffset ??
                     throw new TimestampResolutionException(),
@@ -701,8 +704,8 @@ public sealed class ConsumerMutationPlanner
                     ordinal));
         }
 
-        if (resolved < observed.LowWatermark ||
-            resolved > observed.HighWatermark)
+        if (resolved < observed.LowWatermark!.Value ||
+            resolved > observed.HighWatermark!.Value)
         {
             return (
                 null,
@@ -754,8 +757,9 @@ public sealed class ConsumerMutationPlanner
     {
         if (observed.Partition < 0 ||
             observed.CommittedOffset is < 0 ||
-            observed.LowWatermark < 0 ||
-            observed.HighWatermark < observed.LowWatermark)
+            observed.LowWatermark is null or < 0 ||
+            observed.HighWatermark is null ||
+            observed.HighWatermark.Value < observed.LowWatermark.Value)
         {
             return new(
                 ConsumerMutationPlanningFailureCode.ObservationFailed,
