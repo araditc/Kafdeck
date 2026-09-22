@@ -97,14 +97,21 @@ public sealed class KafkaAdapterIntegrationTestsAuthorization
         Assert.Equal(
             MutationExecutionResultKind.FailedDefinitive,
             result.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_rejected",
+            result.ResultCode);
+        Assert.NotNull(result.SafeEvidence);
+        Assert.True(
+            result.SafeEvidence!.TryGetValue(
+                "provider.error.codes",
+                out var providerCodes));
         Assert.Contains(
-            result.ResultCode,
-            new[]
-            {
-                "consumer_offset_alter_kafka_groupauthorizationfailed",
-                "consumer_offset_alter_kafka_topicauthorizationfailed",
-                "consumer_offset_alter_kafka_clusterauthorizationfailed",
-            });
+            providerCodes!.Split(',', StringSplitOptions.RemoveEmptyEntries),
+            code =>
+                code is
+                    "kafka_groupauthorizationfailed" or
+                    "kafka_topicauthorizationfailed" or
+                    "kafka_clusterauthorizationfailed");
         Assert.DoesNotContain(
             secretsDirectory,
             result.ResultCode,
