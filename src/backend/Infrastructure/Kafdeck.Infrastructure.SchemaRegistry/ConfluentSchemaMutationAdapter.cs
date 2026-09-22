@@ -189,21 +189,26 @@ public sealed class ConfluentSchemaMutationAdapter :
             cancellationToken,
             async (runtime, token) =>
             {
-                var active = await ExistsForObservationAsync(
+                var active = await ObserveDeletePathAsync(
                         runtime,
                         activePath,
+                        request.Version,
                         token)
                     .ConfigureAwait(false);
-                var includingDeleted = await ExistsForObservationAsync(
+                var includingDeleted = await ObserveDeletePathAsync(
                         runtime,
                         deletedPath,
+                        request.Version,
                         token)
                     .ConfigureAwait(false);
 
                 return new SchemaDeleteTargetObservation(
-                    active,
-                    includingDeleted,
-                    IsSoftDeleted: !active && includingDeleted);
+                    active.Exists,
+                    includingDeleted.Exists,
+                    IsSoftDeleted:
+                        !active.Exists && includingDeleted.Exists,
+                    active.Versions,
+                    includingDeleted.Versions);
             });
     }
 
@@ -620,9 +625,10 @@ public sealed class ConfluentSchemaMutationAdapter :
         }
     }
 
-    private static async Task<bool> ExistsForObservationAsync(
+    private static async Task<DeletePathObservation> ObserveDeletePathAsync(
         RegistryRuntime runtime,
         string relativePath,
+        int? requestedVersion,
         CancellationToken cancellationToken)
     {
         using var request = BuildRequest(
@@ -646,7 +652,11 @@ public sealed class ConfluentSchemaMutationAdapter :
         }
 
         if (response.StatusCode == HttpStatusCode.NotFound)
-            return false;
+        {
+            return new DeletePathObservation(
+                false,
+                Array.Empty<int>());
+        }
 
         if (response.StatusCode is
             HttpStatusCode.Unauthorized or
@@ -683,13 +693,36 @@ public sealed class ConfluentSchemaMutationAdapter :
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return root.ValueKind switch
+        if (root.ValueKind == JsonValueKind.Array)
         {
-            JsonValueKind.Array => root.GetArrayLength() > 0,
-            JsonValueKind.Object => true,
-            _ => throw new JsonException(
-                "Schema Registry delete observation response is invalid."),
-        };
+            var versions = root.EnumerateArray()
+                .Select(item =>
+                    item.TryGetInt32(out var version) && version > 0
+                        ? version
+                        : throw new JsonException(
+                            "Schema Registry delete observation version is invalid."))
+                .Distinct()
+                .OrderBy(version => version)
+                .ToArray();
+
+            return new DeletePathObservation(
+                versions.Length > 0,
+                Array.AsReadOnly(versions));
+        }
+
+        if (root.ValueKind == JsonValueKind.Object &&
+            requestedVersion.HasValue &&
+            root.TryGetProperty("version", out var versionElement) &&
+            versionElement.TryGetInt32(out var observedVersion) &&
+            observedVersion == requestedVersion.Value)
+        {
+            return new DeletePathObservation(
+                true,
+                new[] { observedVersion });
+        }
+
+        throw new JsonException(
+            "Schema Registry delete observation response is invalid.");
     }
 
     private static async Task<JsonElement> SendJsonForObservationAsync(
@@ -1124,6 +1157,10 @@ public sealed class ConfluentSchemaMutationAdapter :
     private sealed record RegistryRuntime(
         HttpClient Client,
         AuthenticationHeaderValue? BasicAuthorization);
+
+    private sealed record DeletePathObservation(
+        bool Exists,
+        IReadOnlyList<int> Versions);
 
     private sealed record SchemaRequestBody(
         string SchemaType,
