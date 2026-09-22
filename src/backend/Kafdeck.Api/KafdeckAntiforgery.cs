@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Builder;
 
 namespace Kafdeck.Api;
 
@@ -6,6 +7,13 @@ public static class KafdeckAntiforgeryExtensions
 {
     public const string HeaderName = "X-Kafdeck-CSRF";
     public const string CookieName = "Kafdeck.Antiforgery";
+
+    private sealed class RequiredAntiforgeryMetadata : IAntiforgeryMetadata
+    {
+        public static RequiredAntiforgeryMetadata Instance { get; } = new();
+
+        public bool RequiresValidation => true;
+    }
 
     public static IServiceCollection AddKafdeckAntiforgery(
         this IServiceCollection services,
@@ -61,11 +69,11 @@ public static class KafdeckAntiforgeryExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        // Attach the framework-recognized antiforgery metadata as well as the
-        // Kafdeck filter below. The framework middleware performs the standard
-        // token validation pass, while the filter preserves our stable
-        // Problem Details response for invalid state-changing requests.
-        builder.RequireAntiforgery();
+        // Minimal APIs expose DisableAntiforgery but no public RequireAntiforgery
+        // convention. Attach the framework-recognized metadata explicitly so
+        // UseAntiforgery participates in the endpoint contract, while retaining
+        // the Kafdeck filter below for stable Problem Details responses.
+        builder.WithMetadata(RequiredAntiforgeryMetadata.Instance);
 
         return builder.AddEndpointFilter(async (invocation, next) =>
         {
