@@ -309,6 +309,8 @@ public static class RecordProductionTemplateMaterializer
 {
     public const int MaxTemplateCharacters = 1024 * 1024;
     public const int MaxVariables = 64;
+    public const int MaxVariableValueBytes = RecordProductionPolicy.HardMaxValueBytes;
+    public const int MaxRenderedValueBytes = RecordProductionPolicy.HardMaxValueBytes;
 
     public static RecordProductionRequest Materialize(
         string clusterId,
@@ -349,11 +351,34 @@ public static class RecordProductionTemplateMaterializer
         }
 
         var rendered = definition.ValueTemplate;
+        if (Encoding.UTF8.GetByteCount(rendered) > MaxRenderedValueBytes)
+            throw new ArgumentOutOfRangeException(
+                nameof(definition),
+                "Template exceeds the hard rendered-value byte ceiling.");
+
         foreach (var name in expected)
         {
             var value = variables[name] ?? throw new ArgumentException("Template variable value cannot be null.");
+            var valueBytes = Encoding.UTF8.GetByteCount(value);
+            if (valueBytes > MaxVariableValueBytes)
+                throw new ArgumentOutOfRangeException(
+                    nameof(variables),
+                    "Template variable value exceeds the hard byte ceiling.");
+
+            var placeholder = "{{" + name + "}}";
+            var occurrences = CountOccurrences(rendered, placeholder);
+            var currentBytes = Encoding.UTF8.GetByteCount(rendered);
+            var placeholderBytes = Encoding.UTF8.GetByteCount(placeholder);
+            var projectedBytes = checked(
+                (long)currentBytes +
+                (long)occurrences * (valueBytes - placeholderBytes));
+            if (projectedBytes > MaxRenderedValueBytes)
+                throw new ArgumentOutOfRangeException(
+                    nameof(variables),
+                    "Template expansion exceeds the hard rendered-value byte ceiling.");
+
             rendered = rendered.Replace(
-                "{{" + name + "}}",
+                placeholder,
                 value,
                 StringComparison.Ordinal);
         }
@@ -379,6 +404,19 @@ public static class RecordProductionTemplateMaterializer
             },
             schemaValidation,
             new RecordProductionTemplateIdentity(templateId, definition.Version));
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        var count = 0;
+        var position = 0;
+        while ((position = source.IndexOf(value, position, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            position += value.Length;
+        }
+
+        return count;
     }
 }
 
