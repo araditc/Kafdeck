@@ -5,6 +5,7 @@ using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Kafka;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Consumers;
+using CoreConsumerGroupState = Kafdeck.Core.Consumers.ConsumerGroupState;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -49,7 +50,7 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 cancellation.Token);
 
             Assert.True(initial.Exists);
-            Assert.Equal(ConsumerGroupState.Empty, initial.State);
+            Assert.Equal(CoreConsumerGroupState.Empty, initial.State);
             Assert.Equal(1, Assert.Single(initial.Partitions).CommittedOffset);
 
             var planner = new ConsumerMutationPlanner(observations);
@@ -236,7 +237,7 @@ public sealed class KafkaConsumerMutationIntegrationTests
             if (last.IsSuccess &&
                 last.Value is not null &&
                 last.Value.Exists &&
-                last.Value.State == ConsumerGroupState.Empty &&
+                last.Value.State == CoreConsumerGroupState.Empty &&
                 last.Value.Partitions.Count == 1)
             {
                 return last.Value;
