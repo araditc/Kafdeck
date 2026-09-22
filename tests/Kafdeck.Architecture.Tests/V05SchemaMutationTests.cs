@@ -183,7 +183,7 @@ public sealed class V05SchemaMutationTests
             new SchemaDeleteRequest(
                 "prod",
                 "orders-value",
-                version: null,
+                Version: null,
                 Permanent: false));
 
         Assert.True(soft.IsSuccess, soft.Failure?.SafeMessage);
@@ -202,7 +202,7 @@ public sealed class V05SchemaMutationTests
             new SchemaDeleteRequest(
                 "prod",
                 "orders-value",
-                version: null,
+                Version: null,
                 Permanent: true));
 
         Assert.True(permanent.IsSuccess, permanent.Failure?.SafeMessage);
@@ -221,7 +221,7 @@ public sealed class V05SchemaMutationTests
             new SchemaDeleteRequest(
                 "prod",
                 "orders-value",
-                version: null,
+                Version: null,
                 Permanent: true));
 
         Assert.False(unsafePermanent.IsSuccess);
