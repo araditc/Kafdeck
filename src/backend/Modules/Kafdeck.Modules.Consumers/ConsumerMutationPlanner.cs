@@ -347,8 +347,11 @@ public sealed class ConsumerMutationPlanner
             preconditions.Add(
                 new MutationPrecondition(
                     $"consumer.partition/{ordinal:D4}",
-                    ConsumerMutationCanonicalization.PartitionPreconditionFingerprint(
-                        observed)));
+                    request.Mode == ConsumerDeleteMode.Group
+                        ? ConsumerMutationCanonicalization
+                            .CommittedOffsetInventoryFingerprint(observed)
+                        : ConsumerMutationCanonicalization
+                            .PartitionPreconditionFingerprint(observed)));
         }
 
         var canonical = new ConsumerDeleteCanonicalIntent(
