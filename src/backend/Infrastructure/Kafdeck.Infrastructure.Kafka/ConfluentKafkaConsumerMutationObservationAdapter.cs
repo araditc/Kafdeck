@@ -186,7 +186,14 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                                 new ListConsumerGroupOffsetsOptions
                                 {
                                     RequestTimeout = timeout,
-                                    RequireStableOffsets = true,
+                                    // The group was just observed as Empty. Some
+                                    // Kafka/librdkafka versions reject list-all
+                                    // inventory with require_stable=true even
+                                    // though no member can actively commit.
+                                    // Exact inventory is revalidated immediately
+                                    // before dispatch, so fail-closed TOCTOU
+                                    // protection remains intact.
+                                    RequireStableOffsets = false,
                                 })
                             .WaitAsync(token)
                             .ConfigureAwait(false);
