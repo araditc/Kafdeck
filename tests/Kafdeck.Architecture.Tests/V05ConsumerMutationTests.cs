@@ -1,5 +1,6 @@
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Consumers;
 using Xunit;
@@ -79,17 +80,19 @@ public sealed class V05ConsumerMutationTests
         Assert.True(plan.Risk.RequiresIndependentApproval);
         Assert.Equal(MutationConfirmationMode.TypedTarget, plan.Risk.ConfirmationMode);
 
+        Assert.NotNull(plan.Intent.AuthorizationTargets);
+        var authorizationTargets = plan.Intent.AuthorizationTargets!;
         Assert.Contains(
-            plan.Intent.AuthorizationTargets,
+            authorizationTargets,
             target =>
                 target.Action == AuthorizationAction.ConsumerOffsetAlter &&
                 target.ResourceName == "consumer-group/orders-workers");
         Assert.Contains(
-            plan.Intent.AuthorizationTargets,
+            authorizationTargets,
             target =>
                 target.Action == AuthorizationAction.ConsumerOffsetAlter &&
                 target.ResourceName == "topic/orders");
-        Assert.Equal(2, plan.Intent.AuthorizationTargets.Count);
+        Assert.Equal(2, authorizationTargets.Count);
         Assert.Equal(6, plan.Intent.ResourceKeys.Count);
         Assert.Equal(6, plan.Intent.Preconditions.Count);
 
