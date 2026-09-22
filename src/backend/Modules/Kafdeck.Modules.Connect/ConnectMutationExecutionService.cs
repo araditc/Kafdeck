@@ -40,6 +40,9 @@ public sealed record ConnectMutationVerificationPolicy
 
 public sealed class ConnectMutationExecutionService
 {
+    private static readonly TimeSpan ExecutionCompletionReserve =
+        TimeSpan.FromMilliseconds(250);
+
     private readonly IConnectMutationPort _mutations;
     private readonly IConnectMutationObservationPort _observations;
     private readonly ConnectMutationVerificationPolicy _verification;
@@ -113,7 +116,8 @@ public sealed class ConnectMutationExecutionService
                         observation.ConfigurationFingerprint,
                         canonical.RequestedConfigurationFingerprint,
                         StringComparison.Ordinal),
-                cancellationToken)
+                cancellationToken,
+                context.ExecutionDeadlineUtc)
             .ConfigureAwait(false);
 
         return verification.Verified
@@ -179,7 +183,8 @@ public sealed class ConnectMutationExecutionService
                         observation.ConfigurationFingerprint,
                         canonical.RequestedConfigurationFingerprint,
                         StringComparison.Ordinal),
-                cancellationToken)
+                cancellationToken,
+                context.ExecutionDeadlineUtc)
             .ConfigureAwait(false);
 
         return verification.Verified
@@ -195,7 +200,8 @@ public sealed class ConnectMutationExecutionService
 
     public async Task<MutationProviderResult> ControlAsync(
         ConnectControlCanonicalIntent canonical,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? executionDeadlineUtc = null)
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
@@ -259,7 +265,8 @@ public sealed class ConnectMutationExecutionService
                         observation.State,
                         expectedState,
                         StringComparison.Ordinal),
-                cancellationToken)
+                cancellationToken,
+                executionDeadlineUtc)
             .ConfigureAwait(false);
 
         return verification.Verified
@@ -275,7 +282,8 @@ public sealed class ConnectMutationExecutionService
 
     public async Task<MutationProviderResult> DeleteAsync(
         ConnectDeleteCanonicalIntent canonical,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? executionDeadlineUtc = null)
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
@@ -304,7 +312,8 @@ public sealed class ConnectMutationExecutionService
                 canonical.ClusterId,
                 canonical.ConnectorName,
                 observation => !observation.Exists,
-                cancellationToken)
+                cancellationToken,
+                executionDeadlineUtc)
             .ConfigureAwait(false);
 
         return verification.Verified
@@ -343,16 +352,36 @@ public sealed class ConnectMutationExecutionService
         string clusterId,
         string connectorName,
         Func<ConnectMutationObservation, bool> verify,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? executionDeadlineUtc = null)
     {
-        var deadline =
-            _timeProvider.GetUtcNow().Add(
-                _verification.Timeout);
+        var now = _timeProvider.GetUtcNow();
+        var deadline = now.Add(_verification.Timeout);
+
+        if (executionDeadlineUtc.HasValue)
+        {
+            var safeExecutionDeadline =
+                executionDeadlineUtc.Value - ExecutionCompletionReserve;
+            if (safeExecutionDeadline < deadline)
+            {
+                deadline = safeExecutionDeadline;
+            }
+        }
+
         ConnectMutationObservation? last = null;
+        if (deadline <= now || cancellationToken.IsCancellationRequested)
+        {
+            return new(false, last);
+        }
+
+        using var verificationCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        verificationCancellation.CancelAfter(deadline - now);
+        var verificationToken = verificationCancellation.Token;
 
         while (_timeProvider.GetUtcNow() < deadline)
         {
-            if (cancellationToken.IsCancellationRequested)
+            if (verificationToken.IsCancellationRequested)
             {
                 return new(false, last);
             }
@@ -369,7 +398,7 @@ public sealed class ConnectMutationExecutionService
                                 maxResponseBytes:
                                     ConnectMutationPolicy
                                         .HardMaxConfigurationBytes * 2L),
-                            cancellationToken)
+                            verificationToken)
                         .ConfigureAwait(false);
 
                 if (observed.IsSuccess &&
@@ -407,7 +436,7 @@ public sealed class ConnectMutationExecutionService
                 await Task.Delay(
                         delay,
                         _timeProvider,
-                        cancellationToken)
+                        verificationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -837,7 +866,8 @@ public sealed class ConnectAlterExecutionHandler :
 
                 return _service.ControlAsync(
                     canonical,
-                    cancellationToken);
+                    cancellationToken,
+                    context.ExecutionDeadlineUtc);
 
             default:
                 return Task.FromResult(
@@ -925,6 +955,7 @@ public sealed class ConnectDeleteExecutionHandler :
 
         return _service.DeleteAsync(
             canonical,
-            cancellationToken);
+            cancellationToken,
+            context.ExecutionDeadlineUtc);
     }
 }
