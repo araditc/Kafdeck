@@ -49,6 +49,19 @@ public sealed class V05RecordProductionTests
         Assert.DoesNotContain("private-key", durable, StringComparison.Ordinal);
         Assert.DoesNotContain("private-header", durable, StringComparison.Ordinal);
         Assert.Contains("record/0000", durable, StringComparison.Ordinal);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            result.Plan.Intent,
+            result.Plan.Risk,
+            "w34-leakage",
+            Now.AddMinutes(5),
+            Now,
+            "record-leakage");
+        var persistedOperation = JsonSerializer.Serialize(operation.Snapshot);
+        Assert.DoesNotContain(sentinel, persistedOperation, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-key", persistedOperation, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-header", persistedOperation, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -353,6 +366,23 @@ public sealed class V05RecordProductionTests
                     "{{unknown}}",
                     Array.Empty<string>()),
                 new Dictionary<string, string>(StringComparer.Ordinal)));
+
+        var expansionValue = new string(
+            'x',
+            RecordProductionTemplateMaterializer.MaxRenderedValueBytes / 2 + 1);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            RecordProductionTemplateMaterializer.Materialize(
+                "prod",
+                "orders",
+                new RecordProductionTemplateDefinition(
+                    "bounded",
+                    1,
+                    "{{id}}{{id}}",
+                    new[] { "id" }),
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["id"] = expansionValue,
+                }));
     }
 
     [Fact]
