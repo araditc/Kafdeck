@@ -97,9 +97,9 @@ public sealed class ConsumerMutationPlanner
                     observation.Value)),
         };
 
-        for (var ordinal = 0; ordinal < effectiveTargets.Count; ordinal++)
+        for (var ordinal = 0; ordinal < normalizedTargets.Count; ordinal++)
         {
-            var target = effectiveTargets[ordinal];
+            var target = normalizedTargets[ordinal];
             if (!observedByTarget!.TryGetValue(
                     (target.TopicName, target.Partition),
                     out var observed))
@@ -304,9 +304,9 @@ public sealed class ConsumerMutationPlanner
                     observation.Value)),
         };
 
-        for (var ordinal = 0; ordinal < normalizedTargets.Count; ordinal++)
+        for (var ordinal = 0; ordinal < effectiveTargets.Count; ordinal++)
         {
-            var target = normalizedTargets[ordinal];
+            var target = effectiveTargets[ordinal];
             if (!observedByTarget!.TryGetValue(
                     (target.TopicName, target.Partition),
                     out var observed))
