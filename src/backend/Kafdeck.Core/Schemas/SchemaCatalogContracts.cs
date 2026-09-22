@@ -79,7 +79,9 @@ public sealed record SchemaDeleteObservationRequest(
 public sealed record SchemaDeleteTargetObservation(
     bool ExistsActive,
     bool ExistsIncludingDeleted,
-    bool IsSoftDeleted);
+    bool IsSoftDeleted,
+    IReadOnlyList<int> ActiveVersions,
+    IReadOnlyList<int> VersionsIncludingDeleted);
 
 public sealed record SchemaMutationObservationResult<T>
 {
