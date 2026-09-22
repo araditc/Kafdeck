@@ -72,6 +72,9 @@ public sealed class V05ConsumerMutationTests
         Assert.Equal(
             ConsumerOffsetMovement.BackwardReplay,
             plan.Canonical.Targets[4].Movement);
+        Assert.Equal(35, plan.Canonical.TotalBackwardDistance);
+        Assert.Equal(130, plan.Canonical.TotalForwardDistance);
+        Assert.Equal(0, plan.Canonical.MissingCommittedOffsetCount);
         Assert.Equal(MutationRiskClass.Critical, plan.Risk.RiskClass);
         Assert.True(plan.Risk.RequiresIndependentApproval);
         Assert.Equal(MutationConfirmationMode.TypedTarget, plan.Risk.ConfirmationMode);
@@ -350,7 +353,10 @@ public sealed class V05ConsumerMutationTests
             "prod",
             "g",
             ConsumerGroupState.Empty,
-            "group-fingerprint",
+            new string('a', 64),
+            0,
+            10,
+            0,
             new[]
             {
                 new ConsumerOffsetCanonicalTarget(
@@ -388,12 +394,61 @@ public sealed class V05ConsumerMutationTests
                 "g",
                 ConsumerDeleteMode.Group,
                 ConsumerGroupState.Empty,
-                "group-fingerprint",
+                new string('a', 64),
                 Array.Empty<ConsumerDeleteCanonicalTarget>()));
 
         Assert.Equal(
             MutationExecutionResultKind.AppliedVerified,
             deleted.ResultKind);
+    }
+
+    [Fact]
+    public async Task Malformed_canonical_never_reaches_consumer_mutation_provider()
+    {
+        var mutations = new FakeMutationPort();
+        var observationPort = new FakeObservationPort(
+            Observation(
+                "g",
+                ConsumerGroupState.Empty,
+                Partition("orders", 0, 10, 0, 100, null)));
+        var service = new ConsumerMutationExecutionService(
+            mutations,
+            observationPort);
+
+        var malformed = new ConsumerOffsetAlterCanonicalIntent(
+            "prod",
+            "g",
+            ConsumerGroupState.Empty,
+            new string('a', 64),
+            0,
+            999,
+            0,
+            new[]
+            {
+                new ConsumerOffsetCanonicalTarget(
+                    0,
+                    "orders",
+                    0,
+                    new ConsumerOffsetCanonicalSelector(
+                        ConsumerOffsetSelectorKind.Absolute,
+                        20,
+                        null),
+                    false,
+                    10,
+                    0,
+                    100,
+                    20,
+                    10,
+                    ConsumerOffsetMovement.ForwardSkip),
+            });
+
+        var result = await service.AlterOffsetsAsync(malformed);
+
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            result.ResultKind);
+        Assert.Equal(0, mutations.AlterCalls);
+        Assert.Equal(0, mutations.DeleteCalls);
     }
 
     private static ConsumerMutationObservation Observation(
@@ -455,21 +510,30 @@ public sealed class V05ConsumerMutationTests
 
     private sealed class FakeMutationPort : IConsumerMutationPort
     {
+        public int AlterCalls { get; private set; }
+        public int DeleteCalls { get; private set; }
+
         public Task<MutationProviderResult> AlterOffsetsAsync(
             ConsumerOffsetAlterMutation request,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(
+            CancellationToken cancellationToken = default)
+        {
+            AlterCalls++;
+            return Task.FromResult(
                 new MutationProviderResult(
                     MutationExecutionResultKind.AppliedUnverified,
                     "consumer_offset_alter_accepted"));
+        }
 
         public Task<MutationProviderResult> DeleteAsync(
             ConsumerDeleteMutation request,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(
+            CancellationToken cancellationToken = default)
+        {
+            DeleteCalls++;
+            return Task.FromResult(
                 new MutationProviderResult(
                     MutationExecutionResultKind.AppliedUnverified,
                     "consumer_delete_accepted"));
+        }
     }
 
     private sealed class FixedTimeProvider : TimeProvider
