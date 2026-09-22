@@ -698,7 +698,7 @@ public sealed class V05ConsumerMutationTests
             new[]
             {
                 new Confluent.Kafka.Error(
-                    Confluent.Kafka.ErrorCode.UnknownServerError),
+                    Confluent.Kafka.ErrorCode.Unknown),
             },
             totalCount: 1,
             successfulCount: 0);
@@ -711,7 +711,7 @@ public sealed class V05ConsumerMutationTests
             result.ResultCode);
         Assert.NotNull(result.SafeEvidence);
         Assert.Contains(
-            "kafka_unknownservererror",
+            "kafka_unknown",
             result.SafeEvidence!["provider.error.codes"],
             StringComparison.Ordinal);
     }
