@@ -39,13 +39,16 @@ public sealed class V05MutationApiContractTests
             now,
             "status-contract");
 
+        var projection = MutationStatusData.From(operation.Snapshot);
         var json = JsonSerializer.Serialize(
-            MutationStatusData.From(operation.Snapshot),
+            projection,
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Contains("operationId", json, StringComparison.Ordinal);
         Assert.Contains("previewHash", json, StringComparison.Ordinal);
         Assert.Contains("requiresIndependentApproval", json, StringComparison.Ordinal);
+        Assert.Contains("requiresExecutionMaterial", json, StringComparison.Ordinal);
+        Assert.True(projection.RequiresExecutionMaterial);
 
         Assert.DoesNotContain("canonicalIntent", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("materialDigests", json, StringComparison.OrdinalIgnoreCase);
