@@ -403,6 +403,52 @@ public sealed class V05ConsumerMutationTests
     }
 
     [Fact]
+    public void Consumer_mutation_contract_is_typed_and_has_no_generic_admin_escape_hatch()
+    {
+        var methods = typeof(IConsumerMutationPort)
+            .GetMethods()
+            .OrderBy(method => method.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(2, methods.Length);
+        Assert.Equal(
+            new[]
+            {
+                nameof(IConsumerMutationPort.AlterOffsetsAsync),
+                nameof(IConsumerMutationPort.DeleteAsync),
+            },
+            methods.Select(method => method.Name));
+
+        var forbidden = new[]
+        {
+            "command",
+            "config",
+            "script",
+            "sql",
+            "url",
+            "cli",
+            "shell",
+        };
+
+        foreach (var type in new[]
+                 {
+                     typeof(ConsumerOffsetAlterMutation),
+                     typeof(ConsumerDeleteMutation),
+                     typeof(ConsumerOffsetTarget),
+                 })
+        {
+            foreach (var property in type.GetProperties())
+            {
+                Assert.DoesNotContain(
+                    forbidden,
+                    term => property.Name.Contains(
+                        term,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+        }
+    }
+
+    [Fact]
     public async Task Malformed_canonical_never_reaches_consumer_mutation_provider()
     {
         var mutations = new FakeMutationPort();
