@@ -381,6 +381,36 @@ public sealed class V05ConsumerMutationTests
     }
 
     [Fact]
+    public async Task Whole_group_delete_does_not_require_log_watermarks()
+    {
+        var port = new FakeObservationPort(
+            Observation(
+                "g",
+                ConsumerGroupState.Empty,
+                new ConsumerMutationPartitionObservation(
+                    "orders",
+                    0,
+                    10,
+                    null,
+                    null,
+                    null)));
+        var planner = new ConsumerMutationPlanner(port);
+
+        var result = await planner.PlanDeleteAsync(
+            new ConsumerDeleteRequest(
+                "prod",
+                "g",
+                ConsumerDeleteMode.Group));
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        var target = Assert.Single(result.Plan!.Canonical.Targets);
+        Assert.Equal(10, target.CommittedOffset);
+        Assert.Null(target.LowWatermark);
+        Assert.Null(target.HighWatermark);
+        Assert.True(port.LastIncludeAllCommittedOffsets);
+    }
+
+    [Fact]
     public async Task Whole_group_delete_becomes_stale_when_offset_inventory_changes()
     {
         var original = Observation(
