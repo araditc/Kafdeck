@@ -456,6 +456,13 @@ public sealed class RecordsPurgePlanner
                 new(
                     RecordsPurgePlanningFailureCode.ProviderUnavailable,
                     "Kafka purge target state is currently unavailable."),
+            KafkaFailureCategory.ProtocolError when failure.Code is
+                "kafka_unknowntopicorpart" or
+                "kafka_local_unknowntopic" or
+                "kafka_resourcenotfound" =>
+                new(
+                    RecordsPurgePlanningFailureCode.TargetNotFound,
+                    "A records purge target was not found."),
             _ =>
                 new(
                     RecordsPurgePlanningFailureCode.ObservationFailed,
