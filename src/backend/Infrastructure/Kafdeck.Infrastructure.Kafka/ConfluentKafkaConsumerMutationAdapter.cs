@@ -388,7 +388,9 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
             .Select(KafkaFailureMapper.FromKafka)
             .ToArray();
 
-        var evidence = Evidence(totalCount, 0, failedCount);
+        var evidence = new Dictionary<string, string>(
+            Evidence(totalCount, 0, failedCount),
+            StringComparer.Ordinal);
         var safeCodes = mapped
             .Select(failure => failure.Code)
             .Where(code => !string.IsNullOrWhiteSpace(code))
