@@ -1,4 +1,3 @@
-using Confluent.Kafka;
 using Kafdeck.Infrastructure.Kafka;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Kafka;
@@ -598,7 +597,8 @@ public sealed class V05ConsumerMutationTests
             "consumer_offset_alter",
             new[]
             {
-                new Error(ErrorCode.RequestTimedOut),
+                new Confluent.Kafka.Error(
+                    Confluent.Kafka.ErrorCode.RequestTimedOut),
             },
             totalCount: 2,
             successfulCount: 1);
