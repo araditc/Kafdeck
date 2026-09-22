@@ -4,6 +4,7 @@ import {
   mutationApi,
   type MutationStatus,
 } from './mutationApi.js';
+import { MutationPreviewWorkflows } from './MutationPreviewWorkflows.js';
 
 const noMaterialExecutionKinds = new Set([
   'topicCreate',
@@ -77,13 +78,57 @@ function MutationSummary({ operation }: { operation: MutationStatus }) {
   </article>;
 }
 
-export function MutationOperationsPanel() {
+function bytesToBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  }
+  return btoa(binary);
+}
+
+function pairMap(source: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const rawLine of source.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const separator = line.indexOf('=');
+    if (separator <= 0) throw new Error('Each execution-material line must use key=value.');
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1);
+    if (Object.prototype.hasOwnProperty.call(result, key)) throw new Error(`Duplicate key: ${key}`);
+    result[key] = value;
+  }
+  return result;
+}
+
+export function MutationOperationsPanel({ clusterId }: { clusterId: string }) {
   const [approvals, setApprovals] = useState<MutationStatus[]>([]);
   const [selected, setSelected] = useState<MutationStatus | null>(null);
   const [lookupId, setLookupId] = useState('');
   const [typedChallenge, setTypedChallenge] = useState('');
+  const [recordKey, setRecordKey] = useState('');
+  const [recordValue, setRecordValue] = useState('');
+  const [recordHeaders, setRecordHeaders] = useState('');
+  const [schemaExecutionSource, setSchemaExecutionSource] = useState('');
+  const [connectExecutionConfiguration, setConnectExecutionConfiguration] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const clearExecutionMaterial = () => {
+    setRecordKey('');
+    setRecordValue('');
+    setRecordHeaders('');
+    setSchemaExecutionSource('');
+    setConnectExecutionConfiguration('');
+  };
+
+  const selectOperation = (operation: MutationStatus) => {
+    setSelected(operation);
+    setTypedChallenge('');
+    clearExecutionMaterial();
+  };
 
   const loadApprovals = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -122,9 +167,7 @@ export function MutationOperationsPanel() {
     setLoading(true);
     setError(null);
     try {
-      const operation = await mutationApi.get(operationId);
-      setSelected(operation);
-      setTypedChallenge('');
+      selectOperation(await mutationApi.get(operationId));
     } catch (reason) {
       setError(describeProblem(reason));
     } finally {
@@ -132,13 +175,14 @@ export function MutationOperationsPanel() {
     }
   };
 
-  const apply = async (action: () => Promise<MutationStatus>) => {
+  const apply = async (action: () => Promise<MutationStatus>, clearMaterialAfter = false) => {
     setLoading(true);
     setError(null);
     try {
       const operation = await action();
       setSelected(operation);
       setTypedChallenge('');
+      if (clearMaterialAfter) clearExecutionMaterial();
       await loadApprovals();
     } catch (reason) {
       setError(describeProblem(reason));
@@ -151,9 +195,29 @@ export function MutationOperationsPanel() {
     selected.state === 'ready' &&
     noMaterialExecutionKinds.has(selected.operationKind);
 
+  const executeRecord = () => {
+    if (!selected) return;
+    void apply(() => {
+      const headers = Object.entries(pairMap(recordHeaders)).map(([name, value]) => ({ name, value: bytesToBase64(value) }));
+      return mutationApi.executeRecordProduction(selected, [{ key: recordKey ? bytesToBase64(recordKey) : null, value: bytesToBase64(recordValue), headers }]);
+    }, true);
+  };
+
+  const executeSchema = () => {
+    if (!selected) return;
+    void apply(() => mutationApi.executeSchemaCreate(selected, schemaExecutionSource), true);
+  };
+
+  const executeConnectConfiguration = () => {
+    if (!selected) return;
+    void apply(() => mutationApi.executeConnectConfiguration(selected, pairMap(connectExecutionConfiguration)), true);
+  };
+
   return <section id="mutations" aria-labelledby="mutations-title">
     <h2 id="mutations-title">Governed mutations</h2>
     <p>Mutation actions use frozen previews, explicit confirmation, current-request authorization rechecks and durable execution state. Unknown or partial outcomes are never presented as safe retries.</p>
+
+    <MutationPreviewWorkflows clusterId={clusterId} onPreview={selectOperation} />
 
     <article aria-labelledby="mutation-lookup-title">
       <h3 id="mutation-lookup-title">Operation status</h3>
@@ -170,7 +234,7 @@ export function MutationOperationsPanel() {
       <button type="button" onClick={() => void loadApprovals()} disabled={loading}>Refresh approvals</button>
       {approvals.length === 0
         ? <p>No currently authorized mutation approvals are pending.</p>
-        : <table><thead><tr><th scope="col">Kind</th><th scope="col">Cluster</th><th scope="col">Risk</th><th scope="col">Expires</th><th scope="col">Review</th></tr></thead><tbody>{approvals.map(operation => <tr key={operation.operationId}><th scope="row">{operation.operationKind}</th><td>{operation.clusterId}</td><td>{operation.riskClass}</td><td>{new Date(operation.previewExpiresAtUtc).toLocaleString()}</td><td><button type="button" onClick={() => { setSelected(operation); setTypedChallenge(''); }}>Review</button></td></tr>)}</tbody></table>}
+        : <table><thead><tr><th scope="col">Kind</th><th scope="col">Cluster</th><th scope="col">Risk</th><th scope="col">Expires</th><th scope="col">Review</th></tr></thead><tbody>{approvals.map(operation => <tr key={operation.operationId}><th scope="row">{operation.operationKind}</th><td>{operation.clusterId}</td><td>{operation.riskClass}</td><td>{new Date(operation.previewExpiresAtUtc).toLocaleString()}</td><td><button type="button" onClick={() => selectOperation(operation)}>Review</button></td></tr>)}</tbody></table>}
     </article>
 
     {error && <p role="alert">{error}</p>}
@@ -189,8 +253,15 @@ export function MutationOperationsPanel() {
         </>}
         {preDispatchStates.has(selected.state) && <button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.cancel(selected))}>Cancel before dispatch</button>}
         {canExecuteWithoutMaterial && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeWithoutMaterial(selected))}>Execute governed mutation</button></>}
+        {selected.state === 'ready' && selected.operationKind === 'connectDelete' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute connector deletion</button></>}
+        {selected.state === 'ready' && selected.operationKind === 'connectAlter' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute admitted connector control</button></>}
       </div>
-      {selected.state === 'ready' && !canExecuteWithoutMaterial && <p>This operation requires typed ephemeral execution material. Execute it only from its dedicated workflow; Kafdeck does not expose a generic execution-material console.</p>}
+
+      {selected.state === 'ready' && selected.operationKind === 'recordProduce' && <fieldset disabled={loading}><legend>Re-submit record execution material</legend><p>This material must digest-match the preview and is cleared from UI state after execution.</p><label htmlFor="execute-record-key">UTF-8 key (optional)</label>{' '}<input id="execute-record-key" value={recordKey} onChange={event => setRecordKey(event.target.value)} autoComplete="off" /><br /><label htmlFor="execute-record-value">UTF-8 value</label><br /><textarea id="execute-record-value" value={recordValue} onChange={event => setRecordValue(event.target.value)} rows={5} /><br /><label htmlFor="execute-record-headers">Headers, one name=value per line</label><br /><textarea id="execute-record-headers" value={recordHeaders} onChange={event => setRecordHeaders(event.target.value)} rows={4} /><br /><button type="button" disabled={!recordValue} onClick={executeRecord}>Execute with matching record material</button></fieldset>}
+
+      {selected.state === 'ready' && selected.operationKind === 'schemaCreate' && <fieldset disabled={loading}><legend>Re-submit schema execution material</legend><p>The schema source must match the admitted fingerprint and is cleared from UI state after execution.</p><label htmlFor="execute-schema-source">Schema source</label><br /><textarea id="execute-schema-source" value={schemaExecutionSource} onChange={event => setSchemaExecutionSource(event.target.value)} rows={8} /><br /><button type="button" disabled={!schemaExecutionSource.trim()} onClick={executeSchema}>Execute schema registration</button></fieldset>}
+
+      {selected.state === 'ready' && (selected.operationKind === 'connectCreate' || selected.operationKind === 'connectAlter') && <fieldset disabled={loading}><legend>Re-submit connector configuration when applicable</legend><p>For connector create/update, configuration must digest-match the admitted preview. Secret-bearing values remain browser-memory/request material and are cleared after execution. Connector control operations use the separate control button above.</p><label htmlFor="execute-connect-config">Configuration, one key=value per line</label><br /><textarea id="execute-connect-config" value={connectExecutionConfiguration} onChange={event => setConnectExecutionConfiguration(event.target.value)} rows={8} autoComplete="off" /><br /><button type="button" disabled={!connectExecutionConfiguration.trim()} onClick={executeConnectConfiguration}>Execute connector configuration mutation</button></fieldset>}
     </article>}
   </section>;
 }
