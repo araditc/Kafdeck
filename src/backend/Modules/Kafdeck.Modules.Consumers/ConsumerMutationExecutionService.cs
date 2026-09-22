@@ -247,7 +247,8 @@ public sealed class ConsumerMutationExecutionService
                 canonical.GroupId,
                 targets.Select(target => new ConsumerMutationObservationTarget(
                     target.TopicName,
-                    target.Partition))
+                    target.Partition,
+                    RequireStableOffset: false))
                     .ToArray(),
                 observation =>
                 {
