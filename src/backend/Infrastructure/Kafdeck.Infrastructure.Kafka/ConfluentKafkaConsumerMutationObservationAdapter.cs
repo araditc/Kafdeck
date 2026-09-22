@@ -61,17 +61,23 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                     .Select(item => item.ResolveTimestampUtc?.ToUniversalTime())
                     .Distinct()
                     .ToArray();
-                if (distinctTimestamps.Length != 1)
+                var distinctStableRequirements = group
+                    .Select(item => item.RequireStableOffset)
+                    .Distinct()
+                    .ToArray();
+                if (distinctTimestamps.Length != 1 ||
+                    distinctStableRequirements.Length != 1)
                 {
                     throw new ArgumentException(
-                        "A consumer mutation partition cannot request conflicting timestamp observations.",
+                        "A consumer mutation partition cannot request conflicting observation semantics.",
                         nameof(targets));
                 }
 
                 return new ConsumerMutationObservationTarget(
                     group.Key.Topic,
                     group.Key.Partition,
-                    distinctTimestamps[0]);
+                    distinctTimestamps[0],
+                    distinctStableRequirements[0]);
             })
             .OrderBy(target => target.Topic, StringComparer.Ordinal)
             .ThenBy(target => target.Partition)
@@ -169,7 +175,8 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                         new ListConsumerGroupOffsetsOptions
                         {
                             RequestTimeout = timeout,
-                            RequireStableOffsets = true,
+                            RequireStableOffsets = normalizedTargets.All(
+                                target => target.RequireStableOffset),
                         })
                     .WaitAsync(token)
                     .ConfigureAwait(false);
