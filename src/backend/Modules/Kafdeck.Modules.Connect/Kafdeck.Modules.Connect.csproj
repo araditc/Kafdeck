@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Kafdeck.Modules.Connect</AssemblyName>
+    <RootNamespace>Kafdeck.Modules.Connect</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
+    <ProjectReference Include="../Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kafdeck.Architecture.Tests" />
+  </ItemGroup>
+</Project>

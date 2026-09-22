@@ -135,7 +135,8 @@
         "type": "Project",
         "dependencies": {
           "Kafdeck.Core": "[0.4.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.4.0, )"
+          "Kafdeck.Infrastructure.Configuration": "[0.4.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
         }
       },
       "kafdeck.infrastructure.kafka": {
