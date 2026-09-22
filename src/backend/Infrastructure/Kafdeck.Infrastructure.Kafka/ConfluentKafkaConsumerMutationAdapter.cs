@@ -62,9 +62,17 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                         .WaitAsync(cancellationToken)
                         .ConfigureAwait(false);
 
+                    if (result.Count != 1)
+                    {
+                        return Malformed(
+                            "consumer_offset_alter",
+                            targets.Count,
+                            0);
+                    }
+
                     return FromPartitionResults(
                         "consumer_offset_alter",
-                        result.Single().Partitions,
+                        result[0].Partitions,
                         targets);
                 }
                 catch (AlterConsumerGroupOffsetsException exception)
@@ -366,28 +374,20 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                 Math.Clamp(reportedSuccessCount, 0, totalCount),
                 Math.Max(0, totalCount - reportedSuccessCount)));
 
-    private static MutationProviderResult FromErrors(
+    internal static MutationProviderResult FromErrors(
         string operationCode,
         IReadOnlyList<Error> errors,
         int totalCount,
         int successfulCount)
     {
         var failedCount = Math.Max(0, totalCount - successfulCount);
-        if (successfulCount > 0)
-        {
-            return new MutationProviderResult(
-                MutationExecutionResultKind.PartiallyApplied,
-                $"{operationCode}_partial",
-                Evidence(totalCount, successfulCount, failedCount));
-        }
-
         var mapped = errors
             .Where(error => error.IsError)
             .Select(KafkaFailureMapper.FromKafka)
             .ToArray();
 
         var evidence = new Dictionary<string, string>(
-            Evidence(totalCount, 0, failedCount),
+            Evidence(totalCount, successfulCount, failedCount),
             StringComparer.Ordinal);
         var safeCodes = mapped
             .Select(failure => failure.Code)
@@ -405,6 +405,14 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
             return new MutationProviderResult(
                 MutationExecutionResultKind.ExecutionUnknown,
                 $"{operationCode}_ambiguous",
+                evidence);
+        }
+
+        if (successfulCount > 0)
+        {
+            return new MutationProviderResult(
+                MutationExecutionResultKind.PartiallyApplied,
+                $"{operationCode}_partial",
                 evidence);
         }
 
