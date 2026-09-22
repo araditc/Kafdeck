@@ -208,6 +208,16 @@ public sealed class RecordProductionPlanner
                             "Record contains a null Kafka header.",
                             ordinal);
 
+                    if (header.Name is not null &&
+                        header.Name.Length > _policy.MaxHeaderNameCharacters)
+                    {
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.LimitExceeded,
+                            "Kafka header name exceeds the configured character ceiling.",
+                            ordinal);
+                    }
+
                     string name;
                     try
                     {
