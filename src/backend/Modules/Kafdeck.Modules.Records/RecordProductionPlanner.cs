@@ -161,7 +161,11 @@ public sealed class RecordProductionPlanner
         var material = new Dictionary<string, byte[]>(request.Records.Count, StringComparer.Ordinal);
         var canonicalRecords = new List<RecordProductionCanonicalRecord>(request.Records.Count);
         var digests = new List<MutationMaterialDigest>(request.Records.Count);
+        long totalKeyBytes = 0;
+        long totalValueBytes = 0;
+        long totalHeaderBytes = 0;
         long totalBytes = 0;
+        long totalExecutionMaterialBytes = 0;
 
         try
         {
@@ -182,6 +186,16 @@ public sealed class RecordProductionPlanner
                 if (input.Headers is null || input.Headers.Count > _policy.MaxHeadersPerRecord)
                     return FailAndDispose(material, RecordProductionPlanningFailureCode.LimitExceeded,
                         "Record headers exceed the configured count ceiling.", ordinal);
+
+                totalKeyBytes = checked(totalKeyBytes + (input.Key?.Length ?? 0));
+                if (totalKeyBytes > _policy.MaxTotalKeyBytes)
+                    return FailAndDispose(material, RecordProductionPlanningFailureCode.LimitExceeded,
+                        "Record production exceeds the configured total key-byte ceiling.", ordinal);
+
+                totalValueBytes = checked(totalValueBytes + input.Value.Length);
+                if (totalValueBytes > _policy.MaxTotalValueBytes)
+                    return FailAndDispose(material, RecordProductionPlanningFailureCode.LimitExceeded,
+                        "Record production exceeds the configured total value-byte ceiling.", ordinal);
 
                 var normalizedHeaders = new List<KeyValuePair<string, ReadOnlyMemory<byte>>>(input.Headers.Count);
                 var seenHeaderNames = new HashSet<string>(StringComparer.Ordinal);
@@ -218,6 +232,24 @@ public sealed class RecordProductionPlanner
                             "Duplicate Kafka header names are not admitted for governed production.",
                             ordinal);
 
+                    if (header.Value.Length > _policy.MaxHeaderValueBytes)
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.LimitExceeded,
+                            "Kafka header value exceeds the configured byte ceiling.",
+                            ordinal);
+
+                    totalHeaderBytes = checked(
+                        totalHeaderBytes +
+                        Encoding.UTF8.GetByteCount(name) +
+                        header.Value.Length);
+                    if (totalHeaderBytes > _policy.MaxTotalHeaderBytes)
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.LimitExceeded,
+                            "Record production exceeds the configured total header-byte ceiling.",
+                            ordinal);
+
                     normalizedHeaders.Add(
                         new KeyValuePair<string, ReadOnlyMemory<byte>>(name, header.Value));
                 }
@@ -231,13 +263,9 @@ public sealed class RecordProductionPlanner
                 {
                     headers.Add(pair);
                     canonicalHeaders.Add(new RecordProductionCanonicalHeader(pair.Key, pair.Value.Length));
-                    totalBytes = checked(totalBytes + Encoding.UTF8.GetByteCount(pair.Key) + pair.Value.Length);
                 }
 
-                totalBytes = checked(
-                    totalBytes +
-                    (input.Key?.Length ?? 0) +
-                    input.Value.Length);
+                totalBytes = checked(totalKeyBytes + totalValueBytes + totalHeaderBytes);
 
                 if (totalBytes > _policy.MaxTotalBytes)
                     return FailAndDispose(material, RecordProductionPlanningFailureCode.LimitExceeded,
@@ -310,6 +338,18 @@ public sealed class RecordProductionPlanner
                     input.Key,
                     input.Value,
                     headers);
+                totalExecutionMaterialBytes = checked(
+                    totalExecutionMaterialBytes + envelope.LongLength);
+                if (totalExecutionMaterialBytes > _policy.MaxExecutionMaterialBytes)
+                {
+                    CryptographicOperations.ZeroMemory(envelope);
+                    return FailAndDispose(
+                        material,
+                        RecordProductionPlanningFailureCode.LimitExceeded,
+                        "Record production exceeds the configured execution-material byte ceiling.",
+                        ordinal);
+                }
+
                 material.Add(materialName, envelope);
                 digests.Add(new MutationMaterialDigest(
                     materialName,
