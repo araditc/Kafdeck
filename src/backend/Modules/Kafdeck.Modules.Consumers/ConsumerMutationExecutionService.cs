@@ -331,7 +331,8 @@ public sealed class ConsumerMutationExecutionService
                     target.ResolvedOffset < target.LowWatermark ||
                     target.ResolvedOffset > target.HighWatermark ||
                     target.CommittedOffset is < 0 ||
-                    target.CommittedOffsetMissing != !target.CommittedOffset.HasValue)
+                    target.CommittedOffsetMissing != !target.CommittedOffset.HasValue ||
+                    !SelectorMatchesCanonicalTarget(target))
                 {
                     return false;
                 }
@@ -392,6 +393,65 @@ public sealed class ConsumerMutationExecutionService
         catch (Exception exception) when (
             exception is ArgumentException or
             OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool SelectorMatchesCanonicalTarget(
+        ConsumerOffsetCanonicalTarget target)
+    {
+        try
+        {
+            return target.Selector.Kind switch
+            {
+                ConsumerOffsetSelectorKind.Absolute =>
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.Selector.RequestedValue is >= 0 &&
+                    target.ResolvedOffset == target.Selector.RequestedValue.Value,
+
+                ConsumerOffsetSelectorKind.Earliest =>
+                    target.Selector.RequestedValue is null &&
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.ResolvedOffset == target.LowWatermark,
+
+                ConsumerOffsetSelectorKind.Latest =>
+                    target.Selector.RequestedValue is null &&
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.ResolvedOffset == target.HighWatermark,
+
+                ConsumerOffsetSelectorKind.Timestamp =>
+                    target.Selector.RequestedValue is null &&
+                    target.Selector.TimestampUnixMilliseconds.HasValue &&
+                    TimestampIsSupported(
+                        target.Selector.TimestampUnixMilliseconds.Value),
+
+                ConsumerOffsetSelectorKind.RelativeShift =>
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.Selector.RequestedValue.HasValue &&
+                    target.CommittedOffset.HasValue &&
+                    checked(
+                        target.CommittedOffset.Value +
+                        target.Selector.RequestedValue.Value) ==
+                    target.ResolvedOffset,
+
+                _ => false,
+            };
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TimestampIsSupported(long unixMilliseconds)
+    {
+        try
+        {
+            _ = DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
         {
             return false;
         }
