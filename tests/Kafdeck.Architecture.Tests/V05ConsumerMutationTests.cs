@@ -94,7 +94,8 @@ public sealed class V05ConsumerMutationTests
                 target.ResourceName == "topic/orders");
         Assert.Equal(2, authorizationTargets.Count);
         Assert.Equal(6, plan.Intent.ResourceKeys.Count);
-        Assert.Equal(6, plan.Intent.Preconditions.Count);
+        Assert.NotNull(plan.Intent.Preconditions);
+        Assert.Equal(6, plan.Intent.Preconditions!.Count);
 
         Assert.All(
             port.LastTargets!,
