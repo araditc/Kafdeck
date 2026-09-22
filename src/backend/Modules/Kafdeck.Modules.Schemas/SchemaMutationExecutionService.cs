@@ -159,7 +159,7 @@ public sealed class SchemaMutationExecutionService
                                 canonical.ClusterId,
                                 canonical.Subject,
                                 candidate.Version,
-                                Observation(),
+                                Observation(verificationDeadlineUtc),
                                 token)
                             .ConfigureAwait(false);
 
