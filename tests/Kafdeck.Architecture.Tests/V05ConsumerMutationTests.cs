@@ -591,6 +591,79 @@ public sealed class V05ConsumerMutationTests
     }
 
     [Fact]
+    public async Task Partial_readback_remains_applied_unverified()
+    {
+        var mutations = new FakeMutationPort();
+        var observations = new FakeObservationPort(
+            Observation(
+                "g",
+                ConsumerGroupState.Empty,
+                Partition("orders", 0, 20, 0, 100, null),
+                Partition("orders", 1, 10, 0, 100, null)));
+        var service = new ConsumerMutationExecutionService(
+            mutations,
+            observations,
+            new ConsumerMutationVerificationPolicy(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(50)));
+
+        var canonical = new ConsumerOffsetAlterCanonicalIntent(
+            "prod",
+            "g",
+            ConsumerGroupState.Empty,
+            new string('a', 64),
+            0,
+            20,
+            0,
+            new[]
+            {
+                new ConsumerOffsetCanonicalTarget(
+                    0,
+                    "orders",
+                    0,
+                    new ConsumerOffsetCanonicalSelector(
+                        ConsumerOffsetSelectorKind.Absolute,
+                        20,
+                        null),
+                    false,
+                    10,
+                    0,
+                    100,
+                    20,
+                    10,
+                    ConsumerOffsetMovement.ForwardSkip),
+                new ConsumerOffsetCanonicalTarget(
+                    1,
+                    "orders",
+                    1,
+                    new ConsumerOffsetCanonicalSelector(
+                        ConsumerOffsetSelectorKind.Absolute,
+                        20,
+                        null),
+                    false,
+                    10,
+                    0,
+                    100,
+                    20,
+                    10,
+                    ConsumerOffsetMovement.ForwardSkip),
+            });
+
+        var result = await service.AlterOffsetsAsync(canonical);
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedUnverified,
+            result.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_partially_verified",
+            result.ResultCode);
+        Assert.NotNull(result.SafeEvidence);
+        Assert.Equal("partial", result.SafeEvidence!["verification.state"]);
+        Assert.Equal("1", result.SafeEvidence["verified.count"]);
+        Assert.Equal("2", result.SafeEvidence["target.count"]);
+    }
+
+    [Fact]
     public void Mixed_success_and_timeout_is_execution_unknown()
     {
         var result = ConfluentKafkaConsumerMutationAdapter.FromErrors(
@@ -614,6 +687,32 @@ public sealed class V05ConsumerMutationTests
         Assert.Contains(
             "kafka_requesttimedout",
             result.SafeEvidence["provider.error.codes"],
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Unknown_broker_protocol_error_after_dispatch_is_execution_unknown()
+    {
+        var result = ConfluentKafkaConsumerMutationAdapter.FromErrors(
+            "consumer_offset_alter",
+            new[]
+            {
+                new Confluent.Kafka.Error(
+                    Confluent.Kafka.ErrorCode.UnknownServerError),
+            },
+            totalCount: 1,
+            successfulCount: 0);
+
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            result.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_ambiguous",
+            result.ResultCode);
+        Assert.NotNull(result.SafeEvidence);
+        Assert.Contains(
+            "kafka_unknownservererror",
+            result.SafeEvidence!["provider.error.codes"],
             StringComparison.Ordinal);
     }
 
