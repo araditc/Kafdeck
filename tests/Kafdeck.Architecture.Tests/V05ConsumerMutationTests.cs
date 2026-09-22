@@ -432,6 +432,52 @@ public sealed class V05ConsumerMutationTests
     }
 
     [Fact]
+    public async Task Whole_group_delete_allows_watermark_only_drift()
+    {
+        var original = Observation(
+            "g",
+            ConsumerGroupState.Empty,
+            Partition("orders", 0, 10, 0, 100, null));
+        var port = new FakeObservationPort(original);
+        var planner = new ConsumerMutationPlanner(
+            port,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var planned = await planner.PlanDeleteAsync(
+            new ConsumerDeleteRequest(
+                "prod",
+                "g",
+                ConsumerDeleteMode.Group));
+
+        Assert.True(planned.IsSuccess, planned.Failure?.SafeMessage);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Plan!.Intent,
+            planned.Plan.Risk,
+            "w35-group-delete",
+            Now.AddMinutes(5),
+            Now,
+            "group-delete-watermark");
+
+        port.Current = Observation(
+            "g",
+            ConsumerGroupState.Empty,
+            Partition("orders", 0, 10, 0, 150, null));
+
+        var guard = new ConsumerMutationPreconditionValidator(
+            port,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var result = await guard.ValidateAsync(operation.Snapshot);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.Allowed,
+            result.Outcome);
+        Assert.True(port.LastIncludeAllCommittedOffsets);
+    }
+
+    [Fact]
     public async Task Pre_dispatch_rejects_offset_or_membership_drift()
     {
         var original = Observation(
