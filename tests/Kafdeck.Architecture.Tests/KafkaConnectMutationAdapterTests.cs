@@ -161,8 +161,7 @@ public sealed class KafkaConnectMutationAdapterTests
             Connect: new KafkaConnectProfile(
                 "https://connect.example/",
                 null,
-                null,
-                KafkaConnectMutationProviderProfile.ConfluentCompatibleV1));
+                null));
 
         using var adapter = new KafkaConnectMutationAdapter(
             [profile],
@@ -253,7 +252,8 @@ public sealed class KafkaConnectMutationAdapterTests
             Connect: new KafkaConnectProfile(
                 "https://connect.example/",
                 null,
-                null));
+                null,
+                KafkaConnectMutationProviderProfile.ConfluentCompatibleV1));
 
         return new KafkaConnectMutationAdapter(
             [profile],
