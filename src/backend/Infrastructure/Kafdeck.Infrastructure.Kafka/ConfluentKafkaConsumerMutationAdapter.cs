@@ -388,18 +388,30 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
             .Select(KafkaFailureMapper.FromKafka)
             .ToArray();
 
+        var evidence = Evidence(totalCount, 0, failedCount);
+        var safeCodes = mapped
+            .Select(failure => failure.Code)
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(code => code, StringComparer.Ordinal)
+            .ToArray();
+        if (safeCodes.Length > 0)
+        {
+            evidence["provider.error.codes"] = string.Join(",", safeCodes);
+        }
+
         if (mapped.Any(failure => IsAmbiguous(failure.Category)))
         {
             return new MutationProviderResult(
                 MutationExecutionResultKind.ExecutionUnknown,
                 $"{operationCode}_ambiguous",
-                Evidence(totalCount, 0, failedCount));
+                evidence);
         }
 
         return new MutationProviderResult(
             MutationExecutionResultKind.FailedDefinitive,
             $"{operationCode}_rejected",
-            Evidence(totalCount, 0, failedCount));
+            evidence);
     }
 
     private static IReadOnlyDictionary<string, string> Evidence(
