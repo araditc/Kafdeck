@@ -74,27 +74,6 @@ public sealed class ConsumerMutationPlanner
                 .Failed(commonFailure);
         }
 
-        if (request.Mode == ConsumerDeleteMode.Group &&
-            observation.Value.Partitions.Count > _policy.MaxTargets)
-        {
-            return ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>
-                .Failed(new ConsumerMutationPlanningFailure(
-                    ConsumerMutationPlanningFailureCode.LimitExceeded,
-                    $"Consumer group offset inventory exceeds the configured {_policy.MaxTargets}-target ceiling."));
-        }
-
-        IReadOnlyList<ConsumerOffsetDeleteTargetInput> effectiveTargets =
-            request.Mode == ConsumerDeleteMode.Group
-                ? Array.AsReadOnly(
-                    observation.Value.Partitions
-                        .OrderBy(item => item.Topic, StringComparer.Ordinal)
-                        .ThenBy(item => item.Partition)
-                        .Select(item => new ConsumerOffsetDeleteTargetInput(
-                            item.Topic,
-                            item.Partition))
-                        .ToArray())
-                : normalizedTargets;
-
         var observedByTarget = IndexObservedPartitions(
             observation.Value.Partitions,
             out var observationFailure);
@@ -283,6 +262,27 @@ public sealed class ConsumerMutationPlanner
             return ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>
                 .Failed(commonFailure);
         }
+
+        if (request.Mode == ConsumerDeleteMode.Group &&
+            observation.Value.Partitions.Count > _policy.MaxTargets)
+        {
+            return ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>
+                .Failed(new ConsumerMutationPlanningFailure(
+                    ConsumerMutationPlanningFailureCode.LimitExceeded,
+                    $"Consumer group offset inventory exceeds the configured {_policy.MaxTargets}-target ceiling."));
+        }
+
+        IReadOnlyList<ConsumerOffsetDeleteTargetInput> effectiveTargets =
+            request.Mode == ConsumerDeleteMode.Group
+                ? Array.AsReadOnly(
+                    observation.Value.Partitions
+                        .OrderBy(item => item.Topic, StringComparer.Ordinal)
+                        .ThenBy(item => item.Partition)
+                        .Select(item => new ConsumerOffsetDeleteTargetInput(
+                            item.Topic,
+                            item.Partition))
+                        .ToArray())
+                : normalizedTargets;
 
         var observedByTarget = IndexObservedPartitions(
             observation.Value.Partitions,
