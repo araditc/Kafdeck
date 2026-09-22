@@ -13,7 +13,7 @@
     <ProjectReference Include="../Modules/Kafdeck.Modules.Records/Kafdeck.Modules.Records.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Consumers/Kafdeck.Modules.Consumers.csproj" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Schemas/Kafdeck.Modules.Schemas.csproj" />
-    <ProjectReference Include="../Modules/Kafdeck.Modules.Connect/Kafdeck.Modules.Connect.csproj" />
+    <ProjectReference Include="../Modules/Kafdeck.Modules.Connect/Kafdeck.Modules.Connect.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Modules/Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Kafka/Kafdeck.Infrastructure.Kafka.csproj" />
