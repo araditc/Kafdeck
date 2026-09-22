@@ -32,13 +32,20 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
         string groupId,
         IReadOnlyList<ConsumerMutationObservationTarget> targets,
         KafkaOperationContext operation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeAllCommittedOffsets = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(groupId);
         ArgumentNullException.ThrowIfNull(targets);
 
         if (targets.Count > HardMaxTargets)
             throw new ArgumentOutOfRangeException(nameof(targets));
+        if (includeAllCommittedOffsets && targets.Count > 0)
+        {
+            throw new ArgumentException(
+                "Full consumer offset inventory observation cannot also contain explicit targets.",
+                nameof(targets));
+        }
 
         var normalizedTargets = targets
             .Select(target =>
@@ -154,7 +161,8 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                             .ToArray()))
                     .ToArray();
 
-                if (normalizedTargets.Length == 0)
+                if (normalizedTargets.Length == 0 &&
+                    !includeAllCommittedOffsets)
                 {
                     return new ConsumerMutationObservation(
                         group.GroupId,
@@ -164,39 +172,98 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                         Array.Empty<ConsumerMutationPartitionObservation>());
                 }
 
-                var partitions = normalizedTargets
-                    .Select(target => new TopicPartition(
-                        target.Topic,
-                        new Partition(target.Partition)))
-                    .ToArray();
+                TopicPartition[] partitions;
+                var committedByPartition =
+                    new Dictionary<TopicPartition, long?>();
 
-                var requireStableOffsets = normalizedTargets.All(
-                    target => target.RequireStableOffset);
-                var committedPartitions = requireStableOffsets
-                    ? partitions.ToList()
-                    : new List<TopicPartition>();
-
-                var committedResults = await client.ListConsumerGroupOffsetsAsync(
-                        [new ConsumerGroupTopicPartitions(
-                            groupId,
-                            committedPartitions)],
-                        new ListConsumerGroupOffsetsOptions
-                        {
-                            RequestTimeout = timeout,
-                            RequireStableOffsets = requireStableOffsets,
-                        })
-                    .WaitAsync(token)
-                    .ConfigureAwait(false);
-
-                var committed = committedResults.Single();
-                var committedByPartition = new Dictionary<TopicPartition, long?>();
-                foreach (var item in committed.Partitions)
+                if (includeAllCommittedOffsets)
                 {
-                    if (item.Error.IsError)
-                        throw new KafkaException(item.Error);
+                    var committedResults =
+                        await client.ListConsumerGroupOffsetsAsync(
+                                [new ConsumerGroupTopicPartitions(
+                                    groupId,
+                                    new List<TopicPartition>())],
+                                new ListConsumerGroupOffsetsOptions
+                                {
+                                    RequestTimeout = timeout,
+                                    RequireStableOffsets = true,
+                                })
+                            .WaitAsync(token)
+                            .ConfigureAwait(false);
 
-                    committedByPartition[item.TopicPartition] =
-                        item.Offset.Value >= 0 ? item.Offset.Value : null;
+                    var committed = committedResults.Single();
+                    foreach (var item in committed.Partitions)
+                    {
+                        if (item.Error.IsError)
+                            throw new KafkaException(item.Error);
+
+                        if (item.Offset.Value >= 0)
+                        {
+                            committedByPartition[item.TopicPartition] =
+                                item.Offset.Value;
+                        }
+                    }
+
+                    if (committedByPartition.Count > HardMaxTargets)
+                    {
+                        throw new InvalidOperationException(
+                            "Consumer group offset inventory exceeds the hard observation bound.");
+                    }
+
+                    partitions = committedByPartition.Keys
+                        .OrderBy(item => item.Topic, StringComparer.Ordinal)
+                        .ThenBy(item => item.Partition.Value)
+                        .ToArray();
+
+                    if (partitions.Length == 0)
+                    {
+                        return new ConsumerMutationObservation(
+                            group.GroupId,
+                            true,
+                            mappedState,
+                            members,
+                            Array.Empty<ConsumerMutationPartitionObservation>());
+                    }
+                }
+                else
+                {
+                    partitions = normalizedTargets
+                        .Select(target => new TopicPartition(
+                            target.Topic,
+                            new Partition(target.Partition)))
+                        .ToArray();
+
+                    var requireStableOffsets = normalizedTargets.All(
+                        target => target.RequireStableOffset);
+                    var committedPartitions = requireStableOffsets
+                        ? partitions.ToList()
+                        : new List<TopicPartition>();
+
+                    var committedResults =
+                        await client.ListConsumerGroupOffsetsAsync(
+                                [new ConsumerGroupTopicPartitions(
+                                    groupId,
+                                    committedPartitions)],
+                                new ListConsumerGroupOffsetsOptions
+                                {
+                                    RequestTimeout = timeout,
+                                    RequireStableOffsets =
+                                        requireStableOffsets,
+                                })
+                            .WaitAsync(token)
+                            .ConfigureAwait(false);
+
+                    var committed = committedResults.Single();
+                    foreach (var item in committed.Partitions)
+                    {
+                        if (item.Error.IsError)
+                            throw new KafkaException(item.Error);
+
+                        committedByPartition[item.TopicPartition] =
+                            item.Offset.Value >= 0
+                                ? item.Offset.Value
+                                : null;
+                    }
                 }
 
                 var earliest = await ListOffsetsAsync(
@@ -254,42 +321,71 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
 
                 var observations =
                     new List<ConsumerMutationPartitionObservation>(
-                        normalizedTargets.Length);
-                foreach (var target in normalizedTargets)
+                        partitions.Length);
+
+                if (includeAllCommittedOffsets)
                 {
-                    var partition = new TopicPartition(
-                        target.Topic,
-                        new Partition(target.Partition));
-
-                    committedByPartition.TryGetValue(
-                        partition,
-                        out var committedOffset);
-
-                    if (!earliest.TryGetValue(partition, out var low) ||
-                        !latest.TryGetValue(partition, out var high))
+                    foreach (var partition in partitions)
                     {
-                        throw new InvalidOperationException(
-                            "Kafka returned an incomplete consumer mutation observation.");
-                    }
+                        if (!committedByPartition.TryGetValue(
+                                partition,
+                                out var committedOffset) ||
+                            committedOffset is null ||
+                            !earliest.TryGetValue(partition, out var low) ||
+                            !latest.TryGetValue(partition, out var high))
+                        {
+                            throw new InvalidOperationException(
+                                "Kafka returned an incomplete consumer offset inventory.");
+                        }
 
-                    long? timestampOffset = null;
-                    if (target.ResolveTimestampUtc.HasValue &&
-                        !timestampOffsets.TryGetValue(
-                            partition,
-                            out timestampOffset))
+                        observations.Add(
+                            new ConsumerMutationPartitionObservation(
+                                partition.Topic,
+                                partition.Partition.Value,
+                                committedOffset,
+                                low,
+                                high,
+                                null));
+                    }
+                }
+                else
+                {
+                    foreach (var target in normalizedTargets)
                     {
-                        throw new InvalidOperationException(
-                            "Kafka returned an incomplete timestamp offset observation.");
-                    }
-
-                    observations.Add(
-                        new ConsumerMutationPartitionObservation(
+                        var partition = new TopicPartition(
                             target.Topic,
-                            target.Partition,
-                            committedOffset,
-                            low,
-                            high,
-                            timestampOffset));
+                            new Partition(target.Partition));
+
+                        committedByPartition.TryGetValue(
+                            partition,
+                            out var committedOffset);
+
+                        if (!earliest.TryGetValue(partition, out var low) ||
+                            !latest.TryGetValue(partition, out var high))
+                        {
+                            throw new InvalidOperationException(
+                                "Kafka returned an incomplete consumer mutation observation.");
+                        }
+
+                        long? timestampOffset = null;
+                        if (target.ResolveTimestampUtc.HasValue &&
+                            !timestampOffsets.TryGetValue(
+                                partition,
+                                out timestampOffset))
+                        {
+                            throw new InvalidOperationException(
+                                "Kafka returned an incomplete timestamp offset observation.");
+                        }
+
+                        observations.Add(
+                            new ConsumerMutationPartitionObservation(
+                                target.Topic,
+                                target.Partition,
+                                committedOffset,
+                                low,
+                                high,
+                                timestampOffset));
+                    }
                 }
 
                 return new ConsumerMutationObservation(
