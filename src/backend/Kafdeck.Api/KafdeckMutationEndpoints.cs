@@ -141,6 +141,7 @@ public static class KafdeckMutationEndpoints
             .WithName("v05-mutation-execute")
             .RequireKafdeckAntiforgery();
 
+        app.MapKafdeckMutationApprovalEndpoints();
         return app;
     }
 
