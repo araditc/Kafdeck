@@ -70,14 +70,14 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                     return FromPartitionResults(
                         "consumer_offset_alter",
                         result.Single().Partitions,
-                        targets.Count);
+                        targets);
                 }
                 catch (AlterConsumerGroupOffsetsException exception)
                 {
                     return FromPartitionReports(
                         "consumer_offset_alter",
                         exception.Results.SelectMany(report => report.Partitions),
-                        targets.Count,
+                        targets,
                         exception.Results.Select(report => report.Error));
                 }
             });
@@ -154,22 +154,17 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                         .WaitAsync(cancellationToken)
                         .ConfigureAwait(false);
 
-                    return Accepted(
-                        "consumer_offset_delete_accepted",
-                        new Dictionary<string, string>(StringComparer.Ordinal)
-                        {
-                            ["provider.accepted"] = "true",
-                            ["target.count"] =
-                                result.Partitions.Count.ToString(
-                                    CultureInfo.InvariantCulture),
-                        });
+                    return FromDeleteOffsetSuccess(
+                        "consumer_offset_delete",
+                        result.Partitions,
+                        targets);
                 }
                 catch (DeleteConsumerGroupOffsetsException exception)
                 {
                     return FromPartitionReports(
                         "consumer_offset_delete",
                         exception.Result.Partitions,
-                        targets.Count,
+                        targets,
                         [exception.Result.Error]);
                 }
             });
@@ -238,39 +233,140 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
     private static MutationProviderResult FromPartitionResults(
         string operationCode,
         IEnumerable<TopicPartitionOffsetError> results,
-        int expectedCount) =>
+        IReadOnlyList<ConsumerOffsetTarget> expectedTargets) =>
         FromPartitionReports(
             operationCode,
             results,
-            expectedCount,
+            expectedTargets,
             Array.Empty<Error>());
 
     private static MutationProviderResult FromPartitionReports(
         string operationCode,
         IEnumerable<TopicPartitionOffsetError> partitions,
-        int expectedCount,
+        IReadOnlyList<ConsumerOffsetTarget> expectedTargets,
         IEnumerable<Error> groupErrors)
     {
         var partitionResults = partitions.ToArray();
-        var errors = groupErrors
-            .Concat(partitionResults.Select(result => result.Error))
+        var expected = ExpectedPartitions(expectedTargets);
+        var groupErrorArray = groupErrors
             .Where(error => error.IsError)
             .ToArray();
 
-        var successfulCount = partitionResults.Count(result => !result.Error.IsError);
-        if (partitionResults.Length == expectedCount && errors.Length == 0)
+        var seen = new HashSet<(string Topic, int Partition)>();
+        foreach (var result in partitionResults)
+        {
+            var key = (
+                result.TopicPartition.Topic,
+                result.TopicPartition.Partition.Value);
+            if (!expected.Contains(key) || !seen.Add(key))
+            {
+                return Malformed(
+                    operationCode,
+                    expected.Count,
+                    partitionResults.Count(item => !item.Error.IsError));
+            }
+        }
+
+        var successfulCount =
+            partitionResults.Count(result => !result.Error.IsError);
+        var partitionErrors = partitionResults
+            .Select(result => result.Error)
+            .Where(error => error.IsError)
+            .ToArray();
+
+        if (partitionResults.Length != expected.Count)
+        {
+            if (groupErrorArray.Length > 0 && successfulCount == 0)
+            {
+                return FromErrors(
+                    operationCode,
+                    groupErrorArray.Concat(partitionErrors).ToArray(),
+                    expected.Count,
+                    0);
+            }
+
+            return Malformed(
+                operationCode,
+                expected.Count,
+                successfulCount);
+        }
+
+        var errors = groupErrorArray
+            .Concat(partitionErrors)
+            .ToArray();
+
+        if (errors.Length == 0)
         {
             return Accepted(
                 $"{operationCode}_accepted",
-                Evidence(expectedCount, expectedCount, 0));
+                Evidence(expected.Count, expected.Count, 0));
+        }
+
+        if (groupErrorArray.Length > 0 && successfulCount > 0)
+        {
+            return Malformed(
+                operationCode,
+                expected.Count,
+                successfulCount);
         }
 
         return FromErrors(
             operationCode,
             errors,
-            expectedCount,
+            expected.Count,
             successfulCount);
     }
+
+    private static MutationProviderResult FromDeleteOffsetSuccess(
+        string operationCode,
+        IEnumerable<TopicPartition> partitions,
+        IReadOnlyList<ConsumerOffsetTarget> expectedTargets)
+    {
+        var expected = ExpectedPartitions(expectedTargets);
+        var actual = new HashSet<(string Topic, int Partition)>();
+
+        foreach (var partition in partitions)
+        {
+            var key = (partition.Topic, partition.Partition.Value);
+            if (!expected.Contains(key) || !actual.Add(key))
+            {
+                return Malformed(
+                    operationCode,
+                    expected.Count,
+                    actual.Count);
+            }
+        }
+
+        if (!actual.SetEquals(expected))
+        {
+            return Malformed(
+                operationCode,
+                expected.Count,
+                actual.Count);
+        }
+
+        return Accepted(
+            $"{operationCode}_accepted",
+            Evidence(expected.Count, expected.Count, 0));
+    }
+
+    private static HashSet<(string Topic, int Partition)> ExpectedPartitions(
+        IReadOnlyList<ConsumerOffsetTarget> expectedTargets) =>
+        expectedTargets
+            .Select(target => (target.TopicName, target.Partition))
+            .ToHashSet();
+
+    private static MutationProviderResult Malformed(
+        string operationCode,
+        int totalCount,
+        int reportedSuccessCount) =>
+        new(
+            MutationExecutionResultKind.ExecutionUnknown,
+            $"{operationCode}_provider_result_invalid",
+            Evidence(
+                totalCount,
+                Math.Clamp(reportedSuccessCount, 0, totalCount),
+                Math.Max(0, totalCount - reportedSuccessCount)));
 
     private static MutationProviderResult FromErrors(
         string operationCode,
