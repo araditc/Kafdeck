@@ -15,6 +15,11 @@ public sealed class ConfluentSchemaMutationAdapter :
     ISchemaMutationObservationPort,
     IDisposable
 {
+    private static readonly JsonSerializerOptions RequestJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     private const int MaxSubjectLength = 1_024;
     private const int MaxSchemaBytes = 4 * 1024 * 1024;
     private const int MaxReferences = 64;
@@ -892,7 +897,9 @@ public sealed class ConfluentSchemaMutationAdapter :
 
         if (body is not null)
         {
-            var json = JsonSerializer.Serialize(body);
+            var json = JsonSerializer.Serialize(
+                body,
+                RequestJsonOptions);
             request.Content = new StringContent(
                 json,
                 Encoding.UTF8,
