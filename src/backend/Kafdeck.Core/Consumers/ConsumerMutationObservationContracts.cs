@@ -12,8 +12,8 @@ public sealed record ConsumerMutationPartitionObservation(
     string Topic,
     int Partition,
     long? CommittedOffset,
-    long LowWatermark,
-    long HighWatermark,
+    long? LowWatermark,
+    long? HighWatermark,
     long? TimestampResolvedOffset);
 
 public sealed record ConsumerMutationObservation(
