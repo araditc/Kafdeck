@@ -196,7 +196,7 @@ public sealed class SchemaMutationExecutionService
                             continue;
                         }
 
-                        return VerificationObservation.Verified(
+                        return VerificationObservation.Observed(
                             candidate.Version,
                             candidate.SchemaId);
                     }
@@ -319,7 +319,7 @@ public sealed class SchemaMutationExecutionService
                     }
 
                     return observed == canonical.RequestedMode
-                        ? VerificationObservation.Verified()
+                        ? VerificationObservation.Observed()
                         : VerificationObservation.NotVerified();
                 },
                 cancellationToken)
@@ -412,7 +412,7 @@ public sealed class SchemaMutationExecutionService
                           observed.Value.IsSoftDeleted;
 
                     return isVerified
-                        ? VerificationObservation.Verified()
+                        ? VerificationObservation.Observed()
                         : VerificationObservation.NotVerified();
                 },
                 cancellationToken)
@@ -798,7 +798,7 @@ public sealed class SchemaMutationExecutionService
         int? Version,
         int? SchemaId)
     {
-        public static VerificationObservation Verified(
+        public static VerificationObservation Observed(
             int? version = null,
             int? schemaId = null) =>
             new(true, version, schemaId);
