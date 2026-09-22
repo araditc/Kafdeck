@@ -20,6 +20,7 @@ public sealed class KafkaConsumerMutationIntegrationTests
 
         const string topic = "kafdeck-ci-smoke";
         var groupId = $"kafdeck-w35-{Guid.NewGuid():N}";
+        var groupDeleteId = $"{groupId}-delete";
         var profile = new ClusterProfile(
             "plaintext",
             ["localhost:9092"],
@@ -36,7 +37,7 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 new[] { profile },
                 new SecretResolver());
         using var cancellation =
-            new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
         await CreateCommittedOffsetOnUnsubscribedTopicAsync(
             groupId,
@@ -156,10 +157,21 @@ public sealed class KafkaConsumerMutationIntegrationTests
                     offsetsDeleted.SafeEvidence["verification.state"]);
             }
 
+            // Group deletion is a separate provider operation. Keep its
+            // integration fixture independent from offset deletion because
+            // deleting the last committed offset may itself make an empty
+            // group disappear on some Kafka versions.
+            await CreateCommittedOffsetOnUnsubscribedTopicAsync(
+                groupDeleteId,
+                topic,
+                profile.Id,
+                observations,
+                cancellation.Token);
+
             var groupDeletePlan = await planner.PlanDeleteAsync(
                 new ConsumerDeleteRequest(
                     profile.Id,
-                    groupId,
+                    groupDeleteId,
                     ConsumerDeleteMode.Group),
                 cancellation.Token);
 
@@ -177,7 +189,7 @@ public sealed class KafkaConsumerMutationIntegrationTests
 
             var final = await observations.ObserveAsync(
                 profile.Id,
-                groupId,
+                groupDeleteId,
                 Array.Empty<ConsumerMutationObservationTarget>(),
                 Operation(),
                 cancellation.Token);
@@ -187,15 +199,20 @@ public sealed class KafkaConsumerMutationIntegrationTests
         }
         finally
         {
-            try
+            foreach (var cleanupGroupId in new[] { groupId, groupDeleteId })
             {
-                await mutations.DeleteAsync(
-                    new ConsumerDeleteMutation(profile.Id, groupId),
-                    CancellationToken.None);
-            }
-            catch
-            {
-                // Best-effort cleanup for a unique integration-test group.
+                try
+                {
+                    await mutations.DeleteAsync(
+                        new ConsumerDeleteMutation(
+                            profile.Id,
+                            cleanupGroupId),
+                        CancellationToken.None);
+                }
+                catch
+                {
+                    // Best-effort cleanup for unique integration-test groups.
+                }
             }
         }
     }
