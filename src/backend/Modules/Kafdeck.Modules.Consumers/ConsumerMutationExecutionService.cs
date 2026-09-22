@@ -299,6 +299,7 @@ public sealed class ConsumerMutationExecutionService
                 canonical.GroupFingerprint) ||
             canonical.Targets is null ||
             canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets ||
+            canonical.Targets.Any(static target => target is null) ||
             canonical.TotalBackwardDistance < 0 ||
             canonical.TotalForwardDistance < 0 ||
             canonical.MissingCommittedOffsetCount < 0 ||
@@ -402,7 +403,8 @@ public sealed class ConsumerMutationExecutionService
         targets = Array.Empty<ConsumerOffsetTarget>();
         if (canonical.Mode != ConsumerDeleteMode.Offsets ||
             canonical.Targets is null ||
-            canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets)
+            canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets ||
+            canonical.Targets.Any(static target => target is null))
         {
             return false;
         }
