@@ -168,16 +168,11 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 observations,
                 cancellation.Token);
 
-            var groupDeletePlan = await planner.PlanDeleteAsync(
-                new ConsumerDeleteRequest(
-                    profile.Id,
-                    groupDeleteId,
-                    ConsumerDeleteMode.Group),
+            var groupDeletePlan = await EventuallyPlanGroupDeleteAsync(
+                planner,
+                profile.Id,
+                groupDeleteId,
                 cancellation.Token);
-
-            Assert.True(
-                groupDeletePlan.IsSuccess,
-                groupDeletePlan.Failure?.SafeMessage);
 
             var groupDeleted = await service.DeleteAsync(
                 groupDeletePlan.Plan!.Canonical,
@@ -315,6 +310,48 @@ public sealed class KafkaConsumerMutationIntegrationTests
         Assert.Equal(
             1,
             Assert.Single(observed.Partitions).CommittedOffset);
+    }
+
+    private static async Task<
+        ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>>
+        EventuallyPlanGroupDeleteAsync(
+            ConsumerMutationPlanner planner,
+            string clusterId,
+            string groupId,
+            CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+        ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>? last = null;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            last = await planner.PlanDeleteAsync(
+                new ConsumerDeleteRequest(
+                    clusterId,
+                    groupId,
+                    ConsumerDeleteMode.Group),
+                cancellationToken);
+
+            if (last.IsSuccess)
+                return last;
+
+            if (last.Failure?.Code is not (
+                    ConsumerMutationPlanningFailureCode.ObservationFailed or
+                    ConsumerMutationPlanningFailureCode.ProviderUnavailable))
+            {
+                Assert.Fail(last.Failure?.SafeMessage ?? "Group deletion planning failed.");
+            }
+
+            await Task.Delay(
+                    TimeSpan.FromMilliseconds(200),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Assert.Fail(
+            $"Consumer group deletion inventory did not stabilize: {last?.Failure?.Code}");
+        throw new InvalidOperationException();
     }
 
     private static async Task EventuallyGroupEmptyAsync(
