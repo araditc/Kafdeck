@@ -284,11 +284,16 @@ public sealed class ConsumerMutationPreconditionValidator
             }
 
             var key = $"consumer.partition/{target.Ordinal:D4}";
+            var observedFingerprint = includeAllCommittedOffsets
+                ? ConsumerMutationCanonicalization
+                    .CommittedOffsetInventoryFingerprint(partition)
+                : ConsumerMutationCanonicalization
+                    .PartitionPreconditionFingerprint(partition);
+
             if (!preconditions.TryGetValue(key, out var expected) ||
                 !string.Equals(
                     expected,
-                    ConsumerMutationCanonicalization
-                        .PartitionPreconditionFingerprint(partition),
+                    observedFingerprint,
                     StringComparison.Ordinal))
             {
                 return Stale("consumer_precondition_partition_changed");
