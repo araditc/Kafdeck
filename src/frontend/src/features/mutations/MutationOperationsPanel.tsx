@@ -4,19 +4,8 @@ import {
   mutationApi,
   type MutationStatus,
 } from './mutationApi.js';
+import { mutationExecutionSurface } from './mutationExecutionSurface.js';
 import { MutationPreviewWorkflows } from './MutationPreviewWorkflows.js';
-
-const noMaterialExecutionKinds = new Set([
-  'topicCreate',
-  'topicAlter',
-  'topicIncreasePartitions',
-  'topicDelete',
-  'consumerOffsetAlter',
-  'consumerDelete',
-  'schemaAlter',
-  'schemaDelete',
-  'recordsPurge',
-]);
 
 const preDispatchStates = new Set([
   'previewed',
@@ -192,10 +181,9 @@ export function MutationOperationsPanel({ clusterId }: { clusterId: string }) {
     }
   };
 
-  const canExecuteWithoutMaterial = selected !== null &&
-    selected.state === 'ready' &&
-    !selected.requiresExecutionMaterial &&
-    noMaterialExecutionKinds.has(selected.operationKind);
+  const executionSurface = selected === null
+    ? 'none'
+    : mutationExecutionSurface(selected);
 
   const executeRecord = () => {
     if (!selected) return;
@@ -254,16 +242,16 @@ export function MutationOperationsPanel({ clusterId }: { clusterId: string }) {
           <button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.reject(selected))}>Reject</button>{' '}
         </>}
         {preDispatchStates.has(selected.state) && <button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.cancel(selected))}>Cancel before dispatch</button>}
-        {canExecuteWithoutMaterial && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeWithoutMaterial(selected))}>Execute governed mutation</button></>}
-        {selected.state === 'ready' && selected.operationKind === 'connectDelete' && !selected.requiresExecutionMaterial && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute connector deletion</button></>}
-        {selected.state === 'ready' && selected.operationKind === 'connectAlter' && !selected.requiresExecutionMaterial && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute admitted connector control</button></>}
+        {executionSurface === 'genericNoMaterial' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeWithoutMaterial(selected))}>Execute governed mutation</button></>}
+        {executionSurface === 'connectNoMaterial' && selected.operationKind === 'connectDelete' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute connector deletion</button></>}
+        {executionSurface === 'connectNoMaterial' && selected.operationKind === 'connectAlter' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute admitted connector control</button></>}
       </div>
 
-      {selected.state === 'ready' && selected.operationKind === 'recordProduce' && selected.requiresExecutionMaterial && <fieldset disabled={loading}><legend>Re-submit record execution material</legend><p>This material must digest-match the preview and is cleared from UI state after execution.</p><label htmlFor="execute-record-key">UTF-8 key (optional)</label>{' '}<input id="execute-record-key" value={recordKey} onChange={event => setRecordKey(event.target.value)} autoComplete="off" /><br /><label htmlFor="execute-record-value">UTF-8 value</label><br /><textarea id="execute-record-value" value={recordValue} onChange={event => setRecordValue(event.target.value)} rows={5} /><br /><label htmlFor="execute-record-headers">Headers, one name=value per line</label><br /><textarea id="execute-record-headers" value={recordHeaders} onChange={event => setRecordHeaders(event.target.value)} rows={4} /><br /><button type="button" disabled={!recordValue} onClick={executeRecord}>Execute with matching record material</button></fieldset>}
+      {executionSurface === 'recordMaterial' && <fieldset disabled={loading}><legend>Re-submit record execution material</legend><p>This material must digest-match the preview and is cleared from UI state after execution.</p><label htmlFor="execute-record-key">UTF-8 key (optional)</label>{' '}<input id="execute-record-key" value={recordKey} onChange={event => setRecordKey(event.target.value)} autoComplete="off" /><br /><label htmlFor="execute-record-value">UTF-8 value</label><br /><textarea id="execute-record-value" value={recordValue} onChange={event => setRecordValue(event.target.value)} rows={5} /><br /><label htmlFor="execute-record-headers">Headers, one name=value per line</label><br /><textarea id="execute-record-headers" value={recordHeaders} onChange={event => setRecordHeaders(event.target.value)} rows={4} /><br /><button type="button" disabled={!recordValue} onClick={executeRecord}>Execute with matching record material</button></fieldset>}
 
-      {selected.state === 'ready' && selected.operationKind === 'schemaCreate' && selected.requiresExecutionMaterial && <fieldset disabled={loading}><legend>Re-submit schema execution material</legend><p>The schema source must match the admitted fingerprint and is cleared from UI state after execution.</p><label htmlFor="execute-schema-source">Schema source</label><br /><textarea id="execute-schema-source" value={schemaExecutionSource} onChange={event => setSchemaExecutionSource(event.target.value)} rows={8} /><br /><button type="button" disabled={!schemaExecutionSource.trim()} onClick={executeSchema}>Execute schema registration</button></fieldset>}
+      {executionSurface === 'schemaMaterial' && <fieldset disabled={loading}><legend>Re-submit schema execution material</legend><p>The schema source must match the admitted fingerprint and is cleared from UI state after execution.</p><label htmlFor="execute-schema-source">Schema source</label><br /><textarea id="execute-schema-source" value={schemaExecutionSource} onChange={event => setSchemaExecutionSource(event.target.value)} rows={8} /><br /><button type="button" disabled={!schemaExecutionSource.trim()} onClick={executeSchema}>Execute schema registration</button></fieldset>}
 
-      {selected.state === 'ready' && selected.requiresExecutionMaterial && (selected.operationKind === 'connectCreate' || selected.operationKind === 'connectAlter') && <fieldset disabled={loading}><legend>Re-submit connector configuration</legend><p>Connector create/update configuration must digest-match the admitted preview. Secret-bearing values remain browser-memory/request material and are cleared after execution.</p><label htmlFor="execute-connect-config">Configuration, one key=value per line</label><br /><textarea id="execute-connect-config" value={connectExecutionConfiguration} onChange={event => setConnectExecutionConfiguration(event.target.value)} rows={8} autoComplete="off" /><br /><button type="button" disabled={!connectExecutionConfiguration.trim()} onClick={executeConnectConfiguration}>Execute connector configuration mutation</button></fieldset>}
+      {executionSurface === 'connectMaterial' && <fieldset disabled={loading}><legend>Re-submit connector configuration</legend><p>Connector create/update configuration must digest-match the admitted preview. Secret-bearing values remain browser-memory/request material and are cleared after execution.</p><label htmlFor="execute-connect-config">Configuration, one key=value per line</label><br /><textarea id="execute-connect-config" value={connectExecutionConfiguration} onChange={event => setConnectExecutionConfiguration(event.target.value)} rows={8} autoComplete="off" /><br /><button type="button" disabled={!connectExecutionConfiguration.trim()} onClick={executeConnectConfiguration}>Execute connector configuration mutation</button></fieldset>}
     </article>}
   </section>;
 }
