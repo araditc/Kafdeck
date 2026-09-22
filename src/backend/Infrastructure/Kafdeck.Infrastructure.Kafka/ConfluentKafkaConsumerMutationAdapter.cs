@@ -58,7 +58,7 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                                             target.TopicName,
                                             new Partition(target.Partition),
                                             new Offset(target.Offset)))
-                                        .ToArray()),
+                                        .ToList()),
                             ],
                             new AlterConsumerGroupOffsetsOptions
                             {
