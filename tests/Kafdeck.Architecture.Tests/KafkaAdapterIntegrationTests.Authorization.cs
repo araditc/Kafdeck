@@ -1,6 +1,7 @@
 using Kafdeck.Core.Kafka;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Kafka;
+using Kafdeck.Modules.Administration;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -43,4 +44,85 @@ public sealed class KafkaAdapterIntegrationTestsAuthorization
         Assert.False(configuration.Failure.IsRetryable);
         Assert.DoesNotContain(secretsDirectory, configuration.Failure.SafeMessage, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Restricted_principal_cannot_execute_consumer_offset_mutation()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("KAFDECK_RUN_KAFKA_INTEGRATION"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var secretsDirectory =
+            Environment.GetEnvironmentVariable("KAFDECK_TEST_SECRETS_DIR");
+        Assert.False(string.IsNullOrWhiteSpace(secretsDirectory));
+        Assert.True(Path.IsPathFullyQualified(secretsDirectory));
+
+        var username = SecretReference.Parse(
+            $"file:{Path.Combine(secretsDirectory!, "restricted.username")}");
+        var password = SecretReference.Parse(
+            $"file:{Path.Combine(secretsDirectory, "restricted.password")}");
+        var profile = new ClusterProfile(
+            "restricted",
+            ["localhost:9094"],
+            KafkaSecurityProtocol.SaslPlaintext,
+            null,
+            new SaslProfile(
+                SaslMechanism.Plain,
+                username,
+                password));
+
+        using var adapter = new ConfluentKafkaConsumerMutationAdapter(
+            [profile],
+            new SecretResolver());
+        using var cancellation =
+            new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        var result = await adapter.AlterOffsetsAsync(
+            new ConsumerOffsetAlterMutation(
+                profile.Id,
+                "kafdeck-w35-restricted",
+                new[]
+                {
+                    new ConsumerOffsetTarget(
+                        "kafdeck-ci-smoke",
+                        0,
+                        1),
+                }),
+            cancellation.Token);
+
+        Assert.Equal(
+            MutationExecutionResultKind.FailedDefinitive,
+            result.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_rejected",
+            result.ResultCode);
+        Assert.NotNull(result.SafeEvidence);
+        Assert.True(
+            result.SafeEvidence!.TryGetValue(
+                "provider.error.codes",
+                out var providerCodes));
+        Assert.Contains(
+            providerCodes!.Split(',', StringSplitOptions.RemoveEmptyEntries),
+            code =>
+                code is
+                    "kafka_groupauthorizationfailed" or
+                    "kafka_topicauthorizationfailed" or
+                    "kafka_clusterauthorizationfailed");
+        Assert.DoesNotContain(
+            secretsDirectory,
+            result.ResultCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            secretsDirectory,
+            string.Join(
+                "\n",
+                result.SafeEvidence?.Select(pair => $"{pair.Key}={pair.Value}")
+                ?? Array.Empty<string>()),
+            StringComparison.Ordinal);
+    }
+
 }

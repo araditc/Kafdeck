@@ -271,7 +271,8 @@
       "kafdeck.modules.consumers": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )"
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
         }
       },
       "kafdeck.modules.schemas": {
