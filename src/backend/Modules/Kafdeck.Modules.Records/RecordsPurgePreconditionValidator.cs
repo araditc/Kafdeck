@@ -1,3 +1,4 @@
+using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
@@ -132,7 +133,7 @@ public sealed class RecordsPurgePreconditionValidator
                         target.TopicName,
                         target.Partition))
                     .ToArray(),
-                new Core.Kafka.KafkaOperationContext(
+                new KafkaOperationContext(
                     _timeProvider.GetUtcNow()
                         .Add(_policy.ObservationTimeout)),
                 cancellationToken)
