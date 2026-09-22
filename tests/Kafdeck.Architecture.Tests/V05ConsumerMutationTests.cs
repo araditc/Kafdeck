@@ -356,7 +356,10 @@ public sealed class V05ConsumerMutationTests
                 ConsumerDeleteMode.Group));
 
         Assert.True(group.IsSuccess);
-        Assert.Empty(group.Plan!.Canonical.Targets);
+        Assert.Single(group.Plan!.Canonical.Targets);
+        Assert.Equal("orders", group.Plan.Canonical.Targets[0].TopicName);
+        Assert.Equal(0, group.Plan.Canonical.Targets[0].Partition);
+        Assert.Equal(10, group.Plan.Canonical.Targets[0].CommittedOffset);
         Assert.Equal(MutationRiskClass.High, group.Plan.Risk.RiskClass);
 
         port.Current = Observation(
@@ -375,6 +378,57 @@ public sealed class V05ConsumerMutationTests
         Assert.Equal(
             ConsumerMutationPlanningFailureCode.MissingCommittedOffset,
             missing.Failure!.Code);
+    }
+
+    [Fact]
+    public async Task Whole_group_delete_becomes_stale_when_offset_inventory_changes()
+    {
+        var original = Observation(
+            "g",
+            ConsumerGroupState.Empty,
+            Partition("orders", 0, 10, 0, 100, null));
+        var port = new FakeObservationPort(original);
+        var planner = new ConsumerMutationPlanner(
+            port,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var planned = await planner.PlanDeleteAsync(
+            new ConsumerDeleteRequest(
+                "prod",
+                "g",
+                ConsumerDeleteMode.Group));
+
+        Assert.True(planned.IsSuccess, planned.Failure?.SafeMessage);
+        Assert.Single(planned.Plan!.Canonical.Targets);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Plan.Intent,
+            planned.Plan.Risk,
+            "w35-group-delete",
+            Now.AddMinutes(5),
+            Now,
+            "group-delete-inventory");
+
+        port.Current = Observation(
+            "g",
+            ConsumerGroupState.Empty,
+            Partition("orders", 0, 10, 0, 100, null),
+            Partition("payments", 0, 7, 0, 50, null));
+
+        var guard = new ConsumerMutationPreconditionValidator(
+            port,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var result = await guard.ValidateAsync(operation.Snapshot);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.StalePreview,
+            result.Outcome);
+        Assert.Equal(
+            "consumer_precondition_offset_inventory_changed",
+            result.ResultCode);
+        Assert.True(port.LastIncludeAllCommittedOffsets);
     }
 
     [Fact]
@@ -926,14 +980,18 @@ public sealed class V05ConsumerMutationTests
         public ConsumerMutationObservation Current { get; set; }
         public IReadOnlyList<ConsumerMutationObservationTarget>? LastTargets { get; private set; }
 
+        public bool LastIncludeAllCommittedOffsets { get; private set; }
+
         public Task<KafkaResult<ConsumerMutationObservation>> ObserveAsync(
             string clusterId,
             string groupId,
             IReadOnlyList<ConsumerMutationObservationTarget> targets,
             KafkaOperationContext operation,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool includeAllCommittedOffsets = false)
         {
             LastTargets = targets;
+            LastIncludeAllCommittedOffsets = includeAllCommittedOffsets;
             var now = Now;
             return Task.FromResult(
                 KafkaResult<ConsumerMutationObservation>.Success(
