@@ -24,6 +24,7 @@ export interface MutationStatus {
   riskClass: MutationRiskClass;
   confirmationMode: MutationConfirmationMode;
   requiresIndependentApproval: boolean;
+  requiresExecutionMaterial: boolean;
   state: MutationOperationState;
   previewHash: string;
   previewExpiresAtUtc: string;
