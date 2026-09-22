@@ -142,6 +142,7 @@ public static class KafdeckMutationEndpoints
             .RequireKafdeckAntiforgery();
 
         app.MapKafdeckMutationApprovalEndpoints();
+        app.MapKafdeckV05OpenApi();
         return app;
     }
 
