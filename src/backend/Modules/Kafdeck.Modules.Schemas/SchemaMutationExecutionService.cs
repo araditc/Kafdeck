@@ -40,6 +40,9 @@ public sealed record SchemaMutationVerificationPolicy
 
 public sealed class SchemaMutationExecutionService
 {
+    private static readonly TimeSpan ExecutionCompletionReserve =
+        TimeSpan.FromMilliseconds(250);
+
     private readonly ISchemaMutationPort _mutations;
     private readonly ISchemaCatalogReadPort _catalog;
     private readonly ISchemaMutationObservationPort _observations;
@@ -127,12 +130,12 @@ public sealed class SchemaMutationExecutionService
             "schema.id");
 
         var verification = await VerifyUntilAsync(
-                async token =>
+                async (verificationDeadlineUtc, token) =>
                 {
                     var versions = await _catalog.ListVersionsAsync(
                             canonical.ClusterId,
                             canonical.Subject,
-                            Observation(),
+                            Observation(verificationDeadlineUtc),
                             token)
                         .ConfigureAwait(false);
 
@@ -203,7 +206,8 @@ public sealed class SchemaMutationExecutionService
 
                     return VerificationObservation.NotVerified();
                 },
-                cancellationToken)
+                cancellationToken,
+                context.ExecutionDeadlineUtc)
             .ConfigureAwait(false);
 
         if (verification.Verified)
@@ -238,7 +242,8 @@ public sealed class SchemaMutationExecutionService
 
     public async Task<MutationProviderResult> AlterCompatibilityAsync(
         SchemaCompatibilityCanonicalIntent canonical,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? executionDeadlineUtc = null)
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
@@ -277,7 +282,7 @@ public sealed class SchemaMutationExecutionService
         }
 
         var verified = await VerifyUntilAsync(
-                async token =>
+                async (verificationDeadlineUtc, token) =>
                 {
                     SchemaCompatibilityMode observed;
 
@@ -288,7 +293,7 @@ public sealed class SchemaMutationExecutionService
                             await _catalog.GetCompatibilityAsync(
                                     canonical.ClusterId,
                                     canonical.Subject!,
-                                    Observation(),
+                                    Observation(verificationDeadlineUtc),
                                     token)
                                 .ConfigureAwait(false);
 
@@ -305,7 +310,7 @@ public sealed class SchemaMutationExecutionService
                         var result =
                             await _catalog.GetGlobalCompatibilityAsync(
                                     canonical.ClusterId,
-                                    Observation(),
+                                    Observation(verificationDeadlineUtc),
                                     token)
                                 .ConfigureAwait(false);
 
@@ -322,7 +327,8 @@ public sealed class SchemaMutationExecutionService
                         ? VerificationObservation.Observed()
                         : VerificationObservation.NotVerified();
                 },
-                cancellationToken)
+                cancellationToken,
+                executionDeadlineUtc)
             .ConfigureAwait(false);
 
         if (verified.Verified)
@@ -348,7 +354,8 @@ public sealed class SchemaMutationExecutionService
 
     public async Task<MutationProviderResult> DeleteAsync(
         SchemaDeleteCanonicalIntent canonical,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? executionDeadlineUtc = null)
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
@@ -386,7 +393,7 @@ public sealed class SchemaMutationExecutionService
         }
 
         var verified = await VerifyUntilAsync(
-                async token =>
+                async (verificationDeadlineUtc, token) =>
                 {
                     var observed =
                         await _observations.ObserveDeleteTargetAsync(
@@ -415,7 +422,8 @@ public sealed class SchemaMutationExecutionService
                         ? VerificationObservation.Observed()
                         : VerificationObservation.NotVerified();
                 },
-                cancellationToken)
+                cancellationToken,
+                executionDeadlineUtc)
             .ConfigureAwait(false);
 
         if (verified.Verified)
@@ -647,16 +655,36 @@ public sealed class SchemaMutationExecutionService
     }
 
     private async Task<VerificationObservation> VerifyUntilAsync(
-        Func<CancellationToken, Task<VerificationObservation>> observe,
-        CancellationToken cancellationToken)
+        Func<DateTimeOffset, CancellationToken, Task<VerificationObservation>> observe,
+        CancellationToken cancellationToken,
+        DateTimeOffset? executionDeadlineUtc = null)
     {
-        var deadline =
-            _timeProvider.GetUtcNow().Add(
-                _verification.Timeout);
+        var now = _timeProvider.GetUtcNow();
+        var deadline = now.Add(_verification.Timeout);
+
+        if (executionDeadlineUtc.HasValue)
+        {
+            var safeExecutionDeadline =
+                executionDeadlineUtc.Value - ExecutionCompletionReserve;
+            if (safeExecutionDeadline < deadline)
+            {
+                deadline = safeExecutionDeadline;
+            }
+        }
+
+        if (deadline <= now || cancellationToken.IsCancellationRequested)
+        {
+            return VerificationObservation.NotVerified();
+        }
+
+        using var verificationCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        verificationCancellation.CancelAfter(deadline - now);
+        var verificationToken = verificationCancellation.Token;
 
         while (_timeProvider.GetUtcNow() < deadline)
         {
-            if (cancellationToken.IsCancellationRequested)
+            if (verificationToken.IsCancellationRequested)
             {
                 return VerificationObservation.NotVerified();
             }
@@ -664,7 +692,8 @@ public sealed class SchemaMutationExecutionService
             try
             {
                 var result = await observe(
-                        cancellationToken)
+                        deadline,
+                        verificationToken)
                     .ConfigureAwait(false);
                 if (result.Verified)
                     return result;
@@ -694,7 +723,7 @@ public sealed class SchemaMutationExecutionService
                 await Task.Delay(
                         delay,
                         _timeProvider,
-                        cancellationToken)
+                        verificationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -706,10 +735,10 @@ public sealed class SchemaMutationExecutionService
         return VerificationObservation.NotVerified();
     }
 
-    private ReadViewOperationContext Observation() =>
+    private static ReadViewOperationContext Observation(
+        DateTimeOffset deadlineUtc) =>
         new(
-            _timeProvider.GetUtcNow().Add(
-                _verification.Timeout),
+            deadlineUtc,
             maxItems: 1_000,
             maxResponseBytes: 4 * 1024 * 1024);
 
@@ -875,7 +904,8 @@ public sealed class SchemaAlterExecutionHandler :
 
         return _service.AlterCompatibilityAsync(
             canonical,
-            cancellationToken);
+            cancellationToken,
+            context.ExecutionDeadlineUtc);
     }
 }
 
@@ -924,6 +954,7 @@ public sealed class SchemaDeleteExecutionHandler :
 
         return _service.DeleteAsync(
             canonical,
-            cancellationToken);
+            cancellationToken,
+            context.ExecutionDeadlineUtc);
     }
 }
