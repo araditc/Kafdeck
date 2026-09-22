@@ -128,7 +128,8 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 profile.Id,
                 groupId,
                 topic,
-                cancellation.Token);
+                cancellation.Token,
+                requireStableOffset: false);
             Assert.Null(
                 Assert.Single(afterOffsetDelete.Partitions).CommittedOffset);
 
@@ -319,7 +320,8 @@ public sealed class KafkaConsumerMutationIntegrationTests
             string clusterId,
             string groupId,
             string topic,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool requireStableOffset = true)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
         KafkaResult<ConsumerMutationObservation>? last = null;
@@ -332,7 +334,10 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 groupId,
                 new[]
                 {
-                    new ConsumerMutationObservationTarget(topic, 0),
+                    new ConsumerMutationObservationTarget(
+                        topic,
+                        0,
+                        RequireStableOffset: requireStableOffset),
                 },
                 Operation(),
                 cancellationToken);
