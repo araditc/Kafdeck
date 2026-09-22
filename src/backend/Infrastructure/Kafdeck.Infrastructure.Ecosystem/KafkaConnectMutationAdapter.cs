@@ -30,6 +30,7 @@ public sealed class KafkaConnectMutationAdapter :
     };
 
     private readonly IReadOnlyDictionary<string, HttpReadRuntime> _runtimes;
+    private readonly HashSet<string> _admittedMutationClusters;
     private readonly TimeProvider _timeProvider;
 
     public KafkaConnectMutationAdapter(
@@ -70,6 +71,13 @@ public sealed class KafkaConnectMutationAdapter :
                         handlerFactory(profile));
                 },
                 StringComparer.Ordinal);
+
+        _admittedMutationClusters = clusterProfiles
+            .Where(profile =>
+                profile.Connect?.MutationProviderProfile ==
+                KafkaConnectMutationProviderProfile.ConfluentCompatibleV1)
+            .Select(profile => profile.Id)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     public Task<ConnectMutationObservationResult<ConnectMutationCapabilities>>
@@ -107,6 +115,16 @@ public sealed class KafkaConnectMutationAdapter :
                     ConnectMutationObservationFailureCategory.NotConfigured,
                     "connect_not_configured",
                     "Kafka Connect is not configured for the requested cluster.",
+                    false));
+        }
+
+        if (!_admittedMutationClusters.Contains(clusterId))
+        {
+            return Task.FromResult(
+                ObservationFailed<ConnectMutationCapabilities>(
+                    ConnectMutationObservationFailureCategory.Unsupported,
+                    "connect_mutation_profile_not_admitted",
+                    "Kafka Connect mutation provider profile is not admitted for writes.",
                     false));
         }
 
@@ -644,6 +662,12 @@ public sealed class KafkaConnectMutationAdapter :
         {
             return FailedDefinitive(
                 $"{operationCode}_not_configured");
+        }
+
+        if (!_admittedMutationClusters.Contains(clusterId))
+        {
+            return FailedDefinitive(
+                $"{operationCode}_provider_profile_not_admitted");
         }
 
         try
