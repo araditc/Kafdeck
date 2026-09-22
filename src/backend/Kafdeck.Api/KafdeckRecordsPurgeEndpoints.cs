@@ -1,4 +1,3 @@
-using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Records;
 
@@ -19,10 +18,37 @@ public static class KafdeckRecordsPurgeEndpoints
                     string clusterId,
                     RecordsPurgePreviewRequest request,
                     HttpContext context,
+                    MutationRequestAuthorizationService authorization,
                     RecordsPurgePlanner planner,
                     MutationAdmissionService admission,
                     CancellationToken cancellationToken) =>
                 {
+                    var directTargets =
+                        MutationDirectRouteAuthorization.RecordsPurge(
+                            clusterId,
+                            request.Targets);
+                    if (directTargets is not null)
+                    {
+                        var outcome = authorization.AuthorizeTargets(
+                            context.User,
+                            directTargets);
+                        if (outcome == KafdeckAuthorizationOutcome.Unauthenticated)
+                        {
+                            return Results.Problem(
+                                statusCode: StatusCodes.Status401Unauthorized,
+                                type: "urn:kafdeck:problem:operator-authentication-required",
+                                title: "Operator authentication required");
+                        }
+
+                        if (outcome != KafdeckAuthorizationOutcome.Allowed)
+                        {
+                            return Results.Problem(
+                                statusCode: StatusCodes.Status403Forbidden,
+                                type: "urn:kafdeck:problem:mutation-authorization-denied",
+                                title: "Records purge access denied");
+                        }
+                    }
+
                     var planning = await planner
                         .PlanAsync(
                             new RecordsPurgeRequest(
@@ -81,9 +107,6 @@ public static class KafdeckRecordsPurgeEndpoints
                     };
                 })
             .WithName("v05-records-purge-preview")
-            .RequireKafdeckCollectionAuthorization(
-                AuthorizationAction.RecordsPurge,
-                "clusterId")
             .RequireKafdeckAntiforgery();
 
         return app;
