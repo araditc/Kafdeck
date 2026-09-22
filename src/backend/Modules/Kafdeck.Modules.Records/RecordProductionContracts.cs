@@ -364,8 +364,8 @@ public static class RecordProductionTemplateMaterializer
         foreach (var name in expected)
         {
             var value = variables[name] ?? throw new ArgumentException("Template variable value cannot be null.");
-            var valueBytes = Encoding.UTF8.GetByteCount(value);
-            if (valueBytes > MaxVariableValueBytes)
+            var variableValueBytes = Encoding.UTF8.GetByteCount(value);
+            if (variableValueBytes > MaxVariableValueBytes)
                 throw new ArgumentOutOfRangeException(
                     nameof(variables),
                     "Template variable value exceeds the hard byte ceiling.");
@@ -376,7 +376,7 @@ public static class RecordProductionTemplateMaterializer
             var placeholderBytes = Encoding.UTF8.GetByteCount(placeholder);
             var projectedBytes = checked(
                 (long)currentBytes +
-                (long)occurrences * (valueBytes - placeholderBytes));
+                (long)occurrences * (variableValueBytes - placeholderBytes));
             if (projectedBytes > MaxRenderedValueBytes)
                 throw new ArgumentOutOfRangeException(
                     nameof(variables),
