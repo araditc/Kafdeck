@@ -247,10 +247,11 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                         target.Topic,
                         new Partition(target.Partition));
 
-                    if (!committedByPartition.TryGetValue(
-                            partition,
-                            out var committedOffset) ||
-                        !earliest.TryGetValue(partition, out var low) ||
+                    committedByPartition.TryGetValue(
+                        partition,
+                        out var committedOffset);
+
+                    if (!earliest.TryGetValue(partition, out var low) ||
                         !latest.TryGetValue(partition, out var high))
                     {
                         throw new InvalidOperationException(
