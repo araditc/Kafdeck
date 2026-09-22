@@ -266,20 +266,28 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                     }
                 }
 
-                var earliest = await ListOffsetsAsync(
-                        client,
-                        partitions,
-                        OffsetSpec.Earliest(),
-                        timeout,
-                        token)
-                    .ConfigureAwait(false);
-                var latest = await ListOffsetsAsync(
-                        client,
-                        partitions,
-                        OffsetSpec.Latest(),
-                        timeout,
-                        token)
-                    .ConfigureAwait(false);
+                IReadOnlyDictionary<TopicPartition, long> earliest =
+                    new Dictionary<TopicPartition, long>();
+                IReadOnlyDictionary<TopicPartition, long> latest =
+                    new Dictionary<TopicPartition, long>();
+
+                if (!includeAllCommittedOffsets)
+                {
+                    earliest = await ListOffsetsAsync(
+                            client,
+                            partitions,
+                            OffsetSpec.Earliest(),
+                            timeout,
+                            token)
+                        .ConfigureAwait(false);
+                    latest = await ListOffsetsAsync(
+                            client,
+                            partitions,
+                            OffsetSpec.Latest(),
+                            timeout,
+                            token)
+                        .ConfigureAwait(false);
+                }
 
                 var timestampOffsets =
                     new Dictionary<TopicPartition, long?>();
@@ -330,9 +338,7 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                         if (!committedByPartition.TryGetValue(
                                 partition,
                                 out var committedOffset) ||
-                            committedOffset is null ||
-                            !earliest.TryGetValue(partition, out var low) ||
-                            !latest.TryGetValue(partition, out var high))
+                            committedOffset is null)
                         {
                             throw new InvalidOperationException(
                                 "Kafka returned an incomplete consumer offset inventory.");
@@ -343,8 +349,8 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                                 partition.Topic,
                                 partition.Partition.Value,
                                 committedOffset,
-                                low,
-                                high,
+                                null,
+                                null,
                                 null));
                     }
                 }
