@@ -115,9 +115,10 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 offsetDeletePlan.Plan!.Canonical,
                 cancellation.Token);
 
-            Assert.Equal(
-                MutationExecutionResultKind.AppliedVerified,
-                offsetsDeleted.ResultKind);
+            Assert.True(
+                offsetsDeleted.ResultKind == MutationExecutionResultKind.AppliedVerified,
+                $"offset delete outcome: {offsetsDeleted.ResultKind} / {offsetsDeleted.ResultCode} / " +
+                $"{string.Join(",", offsetsDeleted.SafeEvidence?.Select(pair => $"{pair.Key}={pair.Value}") ?? Array.Empty<string>())}");
 
             var afterOffsetDelete = await EventuallyObserveAsync(
                 observations,
