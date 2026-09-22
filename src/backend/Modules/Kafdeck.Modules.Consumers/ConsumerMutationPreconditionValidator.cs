@@ -165,12 +165,17 @@ public sealed class ConsumerMutationPreconditionValidator
             return Stale("consumer_delete_binding_changed");
         }
 
-        var observationTargets = canonical.Targets
-            .OrderBy(target => target.Ordinal)
-            .Select(target => new ConsumerMutationObservationTarget(
-                target.TopicName,
-                target.Partition))
-            .ToArray();
+        var includeAllCommittedOffsets =
+            canonical.Mode == ConsumerDeleteMode.Group;
+
+        var observationTargets = includeAllCommittedOffsets
+            ? Array.Empty<ConsumerMutationObservationTarget>()
+            : canonical.Targets
+                .OrderBy(target => target.Ordinal)
+                .Select(target => new ConsumerMutationObservationTarget(
+                    target.TopicName,
+                    target.Partition))
+                .ToArray();
 
         return await ValidateObservedStateAsync(
                 operation,
@@ -178,7 +183,8 @@ public sealed class ConsumerMutationPreconditionValidator
                 observationTargets,
                 canonical.Targets.Select(
                     target => (target.Ordinal, target.TopicName, target.Partition)),
-                cancellationToken)
+                cancellationToken,
+                includeAllCommittedOffsets: includeAllCommittedOffsets)
             .ConfigureAwait(false);
     }
 
@@ -190,7 +196,8 @@ public sealed class ConsumerMutationPreconditionValidator
         CancellationToken cancellationToken,
         IReadOnlyDictionary<
             (string Topic, int Partition),
-            ConsumerOffsetCanonicalTarget>? alterTargets = null)
+            ConsumerOffsetCanonicalTarget>? alterTargets = null,
+        bool includeAllCommittedOffsets = false)
     {
         var observed = await _observations.ObserveAsync(
                 operation.ClusterId,
@@ -198,7 +205,8 @@ public sealed class ConsumerMutationPreconditionValidator
                 observationTargets,
                 new KafkaOperationContext(
                     _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout)),
-                cancellationToken)
+                cancellationToken,
+                includeAllCommittedOffsets)
             .ConfigureAwait(false);
 
         if (!observed.IsSuccess || observed.Value is null)
@@ -242,6 +250,10 @@ public sealed class ConsumerMutationPreconditionValidator
             return Stale("consumer_precondition_group_changed");
         }
 
+        var expectedTargets = canonicalTargets
+            .OrderBy(item => item.Ordinal)
+            .ToArray();
+
         var byPartition = new Dictionary<
             (string Topic, int Partition),
             ConsumerMutationPartitionObservation>();
@@ -256,7 +268,13 @@ public sealed class ConsumerMutationPreconditionValidator
             }
         }
 
-        foreach (var target in canonicalTargets.OrderBy(item => item.Ordinal))
+        if (includeAllCommittedOffsets &&
+            byPartition.Count != expectedTargets.Length)
+        {
+            return Stale("consumer_precondition_offset_inventory_changed");
+        }
+
+        foreach (var target in expectedTargets)
         {
             if (!byPartition.TryGetValue(
                     (target.Topic, target.Partition),
@@ -290,7 +308,7 @@ public sealed class ConsumerMutationPreconditionValidator
             }
         }
 
-        if (preconditions.Count != observationTargets.Count + 1)
+        if (preconditions.Count != expectedTargets.Length + 1)
         {
             return Stale("consumer_precondition_shape_changed");
         }
