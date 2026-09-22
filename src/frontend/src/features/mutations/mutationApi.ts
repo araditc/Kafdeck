@@ -195,7 +195,7 @@ async function csrf(signal?: AbortSignal): Promise<CsrfToken> {
 async function postJson<T>(
   path: string,
   body: unknown,
-  options?: { idempotencyKey?: string; signal?: AbortSignal },
+  options?: { idempotencyKey?: string | undefined; signal?: AbortSignal | undefined },
 ): Promise<T> {
   const token = await csrf(options?.signal);
   const headers: Record<string, string> = {
