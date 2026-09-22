@@ -43,7 +43,6 @@ public sealed class KafkaConsumerMutationIntegrationTests
             topic,
             profile.Id,
             observations,
-            mutations,
             cancellation.Token);
 
         try
@@ -202,7 +201,6 @@ public sealed class KafkaConsumerMutationIntegrationTests
             "kafdeck-ci-smoke",
             profile.Id,
             observations,
-            mutations,
             cancellation.Token);
     }
 
@@ -211,7 +209,6 @@ public sealed class KafkaConsumerMutationIntegrationTests
         string targetTopic,
         string clusterId,
         IConsumerMutationObservationPort observations,
-        IConsumerMutationPort mutations,
         CancellationToken cancellationToken)
     {
         const string controlTopic = "kafdeck-w35-control";
@@ -223,6 +220,30 @@ public sealed class KafkaConsumerMutationIntegrationTests
             AutoOffsetReset = AutoOffsetReset.Earliest,
         };
 
+        // First establish a real target-topic subscription and committed offset.
+        using (var consumer =
+               new ConsumerBuilder<Ignore, Ignore>(config).Build())
+        {
+            consumer.Subscribe(targetTopic);
+            var consumed = consumer.Consume(
+                TimeSpan.FromSeconds(10));
+            Assert.NotNull(consumed);
+            Assert.Equal(targetTopic, consumed.Topic);
+            Assert.Equal(0, consumed.Partition.Value);
+
+            consumer.Commit(
+                new[]
+                {
+                    new TopicPartitionOffset(
+                        targetTopic,
+                        new Partition(0),
+                        new Offset(1)),
+                });
+            consumer.Close();
+        }
+
+        // Rejoin the same group with a disjoint subscription so the target
+        // offset becomes stale rather than actively subscribed state.
         using (var consumer =
                new ConsumerBuilder<Ignore, Ignore>(config).Build())
         {
@@ -239,23 +260,6 @@ public sealed class KafkaConsumerMutationIntegrationTests
             clusterId,
             groupId,
             cancellationToken);
-
-        var initialOffset = await mutations.AlterOffsetsAsync(
-            new ConsumerOffsetAlterMutation(
-                clusterId,
-                groupId,
-                new[]
-                {
-                    new ConsumerOffsetTarget(
-                        targetTopic,
-                        0,
-                        1),
-                }),
-            cancellationToken);
-
-        Assert.Equal(
-            MutationExecutionResultKind.AppliedUnverified,
-            initialOffset.ResultKind);
 
         var observed = await EventuallyObserveAsync(
             observations,
