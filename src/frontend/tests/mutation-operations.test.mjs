@@ -4,8 +4,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MutationOperationsPanel } from '../dist/test-source/features/mutations/MutationOperationsPanel.js';
 
-function renderPanel() {
-  return renderToStaticMarkup(React.createElement(MutationOperationsPanel, { clusterId: 'prod' }));
+function renderPanel(enabled = true) {
+  return renderToStaticMarkup(React.createElement(MutationOperationsPanel, { clusterId: 'prod', enabled }));
 }
 
 test('v0.5 mutation UI exposes governed lifecycle, typed preview and independent approval landmarks', () => {
@@ -25,6 +25,12 @@ test('v0.5 mutation UI exposes governed lifecycle, typed preview and independent
   assert.match(markup, /currently authorized/);
   assert.match(markup, /frozen previews/);
   assert.match(markup, /Unknown or partial outcomes are never presented as safe retries/);
+});
+
+test('v0.5 mutation UI is omitted when mutation capability is disabled', () => {
+  const markup = renderPanel(false);
+
+  assert.equal(markup, '');
 });
 
 test('v0.5 mutation preview controls have explicit labels and bounded governance guidance', () => {

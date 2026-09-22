@@ -93,7 +93,13 @@ function pairMap(source: string): Record<string, string> {
   return result;
 }
 
-export function MutationOperationsPanel({ clusterId }: { clusterId: string }) {
+type MutationOperationsPanelProps = {
+  clusterId: string;
+  enabled?: boolean;
+};
+
+export function MutationOperationsPanel({ clusterId, enabled }: MutationOperationsPanelProps) {
+  const [mutationAvailable, setMutationAvailable] = useState<boolean | null>(enabled ?? null);
   const [approvals, setApprovals] = useState<MutationStatus[]>([]);
   const [selected, setSelected] = useState<MutationStatus | null>(null);
   const [lookupId, setLookupId] = useState('');
@@ -123,18 +129,34 @@ export function MutationOperationsPanel({ clusterId }: { clusterId: string }) {
   const loadApprovals = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await mutationApi.listApprovals(50, signal);
+      setMutationAvailable(true);
       setApprovals(response.items);
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') return;
+      if ((reason instanceof MutationApiProblem && reason.status === 404) ||
+          reason instanceof SyntaxError) {
+        setMutationAvailable(false);
+        setApprovals([]);
+        setSelected(null);
+        setError(null);
+        return;
+      }
+
+      setMutationAvailable(true);
       setError(describeProblem(reason));
     }
   }, []);
 
   useEffect(() => {
+    if (enabled === false) {
+      setMutationAvailable(false);
+      return;
+    }
+
     const controller = new AbortController();
     void loadApprovals(controller.signal);
     return () => controller.abort();
-  }, [loadApprovals]);
+  }, [enabled, loadApprovals]);
 
   const refreshSelected = async () => {
     if (!selected) return;
@@ -202,6 +224,8 @@ export function MutationOperationsPanel({ clusterId }: { clusterId: string }) {
     if (!selected) return;
     void apply(() => mutationApi.executeConnectConfiguration(selected, pairMap(connectExecutionConfiguration)), true);
   };
+
+  if (mutationAvailable !== true) return null;
 
   return <section id="mutations" aria-labelledby="mutations-title">
     <h2 id="mutations-title">Governed mutations</h2>

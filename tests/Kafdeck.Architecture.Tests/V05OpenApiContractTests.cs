@@ -37,6 +37,46 @@ public sealed class V05OpenApiContractTests
     }
 
     [Fact]
+    public void W39_openapi_reusable_path_items_are_referenced_only_at_path_item_level()
+    {
+        using var document = JsonDocument.Parse(KafdeckV05OpenApi.Document);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        foreach (var path in paths.EnumerateObject())
+        {
+            if (path.Value.TryGetProperty("$ref", out var pathReference))
+            {
+                Assert.StartsWith(
+                    "#/components/pathItems/",
+                    pathReference.GetString(),
+                    StringComparison.Ordinal);
+            }
+
+            if (path.Value.TryGetProperty("post", out var post) &&
+                post.TryGetProperty("$ref", out var operationReference))
+            {
+                Assert.False(
+                    operationReference.GetString()?.StartsWith(
+                        "#/components/pathItems/",
+                        StringComparison.Ordinal) == true,
+                    "Reusable Path Item references must be placed at the path level, not inside an Operation Object.");
+            }
+        }
+
+        var reusablePathItems = root
+            .GetProperty("components")
+            .GetProperty("pathItems");
+
+        foreach (var item in reusablePathItems.EnumerateObject())
+        {
+            Assert.True(
+                item.Value.TryGetProperty("post", out _),
+                $"Reusable path item '{item.Name}' must contain a POST operation object.");
+        }
+    }
+
+    [Fact]
     public void W39_openapi_contract_documents_governance_headers_without_generic_execution_paths()
     {
         using var document = JsonDocument.Parse(KafdeckV05OpenApi.Document);
