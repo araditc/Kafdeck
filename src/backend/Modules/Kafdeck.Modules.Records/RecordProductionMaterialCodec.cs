@@ -93,8 +93,11 @@ internal static class RecordProductionMaterialCodec
             for (var index = 0; index < headerCount; index++)
             {
                 var nameLength = ReadInt32(envelope.Span, ref position);
-                if (nameLength is < 1 or > 1024)
+                if (nameLength is < 1 or
+                    > RecordProductionPolicy.HardMaxHeaderNameCharacters * 4)
+                {
                     throw Invalid();
+                }
 
                 var nameBytes = ReadSlice(envelope, ref position, nameLength);
                 var name = Encoding.UTF8.GetString(nameBytes.Span);
@@ -103,8 +106,12 @@ internal static class RecordProductionMaterialCodec
                     throw Invalid();
 
                 var headerValueLength = ReadInt32(envelope.Span, ref position);
-                if (headerValueLength != expectedHeader.ValueBytes || headerValueLength < 0)
+                if (headerValueLength != expectedHeader.ValueBytes ||
+                    headerValueLength < 0 ||
+                    headerValueLength > RecordProductionPolicy.HardMaxHeaderValueBytes)
+                {
                     throw Invalid();
+                }
 
                 if (!headers.TryAdd(
                         name,
