@@ -86,6 +86,126 @@ public sealed class V05RecordProductionTests
     }
 
     [Fact]
+    public async Task Planner_enforces_independent_byte_dimensions_before_preview()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            "0123456789abcdef0123456789abcdef");
+
+        var keyPlanner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            policy: new RecordProductionPolicy(
+                maxRecords: 2,
+                maxKeyBytes: 8,
+                maxValueBytes: 8,
+                maxTotalKeyBytes: 4,
+                maxTotalValueBytes: 16,
+                maxTotalHeaderBytes: 16,
+                maxTotalBytes: 64,
+                maxExecutionMaterialBytes: 128));
+
+        using var keys = await keyPlanner.PlanAsync(
+            new RecordProductionRequest(
+                "prod",
+                "orders",
+                new[]
+                {
+                    new RecordProductionRecordInput(
+                        Encoding.UTF8.GetBytes("abc"),
+                        Encoding.UTF8.GetBytes("a"),
+                        Array.Empty<RecordProductionHeaderInput>()),
+                    new RecordProductionRecordInput(
+                        Encoding.UTF8.GetBytes("def"),
+                        Encoding.UTF8.GetBytes("b"),
+                        Array.Empty<RecordProductionHeaderInput>()),
+                }));
+
+        Assert.False(keys.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, keys.Failure!.Code);
+
+        var valuePlanner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            policy: new RecordProductionPolicy(
+                maxRecords: 2,
+                maxValueBytes: 8,
+                maxTotalKeyBytes: 16,
+                maxTotalValueBytes: 6,
+                maxTotalHeaderBytes: 16,
+                maxTotalBytes: 64,
+                maxExecutionMaterialBytes: 128));
+
+        using var values = await valuePlanner.PlanAsync(
+            new RecordProductionRequest(
+                "prod",
+                "orders",
+                new[] { Record("abcd"), Record("efgh") }));
+
+        Assert.False(values.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, values.Failure!.Code);
+
+        var headerPlanner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            policy: new RecordProductionPolicy(
+                maxHeaderValueBytes: 2,
+                maxTotalKeyBytes: 16,
+                maxTotalValueBytes: 16,
+                maxTotalHeaderBytes: 5,
+                maxTotalBytes: 64,
+                maxExecutionMaterialBytes: 128));
+
+        using var headerValue = await headerPlanner.PlanAsync(
+            Request(
+                Encoding.UTF8.GetBytes("a"),
+                headers: new[]
+                {
+                    new RecordProductionHeaderInput("h", Encoding.UTF8.GetBytes("123")),
+                }));
+
+        Assert.False(headerValue.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, headerValue.Failure!.Code);
+
+        using var headerTotal = await new RecordProductionPlanner(
+                new FakeKafkaAdministrationPort(),
+                digest,
+                policy: new RecordProductionPolicy(
+                    maxHeaderValueBytes: 8,
+                    maxTotalKeyBytes: 16,
+                    maxTotalValueBytes: 16,
+                    maxTotalHeaderBytes: 5,
+                    maxTotalBytes: 64,
+                    maxExecutionMaterialBytes: 128))
+            .PlanAsync(
+                Request(
+                    Encoding.UTF8.GetBytes("a"),
+                    headers: new[]
+                    {
+                        new RecordProductionHeaderInput("trace", Encoding.UTF8.GetBytes("x")),
+                    }));
+
+        Assert.False(headerTotal.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, headerTotal.Failure!.Code);
+
+        var materialPlanner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            policy: new RecordProductionPolicy(
+                maxValueBytes: 8,
+                maxTotalKeyBytes: 8,
+                maxTotalValueBytes: 8,
+                maxTotalHeaderBytes: 8,
+                maxTotalBytes: 8,
+                maxExecutionMaterialBytes: 16));
+
+        using var material = await materialPlanner.PlanAsync(
+            Request(Encoding.UTF8.GetBytes("a")));
+
+        Assert.False(material.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, material.Failure!.Code);
+    }
+
+    [Fact]
     public async Task Planner_rejects_duplicate_header_names_instead_of_collapsing_them()
     {
         using var digest = new HmacMutationMaterialDigestService(
@@ -306,6 +426,51 @@ public sealed class V05RecordProductionTests
     }
 
     [Fact]
+    public async Task Batch_cancellation_after_ack_preserves_known_acknowledgement_evidence()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            "0123456789abcdef0123456789abcdef");
+        var planner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest);
+
+        using var preparation = await planner.PlanAsync(
+            new RecordProductionRequest(
+                "prod",
+                "orders",
+                new[] { Record("one"), Record("two") }));
+        Assert.True(preparation.IsSuccess);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            preparation.Plan!.Intent,
+            preparation.Plan.Risk,
+            "w34-test",
+            Now.AddMinutes(5),
+            Now,
+            "record-cancel");
+        operation.OpenForConfirmation(Now);
+        operation.Confirm(
+            operation.Snapshot.RequesterPrincipalId,
+            operation.Snapshot.PreviewHash,
+            Now);
+
+        using var cancellation = new CancellationTokenSource();
+        var service = new RecordProductionExecutionService(
+            new CancelAfterFirstAckProducer(cancellation));
+        using var material = new MutationExecutionMaterial(preparation.ExecutionMaterial!.Items);
+
+        var result = await service.ExecuteAsync(
+            new MutationExecutionContext(operation.Snapshot, material),
+            cancellation.Token);
+
+        Assert.Equal(MutationExecutionResultKind.ExecutionUnknown, result.ResultKind);
+        Assert.Equal("1", result.SafeEvidence!["acknowledged.count"]);
+        Assert.Equal("1", result.SafeEvidence["failure.ordinal"]);
+        Assert.Equal("false", result.SafeEvidence["provider.accepted"]);
+    }
+
+    [Fact]
     public async Task Precondition_validator_detects_topic_drift()
     {
         using var digest = new HmacMutationMaterialDigestService(
@@ -397,6 +562,28 @@ public sealed class V05RecordProductionTests
             RecordProduceMutation request,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(_results.Dequeue());
+    }
+
+    private sealed class CancelAfterFirstAckProducer : IRecordProduceMutationPort
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private int _calls;
+
+        public CancelAfterFirstAckProducer(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        public Task<MutationProviderResult> ProduceAsync(
+            RecordProduceMutation request,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _calls) != 1)
+                throw new InvalidOperationException("Second dispatch must not start after cancellation.");
+
+            _cancellation.Cancel();
+            return Task.FromResult(Ack(0, 10));
+        }
     }
 
     private sealed class ThrowingSchemaValidator : IRecordProductionSchemaValidator
