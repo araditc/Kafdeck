@@ -334,6 +334,44 @@ public sealed class V05ConnectMutationTests
     }
 
     [Fact]
+    public async Task Accepted_control_near_executor_deadline_remains_applied_unverified()
+    {
+        var observations = new FakeObservationPort(
+            Existing("sink-a", state: "RUNNING"));
+        var mutations = new FakeMutationPort();
+        var service = new ConnectMutationExecutionService(
+            mutations,
+            observations,
+            new ConnectMutationVerificationPolicy(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(50)),
+            new FixedTimeProvider(Now));
+
+        var canonical = new ConnectControlCanonicalIntent(
+            ConnectAlterIntentKind.Control,
+            "prod",
+            "sink-a",
+            ConnectControlAction.Pause,
+            null,
+            "RUNNING",
+            null,
+            new string('a', 64));
+
+        var result = await service.ControlAsync(
+            canonical,
+            CancellationToken.None,
+            Now.AddMilliseconds(100));
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedUnverified,
+            result.ResultKind);
+        Assert.Equal(
+            "connect_pause_verification_inconclusive",
+            result.ResultCode);
+        Assert.Equal(1, mutations.ControlCalls);
+    }
+
+    [Fact]
     public void Connect_mutation_contract_has_no_generic_write_proxy_surface()
     {
         var methods = typeof(IConnectMutationPort)
