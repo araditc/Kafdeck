@@ -401,7 +401,7 @@ public sealed class SchemaMutationExecutionService
                                 new SchemaDeleteObservationRequest(
                                     canonical.Subject,
                                     canonical.Version),
-                                Observation(),
+                                Observation(verificationDeadlineUtc),
                                 token)
                             .ConfigureAwait(false);
 
