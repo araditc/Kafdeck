@@ -14,13 +14,11 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
 
     private readonly KafkaAdminClientRegistry _clients;
     private readonly TimeSpan _requestTimeout;
-    private readonly TimeSpan _operationTimeout;
 
     public ConfluentKafkaConsumerMutationAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeSpan? requestTimeout = null,
-        TimeSpan? operationTimeout = null)
+        TimeSpan? requestTimeout = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
@@ -29,9 +27,6 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
         _requestTimeout = ValidateTimeout(
             requestTimeout ?? TimeSpan.FromSeconds(15),
             nameof(requestTimeout));
-        _operationTimeout = ValidateTimeout(
-            operationTimeout ?? TimeSpan.FromSeconds(10),
-            nameof(operationTimeout));
     }
 
     public Task<MutationProviderResult> AlterOffsetsAsync(
