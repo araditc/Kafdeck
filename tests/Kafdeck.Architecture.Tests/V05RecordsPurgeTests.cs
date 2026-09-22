@@ -447,7 +447,7 @@ public sealed class V05RecordsPurgeTests
                         Partition = new Partition(0),
                         Offset = new Offset(10),
                         Error = new Error(
-                            ErrorCode.UnknownServerError),
+                            ErrorCode.Unknown),
                     },
                     new DeleteRecordsReport
                     {
