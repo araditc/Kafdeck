@@ -102,6 +102,118 @@ public sealed class V05ConsumerMutationTests
     }
 
     [Fact]
+    public async Task Planner_deduplicates_sorts_targets_and_enforces_bounds()
+    {
+        var port = new FakeObservationPort(
+            Observation(
+                "g",
+                ConsumerGroupState.Empty,
+                Partition("a", 0, 5, 0, 100, null),
+                Partition("b", 1, 5, 0, 100, null)));
+        var planner = new ConsumerMutationPlanner(port);
+
+        var result = await planner.PlanOffsetAlterAsync(
+            new ConsumerOffsetAlterRequest(
+                "prod",
+                "g",
+                new[]
+                {
+                    new ConsumerOffsetAlterTargetInput(
+                        "b",
+                        1,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            10)),
+                    new ConsumerOffsetAlterTargetInput(
+                        "a",
+                        0,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            10)),
+                    new ConsumerOffsetAlterTargetInput(
+                        "b",
+                        1,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            10)),
+                }));
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(2, result.Plan!.Canonical.Targets.Count);
+        Assert.Equal("a", result.Plan.Canonical.Targets[0].TopicName);
+        Assert.Equal(0, result.Plan.Canonical.Targets[0].Partition);
+        Assert.Equal("b", result.Plan.Canonical.Targets[1].TopicName);
+        Assert.Equal(1, result.Plan.Canonical.Targets[1].Partition);
+
+        var boundedPlanner = new ConsumerMutationPlanner(
+            port,
+            new ConsumerMutationPolicy(maxTargets: 2));
+
+        var bounded = await boundedPlanner.PlanOffsetAlterAsync(
+            new ConsumerOffsetAlterRequest(
+                "prod",
+                "g",
+                new[]
+                {
+                    new ConsumerOffsetAlterTargetInput(
+                        "a",
+                        0,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            10)),
+                    new ConsumerOffsetAlterTargetInput(
+                        "b",
+                        1,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            10)),
+                    new ConsumerOffsetAlterTargetInput(
+                        "c",
+                        2,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            10)),
+                }));
+
+        Assert.False(bounded.IsSuccess);
+        Assert.Equal(
+            ConsumerMutationPlanningFailureCode.LimitExceeded,
+            bounded.Failure!.Code);
+    }
+
+    [Fact]
+    public async Task Single_target_mutation_preserves_high_floor_and_typed_confirmation()
+    {
+        var planner = new ConsumerMutationPlanner(
+            new FakeObservationPort(
+                Observation(
+                    "g",
+                    ConsumerGroupState.Empty,
+                    Partition("orders", 0, 10, 0, 100, null))));
+
+        var result = await planner.PlanOffsetAlterAsync(
+            new ConsumerOffsetAlterRequest(
+                "prod",
+                "g",
+                new[]
+                {
+                    new ConsumerOffsetAlterTargetInput(
+                        "orders",
+                        0,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            20)),
+                }));
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(MutationRiskClass.High, result.Plan!.Risk.RiskClass);
+        Assert.Equal(
+            MutationConfirmationMode.TypedTarget,
+            result.Plan.Risk.ConfirmationMode);
+        Assert.False(result.Plan.Risk.RequiresIndependentApproval);
+    }
+
+    [Fact]
     public async Task Planner_never_clamps_invalid_or_unresolvable_offsets()
     {
         var port = new FakeObservationPort(
@@ -403,6 +515,77 @@ public sealed class V05ConsumerMutationTests
     }
 
     [Fact]
+    public async Task Execution_preserves_partial_and_ambiguous_provider_outcomes()
+    {
+        var mutations = new FakeMutationPort();
+        var observations = new FakeObservationPort(
+            Observation(
+                "g",
+                ConsumerGroupState.Empty,
+                Partition("orders", 0, 10, 0, 100, null)));
+        var service = new ConsumerMutationExecutionService(
+            mutations,
+            observations);
+
+        var canonical = new ConsumerOffsetAlterCanonicalIntent(
+            "prod",
+            "g",
+            ConsumerGroupState.Empty,
+            new string('a', 64),
+            0,
+            10,
+            0,
+            new[]
+            {
+                new ConsumerOffsetCanonicalTarget(
+                    0,
+                    "orders",
+                    0,
+                    new ConsumerOffsetCanonicalSelector(
+                        ConsumerOffsetSelectorKind.Absolute,
+                        20,
+                        null),
+                    false,
+                    10,
+                    0,
+                    100,
+                    20,
+                    10,
+                    ConsumerOffsetMovement.ForwardSkip),
+            });
+
+        mutations.AlterResult = new MutationProviderResult(
+            MutationExecutionResultKind.PartiallyApplied,
+            "consumer_offset_alter_partial",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["target.count"] = "1",
+                ["applied.count"] = "0",
+                ["failed.count"] = "1",
+            });
+
+        var partial = await service.AlterOffsetsAsync(canonical);
+        Assert.Equal(
+            MutationExecutionResultKind.PartiallyApplied,
+            partial.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_partial",
+            partial.ResultCode);
+
+        mutations.AlterResult = new MutationProviderResult(
+            MutationExecutionResultKind.ExecutionUnknown,
+            "consumer_offset_alter_ambiguous");
+
+        var unknown = await service.AlterOffsetsAsync(canonical);
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            unknown.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_ambiguous",
+            unknown.ResultCode);
+    }
+
+    [Fact]
     public void Consumer_mutation_contract_is_typed_and_has_no_generic_admin_escape_hatch()
     {
         var methods = typeof(IConsumerMutationPort)
@@ -559,15 +742,22 @@ public sealed class V05ConsumerMutationTests
         public int AlterCalls { get; private set; }
         public int DeleteCalls { get; private set; }
 
+        public MutationProviderResult AlterResult { get; set; } =
+            new(
+                MutationExecutionResultKind.AppliedUnverified,
+                "consumer_offset_alter_accepted");
+
+        public MutationProviderResult DeleteResult { get; set; } =
+            new(
+                MutationExecutionResultKind.AppliedUnverified,
+                "consumer_delete_accepted");
+
         public Task<MutationProviderResult> AlterOffsetsAsync(
             ConsumerOffsetAlterMutation request,
             CancellationToken cancellationToken = default)
         {
             AlterCalls++;
-            return Task.FromResult(
-                new MutationProviderResult(
-                    MutationExecutionResultKind.AppliedUnverified,
-                    "consumer_offset_alter_accepted"));
+            return Task.FromResult(AlterResult);
         }
 
         public Task<MutationProviderResult> DeleteAsync(
@@ -575,10 +765,7 @@ public sealed class V05ConsumerMutationTests
             CancellationToken cancellationToken = default)
         {
             DeleteCalls++;
-            return Task.FromResult(
-                new MutationProviderResult(
-                    MutationExecutionResultKind.AppliedUnverified,
-                    "consumer_delete_accepted"));
+            return Task.FromResult(DeleteResult);
         }
     }
 
