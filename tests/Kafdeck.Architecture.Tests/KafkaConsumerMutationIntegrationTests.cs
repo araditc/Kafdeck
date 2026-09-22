@@ -27,8 +27,6 @@ public sealed class KafkaConsumerMutationIntegrationTests
             null,
             null);
 
-        CreateCommittedOffset(groupId, topic, 1);
-
         using var observations =
             new ConfluentKafkaConsumerMutationObservationAdapter(
                 new[] { profile },
@@ -39,6 +37,14 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 new SecretResolver());
         using var cancellation =
             new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
+        await CreateCommittedOffsetOnUnsubscribedTopicAsync(
+            groupId,
+            topic,
+            profile.Id,
+            observations,
+            mutations,
+            cancellation.Token);
 
         try
         {
@@ -168,22 +174,47 @@ public sealed class KafkaConsumerMutationIntegrationTests
     }
 
     [Fact]
-    public void Prepare_restricted_consumer_mutation_authorization_fixture()
+    public async Task Prepare_restricted_consumer_mutation_authorization_fixture()
     {
         if (!RunKafkaIntegration())
             return;
 
-        CreateCommittedOffset(
+        var profile = new ClusterProfile(
+            "plaintext",
+            ["localhost:9092"],
+            KafkaSecurityProtocol.Plaintext,
+            null,
+            null);
+
+        using var observations =
+            new ConfluentKafkaConsumerMutationObservationAdapter(
+                new[] { profile },
+                new SecretResolver());
+        using var mutations =
+            new ConfluentKafkaConsumerMutationAdapter(
+                new[] { profile },
+                new SecretResolver());
+        using var cancellation =
+            new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await CreateCommittedOffsetOnUnsubscribedTopicAsync(
             "kafdeck-w35-restricted",
             "kafdeck-ci-smoke",
-            1);
+            profile.Id,
+            observations,
+            mutations,
+            cancellation.Token);
     }
 
-    private static void CreateCommittedOffset(
+    private static async Task CreateCommittedOffsetOnUnsubscribedTopicAsync(
         string groupId,
-        string topic,
-        long offset)
+        string targetTopic,
+        string clusterId,
+        IConsumerMutationObservationPort observations,
+        IConsumerMutationPort mutations,
+        CancellationToken cancellationToken)
     {
+        const string controlTopic = "kafdeck-w35-control";
         var config = new ConsumerConfig
         {
             BootstrapServers = "localhost:9092",
@@ -192,22 +223,86 @@ public sealed class KafkaConsumerMutationIntegrationTests
             AutoOffsetReset = AutoOffsetReset.Earliest,
         };
 
-        using var consumer =
-            new ConsumerBuilder<Ignore, Ignore>(config).Build();
-        consumer.Assign(
-            new TopicPartitionOffset(
-                topic,
-                new Partition(0),
-                new Offset(0)));
-        consumer.Commit(
-            new[]
+        using (var consumer =
+               new ConsumerBuilder<Ignore, Ignore>(config).Build())
+        {
+            consumer.Subscribe(controlTopic);
+            var consumed = consumer.Consume(
+                TimeSpan.FromSeconds(10));
+            Assert.NotNull(consumed);
+            Assert.Equal(controlTopic, consumed.Topic);
+            consumer.Close();
+        }
+
+        await EventuallyGroupEmptyAsync(
+            observations,
+            clusterId,
+            groupId,
+            cancellationToken);
+
+        var initialOffset = await mutations.AlterOffsetsAsync(
+            new ConsumerOffsetAlterMutation(
+                clusterId,
+                groupId,
+                new[]
+                {
+                    new ConsumerOffsetTarget(
+                        targetTopic,
+                        0,
+                        1),
+                }),
+            cancellationToken);
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedUnverified,
+            initialOffset.ResultKind);
+
+        var observed = await EventuallyObserveAsync(
+            observations,
+            clusterId,
+            groupId,
+            targetTopic,
+            cancellationToken);
+        Assert.Equal(
+            1,
+            Assert.Single(observed.Partitions).CommittedOffset);
+    }
+
+    private static async Task EventuallyGroupEmptyAsync(
+        IConsumerMutationObservationPort observations,
+        string clusterId,
+        string groupId,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+        KafkaResult<ConsumerMutationObservation>? last = null;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            last = await observations.ObserveAsync(
+                clusterId,
+                groupId,
+                Array.Empty<ConsumerMutationObservationTarget>(),
+                Operation(),
+                cancellationToken);
+
+            if (last.IsSuccess &&
+                last.Value is not null &&
+                last.Value.Exists &&
+                last.Value.State == CoreConsumerGroupState.Empty)
             {
-                new TopicPartitionOffset(
-                    topic,
-                    new Partition(0),
-                    new Offset(offset)),
-            });
-        consumer.Close();
+                return;
+            }
+
+            await Task.Delay(
+                    TimeSpan.FromMilliseconds(200),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Assert.Fail(
+            $"Consumer group did not become empty: {last?.Failure?.Code}");
     }
 
     private static async Task<ConsumerMutationObservation>
