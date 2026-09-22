@@ -179,6 +179,28 @@ public sealed class V05RecordProductionTests
         Assert.False(headerValue.IsSuccess);
         Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, headerValue.Failure!.Code);
 
+        var headerNamePlanner = new RecordProductionPlanner(
+            new FakeKafkaAdministrationPort(),
+            digest,
+            policy: new RecordProductionPolicy(
+                maxHeaderNameCharacters: 4,
+                maxTotalKeyBytes: 16,
+                maxTotalValueBytes: 16,
+                maxTotalHeaderBytes: 16,
+                maxTotalBytes: 64,
+                maxExecutionMaterialBytes: 128));
+
+        using var headerName = await headerNamePlanner.PlanAsync(
+            Request(
+                Encoding.UTF8.GetBytes("a"),
+                headers: new[]
+                {
+                    new RecordProductionHeaderInput("trace", Encoding.UTF8.GetBytes("x")),
+                }));
+
+        Assert.False(headerName.IsSuccess);
+        Assert.Equal(RecordProductionPlanningFailureCode.LimitExceeded, headerName.Failure!.Code);
+
         using var headerTotal = await new RecordProductionPlanner(
                 new FakeKafkaAdministrationPort(),
                 digest,
