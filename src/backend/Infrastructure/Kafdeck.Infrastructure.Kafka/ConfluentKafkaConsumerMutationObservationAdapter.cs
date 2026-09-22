@@ -182,7 +182,7 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                         await client.ListConsumerGroupOffsetsAsync(
                                 [new ConsumerGroupTopicPartitions(
                                     groupId,
-                                    new List<TopicPartition>())],
+                                    null!)],
                                 new ListConsumerGroupOffsetsOptions
                                 {
                                     RequestTimeout = timeout,
