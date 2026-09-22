@@ -1,3 +1,5 @@
+using Confluent.Kafka;
+using Kafdeck.Infrastructure.Kafka;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Security;
@@ -587,6 +589,110 @@ public sealed class V05ConsumerMutationTests
         Assert.Equal(
             "consumer_offset_alter_ambiguous",
             unknown.ResultCode);
+    }
+
+    [Fact]
+    public void Mixed_success_and_timeout_is_execution_unknown()
+    {
+        var result = ConfluentKafkaConsumerMutationAdapter.FromErrors(
+            "consumer_offset_alter",
+            new[]
+            {
+                new Error(ErrorCode.RequestTimedOut),
+            },
+            totalCount: 2,
+            successfulCount: 1);
+
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            result.ResultKind);
+        Assert.Equal(
+            "consumer_offset_alter_ambiguous",
+            result.ResultCode);
+        Assert.NotNull(result.SafeEvidence);
+        Assert.Equal("1", result.SafeEvidence!["applied.count"]);
+        Assert.Contains(
+            "kafka_requesttimedout",
+            result.SafeEvidence["provider.error.codes"],
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Tampered_selector_semantics_are_rejected_before_dispatch()
+    {
+        var observations = new FakeObservationPort(
+            Observation(
+                "g",
+                ConsumerGroupState.Empty,
+                Partition("orders", 0, 10, 0, 100, null)));
+        var planner = new ConsumerMutationPlanner(
+            observations,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var planned = await planner.PlanOffsetAlterAsync(
+            new ConsumerOffsetAlterRequest(
+                "prod",
+                "g",
+                new[]
+                {
+                    new ConsumerOffsetAlterTargetInput(
+                        "orders",
+                        0,
+                        new ConsumerOffsetSelector(
+                            ConsumerOffsetSelectorKind.Absolute,
+                            20)),
+                }));
+        Assert.True(planned.IsSuccess, planned.Failure?.SafeMessage);
+
+        var validCanonical = planned.Plan!.Canonical;
+        var tamperedTarget = validCanonical.Targets[0] with
+        {
+            Selector = new ConsumerOffsetCanonicalSelector(
+                ConsumerOffsetSelectorKind.Absolute,
+                21,
+                null),
+        };
+        var tamperedCanonical = validCanonical with
+        {
+            Targets = new[] { tamperedTarget },
+        };
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Plan.Intent,
+            planned.Plan.Risk,
+            "w35-selector-test",
+            Now.AddMinutes(5),
+            Now,
+            "selector-tamper");
+
+        var tamperedSnapshot = operation.Snapshot with
+        {
+            CanonicalIntent =
+                ConsumerMutationCanonicalization.Serialize(
+                    tamperedCanonical),
+        };
+
+        var guard = new ConsumerMutationPreconditionValidator(
+            observations,
+            timeProvider: new FixedTimeProvider(Now));
+        var guardResult = await guard.ValidateAsync(tamperedSnapshot);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.StalePreview,
+            guardResult.Outcome);
+
+        var mutations = new FakeMutationPort();
+        var service = new ConsumerMutationExecutionService(
+            mutations,
+            observations);
+        var execution = await service.AlterOffsetsAsync(
+            tamperedCanonical);
+
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            execution.ResultKind);
+        Assert.Equal(0, mutations.AlterCalls);
     }
 
     [Fact]
