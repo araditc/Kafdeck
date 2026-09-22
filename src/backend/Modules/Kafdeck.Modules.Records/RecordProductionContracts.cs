@@ -35,14 +35,28 @@ public sealed record RecordProductionPolicy
     public const int HardMaxHeaderNameCharacters = 256;
     public const int HardMaxKeyBytes = 1024 * 1024;
     public const int HardMaxValueBytes = 4 * 1024 * 1024;
+    public const int HardMaxHeaderValueBytes = HardMaxValueBytes;
     public const long HardMaxTotalBytes = 16L * 1024 * 1024;
+    public const long HardMaxTotalKeyBytes = HardMaxTotalBytes;
+    public const long HardMaxTotalValueBytes = HardMaxTotalBytes;
+    public const long HardMaxTotalHeaderBytes = HardMaxTotalBytes;
+    private const long HardMaxEnvelopeOverheadBytes =
+        HardMaxRecords * 16L +
+        HardMaxRecords * HardMaxHeadersPerRecord * 8L;
+    public const long HardMaxExecutionMaterialBytes =
+        HardMaxTotalBytes + HardMaxEnvelopeOverheadBytes;
 
     public RecordProductionPolicy(
         int maxRecords = 16,
         int maxHeadersPerRecord = 32,
         int maxKeyBytes = 256 * 1024,
         int maxValueBytes = 1024 * 1024,
+        int? maxHeaderValueBytes = null,
+        long? maxTotalKeyBytes = null,
+        long? maxTotalValueBytes = null,
+        long? maxTotalHeaderBytes = null,
         long maxTotalBytes = 1024 * 1024,
+        long? maxExecutionMaterialBytes = null,
         int highRiskRecordCount = 32,
         long highRiskTotalBytes = 8L * 1024 * 1024,
         bool requireIndependentApprovalForHighRisk = false)
@@ -55,8 +69,29 @@ public sealed record RecordProductionPolicy
             throw new ArgumentOutOfRangeException(nameof(maxKeyBytes));
         if (maxValueBytes is < 1 or > HardMaxValueBytes)
             throw new ArgumentOutOfRangeException(nameof(maxValueBytes));
+
+        var effectiveMaxHeaderValueBytes = maxHeaderValueBytes ?? maxValueBytes;
+        var effectiveMaxTotalKeyBytes = maxTotalKeyBytes ?? maxTotalBytes;
+        var effectiveMaxTotalValueBytes = maxTotalValueBytes ?? maxTotalBytes;
+        var effectiveMaxTotalHeaderBytes = maxTotalHeaderBytes ?? maxTotalBytes;
+        var effectiveMaxExecutionMaterialBytes =
+            maxExecutionMaterialBytes ??
+            Math.Min(
+                HardMaxExecutionMaterialBytes,
+                checked(maxTotalBytes + HardMaxEnvelopeOverheadBytes));
+
+        if (effectiveMaxHeaderValueBytes is < 0 or > HardMaxHeaderValueBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxHeaderValueBytes));
+        if (effectiveMaxTotalKeyBytes is < 0 or > HardMaxTotalKeyBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxTotalKeyBytes));
+        if (effectiveMaxTotalValueBytes is < 1 or > HardMaxTotalValueBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxTotalValueBytes));
+        if (effectiveMaxTotalHeaderBytes is < 0 or > HardMaxTotalHeaderBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxTotalHeaderBytes));
         if (maxTotalBytes is < 1 or > HardMaxTotalBytes)
             throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
+        if (effectiveMaxExecutionMaterialBytes is < 1 or > HardMaxExecutionMaterialBytes)
+            throw new ArgumentOutOfRangeException(nameof(maxExecutionMaterialBytes));
         if (highRiskRecordCount is < 1 or > HardMaxRecords)
             throw new ArgumentOutOfRangeException(nameof(highRiskRecordCount));
         if (highRiskTotalBytes is < 1 or > HardMaxTotalBytes)
@@ -66,7 +101,12 @@ public sealed record RecordProductionPolicy
         MaxHeadersPerRecord = maxHeadersPerRecord;
         MaxKeyBytes = maxKeyBytes;
         MaxValueBytes = maxValueBytes;
+        MaxHeaderValueBytes = effectiveMaxHeaderValueBytes;
+        MaxTotalKeyBytes = effectiveMaxTotalKeyBytes;
+        MaxTotalValueBytes = effectiveMaxTotalValueBytes;
+        MaxTotalHeaderBytes = effectiveMaxTotalHeaderBytes;
         MaxTotalBytes = maxTotalBytes;
+        MaxExecutionMaterialBytes = effectiveMaxExecutionMaterialBytes;
         HighRiskRecordCount = highRiskRecordCount;
         HighRiskTotalBytes = highRiskTotalBytes;
         RequireIndependentApprovalForHighRisk = requireIndependentApprovalForHighRisk;
@@ -76,7 +116,12 @@ public sealed record RecordProductionPolicy
     public int MaxHeadersPerRecord { get; }
     public int MaxKeyBytes { get; }
     public int MaxValueBytes { get; }
+    public int MaxHeaderValueBytes { get; }
+    public long MaxTotalKeyBytes { get; }
+    public long MaxTotalValueBytes { get; }
+    public long MaxTotalHeaderBytes { get; }
     public long MaxTotalBytes { get; }
+    public long MaxExecutionMaterialBytes { get; }
     public int HighRiskRecordCount { get; }
     public long HighRiskTotalBytes { get; }
     public bool RequireIndependentApprovalForHighRisk { get; }
