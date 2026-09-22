@@ -132,7 +132,7 @@ public sealed class ConsumerMutationExecutionService
         if (verification.MatchedCount is > 0 &&
             verification.MatchedCount < targets.Length)
         {
-            return Partial(
+            return UnverifiedWithPartialEvidence(
                 "consumer_offset_alter_partially_verified",
                 accepted,
                 targets.Length,
@@ -274,7 +274,7 @@ public sealed class ConsumerMutationExecutionService
         if (offsetVerification.MatchedCount is > 0 &&
             offsetVerification.MatchedCount < targets.Length)
         {
-            return Partial(
+            return UnverifiedWithPartialEvidence(
                 "consumer_offset_delete_partially_verified",
                 deleteAccepted,
                 targets.Length,
@@ -624,7 +624,7 @@ public sealed class ConsumerMutationExecutionService
             evidence);
     }
 
-    private static MutationProviderResult Partial(
+    private static MutationProviderResult UnverifiedWithPartialEvidence(
         string code,
         MutationProviderResult accepted,
         int targetCount,
@@ -637,8 +637,10 @@ public sealed class ConsumerMutationExecutionService
         evidence["verified.count"] =
             verifiedCount.ToString(CultureInfo.InvariantCulture);
 
+        // A partial readback proves only that some targets were observed.
+        // It does not prove the unmatched targets failed to apply.
         return new(
-            MutationExecutionResultKind.PartiallyApplied,
+            MutationExecutionResultKind.AppliedUnverified,
             code,
             evidence);
     }
