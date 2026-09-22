@@ -208,8 +208,17 @@ public sealed class RecordProductionPlanner
                             "Record contains a null Kafka header.",
                             ordinal);
 
-                    if (header.Name is not null &&
-                        header.Name.Length > _policy.MaxHeaderNameCharacters)
+                    var rawHeaderName = header.Name;
+                    if (rawHeaderName is null)
+                    {
+                        return FailAndDispose(
+                            material,
+                            RecordProductionPlanningFailureCode.InvalidInput,
+                            "Kafka header name is required.",
+                            ordinal);
+                    }
+
+                    if (rawHeaderName.Length > _policy.MaxHeaderNameCharacters)
                     {
                         return FailAndDispose(
                             material,
@@ -222,7 +231,7 @@ public sealed class RecordProductionPlanner
                     try
                     {
                         name = RecordProductionValidation.RequireIdentifier(
-                            header.Name,
+                            rawHeaderName,
                             "Kafka header name",
                             RecordProductionPolicy.HardMaxHeaderNameCharacters);
                     }
