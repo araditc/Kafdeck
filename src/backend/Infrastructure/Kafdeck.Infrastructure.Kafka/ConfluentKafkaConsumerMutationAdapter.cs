@@ -148,8 +148,10 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
                                 new Partition(target.Partition))),
                             new DeleteConsumerGroupOffsetsOptions
                             {
+                                // librdkafka does not accept operation.timeout for
+                                // DeleteConsumerGroupOffsets; setting it fails locally
+                                // with Local_InvalidArg before the request reaches Kafka.
                                 RequestTimeout = _requestTimeout,
-                                OperationTimeout = _operationTimeout,
                             })
                         .WaitAsync(cancellationToken)
                         .ConfigureAwait(false);
