@@ -170,13 +170,20 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                         new Partition(target.Partition)))
                     .ToArray();
 
+                var requireStableOffsets = normalizedTargets.All(
+                    target => target.RequireStableOffset);
+                var committedPartitions = requireStableOffsets
+                    ? partitions.ToList()
+                    : new List<TopicPartition>();
+
                 var committedResults = await client.ListConsumerGroupOffsetsAsync(
-                        [new ConsumerGroupTopicPartitions(groupId, partitions.ToList())],
+                        [new ConsumerGroupTopicPartitions(
+                            groupId,
+                            committedPartitions)],
                         new ListConsumerGroupOffsetsOptions
                         {
                             RequestTimeout = timeout,
-                            RequireStableOffsets = normalizedTargets.All(
-                                target => target.RequireStableOffset),
+                            RequireStableOffsets = requireStableOffsets,
                         })
                     .WaitAsync(token)
                     .ConfigureAwait(false);
