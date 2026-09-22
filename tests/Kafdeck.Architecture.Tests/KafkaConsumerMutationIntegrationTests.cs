@@ -166,6 +166,18 @@ public sealed class KafkaConsumerMutationIntegrationTests
         }
     }
 
+    [Fact]
+    public void Prepare_restricted_consumer_mutation_authorization_fixture()
+    {
+        if (!RunKafkaIntegration())
+            return;
+
+        CreateCommittedOffset(
+            "kafdeck-w35-restricted",
+            "kafdeck-ci-smoke",
+            1);
+    }
+
     private static void CreateCommittedOffset(
         string groupId,
         string topic,
