@@ -1,3 +1,5 @@
+using Kafdeck.Core.Records;
+
 namespace Kafdeck.Modules.Administration;
 
 public sealed record MutationProviderResult(
@@ -83,16 +85,28 @@ public interface IConsumerMutationPort
         CancellationToken cancellationToken = default);
 }
 
+public sealed record SchemaMutationReference(
+    string Name,
+    string Subject,
+    int Version);
+
 public sealed record SchemaCreateMutation(
     string ClusterId,
     string Subject,
-    string SchemaType,
+    RecordSchemaFormat Format,
     string Schema,
-    IReadOnlyList<string> References);
+    IReadOnlyList<SchemaMutationReference> References);
+
+public enum SchemaCompatibilityScope
+{
+    Subject = 1,
+    Global = 2,
+}
 
 public sealed record SchemaAlterMutation(
     string ClusterId,
-    string Subject,
+    SchemaCompatibilityScope Scope,
+    string? Subject,
     string CompatibilityMode);
 
 public sealed record SchemaDeleteMutation(

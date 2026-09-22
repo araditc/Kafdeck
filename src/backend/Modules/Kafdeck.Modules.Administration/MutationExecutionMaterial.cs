@@ -139,4 +139,5 @@ public sealed class MutationExecutionMaterial : IDisposable
 
 public sealed record MutationExecutionContext(
     MutationOperationSnapshot Operation,
-    MutationExecutionMaterial Material);
+    MutationExecutionMaterial Material,
+    DateTimeOffset? ExecutionDeadlineUtc = null);

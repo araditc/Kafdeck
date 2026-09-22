@@ -531,7 +531,8 @@ public sealed class MutationExecutor
 
             var executionContext = new MutationExecutionContext(
                 operation.Snapshot,
-                executionMaterial);
+                executionMaterial,
+                _timeProvider.GetUtcNow().Add(_policy.OperationTimeout));
             var providerOutcome = await ExecuteProviderAsync(
                     handler,
                     executionContext)

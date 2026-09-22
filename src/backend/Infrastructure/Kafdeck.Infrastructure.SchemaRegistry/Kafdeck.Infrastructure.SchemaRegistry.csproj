@@ -9,6 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../Kafdeck.Core/Kafdeck.Core.csproj" />
+    <ProjectReference Include="../../Modules/Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj" />
     <ProjectReference Include="../Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj" />
   </ItemGroup>
   <ItemGroup>

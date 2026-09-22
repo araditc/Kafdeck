@@ -222,6 +222,28 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
             });
     }
 
+    public Task<ReadViewResult<SchemaGlobalCompatibilityObservation>>
+        GetGlobalCompatibilityAsync(
+            string clusterId,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            clusterId,
+            operation,
+            cancellationToken,
+            async (runtime, token) =>
+            {
+                var root = await GetJsonAsync(
+                        runtime,
+                        "config",
+                        operation.MaxResponseBytes,
+                        token)
+                    .ConfigureAwait(false);
+
+                return new SchemaGlobalCompatibilityObservation(
+                    ParseCompatibilityResponse(root));
+            });
+
     public void Dispose()
     {
         foreach (var runtime in _registries.Values)

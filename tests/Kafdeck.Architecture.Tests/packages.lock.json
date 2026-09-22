@@ -205,7 +205,8 @@
           "Apache.Avro": "[1.12.2, )",
           "Google.Protobuf": "[3.36.2, )",
           "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )"
+          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
         }
       },
       "kafdeck.infrastructure.security": {
@@ -278,7 +279,8 @@
       "kafdeck.modules.schemas": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )"
+          "Kafdeck.Core": "[0.2.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
         }
       },
       "kafdeck.infrastructure.ecosystem": {
