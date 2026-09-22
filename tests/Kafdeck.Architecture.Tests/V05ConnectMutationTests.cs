@@ -444,6 +444,25 @@ public sealed class V05ConnectMutationTests
             })
             .ToArray();
 
+    private static string ObservationConfigurationFingerprint(
+        IEnumerable<ConnectConfigurationObservationItem> values)
+    {
+        var builder = new StringBuilder();
+        foreach (var item in values
+                     .OrderBy(value => value.Key, StringComparer.Ordinal))
+        {
+            builder.Append(item.Key)
+                .Append('=')
+                .Append(
+                    Convert.ToBase64String(
+                        Encoding.UTF8.GetBytes(item.ValueSha256)))
+                .Append('\n');
+        }
+
+        return ConnectMutationCanonicalization.Sha256(
+            Encoding.UTF8.GetBytes(builder.ToString()));
+    }
+
     private static ConnectMutationObservation Existing(
         string connectorName,
         IReadOnlyList<ConnectConfigurationObservationItem>? configuration = null,
@@ -461,8 +480,7 @@ public sealed class V05ConnectMutationTests
             state,
             tasks,
             configuration,
-            ConnectMutationCanonicalization.ConfigurationFingerprint(
-                configuration));
+            ObservationConfigurationFingerprint(configuration));
     }
 
     private static ConnectMutationObservation Missing(string connectorName)
@@ -475,8 +493,7 @@ public sealed class V05ConnectMutationTests
             "MISSING",
             Array.Empty<ConnectMutationTaskObservation>(),
             configuration,
-            ConnectMutationCanonicalization.ConfigurationFingerprint(
-                configuration));
+            ObservationConfigurationFingerprint(configuration));
     }
 
     private sealed class FakeObservationPort :
