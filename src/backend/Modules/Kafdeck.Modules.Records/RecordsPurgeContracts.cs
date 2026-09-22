@@ -130,6 +130,126 @@ public sealed record RecordsPurgePolicy
     public string PolicyVersion { get; }
 }
 
+internal static class RecordsPurgeCanonicalValidator
+{
+    public static bool TryBuildProviderTargets(
+        RecordsPurgeCanonicalIntent canonical,
+        out RecordsPurgeTarget[] targets)
+    {
+        targets = Array.Empty<RecordsPurgeTarget>();
+        if (canonical is null ||
+            !canonical.Irreversible ||
+            canonical.UndoSupported ||
+            !string.Equals(
+                canonical.WarningCode,
+                RecordsPurgeCanonicalization.WarningCode,
+                StringComparison.Ordinal) ||
+            canonical.TotalPurgeDistance < 0 ||
+            canonical.Targets is null ||
+            canonical.Targets.Count is < 1 or > RecordsPurgePolicy.HardMaxTargets ||
+            canonical.Targets.Any(static target => target is null))
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = RecordsPurgeCanonicalization.RequireIdentifier(
+                canonical.ClusterId,
+                "Cluster ID",
+                256);
+
+            var result = new List<RecordsPurgeTarget>(
+                canonical.Targets.Count);
+            var seen = new HashSet<(string Topic, int Partition)>();
+            long totalDistance = 0;
+
+            foreach (var target in canonical.Targets.OrderBy(item => item.Ordinal))
+            {
+                if (target is null ||
+                    target.Ordinal != result.Count ||
+                    target.Selector is null ||
+                    !Enum.IsDefined(target.Selector.Kind) ||
+                    target.Partition < 0 ||
+                    target.ObservedLowWatermark < 0 ||
+                    target.ObservedHighWatermark < target.ObservedLowWatermark ||
+                    target.BeforeOffset < target.ObservedLowWatermark ||
+                    target.BeforeOffset > target.ObservedHighWatermark ||
+                    target.PurgeDistance < 0 ||
+                    target.PurgeDistance !=
+                        checked(
+                            target.BeforeOffset -
+                            target.ObservedLowWatermark) ||
+                    !SelectorMatches(target))
+                {
+                    return false;
+                }
+
+                var topic =
+                    RecordsPurgeCanonicalization.RequireTopicName(
+                        target.TopicName);
+                if (!seen.Add((topic, target.Partition)))
+                    return false;
+
+                totalDistance = checked(
+                    totalDistance + target.PurgeDistance);
+                result.Add(
+                    new RecordsPurgeTarget(
+                        topic,
+                        target.Partition,
+                        target.BeforeOffset));
+            }
+
+            if (totalDistance != canonical.TotalPurgeDistance)
+                return false;
+
+            targets = result.ToArray();
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+            OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool SelectorMatches(
+        RecordsPurgeCanonicalTarget target)
+    {
+        return target.Selector.Kind switch
+        {
+            RecordsPurgeSelectorKind.Absolute =>
+                target.Selector.TimestampUnixMilliseconds is null &&
+                target.Selector.RequestedBeforeOffset is >= 0 &&
+                target.Selector.RequestedBeforeOffset.Value ==
+                    target.BeforeOffset,
+
+            RecordsPurgeSelectorKind.Timestamp =>
+                target.Selector.RequestedBeforeOffset is null &&
+                target.Selector.TimestampUnixMilliseconds.HasValue &&
+                TimestampIsSupported(
+                    target.Selector.TimestampUnixMilliseconds.Value),
+
+            _ => false,
+        };
+    }
+
+    private static bool TimestampIsSupported(long unixMilliseconds)
+    {
+        try
+        {
+            _ = DateTimeOffset.FromUnixTimeMilliseconds(
+                unixMilliseconds);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
+    }
+}
+
 internal static class RecordsPurgeCanonicalization
 {
     internal static readonly JsonSerializerOptions JsonOptions = new()
