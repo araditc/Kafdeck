@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.Extensions.Options;
 
 namespace Kafdeck.Api;
 
@@ -61,6 +60,12 @@ public static class KafdeckAntiforgeryExtensions
         this RouteHandlerBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
+
+        // Attach the framework-recognized antiforgery metadata as well as the
+        // Kafdeck filter below. The framework middleware performs the standard
+        // token validation pass, while the filter preserves our stable
+        // Problem Details response for invalid state-changing requests.
+        builder.RequireAntiforgery();
 
         return builder.AddEndpointFilter(async (invocation, next) =>
         {

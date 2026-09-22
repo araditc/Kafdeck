@@ -1,6 +1,8 @@
 using Kafdeck.Api;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -42,5 +44,27 @@ public sealed class V05AntiforgeryTests
             .Value;
 
         Assert.Equal(CookieSecurePolicy.SameAsRequest, options.Cookie.SecurePolicy);
+    }
+
+    [Fact]
+    public void State_changing_endpoint_carries_framework_antiforgery_metadata()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+
+        using var app = builder.Build();
+        app.MapPost("/mutation", () => Results.Ok())
+            .RequireKafdeckAntiforgery();
+
+        var endpoint = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .Single(item => string.Equals(
+                item.RoutePattern.RawText,
+                "/mutation",
+                StringComparison.Ordinal));
+        var metadata = endpoint.Metadata.GetMetadata<IAntiforgeryMetadata>();
+
+        Assert.NotNull(metadata);
+        Assert.True(metadata.RequiresValidation);
     }
 }

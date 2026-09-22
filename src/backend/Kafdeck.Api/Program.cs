@@ -277,6 +277,7 @@ app.UseMiddleware<ApiTelemetryMiddleware>();
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
     app.UseAuthentication();
+    app.UseAntiforgery();
 }
 
 app.UseDefaultFiles();
