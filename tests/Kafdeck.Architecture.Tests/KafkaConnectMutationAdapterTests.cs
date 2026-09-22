@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Kafdeck.Core.ReadViews;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Ecosystem;
 using Kafdeck.Modules.Administration;
@@ -142,6 +143,65 @@ public sealed class KafkaConnectMutationAdapterTests
         Assert.Equal(
             "connect_create_invalid_provider_response",
             result.ResultCode);
+    }
+
+    [Fact]
+    public async Task Configured_url_without_admitted_mutation_profile_fails_closed_before_network_access()
+    {
+        var handler = new RecordingHandler(
+            _ => throw new InvalidOperationException(
+                "Network should not be reached."));
+
+        var profile = new ClusterProfile(
+            "prod",
+            ["localhost:9092"],
+            KafkaSecurityProtocol.Plaintext,
+            null,
+            null,
+            Connect: new KafkaConnectProfile(
+                "https://connect.example/",
+                null,
+                null,
+                KafkaConnectMutationProviderProfile.ConfluentCompatibleV1));
+
+        using var adapter = new KafkaConnectMutationAdapter(
+            [profile],
+            new SecretResolver(),
+            _ => handler);
+
+        var capabilities = await adapter.GetCapabilitiesAsync(
+            "prod",
+            new ReadViewOperationContext(
+                DateTimeOffset.UtcNow.AddSeconds(5),
+                maxItems: 16,
+                maxResponseBytes: 4096),
+            CancellationToken.None);
+
+        Assert.False(capabilities.IsSuccess);
+        Assert.NotNull(capabilities.Failure);
+        Assert.Equal(
+            Kafdeck.Core.Ecosystem.ConnectMutationObservationFailureCategory.Unsupported,
+            capabilities.Failure!.Category);
+        Assert.Equal(
+            "connect_mutation_profile_not_admitted",
+            capabilities.Failure.Code);
+
+        var result = await adapter.CreateAsync(
+            new ConnectCreateMutation(
+                "prod",
+                "sink-a",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["connector.class"] = "org.example.Sink",
+                }));
+
+        Assert.Equal(
+            MutationExecutionResultKind.FailedDefinitive,
+            result.ResultKind);
+        Assert.Equal(
+            "connect_create_provider_profile_not_admitted",
+            result.ResultCode);
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]
