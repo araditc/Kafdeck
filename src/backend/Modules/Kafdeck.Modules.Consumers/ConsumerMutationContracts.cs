@@ -282,6 +282,23 @@ internal static class ConsumerMutationCanonicalization
         return Hash(builder);
     }
 
+    public static string CommittedOffsetInventoryFingerprint(
+        ConsumerMutationPartitionObservation observation)
+    {
+        var builder = new StringBuilder(256);
+        Append(builder, "topic", observation.Topic);
+        Append(
+            builder,
+            "partition",
+            observation.Partition.ToString(CultureInfo.InvariantCulture));
+        Append(
+            builder,
+            "committed",
+            observation.CommittedOffset?.ToString(CultureInfo.InvariantCulture)
+            ?? "missing");
+        return Hash(builder);
+    }
+
     public static string PartitionPreconditionFingerprint(
         ConsumerMutationPartitionObservation observation)
     {
