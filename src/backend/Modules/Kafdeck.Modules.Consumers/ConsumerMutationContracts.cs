@@ -150,46 +150,42 @@ public sealed record ConsumerMutationPlanningResult<TCanonical>
         new(null, failure ?? throw new ArgumentNullException(nameof(failure)));
 }
 
-public sealed record ConsumerMutationPolicy(
-    int MaxTargets,
-    TimeSpan ObservationTimeout,
-    string PolicyVersion,
-    bool RequireEmptyGroup)
+public sealed record ConsumerMutationPolicy
 {
     public const int HardMaxTargets = 256;
 
-    public static ConsumerMutationPolicy Default { get; } =
-        new(64, TimeSpan.FromSeconds(10), "v0.5-consumer-admin-p1", true);
-
-    public ConsumerMutationPolicy()
-        : this(64, TimeSpan.FromSeconds(10), "v0.5-consumer-admin-p1", true)
-    {
-    }
+    public static ConsumerMutationPolicy Default { get; } = new();
 
     public ConsumerMutationPolicy(
         int maxTargets = 64,
         TimeSpan? observationTimeout = null,
         string policyVersion = "v0.5-consumer-admin-p1",
         bool requireEmptyGroup = true)
-        : this(
-            maxTargets,
-            observationTimeout ?? TimeSpan.FromSeconds(10),
-            policyVersion,
-            requireEmptyGroup)
     {
+        var effectiveObservationTimeout =
+            observationTimeout ?? TimeSpan.FromSeconds(10);
+
         if (maxTargets is < 1 or > HardMaxTargets)
             throw new ArgumentOutOfRangeException(nameof(maxTargets));
-        if (ObservationTimeout < TimeSpan.FromSeconds(1) ||
-            ObservationTimeout > TimeSpan.FromSeconds(30))
+        if (effectiveObservationTimeout < TimeSpan.FromSeconds(1) ||
+            effectiveObservationTimeout > TimeSpan.FromSeconds(30))
         {
             throw new ArgumentOutOfRangeException(nameof(observationTimeout));
         }
 
-        _ = ConsumerMutationCanonicalization.RequireIdentifier(
-            PolicyVersion,
+        MaxTargets = maxTargets;
+        ObservationTimeout = effectiveObservationTimeout;
+        PolicyVersion = ConsumerMutationCanonicalization.RequireIdentifier(
+            policyVersion,
             "Consumer mutation policy version",
             256);
+        RequireEmptyGroup = requireEmptyGroup;
     }
+
+    public int MaxTargets { get; }
+    public TimeSpan ObservationTimeout { get; }
+    public string PolicyVersion { get; }
+    public bool RequireEmptyGroup { get; }
 }
 
 internal static class ConsumerMutationCanonicalization
