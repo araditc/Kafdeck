@@ -40,7 +40,15 @@ public sealed class RecordProductionExecutionService
         var acknowledged = 0;
         for (var ordinal = 0; ordinal < canonical.Records.Count; ordinal++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return Unknown(
+                    "record_produce_execution_cancelled_or_timeout",
+                    canonical.Records.Count,
+                    acknowledged,
+                    ordinal);
+            }
+
             var expected = canonical.Records[ordinal];
             if (expected.Ordinal != ordinal ||
                 !string.Equals(expected.MaterialName, $"record/{ordinal:D4}", StringComparison.Ordinal))
@@ -71,9 +79,29 @@ public sealed class RecordProductionExecutionService
                     ordinal);
             }
 
-            var result = await _producer
-                .ProduceAsync(mutation, cancellationToken)
-                .ConfigureAwait(false);
+            MutationProviderResult result;
+            try
+            {
+                result = await _producer
+                    .ProduceAsync(mutation, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return Unknown(
+                    "record_produce_execution_cancelled_or_timeout",
+                    canonical.Records.Count,
+                    acknowledged,
+                    ordinal);
+            }
+            catch
+            {
+                return Unknown(
+                    "record_produce_provider_exception",
+                    canonical.Records.Count,
+                    acknowledged,
+                    ordinal);
+            }
 
             if (result.ResultKind == MutationExecutionResultKind.AppliedVerified)
             {
