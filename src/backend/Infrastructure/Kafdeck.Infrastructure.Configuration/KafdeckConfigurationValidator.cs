@@ -318,6 +318,12 @@ public static class KafdeckConfigurationValidator
                     cluster.Connect.Username,
                     cluster.Connect.Password,
                     errors);
+
+                if (!Enum.IsDefined(cluster.Connect.MutationProviderProfile))
+                {
+                    errors.Add(
+                        $"Cluster '{cluster.Id}' Kafka Connect mutation provider profile is unsupported.");
+                }
             }
 
             if (cluster.KsqlDb is not null)
