@@ -144,6 +144,69 @@ public sealed class ConfluentSchemaMutationAdapter :
             });
     }
 
+    public Task<SchemaMutationObservationResult<SchemaDeleteTargetObservation>>
+        ObserveDeleteTargetAsync(
+            string clusterId,
+            SchemaDeleteObservationRequest request,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        string subject;
+        string activePath;
+        string deletedPath;
+        try
+        {
+            subject = RequireSubject(request.Subject);
+            if (request.Version is <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request.Version));
+            }
+
+            activePath = request.Version.HasValue
+                ? $"subjects/{Uri.EscapeDataString(subject)}/versions/{request.Version.Value}"
+                : $"subjects/{Uri.EscapeDataString(subject)}/versions";
+
+            deletedPath = activePath.Contains('?', StringComparison.Ordinal)
+                ? activePath + "&deleted=true"
+                : activePath + "?deleted=true";
+        }
+        catch (ArgumentException)
+        {
+            return Task.FromResult(
+                ObservationFailed<SchemaDeleteTargetObservation>(
+                    SchemaMutationObservationFailureCategory.InvalidRequest,
+                    "invalid_schema_delete_observation",
+                    "Schema delete observation request is invalid.",
+                    false));
+        }
+
+        return ExecuteObservationAsync(
+            clusterId,
+            operation,
+            cancellationToken,
+            async (runtime, token) =>
+            {
+                var active = await ExistsForObservationAsync(
+                        runtime,
+                        activePath,
+                        token)
+                    .ConfigureAwait(false);
+                var includingDeleted = await ExistsForObservationAsync(
+                        runtime,
+                        deletedPath,
+                        token)
+                    .ConfigureAwait(false);
+
+                return new SchemaDeleteTargetObservation(
+                    active,
+                    includingDeleted,
+                    IsSoftDeleted: !active && includingDeleted);
+            });
+    }
+
     public Task<MutationProviderResult> CreateAsync(
         SchemaCreateMutation request,
         CancellationToken cancellationToken = default)
@@ -555,6 +618,78 @@ public sealed class ConfluentSchemaMutationAdapter :
             return Unknown(
                 $"{operationCode}_provider_exception");
         }
+    }
+
+    private static async Task<bool> ExistsForObservationAsync(
+        RegistryRuntime runtime,
+        string relativePath,
+        CancellationToken cancellationToken)
+    {
+        using var request = BuildRequest(
+            runtime,
+            HttpMethod.Get,
+            relativePath,
+            body: null);
+        using var response = await runtime.Client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((int)response.StatusCode is >= 300 and < 400)
+        {
+            throw new RegistryObservationStatusException(
+                SchemaMutationObservationFailureCategory.InvalidResponse,
+                "schema_registry_redirect_rejected",
+                "Schema Registry redirect was rejected.",
+                false);
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return false;
+
+        if (response.StatusCode is
+            HttpStatusCode.Unauthorized or
+            HttpStatusCode.Forbidden)
+        {
+            throw new RegistryObservationStatusException(
+                SchemaMutationObservationFailureCategory.Unauthorized,
+                "schema_registry_authorization_denied",
+                "Schema Registry denied the requested operation.",
+                false);
+        }
+
+        if ((int)response.StatusCode >= 500)
+        {
+            throw new RegistryObservationStatusException(
+                SchemaMutationObservationFailureCategory.Unavailable,
+                "schema_registry_unavailable",
+                "Schema Registry is temporarily unavailable.",
+                true);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new RegistryObservationStatusException(
+                SchemaMutationObservationFailureCategory.InvalidResponse,
+                "schema_registry_request_failed",
+                "Schema Registry rejected the requested observation.",
+                false);
+        }
+
+        var root = await ReadJsonAsync(
+                response,
+                MaxResponseBytes,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return root.ValueKind switch
+        {
+            JsonValueKind.Array => root.GetArrayLength() > 0,
+            JsonValueKind.Object => true,
+            _ => throw new JsonException(
+                "Schema Registry delete observation response is invalid."),
+        };
     }
 
     private static async Task<JsonElement> SendJsonForObservationAsync(
