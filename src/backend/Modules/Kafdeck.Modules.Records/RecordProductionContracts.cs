@@ -49,6 +49,7 @@ public sealed record RecordProductionPolicy
     public RecordProductionPolicy(
         int maxRecords = 16,
         int maxHeadersPerRecord = 32,
+        int maxHeaderNameCharacters = HardMaxHeaderNameCharacters,
         int maxKeyBytes = 256 * 1024,
         int maxValueBytes = 1024 * 1024,
         int? maxHeaderValueBytes = null,
@@ -65,6 +66,8 @@ public sealed record RecordProductionPolicy
             throw new ArgumentOutOfRangeException(nameof(maxRecords));
         if (maxHeadersPerRecord is < 0 or > HardMaxHeadersPerRecord)
             throw new ArgumentOutOfRangeException(nameof(maxHeadersPerRecord));
+        if (maxHeaderNameCharacters is < 1 or > HardMaxHeaderNameCharacters)
+            throw new ArgumentOutOfRangeException(nameof(maxHeaderNameCharacters));
         if (maxKeyBytes is < 0 or > HardMaxKeyBytes)
             throw new ArgumentOutOfRangeException(nameof(maxKeyBytes));
         if (maxValueBytes is < 1 or > HardMaxValueBytes)
@@ -99,6 +102,7 @@ public sealed record RecordProductionPolicy
 
         MaxRecords = maxRecords;
         MaxHeadersPerRecord = maxHeadersPerRecord;
+        MaxHeaderNameCharacters = maxHeaderNameCharacters;
         MaxKeyBytes = maxKeyBytes;
         MaxValueBytes = maxValueBytes;
         MaxHeaderValueBytes = effectiveMaxHeaderValueBytes;
@@ -114,6 +118,7 @@ public sealed record RecordProductionPolicy
 
     public int MaxRecords { get; }
     public int MaxHeadersPerRecord { get; }
+    public int MaxHeaderNameCharacters { get; }
     public int MaxKeyBytes { get; }
     public int MaxValueBytes { get; }
     public int MaxHeaderValueBytes { get; }
