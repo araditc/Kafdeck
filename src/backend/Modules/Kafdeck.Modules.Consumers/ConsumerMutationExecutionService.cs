@@ -62,23 +62,13 @@ public sealed class ConsumerMutationExecutionService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(canonical);
-        if (canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets)
-            return Unknown("consumer_offset_canonical_invalid", canonical.Targets.Count);
-
-        var targets = canonical.Targets
-            .OrderBy(target => target.Ordinal)
-            .Select((target, ordinal) =>
-            {
-                if (target.Ordinal != ordinal || target.ResolvedOffset < 0)
-                    throw new MutationStateException(
-                        "Consumer offset canonical target ordering is invalid.");
-
-                return new ConsumerOffsetTarget(
-                    target.TopicName,
-                    target.Partition,
-                    target.ResolvedOffset);
-            })
-            .ToArray();
+        var canonicalTargetCount = canonical.Targets?.Count ?? 0;
+        if (!TryBuildAlterTargets(canonical, out var targets))
+        {
+            return Unknown(
+                "consumer_offset_canonical_invalid",
+                canonicalTargetCount);
+        }
 
         MutationProviderResult accepted;
         try
@@ -160,12 +150,19 @@ public sealed class ConsumerMutationExecutionService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(canonical);
-        if (!Enum.IsDefined(canonical.Mode) ||
+        var canonicalTargetCount = canonical.Targets?.Count ?? 0;
+        if (!TryValidateCanonicalIdentity(
+                canonical.ClusterId,
+                canonical.GroupId,
+                canonical.GroupState,
+                canonical.GroupFingerprint) ||
+            !Enum.IsDefined(canonical.Mode) ||
+            canonical.Targets is null ||
             canonical.Targets.Count > ConsumerMutationPolicy.HardMaxTargets)
         {
             return Unknown(
                 "consumer_delete_canonical_invalid",
-                canonical.Targets.Count);
+                canonicalTargetCount);
         }
 
         if (canonical.Mode == ConsumerDeleteMode.Group)
@@ -211,27 +208,12 @@ public sealed class ConsumerMutationExecutionService
                     1);
         }
 
-        if (canonical.Targets.Count < 1)
-            return Unknown("consumer_offset_delete_canonical_invalid", 0);
-
-        var targets = canonical.Targets
-            .OrderBy(target => target.Ordinal)
-            .Select((target, ordinal) =>
-            {
-                if (target.Ordinal != ordinal ||
-                    target.CommittedOffsetMissing ||
-                    target.CommittedOffset is null)
-                {
-                    throw new MutationStateException(
-                        "Consumer offset deletion canonical target is invalid.");
-                }
-
-                return new ConsumerOffsetTarget(
-                    target.TopicName,
-                    target.Partition,
-                    target.CommittedOffset.Value);
-            })
-            .ToArray();
+        if (!TryBuildDeleteTargets(canonical, out var targets))
+        {
+            return Unknown(
+                "consumer_offset_delete_canonical_invalid",
+                canonicalTargetCount);
+        }
 
         MutationProviderResult deleteAccepted;
         try
@@ -302,6 +284,200 @@ public sealed class ConsumerMutationExecutionService
             "consumer_offset_delete_verification_inconclusive",
             deleteAccepted,
             targets.Length);
+    }
+
+    private static bool TryBuildAlterTargets(
+        ConsumerOffsetAlterCanonicalIntent canonical,
+        out ConsumerOffsetTarget[] targets)
+    {
+        targets = Array.Empty<ConsumerOffsetTarget>();
+
+        if (!TryValidateCanonicalIdentity(
+                canonical.ClusterId,
+                canonical.GroupId,
+                canonical.GroupState,
+                canonical.GroupFingerprint) ||
+            canonical.Targets is null ||
+            canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets ||
+            canonical.TotalBackwardDistance < 0 ||
+            canonical.TotalForwardDistance < 0 ||
+            canonical.MissingCommittedOffsetCount < 0 ||
+            canonical.MissingCommittedOffsetCount > canonical.Targets.Count)
+        {
+            return false;
+        }
+
+        try
+        {
+            var seen = new HashSet<(string Topic, int Partition)>();
+            var result = new List<ConsumerOffsetTarget>(canonical.Targets.Count);
+            long backwardDistance = 0;
+            long forwardDistance = 0;
+            var missingCount = 0;
+
+            foreach (var target in canonical.Targets.OrderBy(item => item.Ordinal))
+            {
+                if (target is null ||
+                    target.Ordinal != result.Count ||
+                    target.Selector is null ||
+                    !Enum.IsDefined(target.Selector.Kind) ||
+                    !Enum.IsDefined(target.Movement) ||
+                    target.Partition < 0 ||
+                    target.ResolvedOffset < 0 ||
+                    target.LowWatermark < 0 ||
+                    target.HighWatermark < target.LowWatermark ||
+                    target.ResolvedOffset < target.LowWatermark ||
+                    target.ResolvedOffset > target.HighWatermark ||
+                    target.CommittedOffset is < 0 ||
+                    target.CommittedOffsetMissing != !target.CommittedOffset.HasValue)
+                {
+                    return false;
+                }
+
+                var topic = ConsumerMutationCanonicalization.RequireTopicName(
+                    target.TopicName);
+                if (!seen.Add((topic, target.Partition)))
+                    return false;
+
+                long? expectedDelta = target.CommittedOffset.HasValue
+                    ? checked(target.ResolvedOffset - target.CommittedOffset.Value)
+                    : null;
+                if (target.DeltaFromCommitted != expectedDelta)
+                    return false;
+
+                var expectedMovement = expectedDelta switch
+                {
+                    null => ConsumerOffsetMovement.MissingCurrent,
+                    < 0 => ConsumerOffsetMovement.BackwardReplay,
+                    > 0 => ConsumerOffsetMovement.ForwardSkip,
+                    _ => ConsumerOffsetMovement.Unchanged,
+                };
+                if (target.Movement != expectedMovement)
+                    return false;
+
+                if (!expectedDelta.HasValue)
+                {
+                    missingCount++;
+                }
+                else if (expectedDelta.Value < 0)
+                {
+                    backwardDistance = checked(
+                        backwardDistance - expectedDelta.Value);
+                }
+                else if (expectedDelta.Value > 0)
+                {
+                    forwardDistance = checked(
+                        forwardDistance + expectedDelta.Value);
+                }
+
+                result.Add(
+                    new ConsumerOffsetTarget(
+                        topic,
+                        target.Partition,
+                        target.ResolvedOffset));
+            }
+
+            if (backwardDistance != canonical.TotalBackwardDistance ||
+                forwardDistance != canonical.TotalForwardDistance ||
+                missingCount != canonical.MissingCommittedOffsetCount)
+            {
+                return false;
+            }
+
+            targets = result.ToArray();
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+            OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryBuildDeleteTargets(
+        ConsumerDeleteCanonicalIntent canonical,
+        out ConsumerOffsetTarget[] targets)
+    {
+        targets = Array.Empty<ConsumerOffsetTarget>();
+        if (canonical.Mode != ConsumerDeleteMode.Offsets ||
+            canonical.Targets is null ||
+            canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets)
+        {
+            return false;
+        }
+
+        try
+        {
+            var seen = new HashSet<(string Topic, int Partition)>();
+            var result = new List<ConsumerOffsetTarget>(canonical.Targets.Count);
+
+            foreach (var target in canonical.Targets.OrderBy(item => item.Ordinal))
+            {
+                if (target is null ||
+                    target.Ordinal != result.Count ||
+                    target.Partition < 0 ||
+                    target.CommittedOffsetMissing ||
+                    target.CommittedOffset is null or < 0 ||
+                    target.LowWatermark < 0 ||
+                    target.HighWatermark < target.LowWatermark)
+                {
+                    return false;
+                }
+
+                var topic = ConsumerMutationCanonicalization.RequireTopicName(
+                    target.TopicName);
+                if (!seen.Add((topic, target.Partition)))
+                    return false;
+
+                result.Add(
+                    new ConsumerOffsetTarget(
+                        topic,
+                        target.Partition,
+                        target.CommittedOffset.Value));
+            }
+
+            targets = result.ToArray();
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryValidateCanonicalIdentity(
+        string clusterId,
+        string groupId,
+        ConsumerGroupState groupState,
+        string groupFingerprint)
+    {
+        if (groupState != ConsumerGroupState.Empty)
+            return false;
+
+        try
+        {
+            _ = ConsumerMutationCanonicalization.RequireIdentifier(
+                clusterId,
+                "Cluster ID",
+                256);
+            _ = ConsumerMutationCanonicalization.RequireIdentifier(
+                groupId,
+                "Consumer group ID",
+                255);
+            var fingerprint =
+                ConsumerMutationCanonicalization.RequireIdentifier(
+                    groupFingerprint,
+                    "Consumer group fingerprint",
+                    128);
+
+            return fingerprint.Length == 64 &&
+                   fingerprint.All(char.IsAsciiHexDigit);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private async Task<(bool Verified, int MatchedCount)> VerifyUntilAsync(
