@@ -483,9 +483,7 @@ public sealed class ConsumerMutationExecutionService
                     target.Ordinal != ordinal++ ||
                     target.Partition < 0 ||
                     target.CommittedOffsetMissing ||
-                    target.CommittedOffset is null or < 0 ||
-                    target.LowWatermark < 0 ||
-                    target.HighWatermark < target.LowWatermark)
+                    target.CommittedOffset is null or < 0)
                 {
                     return false;
                 }
@@ -529,8 +527,9 @@ public sealed class ConsumerMutationExecutionService
                     target.Partition < 0 ||
                     target.CommittedOffsetMissing ||
                     target.CommittedOffset is null or < 0 ||
-                    target.LowWatermark < 0 ||
-                    target.HighWatermark < target.LowWatermark)
+                    target.LowWatermark is null or < 0 ||
+                    target.HighWatermark is null ||
+                    target.HighWatermark.Value < target.LowWatermark.Value)
                 {
                     return false;
                 }
