@@ -30,5 +30,6 @@ public interface IConsumerMutationObservationPort
         string groupId,
         IReadOnlyList<ConsumerMutationObservationTarget> targets,
         KafkaOperationContext operation,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool includeAllCommittedOffsets = false);
 }
