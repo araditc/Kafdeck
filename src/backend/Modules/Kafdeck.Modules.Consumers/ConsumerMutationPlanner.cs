@@ -74,6 +74,27 @@ public sealed class ConsumerMutationPlanner
                 .Failed(commonFailure);
         }
 
+        if (request.Mode == ConsumerDeleteMode.Group &&
+            observation.Value.Partitions.Count > _policy.MaxTargets)
+        {
+            return ConsumerMutationPlanningResult<ConsumerDeleteCanonicalIntent>
+                .Failed(new ConsumerMutationPlanningFailure(
+                    ConsumerMutationPlanningFailureCode.LimitExceeded,
+                    $"Consumer group offset inventory exceeds the configured {_policy.MaxTargets}-target ceiling."));
+        }
+
+        IReadOnlyList<ConsumerOffsetDeleteTargetInput> effectiveTargets =
+            request.Mode == ConsumerDeleteMode.Group
+                ? Array.AsReadOnly(
+                    observation.Value.Partitions
+                        .OrderBy(item => item.Topic, StringComparer.Ordinal)
+                        .ThenBy(item => item.Partition)
+                        .Select(item => new ConsumerOffsetDeleteTargetInput(
+                            item.Topic,
+                            item.Partition))
+                        .ToArray())
+                : normalizedTargets;
+
         var observedByTarget = IndexObservedPartitions(
             observation.Value.Partitions,
             out var observationFailure);
@@ -97,9 +118,9 @@ public sealed class ConsumerMutationPlanner
                     observation.Value)),
         };
 
-        for (var ordinal = 0; ordinal < normalizedTargets.Count; ordinal++)
+        for (var ordinal = 0; ordinal < effectiveTargets.Count; ordinal++)
         {
-            var target = normalizedTargets[ordinal];
+            var target = effectiveTargets[ordinal];
             if (!observedByTarget!.TryGetValue(
                     (target.TopicName, target.Partition),
                     out var observed))
@@ -245,7 +266,9 @@ public sealed class ConsumerMutationPlanner
                         target.TopicName,
                         target.Partition))
                     .ToArray(),
-                cancellationToken)
+                cancellationToken,
+                includeAllCommittedOffsets:
+                    request.Mode == ConsumerDeleteMode.Group)
             .ConfigureAwait(false);
 
         if (!observation.IsSuccess || observation.Value is null)
@@ -271,9 +294,9 @@ public sealed class ConsumerMutationPlanner
         }
 
         var canonicalTargets = new List<ConsumerDeleteCanonicalTarget>(
-            normalizedTargets.Count);
+            effectiveTargets.Count);
         var preconditions = new List<MutationPrecondition>(
-            normalizedTargets.Count + 1)
+            effectiveTargets.Count + 1)
         {
             new(
                 "consumer.group",
@@ -366,14 +389,16 @@ public sealed class ConsumerMutationPlanner
         string clusterId,
         string groupId,
         IReadOnlyList<ConsumerMutationObservationTarget> targets,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        bool includeAllCommittedOffsets = false) =>
         await _observations.ObserveAsync(
                 clusterId,
                 groupId,
                 targets,
                 new KafkaOperationContext(
                     _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout)),
-                cancellationToken)
+                cancellationToken,
+                includeAllCommittedOffsets)
             .ConfigureAwait(false);
 
     private ConsumerMutationPlanningFailure? ValidateGroupObservation(
