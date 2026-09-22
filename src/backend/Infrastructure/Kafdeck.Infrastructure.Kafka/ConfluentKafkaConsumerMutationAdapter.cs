@@ -454,6 +454,7 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
             Kafdeck.Core.Kafka.KafkaFailureCategory.Timeout or
             Kafdeck.Core.Kafka.KafkaFailureCategory.Unavailable or
             Kafdeck.Core.Kafka.KafkaFailureCategory.Unknown or
+            Kafdeck.Core.Kafka.KafkaFailureCategory.ProtocolError or
             Kafdeck.Core.Kafka.KafkaFailureCategory.Cancelled;
 
     private static string RequireGroupId(string value)
