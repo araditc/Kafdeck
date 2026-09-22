@@ -168,7 +168,11 @@ public static class KafdeckConfigurationLoader
             connect = new KafkaConnectProfile(
                 connectSection["Url"] ?? string.Empty,
                 ParseOptionalSecret(connectSection["Username"]),
-                ParseOptionalSecret(connectSection["Password"]));
+                ParseOptionalSecret(connectSection["Password"]),
+                ParseEnum(
+                    connectSection["MutationProviderProfile"],
+                    KafkaConnectMutationProviderProfile.None,
+                    "Kafka Connect mutation provider profile"));
         }
 
         var ksqlSection = section.GetSection("KsqlDb");
