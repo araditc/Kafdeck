@@ -292,6 +292,48 @@ public sealed class V05SchemaMutationTests
     }
 
     [Fact]
+    public async Task Accepted_schema_mutation_near_executor_deadline_remains_applied_unverified()
+    {
+        var mutations = new AcceptingSchemaMutationPort();
+        var catalog = ExistingSubjectCatalog();
+        var observations = new FakeMutationObservation();
+        var service = new SchemaMutationExecutionService(
+            mutations,
+            catalog,
+            observations,
+            new SchemaMutationVerificationPolicy(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(50)),
+            new FixedTimeProvider(Now));
+
+        var canonical = new SchemaCompatibilityCanonicalIntent(
+            "prod",
+            SchemaCompatibilityScope.Subject,
+            "orders-value",
+            SchemaCompatibilityMode.Backward,
+            false,
+            SchemaCompatibilityMode.Full,
+            new string('a', 64));
+
+        var result = await service.AlterCompatibilityAsync(
+            canonical,
+            CancellationToken.None,
+            Now.AddMilliseconds(100));
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedUnverified,
+            result.ResultKind);
+        Assert.Equal(
+            "schema_compatibility_verification_inconclusive",
+            result.ResultCode);
+        Assert.NotNull(result.SafeEvidence);
+        Assert.Equal(
+            "inconclusive",
+            result.SafeEvidence!["verification.state"]);
+        Assert.Equal(1, mutations.AlterCalls);
+    }
+
+    [Fact]
     public void Schema_mutation_surface_has_no_generic_registry_write_proxy()
     {
         var methods = typeof(ISchemaMutationPort)
@@ -495,6 +537,39 @@ public sealed class V05SchemaMutationTests
             Task.FromResult(
                 ReadViewResult<SchemaGlobalCompatibilityObservation>.Success(
                     GlobalCompatibility));
+    }
+
+    private sealed class AcceptingSchemaMutationPort :
+        ISchemaMutationPort
+    {
+        public int AlterCalls { get; private set; }
+
+        public Task<MutationProviderResult> CreateAsync(
+            SchemaCreateMutation request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.AppliedUnverified,
+                    "schema_create_accepted"));
+
+        public Task<MutationProviderResult> AlterCompatibilityAsync(
+            SchemaAlterMutation request,
+            CancellationToken cancellationToken = default)
+        {
+            AlterCalls++;
+            return Task.FromResult(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.AppliedUnverified,
+                    "schema_compatibility_accepted"));
+        }
+
+        public Task<MutationProviderResult> DeleteAsync(
+            SchemaDeleteMutation request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.AppliedUnverified,
+                    "schema_delete_accepted"));
     }
 
     private sealed class FakeMutationObservation :
