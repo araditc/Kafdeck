@@ -106,10 +106,18 @@ public sealed record SchemaRegistryProfile(
     SecretReference? Username,
     SecretReference? Password);
 
+public enum KafkaConnectMutationProviderProfile
+{
+    None = 0,
+    ConfluentCompatibleV1 = 1,
+}
+
 public sealed record KafkaConnectProfile(
     string Url,
     SecretReference? Username,
-    SecretReference? Password);
+    SecretReference? Password,
+    KafkaConnectMutationProviderProfile MutationProviderProfile =
+        KafkaConnectMutationProviderProfile.None);
 
 public sealed record KsqlDbProfile(
     string Url,
