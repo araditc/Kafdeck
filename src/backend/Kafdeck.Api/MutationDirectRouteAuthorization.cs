@@ -16,12 +16,20 @@ public static class MutationDirectRouteAuthorization
     public static IReadOnlyList<MutationAuthorizationTarget>? ConsumerOffsetAlter(
         string clusterId,
         string groupId,
-        IReadOnlyList<ConsumerOffsetAlterTargetInput>? targets) =>
-        ConsumerTargets(
+        IReadOnlyList<ConsumerOffsetAlterTargetInput>? targets)
+    {
+        if (targets is null or { Count: 0 } ||
+            targets.Count > ConsumerMutationPolicy.HardMaxTargets)
+        {
+            return null;
+        }
+
+        return ConsumerTargets(
             AuthorizationAction.ConsumerOffsetAlter,
             clusterId,
             groupId,
-            targets?.Select(target => target?.TopicName));
+            targets.Select(target => target?.TopicName));
+    }
 
     public static IReadOnlyList<MutationAuthorizationTarget>? ConsumerDelete(
         string clusterId,
@@ -52,11 +60,17 @@ public static class MutationDirectRouteAuthorization
             });
         }
 
+        if (targets is null or { Count: 0 } ||
+            targets.Count > ConsumerMutationPolicy.HardMaxTargets)
+        {
+            return null;
+        }
+
         return ConsumerTargets(
             AuthorizationAction.ConsumerDelete,
             clusterId,
             groupId,
-            targets?.Select(target => target?.TopicName));
+            targets.Select(target => target?.TopicName));
     }
 
     public static IReadOnlyList<MutationAuthorizationTarget>? RecordsPurge(
@@ -96,11 +110,10 @@ public static class MutationDirectRouteAuthorization
         AuthorizationAction action,
         string clusterId,
         string groupId,
-        IEnumerable<string?>? topics)
+        IEnumerable<string?> topics)
     {
         if (!IsIdentifier(clusterId, 256) ||
-            !IsIdentifier(groupId, 255) ||
-            topics is null)
+            !IsIdentifier(groupId, 255))
         {
             return null;
         }
