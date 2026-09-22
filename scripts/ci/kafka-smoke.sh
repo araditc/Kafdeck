@@ -75,10 +75,14 @@ kafka_configs='/opt/kafka/bin/kafka-configs.sh'
 kafka_acls='/opt/kafka/bin/kafka-acls.sh'
 
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --create --topic kafdeck-ci-smoke --partitions 1 --replication-factor 1
+docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --create --topic kafdeck-w35-control --partitions 1 --replication-factor 1
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --describe --topic kafdeck-ci-smoke
 printf 'kafdeck-record-alpha\nkafdeck-record-beta\nkafdeck-record-gamma\n' | \
   docker exec -i kafdeck-kafka /opt/kafka/bin/kafka-console-producer.sh \
   --bootstrap-server localhost:9092 --topic kafdeck-ci-smoke >/dev/null
+printf 'kafdeck-w35-control\n' | \
+  docker exec -i kafdeck-kafka /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 --topic kafdeck-w35-control >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${KAFDECK_SCRAM256_PASSWORD}]" --entity-type users --entity-name kafdeck-scram256 >/dev/null
 docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --alter --add-config "SCRAM-SHA-512=[iterations=4096,password=${KAFDECK_SCRAM512_PASSWORD}]" --entity-type users --entity-name kafdeck-scram512 >/dev/null
 
@@ -118,6 +122,7 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
   --filter FullyQualifiedName~KafkaAdapterIntegrationTestsAuthorization
 
+docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-w35-control
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke
 
 echo "Kafka ${KAFDECK_KAFKA_VERSION:-4.3.1} W35 compatibility, mutation, security and partial-access matrix passed."
