@@ -3,6 +3,7 @@ using Confluent.Kafka.Admin;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Infrastructure.Configuration;
+using CoreConsumerGroupState = Kafdeck.Core.Consumers.ConsumerGroupState;
 
 namespace Kafdeck.Infrastructure.Kafka;
 
@@ -82,30 +83,38 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
             cancellationToken,
             async (client, timeout, token) =>
             {
-                var described = await client.DescribeConsumerGroupsAsync(
-                        [groupId],
-                        new DescribeConsumerGroupsOptions
-                        {
-                            RequestTimeout = timeout,
-                        })
-                    .WaitAsync(token)
-                    .ConfigureAwait(false);
-
-                var group = described.ConsumerGroupDescriptions.Single();
-                if (group.Error.IsError)
+                ConsumerGroupDescription group;
+                try
                 {
-                    if (group.Error.Code == ErrorCode.GroupIdNotFound)
+                    var described = await client.DescribeConsumerGroupsAsync(
+                            [groupId],
+                            new DescribeConsumerGroupsOptions
+                            {
+                                RequestTimeout = timeout,
+                            })
+                        .WaitAsync(token)
+                        .ConfigureAwait(false);
+
+                    group = described.ConsumerGroupDescriptions.Single();
+                }
+                catch (DescribeConsumerGroupsException exception)
+                {
+                    var report = exception.Results.ConsumerGroupDescriptions.Single();
+                    if (report.Error.Code == ErrorCode.GroupIdNotFound)
                     {
                         return new ConsumerMutationObservation(
                             groupId,
                             false,
-                            ConsumerGroupState.Dead,
+                            CoreConsumerGroupState.Dead,
                             Array.Empty<ConsumerMemberProjection>(),
                             Array.Empty<ConsumerMutationPartitionObservation>());
                     }
 
-                    throw new KafkaException(group.Error);
+                    throw new KafkaException(report.Error);
                 }
+
+                if (group.Error.IsError)
+                    throw new KafkaException(group.Error);
 
                 var members = group.Members
                     .OrderBy(member => member.ConsumerId, StringComparer.Ordinal)
@@ -140,7 +149,7 @@ public sealed class ConfluentKafkaConsumerMutationObservationAdapter :
                     .ToArray();
 
                 var committedResults = await client.ListConsumerGroupOffsetsAsync(
-                        [new ConsumerGroupTopicPartitions(groupId, partitions)],
+                        [new ConsumerGroupTopicPartitions(groupId, partitions.ToList())],
                         new ListConsumerGroupOffsetsOptions
                         {
                             RequestTimeout = timeout,
