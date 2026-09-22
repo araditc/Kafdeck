@@ -102,8 +102,8 @@ public sealed record ConsumerDeleteCanonicalTarget(
     int Partition,
     bool CommittedOffsetMissing,
     long? CommittedOffset,
-    long LowWatermark,
-    long HighWatermark);
+    long? LowWatermark,
+    long? HighWatermark);
 
 public sealed record ConsumerOffsetAlterCanonicalIntent(
     string ClusterId,
@@ -315,11 +315,13 @@ internal static class ConsumerMutationCanonicalization
         Append(
             builder,
             "low",
-            observation.LowWatermark.ToString(CultureInfo.InvariantCulture));
+            observation.LowWatermark?.ToString(CultureInfo.InvariantCulture)
+            ?? "missing");
         Append(
             builder,
             "high",
-            observation.HighWatermark.ToString(CultureInfo.InvariantCulture));
+            observation.HighWatermark?.ToString(CultureInfo.InvariantCulture)
+            ?? "missing");
         Append(
             builder,
             "timestamp-offset",
