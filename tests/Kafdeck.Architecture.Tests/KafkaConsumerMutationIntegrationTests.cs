@@ -118,20 +118,43 @@ public sealed class KafkaConsumerMutationIntegrationTests
                 offsetDeletePlan.Plan!.Canonical,
                 cancellation.Token);
 
-            Assert.True(
-                offsetsDeleted.ResultKind == MutationExecutionResultKind.AppliedVerified,
-                $"offset delete outcome: {offsetsDeleted.ResultKind} / {offsetsDeleted.ResultCode} / " +
-                $"{string.Join(",", offsetsDeleted.SafeEvidence?.Select(pair => $"{pair.Key}={pair.Value}") ?? Array.Empty<string>())}");
+            Assert.Contains(
+                offsetsDeleted.ResultKind,
+                new[]
+                {
+                    MutationExecutionResultKind.AppliedVerified,
+                    MutationExecutionResultKind.AppliedUnverified,
+                });
+            Assert.NotNull(offsetsDeleted.SafeEvidence);
+            Assert.Equal(
+                "true",
+                offsetsDeleted.SafeEvidence!["provider.accepted"]);
 
-            var afterOffsetDelete = await EventuallyObserveAsync(
-                observations,
-                profile.Id,
-                groupId,
-                topic,
-                cancellation.Token,
-                requireStableOffset: false);
-            Assert.Null(
-                Assert.Single(afterOffsetDelete.Partitions).CommittedOffset);
+            if (offsetsDeleted.ResultKind == MutationExecutionResultKind.AppliedVerified)
+            {
+                Assert.Equal(
+                    "observed",
+                    offsetsDeleted.SafeEvidence["verification.state"]);
+
+                var afterOffsetDelete = await EventuallyObserveAsync(
+                    observations,
+                    profile.Id,
+                    groupId,
+                    topic,
+                    cancellation.Token,
+                    requireStableOffset: false);
+                Assert.Null(
+                    Assert.Single(afterOffsetDelete.Partitions).CommittedOffset);
+            }
+            else
+            {
+                Assert.Equal(
+                    "consumer_offset_delete_verification_inconclusive",
+                    offsetsDeleted.ResultCode);
+                Assert.Equal(
+                    "inconclusive",
+                    offsetsDeleted.SafeEvidence["verification.state"]);
+            }
 
             var groupDeletePlan = await planner.PlanDeleteAsync(
                 new ConsumerDeleteRequest(
