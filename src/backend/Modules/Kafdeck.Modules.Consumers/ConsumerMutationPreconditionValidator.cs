@@ -57,34 +57,81 @@ public sealed class ConsumerMutationPreconditionValidator
             return Stale("consumer_offset_intent_invalid");
         }
 
+        if (canonical.Targets is null ||
+            canonical.Targets.Count is < 1 or > ConsumerMutationPolicy.HardMaxTargets ||
+            canonical.Targets.Any(static target =>
+                target is null || target.Selector is null))
+        {
+            return Stale("consumer_offset_intent_invalid");
+        }
+
+        var orderedTargets = canonical.Targets
+            .OrderBy(target => target.Ordinal)
+            .ToArray();
+        var alterTargets = new Dictionary<
+            (string Topic, int Partition),
+            ConsumerOffsetCanonicalTarget>();
+        var observationTargets =
+            new List<ConsumerMutationObservationTarget>(
+                orderedTargets.Length);
+
+        try
+        {
+            for (var ordinal = 0; ordinal < orderedTargets.Length; ordinal++)
+            {
+                var target = orderedTargets[ordinal];
+                if (target.Ordinal != ordinal ||
+                    target.Partition < 0 ||
+                    !SelectorMatchesCanonicalTarget(target))
+                {
+                    return Stale("consumer_offset_intent_invalid");
+                }
+
+                var topic =
+                    ConsumerMutationCanonicalization.RequireTopicName(
+                        target.TopicName);
+                if (!alterTargets.TryAdd(
+                        (topic, target.Partition),
+                        target))
+                {
+                    return Stale("consumer_offset_intent_invalid");
+                }
+
+                var timestamp =
+                    target.Selector.TimestampUnixMilliseconds.HasValue
+                        ? DateTimeOffset.FromUnixTimeMilliseconds(
+                            target.Selector.TimestampUnixMilliseconds.Value)
+                        : (DateTimeOffset?)null;
+
+                observationTargets.Add(
+                    new ConsumerMutationObservationTarget(
+                        topic,
+                        target.Partition,
+                        timestamp));
+            }
+        }
+        catch (ArgumentException)
+        {
+            return Stale("consumer_offset_intent_invalid");
+        }
+
         if (!BindingsMatch(
                 operation,
                 canonical.ClusterId,
                 canonical.GroupId,
-                canonical.Targets.Select(
-                    target => (target.TopicName, target.Partition))))
+                alterTargets.Keys))
         {
             return Stale("consumer_offset_binding_changed");
         }
-
-        var observationTargets = canonical.Targets
-            .OrderBy(target => target.Ordinal)
-            .Select(target => new ConsumerMutationObservationTarget(
-                target.TopicName,
-                target.Partition,
-                target.Selector.TimestampUnixMilliseconds.HasValue
-                    ? DateTimeOffset.FromUnixTimeMilliseconds(
-                        target.Selector.TimestampUnixMilliseconds.Value)
-                    : null))
-            .ToArray();
 
         return await ValidateObservedStateAsync(
                 operation,
                 canonical.GroupId,
                 observationTargets,
-                canonical.Targets.Select(
+                orderedTargets.Select(
                     target => (target.Ordinal, target.TopicName, target.Partition)),
-                cancellationToken)
+                cancellationToken,
+                alterTargets)
             .ConfigureAwait(false);
     }
 
@@ -106,6 +153,8 @@ public sealed class ConsumerMutationPreconditionValidator
         }
 
         if (!Enum.IsDefined(canonical.Mode) ||
+            canonical.Targets is null ||
+            canonical.Targets.Any(static target => target is null) ||
             !BindingsMatch(
                 operation,
                 canonical.ClusterId,
@@ -138,7 +187,10 @@ public sealed class ConsumerMutationPreconditionValidator
         string groupId,
         IReadOnlyList<ConsumerMutationObservationTarget> observationTargets,
         IEnumerable<(int Ordinal, string Topic, int Partition)> canonicalTargets,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<
+            (string Topic, int Partition),
+            ConsumerOffsetCanonicalTarget>? alterTargets = null)
     {
         var observed = await _observations.ObserveAsync(
                 operation.ClusterId,
@@ -223,6 +275,19 @@ public sealed class ConsumerMutationPreconditionValidator
             {
                 return Stale("consumer_precondition_partition_changed");
             }
+
+            if (alterTargets is not null)
+            {
+                if (!alterTargets.TryGetValue(
+                        (target.Topic, target.Partition),
+                        out var alterTarget) ||
+                    !SelectorMatchesObservedTarget(
+                        alterTarget,
+                        partition))
+                {
+                    return Stale("consumer_precondition_selector_changed");
+                }
+            }
         }
 
         if (preconditions.Count != observationTargets.Count + 1)
@@ -231,6 +296,84 @@ public sealed class ConsumerMutationPreconditionValidator
         }
 
         return MutationPreDispatchGuardResult.Allowed;
+    }
+
+    private static bool SelectorMatchesObservedTarget(
+        ConsumerOffsetCanonicalTarget target,
+        ConsumerMutationPartitionObservation observed)
+    {
+        if (!SelectorMatchesCanonicalTarget(target) ||
+            target.CommittedOffset != observed.CommittedOffset ||
+            target.CommittedOffsetMissing != !observed.CommittedOffset.HasValue ||
+            target.LowWatermark != observed.LowWatermark ||
+            target.HighWatermark != observed.HighWatermark)
+        {
+            return false;
+        }
+
+        return target.Selector.Kind == ConsumerOffsetSelectorKind.Timestamp
+            ? observed.TimestampResolvedOffset == target.ResolvedOffset
+            : observed.TimestampResolvedOffset is null;
+    }
+
+    private static bool SelectorMatchesCanonicalTarget(
+        ConsumerOffsetCanonicalTarget target)
+    {
+        try
+        {
+            return target.Selector.Kind switch
+            {
+                ConsumerOffsetSelectorKind.Absolute =>
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.Selector.RequestedValue is >= 0 &&
+                    target.ResolvedOffset ==
+                    target.Selector.RequestedValue.Value,
+
+                ConsumerOffsetSelectorKind.Earliest =>
+                    target.Selector.RequestedValue is null &&
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.ResolvedOffset == target.LowWatermark,
+
+                ConsumerOffsetSelectorKind.Latest =>
+                    target.Selector.RequestedValue is null &&
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.ResolvedOffset == target.HighWatermark,
+
+                ConsumerOffsetSelectorKind.Timestamp =>
+                    target.Selector.RequestedValue is null &&
+                    target.Selector.TimestampUnixMilliseconds.HasValue &&
+                    TimestampIsSupported(
+                        target.Selector.TimestampUnixMilliseconds.Value),
+
+                ConsumerOffsetSelectorKind.RelativeShift =>
+                    target.Selector.TimestampUnixMilliseconds is null &&
+                    target.Selector.RequestedValue.HasValue &&
+                    target.CommittedOffset.HasValue &&
+                    checked(
+                        target.CommittedOffset.Value +
+                        target.Selector.RequestedValue.Value) ==
+                    target.ResolvedOffset,
+
+                _ => false,
+            };
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TimestampIsSupported(long unixMilliseconds)
+    {
+        try
+        {
+            _ = DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
     }
 
     private static bool BindingsMatch(
