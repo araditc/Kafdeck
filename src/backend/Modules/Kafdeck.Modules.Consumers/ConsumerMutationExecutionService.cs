@@ -167,8 +167,12 @@ public sealed class ConsumerMutationExecutionService
 
         if (canonical.Mode == ConsumerDeleteMode.Group)
         {
-            if (canonical.Targets.Count != 0)
-                return Unknown("consumer_group_delete_canonical_invalid", 0);
+            if (!TryValidateGroupDeleteInventory(canonical))
+            {
+                return Unknown(
+                    "consumer_group_delete_canonical_invalid",
+                    canonicalTargetCount);
+            }
 
             MutationProviderResult accepted;
             try
@@ -452,6 +456,49 @@ public sealed class ConsumerMutationExecutionService
             return true;
         }
         catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryValidateGroupDeleteInventory(
+        ConsumerDeleteCanonicalIntent canonical)
+    {
+        if (canonical.Mode != ConsumerDeleteMode.Group ||
+            canonical.Targets is null ||
+            canonical.Targets.Count > ConsumerMutationPolicy.HardMaxTargets ||
+            canonical.Targets.Any(static target => target is null))
+        {
+            return false;
+        }
+
+        try
+        {
+            var seen = new HashSet<(string Topic, int Partition)>();
+            var ordinal = 0;
+
+            foreach (var target in canonical.Targets.OrderBy(item => item.Ordinal))
+            {
+                if (target is null ||
+                    target.Ordinal != ordinal++ ||
+                    target.Partition < 0 ||
+                    target.CommittedOffsetMissing ||
+                    target.CommittedOffset is null or < 0 ||
+                    target.LowWatermark < 0 ||
+                    target.HighWatermark < target.LowWatermark)
+                {
+                    return false;
+                }
+
+                var topic = ConsumerMutationCanonicalization.RequireTopicName(
+                    target.TopicName);
+                if (!seen.Add((topic, target.Partition)))
+                    return false;
+            }
+
+            return true;
+        }
+        catch (ArgumentException)
         {
             return false;
         }
