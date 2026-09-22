@@ -72,6 +72,15 @@ public sealed record SchemaCompatibilityCheckObservation(
     bool IsCompatible,
     string ResultCode);
 
+public sealed record SchemaDeleteObservationRequest(
+    string Subject,
+    int? Version);
+
+public sealed record SchemaDeleteTargetObservation(
+    bool ExistsActive,
+    bool ExistsIncludingDeleted,
+    bool IsSoftDeleted);
+
 public sealed record SchemaMutationObservationResult<T>
 {
     private SchemaMutationObservationResult(
@@ -106,6 +115,13 @@ public interface ISchemaMutationObservationPort
         TestCompatibilityAsync(
             string clusterId,
             SchemaCompatibilityCheckRequest request,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken);
+
+    Task<SchemaMutationObservationResult<SchemaDeleteTargetObservation>>
+        ObserveDeleteTargetAsync(
+            string clusterId,
+            SchemaDeleteObservationRequest request,
             ReadViewOperationContext operation,
             CancellationToken cancellationToken);
 }
