@@ -117,6 +117,46 @@ public sealed class V05ConnectSecretPreviewTests
     }
 
     [Fact]
+    public async Task Execution_material_builder_reuses_keyed_secret_projection()
+    {
+        var password = TestValue();
+        var opaque = TestValue();
+        var configuration = Request(password, opaque).Configuration;
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(
+            new FakeObservationPort(Missing("sink-a")),
+            digest);
+
+        var planned = await planner.PlanCreateAsync(
+            new ConnectCreateRequest(
+                "prod",
+                "sink-a",
+                configuration));
+
+        Assert.True(planned.IsSuccess, planned.Failure?.SafeMessage);
+        using var plannedMaterial = planned.ExecutionMaterial!;
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Plan!.Intent,
+            planned.Plan.Risk,
+            "w39-connect-material-builder-test",
+            Now.AddMinutes(5),
+            Now,
+            "connect-create-secret-material-builder");
+
+        using var rebuilt = ConnectMutationExecutionMaterialBuilder.BuildConfiguration(
+            operation.Snapshot,
+            configuration,
+            digest);
+
+        Assert.Equal(
+            planned.Plan.Canonical.MaterialName,
+            Assert.Single(rebuilt.Names));
+        Assert.True(
+            rebuilt.GetRequired(planned.Plan.Canonical.MaterialName).Length > 0);
+    }
+
+    [Fact]
     public async Task Create_with_secret_configuration_can_be_verified_after_provider_acceptance()
     {
         var password = TestValue();
