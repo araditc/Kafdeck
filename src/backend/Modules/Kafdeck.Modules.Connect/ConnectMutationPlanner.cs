@@ -40,13 +40,11 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
-            connectorName =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    request.ConnectorName);
-            configuration =
-                ConnectMutationCanonicalization.NormalizeConfiguration(
-                    request.Configuration,
-                    _policy);
+            connectorName = ConnectMutationCanonicalization.RequireConnectorName(
+                request.ConnectorName);
+            configuration = ConnectMutationCanonicalization.NormalizeConfiguration(
+                request.Configuration,
+                _policy);
         }
         catch (ArgumentException exception)
         {
@@ -55,9 +53,7 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(
-                clusterId,
-                cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectCreateCanonicalIntent>(capabilities.Failure!);
@@ -68,10 +64,7 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit connector creation.");
         }
 
-        var observed = await ObserveAsync(
-                clusterId,
-                connectorName,
-                cancellationToken)
+        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectCreateCanonicalIntent>(observed.Failure!);
@@ -105,13 +98,11 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
-            connectorName =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    request.ConnectorName);
-            configuration =
-                ConnectMutationCanonicalization.NormalizeConfiguration(
-                    request.Configuration,
-                    _policy);
+            connectorName = ConnectMutationCanonicalization.RequireConnectorName(
+                request.ConnectorName);
+            configuration = ConnectMutationCanonicalization.NormalizeConfiguration(
+                request.Configuration,
+                _policy);
         }
         catch (ArgumentException exception)
         {
@@ -120,9 +111,7 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(
-                clusterId,
-                cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectUpdateCanonicalIntent>(capabilities.Failure!);
@@ -133,10 +122,7 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit connector update.");
         }
 
-        var observed = await ObserveAsync(
-                clusterId,
-                connectorName,
-                cancellationToken)
+        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectUpdateCanonicalIntent>(observed.Failure!);
@@ -147,16 +133,14 @@ public sealed class ConnectMutationPlanner
                 "Kafka Connect connector does not exist.");
         }
 
-        var projected =
-            ConnectMutationCanonicalization.ProjectConfiguration(
-                configuration);
+        var projected = ConnectMutationSensitiveFingerprinting.ProjectRequested(
+            configuration,
+            _digest);
         var requestedFingerprint =
-            ConnectMutationCanonicalization.ConfigurationFingerprint(
-                projected);
-        var diff =
-            ConnectMutationCanonicalization.Diff(
-                observed.Value.Configuration,
-                projected);
+            ConnectMutationCanonicalization.ConfigurationFingerprint(projected);
+        var diff = ConnectMutationCanonicalization.Diff(
+            observed.Value.Configuration,
+            projected);
 
         if (diff.Count == 0 &&
             string.Equals(
@@ -170,27 +154,24 @@ public sealed class ConnectMutationPlanner
         }
 
         var materialName = "connect/configuration";
-        var materialBytes =
-            ConnectMutationCanonicalization.EncodeConfiguration(
-                configuration);
+        var materialBytes = ConnectMutationCanonicalization.EncodeConfiguration(
+            configuration);
 
         try
         {
             var stateFingerprint =
-                ConnectMutationCanonicalization.ObservationFingerprint(
-                    observed.Value);
-            var canonical =
-                new ConnectUpdateCanonicalIntent(
-                    ConnectAlterIntentKind.ConfigurationUpdate,
-                    clusterId,
-                    connectorName,
-                    materialName,
-                    observed.Value.ConfigurationFingerprint,
-                    requestedFingerprint,
-                    projected,
-                    diff,
-                    observed.Value.State,
-                    stateFingerprint);
+                ConnectMutationCanonicalization.ObservationFingerprint(observed.Value);
+            var canonical = new ConnectUpdateCanonicalIntent(
+                ConnectAlterIntentKind.ConfigurationUpdate,
+                clusterId,
+                connectorName,
+                materialName,
+                observed.Value.ConfigurationFingerprint,
+                requestedFingerprint,
+                projected,
+                diff,
+                observed.Value.State,
+                stateFingerprint);
 
             var intent = BuildIntent(
                 MutationOperationKind.ConnectAlter,
@@ -202,31 +183,24 @@ public sealed class ConnectMutationPlanner
                 materialName,
                 materialBytes);
 
-            var risk =
-                MutationRiskClassifier.Classify(
-                    new MutationRiskInput(
-                        MutationOperationKind.ConnectAlter));
+            var risk = MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.ConnectAlter));
+            var material = new MutationExecutionMaterial(
+                new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+                {
+                    [materialName] = materialBytes,
+                });
 
-            var material =
-                new MutationExecutionMaterial(
-                    new Dictionary<string, ReadOnlyMemory<byte>>(
-                        StringComparer.Ordinal)
-                    {
-                        [materialName] = materialBytes,
-                    });
-
-            return ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent>
-                .Success(
-                    new ConnectMutationPlan<ConnectUpdateCanonicalIntent>(
-                        canonical,
-                        intent,
-                        risk),
-                    material);
+            return ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent>.Success(
+                new ConnectMutationPlan<ConnectUpdateCanonicalIntent>(
+                    canonical,
+                    intent,
+                    risk),
+                material);
         }
         finally
         {
-            System.Security.Cryptography.CryptographicOperations
-                .ZeroMemory(materialBytes);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(materialBytes);
         }
     }
 
@@ -245,16 +219,13 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
-            connectorName =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    request.ConnectorName);
+            connectorName = ConnectMutationCanonicalization.RequireConnectorName(
+                request.ConnectorName);
 
             if (!Enum.IsDefined(request.Action))
                 throw new ArgumentOutOfRangeException(nameof(request.Action));
 
-            if (request.Action is
-                    ConnectControlAction.Pause or
-                    ConnectControlAction.Resume)
+            if (request.Action is ConnectControlAction.Pause or ConnectControlAction.Resume)
             {
                 if (request.TaskId is not null)
                     throw new ArgumentException(
@@ -272,23 +243,18 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(
-                clusterId,
-                cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectControlCanonicalIntent>(capabilities.Failure!);
 
         var supported = request.Action switch
         {
-            ConnectControlAction.Pause =>
-                capabilities.Value!.SupportsPause,
-            ConnectControlAction.Resume =>
-                capabilities.Value!.SupportsResume,
+            ConnectControlAction.Pause => capabilities.Value!.SupportsPause,
+            ConnectControlAction.Resume => capabilities.Value!.SupportsResume,
             ConnectControlAction.Restart when request.TaskId.HasValue =>
                 capabilities.Value!.SupportsTaskRestart,
-            ConnectControlAction.Restart =>
-                capabilities.Value!.SupportsRestart,
+            ConnectControlAction.Restart => capabilities.Value!.SupportsRestart,
             _ => false,
         };
 
@@ -299,10 +265,7 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit the requested lifecycle operation.");
         }
 
-        var observed = await ObserveAsync(
-                clusterId,
-                connectorName,
-                cancellationToken)
+        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectControlCanonicalIntent>(observed.Failure!);
@@ -316,8 +279,8 @@ public sealed class ConnectMutationPlanner
         string? taskState = null;
         if (request.TaskId.HasValue)
         {
-            var task = observed.Value.Tasks
-                .SingleOrDefault(item => item.Id == request.TaskId.Value);
+            var task = observed.Value.Tasks.SingleOrDefault(
+                item => item.Id == request.TaskId.Value);
             if (task is null)
             {
                 return Failed<ConnectControlCanonicalIntent>(
@@ -329,10 +292,7 @@ public sealed class ConnectMutationPlanner
         }
 
         if (request.Action == ConnectControlAction.Pause &&
-            string.Equals(
-                observed.Value.State,
-                "PAUSED",
-                StringComparison.Ordinal))
+            string.Equals(observed.Value.State, "PAUSED", StringComparison.Ordinal))
         {
             return Failed<ConnectControlCanonicalIntent>(
                 ConnectMutationPlanningFailureCode.NoChange,
@@ -340,10 +300,7 @@ public sealed class ConnectMutationPlanner
         }
 
         if (request.Action == ConnectControlAction.Resume &&
-            string.Equals(
-                observed.Value.State,
-                "RUNNING",
-                StringComparison.Ordinal))
+            string.Equals(observed.Value.State, "RUNNING", StringComparison.Ordinal))
         {
             return Failed<ConnectControlCanonicalIntent>(
                 ConnectMutationPlanningFailureCode.NoChange,
@@ -351,40 +308,31 @@ public sealed class ConnectMutationPlanner
         }
 
         var stateFingerprint =
-            ConnectMutationCanonicalization.ObservationFingerprint(
-                observed.Value);
-        var canonical =
-            new ConnectControlCanonicalIntent(
-                ConnectAlterIntentKind.Control,
-                clusterId,
-                connectorName,
-                request.Action,
-                request.TaskId,
-                observed.Value.State,
-                taskState,
-                stateFingerprint);
-
-        var canonicalJson =
-            ConnectMutationCanonicalization.Serialize(canonical);
+            ConnectMutationCanonicalization.ObservationFingerprint(observed.Value);
+        var canonical = new ConnectControlCanonicalIntent(
+            ConnectAlterIntentKind.Control,
+            clusterId,
+            connectorName,
+            request.Action,
+            request.TaskId,
+            observed.Value.State,
+            taskState,
+            stateFingerprint);
         var intent = BuildIntent(
             MutationOperationKind.ConnectAlter,
             clusterId,
             connectorName,
-            canonicalJson,
+            ConnectMutationCanonicalization.Serialize(canonical),
             stateFingerprint,
             AuthorizationAction.ConnectAlter);
+        var risk = MutationRiskClassifier.Classify(
+            new MutationRiskInput(MutationOperationKind.ConnectAlter));
 
-        var risk =
-            MutationRiskClassifier.Classify(
-                new MutationRiskInput(
-                    MutationOperationKind.ConnectAlter));
-
-        return ConnectMutationPlanningResult<ConnectControlCanonicalIntent>
-            .Success(
-                new ConnectMutationPlan<ConnectControlCanonicalIntent>(
-                    canonical,
-                    intent,
-                    risk));
+        return ConnectMutationPlanningResult<ConnectControlCanonicalIntent>.Success(
+            new ConnectMutationPlan<ConnectControlCanonicalIntent>(
+                canonical,
+                intent,
+                risk));
     }
 
     public async Task<ConnectMutationPlanningResult<ConnectDeleteCanonicalIntent>>
@@ -402,9 +350,8 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
-            connectorName =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    request.ConnectorName);
+            connectorName = ConnectMutationCanonicalization.RequireConnectorName(
+                request.ConnectorName);
         }
         catch (ArgumentException exception)
         {
@@ -413,9 +360,7 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(
-                clusterId,
-                cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectDeleteCanonicalIntent>(capabilities.Failure!);
@@ -426,10 +371,7 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit connector deletion.");
         }
 
-        var observed = await ObserveAsync(
-                clusterId,
-                connectorName,
-                cancellationToken)
+        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectDeleteCanonicalIntent>(observed.Failure!);
@@ -441,16 +383,13 @@ public sealed class ConnectMutationPlanner
         }
 
         var stateFingerprint =
-            ConnectMutationCanonicalization.ObservationFingerprint(
-                observed.Value);
-        var canonical =
-            new ConnectDeleteCanonicalIntent(
-                clusterId,
-                connectorName,
-                observed.Value.State,
-                observed.Value.ConfigurationFingerprint,
-                stateFingerprint);
-
+            ConnectMutationCanonicalization.ObservationFingerprint(observed.Value);
+        var canonical = new ConnectDeleteCanonicalIntent(
+            clusterId,
+            connectorName,
+            observed.Value.State,
+            observed.Value.ConfigurationFingerprint,
+            stateFingerprint);
         var intent = BuildIntent(
             MutationOperationKind.ConnectDelete,
             clusterId,
@@ -458,52 +397,42 @@ public sealed class ConnectMutationPlanner
             ConnectMutationCanonicalization.Serialize(canonical),
             stateFingerprint,
             AuthorizationAction.ConnectDelete);
+        var risk = MutationRiskClassifier.Classify(
+            new MutationRiskInput(MutationOperationKind.ConnectDelete));
 
-        var risk =
-            MutationRiskClassifier.Classify(
-                new MutationRiskInput(
-                    MutationOperationKind.ConnectDelete));
-
-        return ConnectMutationPlanningResult<ConnectDeleteCanonicalIntent>
-            .Success(
-                new ConnectMutationPlan<ConnectDeleteCanonicalIntent>(
-                    canonical,
-                    intent,
-                    risk));
+        return ConnectMutationPlanningResult<ConnectDeleteCanonicalIntent>.Success(
+            new ConnectMutationPlan<ConnectDeleteCanonicalIntent>(
+                canonical,
+                intent,
+                risk));
     }
 
-    private ConnectMutationPlanningResult<ConnectCreateCanonicalIntent>
-        BuildCreate(
-            string clusterId,
-            string connectorName,
-            IReadOnlyDictionary<string, string> configuration,
-            ConnectMutationObservation observed)
+    private ConnectMutationPlanningResult<ConnectCreateCanonicalIntent> BuildCreate(
+        string clusterId,
+        string connectorName,
+        IReadOnlyDictionary<string, string> configuration,
+        ConnectMutationObservation observed)
     {
-        var projected =
-            ConnectMutationCanonicalization.ProjectConfiguration(
-                configuration);
+        var projected = ConnectMutationSensitiveFingerprinting.ProjectRequested(
+            configuration,
+            _digest);
         var requestedFingerprint =
-            ConnectMutationCanonicalization.ConfigurationFingerprint(
-                projected);
+            ConnectMutationCanonicalization.ConfigurationFingerprint(projected);
         var stateFingerprint =
-            ConnectMutationCanonicalization.ObservationFingerprint(
-                observed);
+            ConnectMutationCanonicalization.ObservationFingerprint(observed);
         var materialName = "connect/configuration";
-        var materialBytes =
-            ConnectMutationCanonicalization.EncodeConfiguration(
-                configuration);
+        var materialBytes = ConnectMutationCanonicalization.EncodeConfiguration(
+            configuration);
 
         try
         {
-            var canonical =
-                new ConnectCreateCanonicalIntent(
-                    clusterId,
-                    connectorName,
-                    materialName,
-                    requestedFingerprint,
-                    projected,
-                    stateFingerprint);
-
+            var canonical = new ConnectCreateCanonicalIntent(
+                clusterId,
+                connectorName,
+                materialName,
+                requestedFingerprint,
+                projected,
+                stateFingerprint);
             var intent = BuildIntent(
                 MutationOperationKind.ConnectCreate,
                 clusterId,
@@ -513,32 +442,24 @@ public sealed class ConnectMutationPlanner
                 AuthorizationAction.ConnectCreate,
                 materialName,
                 materialBytes);
+            var risk = MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.ConnectCreate));
+            var material = new MutationExecutionMaterial(
+                new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+                {
+                    [materialName] = materialBytes,
+                });
 
-            var risk =
-                MutationRiskClassifier.Classify(
-                    new MutationRiskInput(
-                        MutationOperationKind.ConnectCreate));
-
-            var material =
-                new MutationExecutionMaterial(
-                    new Dictionary<string, ReadOnlyMemory<byte>>(
-                        StringComparer.Ordinal)
-                    {
-                        [materialName] = materialBytes,
-                    });
-
-            return ConnectMutationPlanningResult<ConnectCreateCanonicalIntent>
-                .Success(
-                    new ConnectMutationPlan<ConnectCreateCanonicalIntent>(
-                        canonical,
-                        intent,
-                        risk),
-                    material);
+            return ConnectMutationPlanningResult<ConnectCreateCanonicalIntent>.Success(
+                new ConnectMutationPlan<ConnectCreateCanonicalIntent>(
+                    canonical,
+                    intent,
+                    risk),
+                material);
         }
         finally
         {
-            System.Security.Cryptography.CryptographicOperations
-                .ZeroMemory(materialBytes);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(materialBytes);
         }
     }
 
@@ -569,15 +490,11 @@ public sealed class ConnectMutationPlanner
             canonicalIntent,
             new[]
             {
-                ConnectMutationCanonicalization.ResourceKey(
-                    clusterId,
-                    connectorName),
+                ConnectMutationCanonicalization.ResourceKey(clusterId, connectorName),
             },
             new[]
             {
-                new MutationPrecondition(
-                    "connect.connector",
-                    stateFingerprint),
+                new MutationPrecondition("connect.connector", stateFingerprint),
             },
             materialDigests,
             new[]
@@ -585,8 +502,7 @@ public sealed class ConnectMutationPlanner
                 new MutationAuthorizationTarget(
                     action,
                     clusterId,
-                    ConnectMutationCanonicalization.AuthorizationResource(
-                        connectorName)),
+                    ConnectMutationCanonicalization.AuthorizationResource(connectorName)),
             });
     }
 
@@ -602,17 +518,15 @@ public sealed class ConnectMutationPlanner
             .ConfigureAwait(false);
 
         return result.IsSuccess && result.Value is not null
-            ? ConnectObservationResult<ConnectMutationCapabilities>.Success(
-                result.Value)
+            ? ConnectObservationResult<ConnectMutationCapabilities>.Success(result.Value)
             : ConnectObservationResult<ConnectMutationCapabilities>.Failed(
                 MapObservationFailure(result.Failure));
     }
 
-    internal async Task<ConnectObservationResult<ConnectMutationObservation>>
-        ObserveAsync(
-            string clusterId,
-            string connectorName,
-            CancellationToken cancellationToken)
+    internal async Task<ConnectObservationResult<ConnectMutationObservation>> ObserveAsync(
+        string clusterId,
+        string connectorName,
+        CancellationToken cancellationToken)
     {
         var result = await _observations.ObserveConnectorAsync(
                 clusterId,
@@ -639,20 +553,22 @@ public sealed class ConnectMutationPlanner
                     "Kafka Connect returned an invalid connector observation."));
         }
 
+        var protectedObservation =
+            ConnectMutationSensitiveFingerprinting.ProtectObservation(
+                result.Value,
+                _digest);
+
         return ConnectObservationResult<ConnectMutationObservation>.Success(
-            result.Value);
+            protectedObservation);
     }
 
     private ReadViewOperationContext Observation() =>
         new(
-            _timeProvider.GetUtcNow().Add(
-                _policy.ObservationTimeout),
-            maxItems:
-                Math.Max(
-                    _policy.MaxConfigurationItems,
-                    _policy.MaxTasks),
-            maxResponseBytes:
-                ConnectMutationPolicy.HardMaxConfigurationBytes * 2L);
+            _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout),
+            maxItems: Math.Max(
+                _policy.MaxConfigurationItems,
+                _policy.MaxTasks),
+            maxResponseBytes: ConnectMutationPolicy.HardMaxConfigurationBytes * 2L);
 
     private static ConnectMutationPlanningFailure MapObservationFailure(
         ConnectMutationObservationFailure? failure)
@@ -666,28 +582,23 @@ public sealed class ConnectMutationPlanner
 
         return failure.Category switch
         {
-            ConnectMutationObservationFailureCategory.NotConfigured =>
-                new(
-                    ConnectMutationPlanningFailureCode.ProviderNotConfigured,
-                    "Kafka Connect is not configured for the requested cluster."),
-            ConnectMutationObservationFailureCategory.Unauthorized =>
-                new(
-                    ConnectMutationPlanningFailureCode.ProviderUnauthorized,
-                    "Kafka Connect denied the required observation."),
-            ConnectMutationObservationFailureCategory.Unsupported =>
-                new(
-                    ConnectMutationPlanningFailureCode.ProviderUnsupported,
-                    "Kafka Connect does not support the required capability."),
+            ConnectMutationObservationFailureCategory.NotConfigured => new(
+                ConnectMutationPlanningFailureCode.ProviderNotConfigured,
+                "Kafka Connect is not configured for the requested cluster."),
+            ConnectMutationObservationFailureCategory.Unauthorized => new(
+                ConnectMutationPlanningFailureCode.ProviderUnauthorized,
+                "Kafka Connect denied the required observation."),
+            ConnectMutationObservationFailureCategory.Unsupported => new(
+                ConnectMutationPlanningFailureCode.ProviderUnsupported,
+                "Kafka Connect does not support the required capability."),
             ConnectMutationObservationFailureCategory.Unavailable or
             ConnectMutationObservationFailureCategory.Timeout or
-            ConnectMutationObservationFailureCategory.Cancelled =>
-                new(
-                    ConnectMutationPlanningFailureCode.ProviderUnavailable,
-                    "Kafka Connect state is currently unavailable."),
-            _ =>
-                new(
-                    ConnectMutationPlanningFailureCode.ObservationFailed,
-                    "Kafka Connect state could not be safely observed."),
+            ConnectMutationObservationFailureCategory.Cancelled => new(
+                ConnectMutationPlanningFailureCode.ProviderUnavailable,
+                "Kafka Connect state is currently unavailable."),
+            _ => new(
+                ConnectMutationPlanningFailureCode.ObservationFailed,
+                "Kafka Connect state could not be safely observed."),
         };
     }
 
@@ -696,9 +607,7 @@ public sealed class ConnectMutationPlanner
         string message)
         where T : class =>
         ConnectMutationPlanningResult<T>.Failed(
-            new ConnectMutationPlanningFailure(
-                code,
-                message));
+            new ConnectMutationPlanningFailure(code, message));
 
     private static ConnectMutationPlanningResult<T> Failed<T>(
         ConnectMutationPlanningFailure failure)
@@ -717,11 +626,9 @@ public sealed class ConnectMutationPlanner
 
         public T? Value { get; }
         public ConnectMutationPlanningFailure? Failure { get; }
-        public bool IsSuccess =>
-            Value is not null && Failure is null;
+        public bool IsSuccess => Value is not null && Failure is null;
 
-        public static ConnectObservationResult<T> Success(
-            T value) =>
+        public static ConnectObservationResult<T> Success(T value) =>
             new(value, null);
 
         public static ConnectObservationResult<T> Failed(
