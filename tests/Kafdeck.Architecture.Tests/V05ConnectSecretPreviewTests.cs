@@ -10,6 +10,9 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class V05ConnectSecretPreviewTests
 {
+    private static readonly DateTimeOffset Now =
+        new(2026, 9, 23, 4, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public async Task Secret_and_opaque_values_use_keyed_non_guessable_fingerprints()
     {
@@ -108,6 +111,53 @@ public sealed class V05ConnectSecretPreviewTests
         Assert.Equal(ConnectConfigurationChangeKind.Changed, change.ChangeKind);
         Assert.Equal("[REDACTED]", change.CurrentSafeValue);
         Assert.Equal("[REDACTED]", change.RequestedSafeValue);
+    }
+
+    [Fact]
+    public async Task Create_with_secret_configuration_can_be_verified_after_provider_acceptance()
+    {
+        var configuration = Request(
+            "verified-password",
+            "verified-opaque").Configuration;
+        var observations = new FakeObservationPort(Missing("sink-a"));
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(observations, digest);
+
+        var plan = await planner.PlanCreateAsync(
+            new ConnectCreateRequest(
+                "prod",
+                "sink-a",
+                configuration));
+
+        Assert.True(plan.IsSuccess, plan.Failure?.SafeMessage);
+        using var material = plan.ExecutionMaterial!;
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            plan.Plan!.Intent,
+            plan.Plan.Risk,
+            "w39-connect-secret-test",
+            Now.AddMinutes(5),
+            Now,
+            "connect-create-secret-verification");
+
+        observations.Current = Existing("sink-a", configuration);
+        var service = new ConnectMutationExecutionService(
+            new FakeMutationPort(),
+            observations,
+            digest);
+
+        var result = await service.CreateAsync(
+            new MutationExecutionContext(
+                operation.Snapshot,
+                material));
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedVerified,
+            result.ResultKind);
+        Assert.Equal("connect_create_verified", result.ResultCode);
+        Assert.Equal(
+            plan.Plan.Canonical.RequestedConfigurationFingerprint,
+            result.SafeEvidence!["configuration.fingerprint"]);
     }
 
     [Fact]
@@ -212,12 +262,12 @@ public sealed class V05ConnectSecretPreviewTests
 
     private sealed class FakeObservationPort : IConnectMutationObservationPort
     {
-        private readonly ConnectMutationObservation _observation;
-
         public FakeObservationPort(ConnectMutationObservation observation)
         {
-            _observation = observation;
+            Current = observation;
         }
+
+        public ConnectMutationObservation Current { get; set; }
 
         public Task<ConnectMutationObservationResult<ConnectMutationCapabilities>>
             GetCapabilitiesAsync(
@@ -243,6 +293,38 @@ public sealed class V05ConnectSecretPreviewTests
                 CancellationToken cancellationToken) =>
             Task.FromResult(
                 ConnectMutationObservationResult<ConnectMutationObservation>.Success(
-                    _observation));
+                    Current));
+    }
+
+    private sealed class FakeMutationPort : IConnectMutationPort
+    {
+        public Task<MutationProviderResult> CreateAsync(
+            ConnectCreateMutation request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Accepted("connect_create_accepted"));
+
+        public Task<MutationProviderResult> AlterAsync(
+            ConnectAlterMutation request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Accepted("connect_update_accepted"));
+
+        public Task<MutationProviderResult> ControlAsync(
+            ConnectControlMutation request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Accepted("connect_control_accepted"));
+
+        public Task<MutationProviderResult> DeleteAsync(
+            ConnectDeleteMutation request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Accepted("connect_delete_accepted"));
+
+        private static MutationProviderResult Accepted(string code) =>
+            new(
+                MutationExecutionResultKind.AppliedUnverified,
+                code,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["provider.accepted"] = "true",
+                });
     }
 }
