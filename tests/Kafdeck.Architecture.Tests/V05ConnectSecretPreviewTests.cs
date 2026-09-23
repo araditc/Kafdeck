@@ -16,15 +16,19 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Secret_and_opaque_values_use_keyed_non_guessable_fingerprints()
     {
+        var firstPasswordValue = TestValue();
+        var firstOpaqueValue = TestValue();
+        var secondPasswordValue = TestValue();
+        var secondOpaqueValue = TestValue();
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
             new FakeObservationPort(Missing("sink-a")),
             digest);
 
         var first = await planner.PlanCreateAsync(
-            Request("low-entropy-password", "opaque-one"));
+            Request(firstPasswordValue, firstOpaqueValue));
         var second = await planner.PlanCreateAsync(
-            Request("different-password", "opaque-two"));
+            Request(secondPasswordValue, secondOpaqueValue));
 
         Assert.True(first.IsSuccess, first.Failure?.SafeMessage);
         Assert.True(second.IsSuccess, second.Failure?.SafeMessage);
@@ -48,8 +52,8 @@ public sealed class V05ConnectSecretPreviewTests
         Assert.Equal("[REDACTED]", firstOpaque.SafeValue);
         Assert.NotEqual(firstPassword.ValueSha256, secondPassword.ValueSha256);
         Assert.NotEqual(firstOpaque.ValueSha256, secondOpaque.ValueSha256);
-        Assert.NotEqual(Sha256("low-entropy-password"), firstPassword.ValueSha256);
-        Assert.NotEqual(Sha256("opaque-one"), firstOpaque.ValueSha256);
+        Assert.NotEqual(Sha256(firstPasswordValue), firstPassword.ValueSha256);
+        Assert.NotEqual(Sha256(firstOpaqueValue), firstOpaque.ValueSha256);
         Assert.NotEqual(
             first.Plan.Canonical.RequestedConfigurationFingerprint,
             second.Plan.Canonical.RequestedConfigurationFingerprint);
@@ -63,9 +67,9 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Unchanged_secret_configuration_is_detected_without_persisting_raw_hashes()
     {
-        var configuration = Request(
-            "same-password",
-            "same-opaque").Configuration;
+        var password = TestValue();
+        var opaque = TestValue();
+        var configuration = Request(password, opaque).Configuration;
         var rawObservation = Existing("sink-a", configuration);
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
@@ -87,12 +91,11 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Secret_only_change_is_detected_and_remains_redacted()
     {
-        var current = Request(
-            "old-password",
-            "same-opaque").Configuration;
-        var requested = Request(
-            "new-password",
-            "same-opaque").Configuration;
+        var oldPassword = TestValue();
+        var newPassword = TestValue();
+        var opaque = TestValue();
+        var current = Request(oldPassword, opaque).Configuration;
+        var requested = Request(newPassword, opaque).Configuration;
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
             new FakeObservationPort(Existing("sink-a", current)),
@@ -116,9 +119,9 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Create_with_secret_configuration_can_be_verified_after_provider_acceptance()
     {
-        var configuration = Request(
-            "verified-password",
-            "verified-opaque").Configuration;
+        var password = TestValue();
+        var opaque = TestValue();
+        var configuration = Request(password, opaque).Configuration;
         var observations = new FakeObservationPort(Missing("sink-a"));
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(observations, digest);
@@ -163,9 +166,11 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Delete_preview_does_not_persist_raw_observation_secret_fingerprint()
     {
+        var password = TestValue();
+        var opaque = TestValue();
         var rawObservation = Existing(
             "sink-a",
-            Request("provider-password", "provider-opaque").Configuration);
+            Request(password, opaque).Configuration);
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
             new FakeObservationPort(rawObservation),
@@ -184,7 +189,10 @@ public sealed class V05ConnectSecretPreviewTests
     }
 
     private static HmacMutationMaterialDigestService Digest() =>
-        new("0123456789abcdef0123456789abcdef");
+        new(Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
+
+    private static string TestValue() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
     private static ConnectCreateRequest Request(
         string password,
