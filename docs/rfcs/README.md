@@ -21,11 +21,11 @@ Examples:
 
 Implementation should not outrun an unresolved RFC when the RFC is required by governance.
 
-
 ## Current RFC index
 
-- RFC-0001 — v0.1 Cluster Explorer — accepted/implemented.
-- RFC-0002 — v0.2 Operator Identity and RBAC — accepted/implemented.
-- RFC-0003 — v0.3 Safe Data Explorer and Server-Side Masking — accepted/implemented.
+- RFC-0001 — v0.1 Cluster Explorer — accepted/implemented/released.
+- RFC-0002 — v0.2 Operator Identity and RBAC — accepted/implemented/released.
+- RFC-0003 — v0.3 Safe Data Explorer and Server-Side Masking — accepted/implemented/released.
 - RFC-0004 — v0.4 Consumers, Schemas & Ecosystem Read Views — accepted/implemented/released.
-- RFC-0005 — v0.5 Safe Administration & Controlled Mutations — planning/review; implementation blocked until governed admission.
+- RFC-0005 — v0.5 Safe Administration & Controlled Mutations — accepted/implemented/released; v0.5.1 corrective publication completed.
+- RFC-0006 — v0.6 Fleet Operations, Broker Maintenance & Kafka Security — proposed for governed planning admission; implementation blocked until planning merge.
