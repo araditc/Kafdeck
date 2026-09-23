@@ -13,6 +13,7 @@ on:
       - 'tests/Kafdeck.Architecture.Tests/KafkaRecordsPurgeIntegrationTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V05MutationKernelTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V05MutationPersistenceTests.cs'
+      - 'docs/implementation/v0.5-w40-readiness.md'
       - '.github/workflows/v05-persistence.yml'
   workflow_dispatch:
 
