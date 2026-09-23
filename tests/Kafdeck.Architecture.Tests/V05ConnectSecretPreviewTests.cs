@@ -11,12 +11,11 @@ namespace Kafdeck.Architecture.Tests;
 public sealed class V05ConnectSecretPreviewTests
 {
     [Fact]
-    public async Task Secret_and_opaque_values_do_not_persist_guessable_value_hashes()
+    public async Task Secret_and_opaque_values_use_keyed_non_guessable_fingerprints()
     {
-        using var digest = new HmacMutationMaterialDigestService(
-            "0123456789abcdef0123456789abcdef");
+        using var digest = Digest();
         var planner = new ConnectMutationPlanner(
-            new MissingConnectorObservationPort(),
+            new FakeObservationPort(Missing("sink-a")),
             digest);
 
         var first = await planner.PlanCreateAsync(
@@ -44,21 +43,98 @@ public sealed class V05ConnectSecretPreviewTests
 
         Assert.Equal("[REDACTED]", firstPassword.SafeValue);
         Assert.Equal("[REDACTED]", firstOpaque.SafeValue);
-        Assert.Equal(firstPassword.ValueSha256, secondPassword.ValueSha256);
-        Assert.Equal(firstOpaque.ValueSha256, secondOpaque.ValueSha256);
+        Assert.NotEqual(firstPassword.ValueSha256, secondPassword.ValueSha256);
+        Assert.NotEqual(firstOpaque.ValueSha256, secondOpaque.ValueSha256);
         Assert.NotEqual(Sha256("low-entropy-password"), firstPassword.ValueSha256);
         Assert.NotEqual(Sha256("opaque-one"), firstOpaque.ValueSha256);
-
-        // The durable preview intentionally does not distinguish secret values.
-        // The W32 HMAC-bound execution-material digest remains the authoritative
-        // binding from preview to the re-submitted secret-bearing configuration.
-        Assert.Equal(
+        Assert.NotEqual(
             first.Plan.Canonical.RequestedConfigurationFingerprint,
             second.Plan.Canonical.RequestedConfigurationFingerprint);
+
+        // W32 retains a separate whole-material HMAC binding for execution.
         Assert.NotEqual(
             Assert.Single(first.Plan.Intent.MaterialDigests!).Digest,
             Assert.Single(second.Plan.Intent.MaterialDigests!).Digest);
     }
+
+    [Fact]
+    public async Task Unchanged_secret_configuration_is_detected_without_persisting_raw_hashes()
+    {
+        var configuration = Request(
+            "same-password",
+            "same-opaque").Configuration;
+        var rawObservation = Existing("sink-a", configuration);
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(
+            new FakeObservationPort(rawObservation),
+            digest);
+
+        var result = await planner.PlanUpdateAsync(
+            new ConnectUpdateRequest(
+                "prod",
+                "sink-a",
+                configuration));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ConnectMutationPlanningFailureCode.NoChange,
+            result.Failure!.Code);
+    }
+
+    [Fact]
+    public async Task Secret_only_change_is_detected_and_remains_redacted()
+    {
+        var current = Request(
+            "old-password",
+            "same-opaque").Configuration;
+        var requested = Request(
+            "new-password",
+            "same-opaque").Configuration;
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(
+            new FakeObservationPort(Existing("sink-a", current)),
+            digest);
+
+        var result = await planner.PlanUpdateAsync(
+            new ConnectUpdateRequest(
+                "prod",
+                "sink-a",
+                requested));
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        using var material = result.ExecutionMaterial!;
+        var change = Assert.Single(result.Plan!.Canonical.Diff);
+        Assert.Equal("db.password", change.Key);
+        Assert.Equal(ConnectConfigurationChangeKind.Changed, change.ChangeKind);
+        Assert.Equal("[REDACTED]", change.CurrentSafeValue);
+        Assert.Equal("[REDACTED]", change.RequestedSafeValue);
+    }
+
+    [Fact]
+    public async Task Delete_preview_does_not_persist_raw_observation_secret_fingerprint()
+    {
+        var rawObservation = Existing(
+            "sink-a",
+            Request("provider-password", "provider-opaque").Configuration);
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(
+            new FakeObservationPort(rawObservation),
+            digest);
+
+        var result = await planner.PlanDeleteAsync(
+            new ConnectDeleteRequest("prod", "sink-a"));
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.NotEqual(
+            rawObservation.ConfigurationFingerprint,
+            result.Plan!.Canonical.CurrentConfigurationFingerprint);
+        Assert.NotEqual(
+            ConnectMutationCanonicalization.ObservationFingerprint(rawObservation),
+            result.Plan.Canonical.StateFingerprint);
+    }
+
+    private static HmacMutationMaterialDigestService Digest() =>
+        new("0123456789abcdef0123456789abcdef");
 
     private static ConnectCreateRequest Request(
         string password,
@@ -74,14 +150,75 @@ public sealed class V05ConnectSecretPreviewTests
                 ["plugin.opaque"] = opaque,
             });
 
+    private static ConnectMutationObservation Existing(
+        string connectorName,
+        IReadOnlyDictionary<string, string> configuration)
+    {
+        var items = configuration
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair =>
+            {
+                var rawHash = Sha256(pair.Value);
+                var safe =
+                    ConnectSafeConfigurationPolicy.IsExplicitlySafeConfigKey(pair.Key) &&
+                    !ConnectSafeConfigurationPolicy.IsSecretKey(pair.Key)
+                        ? pair.Value
+                        : "[REDACTED]";
+                return new ConnectConfigurationObservationItem(
+                    pair.Key,
+                    rawHash,
+                    safe);
+            })
+            .ToArray();
+
+        return new ConnectMutationObservation(
+            connectorName,
+            Exists: true,
+            State: "RUNNING",
+            Tasks: Array.Empty<ConnectMutationTaskObservation>(),
+            Configuration: items,
+            ConfigurationFingerprint: RawConfigurationFingerprint(items));
+    }
+
+    private static ConnectMutationObservation Missing(string connectorName) =>
+        new(
+            connectorName,
+            Exists: false,
+            State: "MISSING",
+            Tasks: Array.Empty<ConnectMutationTaskObservation>(),
+            Configuration: Array.Empty<ConnectConfigurationObservationItem>(),
+            ConfigurationFingerprint: RawConfigurationFingerprint(
+                Array.Empty<ConnectConfigurationObservationItem>()));
+
+    private static string RawConfigurationFingerprint(
+        IEnumerable<ConnectConfigurationObservationItem> items)
+    {
+        var builder = new StringBuilder();
+        foreach (var item in items.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            builder.Append(item.Key)
+                .Append('=')
+                .Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(item.ValueSha256)))
+                .Append('\n');
+        }
+
+        return Sha256(builder.ToString());
+    }
+
     private static string Sha256(string value) =>
         Convert.ToHexString(
                 SHA256.HashData(Encoding.UTF8.GetBytes(value)))
             .ToLowerInvariant();
 
-    private sealed class MissingConnectorObservationPort :
-        IConnectMutationObservationPort
+    private sealed class FakeObservationPort : IConnectMutationObservationPort
     {
+        private readonly ConnectMutationObservation _observation;
+
+        public FakeObservationPort(ConnectMutationObservation observation)
+        {
+            _observation = observation;
+        }
+
         public Task<ConnectMutationObservationResult<ConnectMutationCapabilities>>
             GetCapabilitiesAsync(
                 string clusterId,
@@ -106,12 +243,6 @@ public sealed class V05ConnectSecretPreviewTests
                 CancellationToken cancellationToken) =>
             Task.FromResult(
                 ConnectMutationObservationResult<ConnectMutationObservation>.Success(
-                    new ConnectMutationObservation(
-                        connectorName,
-                        Exists: false,
-                        State: "MISSING",
-                        Tasks: Array.Empty<ConnectMutationTaskObservation>(),
-                        Configuration: Array.Empty<ConnectConfigurationObservationItem>(),
-                        ConfigurationFingerprint: new string('0', 64))));
+                    _observation));
     }
 }
