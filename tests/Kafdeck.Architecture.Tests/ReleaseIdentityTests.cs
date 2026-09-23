@@ -71,13 +71,27 @@ public sealed class ReleaseIdentityTests
                     PreviewTtl: TimeSpan.FromMinutes(5),
                     MaxConcurrentPerCluster: 1)));
 
+    [Theory]
+    [InlineData("v0.6-rc.1", "0.6.0-rc.1")]
+    [InlineData("v0.6.1-rc.2", "0.6.1-rc.2")]
+    [InlineData("v0.6", "0.6.0")]
+    public void Release_version_normalization_preserves_prerelease_identity(
+        string releaseVersion,
+        string expectedPackageVersion)
+    {
+        Assert.Equal(expectedPackageVersion, ToPackageVersion(releaseVersion));
+    }
+
     private static string ToPackageVersion(string releaseVersion)
     {
         var value = releaseVersion.TrimStart('v');
-        var numeric = value.Split('-', 2, StringSplitOptions.TrimEntries)[0];
+        var suffixStart = value.IndexOf('-', StringComparison.Ordinal);
+        var numeric = suffixStart >= 0 ? value[..suffixStart] : value;
+        var suffix = suffixStart >= 0 ? value[suffixStart..] : string.Empty;
         var componentCount = numeric.Count(character => character == '.') + 1;
+        var normalizedNumeric = componentCount == 2 ? numeric + ".0" : numeric;
 
-        return componentCount == 2 ? numeric + ".0" : numeric;
+        return normalizedNumeric + suffix;
     }
 
     private static string FindRepositoryRoot()
