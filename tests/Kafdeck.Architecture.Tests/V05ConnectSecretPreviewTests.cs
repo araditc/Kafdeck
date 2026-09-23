@@ -10,35 +10,59 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class V05ConnectSecretPreviewTests
 {
+    private const string ExistingSecretValue = "w40-test-password-value";
+    private const string ChangedSecretValue = "w40-test-password-changed";
+    private const string ExistingOpaqueValue = "w40-test-opaque-value";
+    private const string ConnectorClassRawSha256 =
+        "1e387c76059ce310f37b38e9aaa5621890430240336a507b66404615f6bd4b86";
+    private const string TasksMaxRawSha256 =
+        "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b";
+    private const string ExistingSecretRawSha256 =
+        "fe7edc6f1a772be049176518a9ce214331bb13bdae13171f1915522d04aca798";
+    private const string ChangedSecretRawSha256 =
+        "26ff2ce78c4d1dd232f72106f7ca51a340785e1d9c78197269fca96b003cd8fc";
+    private const string ExistingOpaqueRawSha256 =
+        "0ca2680f969cb57e80dc3e376332e43d5d71165ac42dcebeb8b51dcc8ec16aa0";
+
     private static readonly DateTimeOffset Now =
         new(2026, 9, 23, 4, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task Secret_and_opaque_values_use_keyed_non_guessable_fingerprints()
     {
-        var firstPasswordValue = TestValue();
+        var firstSecretValue = TestValue();
         var firstOpaqueValue = TestValue();
-        var secondPasswordValue = TestValue();
+        var secondSecretValue = TestValue();
         var secondOpaqueValue = TestValue();
-        using var digest = Digest();
-        var planner = new ConnectMutationPlanner(
+        using var firstDigest = Digest();
+        using var secondDigest = Digest();
+        var firstPlanner = new ConnectMutationPlanner(
             new FakeObservationPort(Missing("sink-a")),
-            digest);
+            firstDigest);
+        var secondPlanner = new ConnectMutationPlanner(
+            new FakeObservationPort(Missing("sink-a")),
+            secondDigest);
 
-        var first = await planner.PlanCreateAsync(
-            Request(firstPasswordValue, firstOpaqueValue));
-        var second = await planner.PlanCreateAsync(
-            Request(secondPasswordValue, secondOpaqueValue));
+        var first = await firstPlanner.PlanCreateAsync(
+            Request(firstSecretValue, firstOpaqueValue));
+        var second = await firstPlanner.PlanCreateAsync(
+            Request(secondSecretValue, secondOpaqueValue));
+        var sameValuesDifferentKey = await secondPlanner.PlanCreateAsync(
+            Request(firstSecretValue, firstOpaqueValue));
 
         Assert.True(first.IsSuccess, first.Failure?.SafeMessage);
         Assert.True(second.IsSuccess, second.Failure?.SafeMessage);
+        Assert.True(
+            sameValuesDifferentKey.IsSuccess,
+            sameValuesDifferentKey.Failure?.SafeMessage);
         using var firstMaterial = first.ExecutionMaterial!;
         using var secondMaterial = second.ExecutionMaterial!;
+        using var sameValuesDifferentKeyMaterial = sameValuesDifferentKey.ExecutionMaterial!;
 
-        var firstPassword = Assert.Single(
+        var firstSecret = Assert.Single(
             first.Plan!.Canonical.RequestedConfiguration,
             item => item.Key == "db.password");
-        var secondPassword = Assert.Single(
+        var secondSecret = Assert.Single(
             second.Plan!.Canonical.RequestedConfiguration,
             item => item.Key == "db.password");
         var firstOpaque = Assert.Single(
@@ -47,16 +71,25 @@ public sealed class V05ConnectSecretPreviewTests
         var secondOpaque = Assert.Single(
             second.Plan.Canonical.RequestedConfiguration,
             item => item.Key == "plugin.opaque");
+        var differentlyKeyedSecret = Assert.Single(
+            sameValuesDifferentKey.Plan!.Canonical.RequestedConfiguration,
+            item => item.Key == "db.password");
+        var differentlyKeyedOpaque = Assert.Single(
+            sameValuesDifferentKey.Plan.Canonical.RequestedConfiguration,
+            item => item.Key == "plugin.opaque");
 
-        Assert.Equal("[REDACTED]", firstPassword.SafeValue);
+        Assert.Equal("[REDACTED]", firstSecret.SafeValue);
         Assert.Equal("[REDACTED]", firstOpaque.SafeValue);
-        Assert.NotEqual(firstPassword.ValueSha256, secondPassword.ValueSha256);
+        Assert.NotEqual(firstSecret.ValueSha256, secondSecret.ValueSha256);
         Assert.NotEqual(firstOpaque.ValueSha256, secondOpaque.ValueSha256);
-        Assert.NotEqual(Sha256(firstPasswordValue), firstPassword.ValueSha256);
-        Assert.NotEqual(Sha256(firstOpaqueValue), firstOpaque.ValueSha256);
+        Assert.NotEqual(firstSecret.ValueSha256, differentlyKeyedSecret.ValueSha256);
+        Assert.NotEqual(firstOpaque.ValueSha256, differentlyKeyedOpaque.ValueSha256);
         Assert.NotEqual(
             first.Plan.Canonical.RequestedConfigurationFingerprint,
             second.Plan.Canonical.RequestedConfigurationFingerprint);
+        Assert.NotEqual(
+            first.Plan.Canonical.RequestedConfigurationFingerprint,
+            sameValuesDifferentKey.Plan.Canonical.RequestedConfigurationFingerprint);
 
         // W32 retains a separate whole-material HMAC binding for execution.
         Assert.NotEqual(
@@ -67,10 +100,13 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Unchanged_secret_configuration_is_detected_without_persisting_raw_hashes()
     {
-        var password = TestValue();
-        var opaque = TestValue();
-        var configuration = Request(password, opaque).Configuration;
-        var rawObservation = Existing("sink-a", configuration);
+        var configuration = Request(
+            ExistingSecretValue,
+            ExistingOpaqueValue).Configuration;
+        var rawObservation = Existing(
+            "sink-a",
+            configuration,
+            RawFingerprints(ExistingSecretRawSha256));
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
             new FakeObservationPort(rawObservation),
@@ -91,14 +127,19 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Secret_only_change_is_detected_and_remains_redacted()
     {
-        var oldPassword = TestValue();
-        var newPassword = TestValue();
-        var opaque = TestValue();
-        var current = Request(oldPassword, opaque).Configuration;
-        var requested = Request(newPassword, opaque).Configuration;
+        var current = Request(
+            ExistingSecretValue,
+            ExistingOpaqueValue).Configuration;
+        var requested = Request(
+            ChangedSecretValue,
+            ExistingOpaqueValue).Configuration;
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
-            new FakeObservationPort(Existing("sink-a", current)),
+            new FakeObservationPort(
+                Existing(
+                    "sink-a",
+                    current,
+                    RawFingerprints(ExistingSecretRawSha256))),
             digest);
 
         var result = await planner.PlanUpdateAsync(
@@ -119,9 +160,9 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Execution_material_builder_reuses_keyed_secret_projection()
     {
-        var password = TestValue();
+        var secretValue = TestValue();
         var opaque = TestValue();
-        var configuration = Request(password, opaque).Configuration;
+        var configuration = Request(secretValue, opaque).Configuration;
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
             new FakeObservationPort(Missing("sink-a")),
@@ -159,9 +200,9 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Create_with_secret_configuration_can_be_verified_after_provider_acceptance()
     {
-        var password = TestValue();
-        var opaque = TestValue();
-        var configuration = Request(password, opaque).Configuration;
+        var configuration = Request(
+            ExistingSecretValue,
+            ExistingOpaqueValue).Configuration;
         var observations = new FakeObservationPort(Missing("sink-a"));
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(observations, digest);
@@ -183,7 +224,10 @@ public sealed class V05ConnectSecretPreviewTests
             Now,
             "connect-create-secret-verification");
 
-        observations.Current = Existing("sink-a", configuration);
+        observations.Current = Existing(
+            "sink-a",
+            configuration,
+            RawFingerprints(ExistingSecretRawSha256));
         var service = new ConnectMutationExecutionService(
             new FakeMutationPort(),
             observations,
@@ -206,11 +250,12 @@ public sealed class V05ConnectSecretPreviewTests
     [Fact]
     public async Task Delete_preview_does_not_persist_raw_observation_secret_fingerprint()
     {
-        var password = TestValue();
-        var opaque = TestValue();
         var rawObservation = Existing(
             "sink-a",
-            Request(password, opaque).Configuration);
+            Request(
+                ExistingSecretValue,
+                ExistingOpaqueValue).Configuration,
+            RawFingerprints(ExistingSecretRawSha256));
         using var digest = Digest();
         var planner = new ConnectMutationPlanner(
             new FakeObservationPort(rawObservation),
@@ -235,7 +280,7 @@ public sealed class V05ConnectSecretPreviewTests
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
     private static ConnectCreateRequest Request(
-        string password,
+        string secretValue,
         string opaque) =>
         new(
             "prod",
@@ -244,19 +289,35 @@ public sealed class V05ConnectSecretPreviewTests
             {
                 ["connector.class"] = "org.example.Sink",
                 ["tasks.max"] = "1",
-                ["db.password"] = password,
+                ["db.password"] = secretValue,
                 ["plugin.opaque"] = opaque,
             });
 
+    private static IReadOnlyDictionary<string, string> RawFingerprints(
+        string secretRawSha256) =>
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["connector.class"] = ConnectorClassRawSha256,
+            ["tasks.max"] = TasksMaxRawSha256,
+            ["db.password"] = secretRawSha256,
+            ["plugin.opaque"] = ExistingOpaqueRawSha256,
+        };
+
     private static ConnectMutationObservation Existing(
         string connectorName,
-        IReadOnlyDictionary<string, string> configuration)
+        IReadOnlyDictionary<string, string> configuration,
+        IReadOnlyDictionary<string, string> rawFingerprints)
     {
         var items = configuration
             .OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair =>
             {
-                var rawHash = Sha256(pair.Value);
+                if (!rawFingerprints.TryGetValue(pair.Key, out var rawFingerprint))
+                {
+                    throw new InvalidOperationException(
+                        $"Missing fixed raw fingerprint fixture for '{pair.Key}'.");
+                }
+
                 var safe =
                     ConnectSafeConfigurationPolicy.IsExplicitlySafeConfigKey(pair.Key) &&
                     !ConnectSafeConfigurationPolicy.IsSecretKey(pair.Key)
@@ -264,7 +325,7 @@ public sealed class V05ConnectSecretPreviewTests
                         : "[REDACTED]";
                 return new ConnectConfigurationObservationItem(
                     pair.Key,
-                    rawHash,
+                    rawFingerprint,
                     safe);
             })
             .ToArray();
@@ -300,13 +361,10 @@ public sealed class V05ConnectSecretPreviewTests
                 .Append('\n');
         }
 
-        return Sha256(builder.ToString());
-    }
-
-    private static string Sha256(string value) =>
-        Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(value)))
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
             .ToLowerInvariant();
+    }
 
     private sealed class FakeObservationPort : IConnectMutationObservationPort
     {

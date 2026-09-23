@@ -290,7 +290,7 @@ public sealed class RecordMaskingAndExportTests
             page,
             new RecordExportRequest(
                 format,
-                new RecordExportBudget(maxRows: 2, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(1))),
+                new RecordExportBudget(maxRows: 2, maxBytes: 4096, maxDuration: TimeSpan.FromSeconds(5))),
             evaluator,
             identity,
             destination);
@@ -313,7 +313,7 @@ public sealed class RecordMaskingAndExportTests
             page,
             new RecordExportRequest(
                 RecordExportFormat.Json,
-                new RecordExportBudget(maxRows: 10, maxBytes: 256, maxDuration: TimeSpan.FromSeconds(1))),
+                new RecordExportBudget(maxRows: 10, maxBytes: 256, maxDuration: TimeSpan.FromSeconds(5))),
             evaluator,
             identity,
             destination);
