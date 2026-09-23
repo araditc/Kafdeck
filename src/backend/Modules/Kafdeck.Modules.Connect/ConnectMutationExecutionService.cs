@@ -49,6 +49,23 @@ public sealed class ConnectMutationExecutionService
     private readonly ConnectMutationVerificationPolicy _verification;
     private readonly TimeProvider _timeProvider;
 
+    // Compatibility constructor for callers that exercise non-configuration
+    // lifecycle operations only. Any path that needs sensitive configuration
+    // fingerprinting fails closed unless the governed digest service is supplied.
+    public ConnectMutationExecutionService(
+        IConnectMutationPort mutations,
+        IConnectMutationObservationPort observations,
+        ConnectMutationVerificationPolicy? verification = null,
+        TimeProvider? timeProvider = null)
+        : this(
+            mutations,
+            observations,
+            MissingMutationMaterialDigestService.Instance,
+            verification,
+            timeProvider)
+    {
+    }
+
     public ConnectMutationExecutionService(
         IConnectMutationPort mutations,
         IConnectMutationObservationPort observations,
@@ -646,6 +663,16 @@ public sealed class ConnectMutationExecutionService
         }
 
         return result;
+    }
+
+    private sealed class MissingMutationMaterialDigestService :
+        IMutationMaterialDigestService
+    {
+        public static MissingMutationMaterialDigestService Instance { get; } = new();
+
+        public string ComputeDigest(ReadOnlySpan<byte> material) =>
+            throw new MutationStateException(
+                "Sensitive Kafka Connect configuration fingerprinting requires the governed mutation material digest service.");
     }
 
     private sealed record ConnectVerificationObservation(
