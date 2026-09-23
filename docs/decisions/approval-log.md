@@ -100,7 +100,6 @@ No Gate 0 decision remains open. Implementation-level details that do not alter 
 - Roadmap sequencing is v0.1 Cluster Explorer → v0.2 Safe Data Explorer → v0.3 Consumers/Schemas/Ecosystem Read Views → v0.4 Identity/Policy/Masking/Audit → v0.5 Safe Administration → v0.6 Fleet/Kafka Security → v0.7 Developer/Streaming Ecosystem → v0.8 Observability/Automation/Platform APIs → v0.9 Governance/Hardening → v1.0 Stable.
 - Material departures from these boundaries require a new RFC/approval gate.
 
-
 ## Gate 3 — v0.3 Safe Data Explorer + Server-Side Masking Scope
 
 - **Date:** 2026-09-20
@@ -196,7 +195,6 @@ Accepted scope includes consumer groups/members/assignments/committed offsets/la
 
 W25–W31 may proceed autonomously under protected-main governance. Dependency-valid stacked work may continue while a review gate is pending; no approval may be fabricated. Tag/publication requires a separate explicit v0.4 release decision.
 
-
 ## Gate 5 — v0.5 Safe Administration & Controlled Mutations
 
 - **Date:** 2026-09-21
@@ -235,3 +233,37 @@ The accepted scope introduces governed topic, record-production, consumer-offset
 ### Implementation gate
 
 Implementation remains blocked until the RFC-0005 planning package receives fresh exact-head required checks, fresh required CODEOWNER approval, resolved required review threads and protected-main merge. After admission, W32-W40 may proceed autonomously under Issue #122. v0.5 release/publication requires a later explicit owner decision.
+
+## Gate 6 — v0.6 Fleet Operations, Broker Maintenance & Kafka Security
+
+- **Date:** 2026-09-23
+- **Status:** SCOPE ACCEPTED / PLANNING AUTHORIZED
+- **Authority:** Project Owner
+- **Scope issue:** #145
+- **Tracker:** #146
+- **RFC:** RFC-0006 planning package
+
+### Accepted decision
+
+Kafdeck v0.6 is **Fleet Operations, Broker Maintenance & Kafka Security**. Scope includes typed ACL/SCRAM/quota administration, evidence-based access analysis, dynamic allowlisted cluster configuration, leader election, reassignment/replication-factor/throttle workflows, capability-gated broker/log-directory maintenance, bounded cross-cluster transfer and MirrorMaker 2/provider replication integration.
+
+### Accepted invariants
+
+- reuse the v0.5 mutation kernel; no parallel executor or generic provider command surface,
+- all new operations have explicit authorization actions and server-owned risk floors,
+- SCRAM credentials remain write-only/ephemeral and are never retrievable or durably stored in plaintext,
+- CRITICAL always requires a distinct eligible approver,
+- reassignment/decommission uses materialized plans, current-state fingerprints and stale-plan revalidation,
+- long-running work uses durable ownership/lease/fencing and bounded typed progress,
+- cross-cluster transfer requires conjunctive source read/export and destination produce authorization plus transfer permission,
+- unknown provider mutation capability fails closed,
+- no mandatory data-plane proxy,
+- v0.7+ remains inactive.
+
+### Owner approval
+
+> **v0.6 Fleet Operations, Broker Maintenance & Kafka Security طبق scope و safety boundaries ثبت‌شده در Issue #145 تأیید است؛ planning package را کامل کن و implementation را فقط بعد از governed planning admission شروع کن.**
+
+### Implementation gate
+
+Planning is authorized. Implementation remains blocked until the complete RFC-0006 planning package receives fresh exact-head required checks, fresh required CODEOWNER approval, resolved required review threads and protected-main merge using the expected-head guard. After admission, W41-W50 may proceed autonomously under Issue #146. v0.6 release/tag/publication requires a later explicit owner decision.
