@@ -28,7 +28,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **v0.5 is the current release.** Read-only remains the default operating posture. Governed mutation workflows are opt-in and activate only when `Kafdeck:Administration:Mutations:Enabled=true` and the required durable persistence, digest material, authorization, and provider prerequisites validate successfully. ksqlDB statement execution and generic provider/CLI command surfaces remain unavailable.
+> **v0.5.1 is the current release.** Read-only remains the default operating posture. Governed mutation workflows are opt-in and activate only when `Kafdeck:Administration:Mutations:Enabled=true` and the required durable persistence, digest material, authorization, and provider prerequisites validate successfully. ksqlDB statement execution and generic provider/CLI command surfaces remain unavailable.
 
 ## Why Kafdeck?
 
