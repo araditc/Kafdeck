@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 5 scope accepted; v0.1-v0.5 released; v0.6 not activated**  
+Status: **Gate 0–Gate 6 scope accepted; v0.1-v0.5 released; v0.5.1 corrective release published; v0.6 planning pending governed admission; v0.7+ inactive**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -157,13 +157,13 @@ All mutations use:
 
 Risk classes: LOW, MODERATE, HIGH, CRITICAL.
 
-Scope authority: **Issue #121 / Gate 5 / RFC-0005**. W32-W40 were governed-admitted through tracker #122 and the v0.5 release was explicitly owner-approved. v0.6 remains inactive pending a separate owner scope decision.
+Scope authority: **Issue #121 / Gate 5 / RFC-0005**. W32-W40 were governed-admitted through tracker #122 and the v0.5 release was explicitly owner-approved. The scope-neutral v0.5.1 corrective release is complete under Issue #144. Gate 6 now accepts v0.6 scope; implementation remains gated by its separate planning admission.
 
 Mutation mode requires durable Kafdeck operation persistence. CRITICAL operations require a distinct eligible approver; a deployment that cannot establish that property fails closed for CRITICAL mutation.
 
 Irreversible operations such as topic deletion and record purge are never represented as generally reversible.
 
-## v0.6 — Fleet Operations, Broker Maintenance & Kafka Security
+## v0.6 — Fleet Operations, Broker Maintenance & Kafka Security — SCOPE ACCEPTED
 
 Capabilities:
 - Kafka ACL browser/editor
@@ -182,6 +182,8 @@ Capabilities:
 - MirrorMaker 2/replication integration rather than reimplementing replication
 
 There is no fabricated generic Kafka "broker read-only mode"; maintenance actions are capability-gated to actual Kafka/provider primitives.
+
+Scope authority: **Issue #145 / Gate 6 — owner accepted 2026-09-23**. Tracker **#146** owns the [RFC-0006 planning package](docs/implementation/v0.6-planning-package.md). W41-W50 may start only after protected-main governed planning admission with fresh exact-head checks, required CODEOWNER approval and resolved substantive review threads. No v0.6 executable surface is activated by scope acceptance or this roadmap change. Release/tag/publication remains a separate owner gate; v0.7+ remains inactive.
 
 ## v0.7 — Developer & Streaming Ecosystem Platform
 

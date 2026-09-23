@@ -235,3 +235,29 @@ The accepted scope introduces governed topic, record-production, consumer-offset
 ### Implementation gate
 
 Implementation remains blocked until the RFC-0005 planning package receives fresh exact-head required checks, fresh required CODEOWNER approval, resolved required review threads and protected-main merge. After admission, W32-W40 may proceed autonomously under Issue #122. v0.5 release/publication requires a later explicit owner decision.
+
+## Gate 6 — v0.6 Fleet Operations, Broker Maintenance & Kafka Security
+
+- **Date:** 2026-09-23
+- **Status:** DETAILED SCOPE ACCEPTED; PLANNING ADMISSION PENDING
+- **Authority:** Project Owner, Ammar Heidari
+- **Scope issue:** #145
+- **Tracker:** #146
+- **RFC:** RFC-0006 planning package
+- **Gate record:** [Gate 6](gate-6-v0.6-fleet-security.md)
+
+### Accepted decision
+
+The detailed Issue #145 scope and safety boundaries are accepted: typed Kafka ACL/SCRAM/quota administration, evidence-based access analysis, allowlisted dynamically alterable broker/cluster configuration, preferred leadership, reassignment/RF-change planning and progress, supported broker/log-directory maintenance, bounded cross-cluster transfer and tested replication integration.
+
+All inherited v0.5 invariants remain mandatory. CRITICAL requires a distinct eligible principal; read permissions never imply mutations. No generic provider execution, arbitrary code, durable raw payload/secret staging, fabricated broker read-only mode, or uncontrolled cross-cluster exfiltration path is authorized.
+
+### Owner approval
+
+> **v0.6 Fleet Operations, Broker Maintenance & Kafka Security طبق scope و safety boundaries ثبت‌شده در Issue #145 تأیید است؛ planning package را کامل کن و implementation را فقط بعد از governed planning admission شروع کن.**
+
+### Implementation and release gates
+
+Planning is authorized under #146. The [complete planning package](../implementation/v0.6-planning-package.md) must receive fresh exact-head applicable checks, substantive architecture/security review, fresh required CODEOWNER approval, zero unresolved required threads and an expected-head guarded protected-main merge. Only after that admission and post-merge verification may W41-W50 proceed dependency-valid under the tracker.
+
+This scope approval does not approve a release/tag/OCI promotion/publication, v0.7+, or a material departure from Issue #145. Published v0.5/v0.5.1 identities remain untouched. Earlier gate records above remain historical evidence, not substitutes for live implementation/admission status.
