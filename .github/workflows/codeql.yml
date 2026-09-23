@@ -47,10 +47,20 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
 
+      - name: Stage SARIF diagnostic evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/codeql
+          if compgen -G "../results/*.sarif" >/dev/null; then
+            cp ../results/*.sarif .artifacts/codeql/
+          fi
+
       - name: Retain SARIF diagnostic evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeql-sarif-${{ matrix.language }}-${{ github.sha }}
-          path: ../results/*.sarif
+          path: .artifacts/codeql/*.sarif
           if-no-files-found: warn
