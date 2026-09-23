@@ -535,7 +535,9 @@ public static class KafdeckOidcEndpointExtensions
                 {
                     RedirectUri = "/",
                 });
-        }).WithName("v02-auth-logout");
+        })
+            .WithName("v02-auth-logout")
+            .RequireKafdeckAntiforgery();
 
         return app;
     }
