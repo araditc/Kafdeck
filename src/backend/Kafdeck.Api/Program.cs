@@ -19,6 +19,7 @@ using Kafdeck.Infrastructure.SchemaRegistry;
 using Kafdeck.Infrastructure.Security;
 using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Administration;
+using Kafdeck.Modules.Connect;
 using Kafdeck.Modules.Consumers;
 using Kafdeck.Modules.Records;
 using Kafdeck.Modules.Schemas;
@@ -49,6 +50,7 @@ var deploymentAccessToken =
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
     builder.Services.AddKafdeckOidc(kafdeckOptions.Deployment, secretResolver);
+    builder.Services.AddKafdeckAntiforgery(kafdeckOptions.Deployment.ListenUrl);
 }
 
 builder.Services.AddProblemDetails();
@@ -133,9 +135,94 @@ if (mutationOptions?.Enabled == true)
             services.GetRequiredService<IMutationDbConnectionFactory>()));
     builder.Services.AddSingleton<IMutationAuditSink, LoggingMutationAuditSink>();
     builder.Services.AddSingleton<MutationApprovalAuthorizer>();
-    builder.Services.AddSingleton<IMutationPreDispatchGuard, FailClosedMutationPreDispatchGuard>();
-    builder.Services.AddSingleton(
-        new MutationExecutionHandlerRegistry(Array.Empty<IMutationExecutionHandler>()));
+    builder.Services.AddSingleton<MutationRequestAuthorizationService>();
+    builder.Services.AddSingleton<MutationAdmissionService>();
+    builder.Services.AddSingleton<MutationCommandService>();
+    builder.Services.AddSingleton<MutationExecutionRequestContextAccessor>();
+    builder.Services.AddSingleton<MutationDispatchService>();
+
+    builder.Services.AddSingleton<TopicMutationPlanner>();
+    builder.Services.AddSingleton<TopicMutationPreconditionValidator>();
+    builder.Services.AddSingleton<ITopicMutationPort>(_ =>
+        new ConfluentKafkaTopicMutationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<TopicMutationExecutionService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, TopicCreateExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, TopicAlterExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, TopicIncreasePartitionsExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, TopicDeleteExecutionHandler>();
+
+    builder.Services.AddSingleton<RecordProductionPlanner>();
+    builder.Services.AddSingleton<RecordProductionPreconditionValidator>();
+    builder.Services.AddSingleton<IRecordProduceMutationPort>(_ =>
+        new ConfluentKafkaRecordProduceAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<RecordProductionExecutionService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, RecordProduceExecutionHandler>();
+
+    builder.Services.AddSingleton<IConsumerMutationObservationPort>(_ =>
+        new ConfluentKafkaConsumerMutationObservationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<IConsumerMutationPort>(_ =>
+        new ConfluentKafkaConsumerMutationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<ConsumerMutationPlanner>();
+    builder.Services.AddSingleton<ConsumerMutationPreconditionValidator>();
+    builder.Services.AddSingleton<ConsumerMutationExecutionService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, ConsumerOffsetAlterExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, ConsumerDeleteExecutionHandler>();
+
+    builder.Services.AddSingleton<ConfluentSchemaMutationAdapter>(_ =>
+        new ConfluentSchemaMutationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<ISchemaMutationPort>(services =>
+        services.GetRequiredService<ConfluentSchemaMutationAdapter>());
+    builder.Services.AddSingleton<ISchemaMutationObservationPort>(services =>
+        services.GetRequiredService<ConfluentSchemaMutationAdapter>());
+    builder.Services.AddSingleton<SchemaMutationPlanner>();
+    builder.Services.AddSingleton<SchemaMutationPreconditionValidator>();
+    builder.Services.AddSingleton<SchemaMutationExecutionService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, SchemaCreateExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, SchemaAlterExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, SchemaDeleteExecutionHandler>();
+
+    builder.Services.AddSingleton<KafkaConnectMutationAdapter>(_ =>
+        new KafkaConnectMutationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<IConnectMutationPort>(services =>
+        services.GetRequiredService<KafkaConnectMutationAdapter>());
+    builder.Services.AddSingleton<IConnectMutationObservationPort>(services =>
+        services.GetRequiredService<KafkaConnectMutationAdapter>());
+    builder.Services.AddSingleton<ConnectMutationPlanner>();
+    builder.Services.AddSingleton<ConnectMutationPreconditionValidator>();
+    builder.Services.AddSingleton<ConnectMutationExecutionService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, ConnectCreateExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, ConnectAlterExecutionHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, ConnectDeleteExecutionHandler>();
+
+    builder.Services.AddSingleton<IRecordsPurgeObservationPort>(_ =>
+        new ConfluentKafkaRecordsPurgeObservationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<IRecordsPurgeMutationPort>(_ =>
+        new ConfluentKafkaRecordsPurgeAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<RecordsPurgePlanner>();
+    builder.Services.AddSingleton<RecordsPurgePreconditionValidator>();
+    builder.Services.AddSingleton<RecordsPurgeExecutionService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, RecordsPurgeExecutionHandler>();
+
+    builder.Services.AddSingleton<IMutationPreDispatchGuard, W39MutationPreDispatchGuard>();
+    builder.Services.AddSingleton<MutationExecutionHandlerRegistry>(services =>
+        new MutationExecutionHandlerRegistry(
+            services.GetServices<IMutationExecutionHandler>()));
     builder.Services.AddSingleton(
         new MutationExecutorPolicy(
             mutationOptions.MaxConcurrentPerCluster,
@@ -170,7 +257,7 @@ if (mutationOptions?.Enabled == true)
         recoveredMutations);
 
     app.Logger.LogInformation(
-        "Kafdeck mutation runtime initialized in fail-closed mode with persistence provider {PersistenceProvider} and execution mode {ExecutionMode}.",
+        "Kafdeck mutation runtime initialized with governed W39 topic, record-production, consumer, schema, Connect and controlled-purge dispatch, persistence provider {PersistenceProvider} and execution mode {ExecutionMode}.",
         mutationOptions.Persistence!.Provider,
         mutationOptions.Persistence.ExecutionMode);
 }
@@ -190,6 +277,7 @@ app.UseMiddleware<ApiTelemetryMiddleware>();
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
     app.UseAuthentication();
+    app.UseAntiforgery();
 }
 
 app.UseDefaultFiles();
@@ -221,11 +309,22 @@ app.MapGet("/healthz", () => Results.Ok(new
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
     app.MapKafdeckOidcSessionEndpoints();
+    app.MapKafdeckAntiforgeryEndpoint();
 }
 
 app.MapKafdeckV01(kafdeckOptions);
 app.MapKafdeckRecordEndpoints(kafdeckOptions);
 app.MapKafdeckV04ReadViews(kafdeckOptions);
+if (mutationOptions?.Enabled == true)
+{
+    app.MapKafdeckMutationEndpoints();
+    app.MapKafdeckTopicMutationEndpoints();
+    app.MapKafdeckRecordProductionEndpoints();
+    app.MapKafdeckConsumerMutationEndpoints();
+    app.MapKafdeckSchemaMutationEndpoints();
+    app.MapKafdeckConnectMutationEndpoints();
+    app.MapKafdeckRecordsPurgeEndpoints();
+}
 app.MapFallbackToFile("index.html");
 
 app.Run();

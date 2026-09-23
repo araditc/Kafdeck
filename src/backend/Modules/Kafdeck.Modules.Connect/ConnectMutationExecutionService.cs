@@ -45,19 +45,38 @@ public sealed class ConnectMutationExecutionService
 
     private readonly IConnectMutationPort _mutations;
     private readonly IConnectMutationObservationPort _observations;
+    private readonly IMutationMaterialDigestService _digest;
     private readonly ConnectMutationVerificationPolicy _verification;
     private readonly TimeProvider _timeProvider;
 
+    // Compatibility constructor for callers that exercise non-configuration
+    // lifecycle operations only. Any path that needs sensitive configuration
+    // fingerprinting fails closed unless the governed digest service is supplied.
     public ConnectMutationExecutionService(
         IConnectMutationPort mutations,
         IConnectMutationObservationPort observations,
         ConnectMutationVerificationPolicy? verification = null,
         TimeProvider? timeProvider = null)
+        : this(
+            mutations,
+            observations,
+            MissingMutationMaterialDigestService.Instance,
+            verification,
+            timeProvider)
+    {
+    }
+
+    public ConnectMutationExecutionService(
+        IConnectMutationPort mutations,
+        IConnectMutationObservationPort observations,
+        IMutationMaterialDigestService digest,
+        ConnectMutationVerificationPolicy? verification = null,
+        TimeProvider? timeProvider = null)
     {
         _mutations = mutations ?? throw new ArgumentNullException(nameof(mutations));
         _observations = observations ?? throw new ArgumentNullException(nameof(observations));
-        _verification =
-            verification ?? ConnectMutationVerificationPolicy.Default;
+        _digest = digest ?? throw new ArgumentNullException(nameof(digest));
+        _verification = verification ?? ConnectMutationVerificationPolicy.Default;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -66,46 +85,31 @@ public sealed class ConnectMutationExecutionService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (context.Operation.OperationKind !=
-            MutationOperationKind.ConnectCreate)
-        {
+        if (context.Operation.OperationKind != MutationOperationKind.ConnectCreate)
             return Unknown("connect_create_operation_mismatch");
-        }
 
         ConnectCreateCanonicalIntent canonical;
         try
         {
-            canonical =
-                ConnectMutationCanonicalization.Deserialize<
-                    ConnectCreateCanonicalIntent>(
-                    context.Operation.CanonicalIntent);
+            canonical = ConnectMutationCanonicalization.Deserialize<
+                ConnectCreateCanonicalIntent>(context.Operation.CanonicalIntent);
         }
         catch
         {
             return Unknown("connect_create_canonical_invalid");
         }
 
-        if (!TryBuildCreateMutation(
-                canonical,
-                context.Material,
-                out var mutation))
-        {
+        if (!TryBuildCreateMutation(canonical, context.Material, out var mutation))
             return Unknown("connect_create_material_invalid");
-        }
 
         var accepted = await InvokeAsync(
-                () => _mutations.CreateAsync(
-                    mutation!,
-                    cancellationToken),
+                () => _mutations.CreateAsync(mutation!, cancellationToken),
                 "connect_create",
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (accepted.ResultKind !=
-            MutationExecutionResultKind.AppliedUnverified)
-        {
+        if (accepted.ResultKind != MutationExecutionResultKind.AppliedUnverified)
             return accepted;
-        }
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
@@ -121,10 +125,7 @@ public sealed class ConnectMutationExecutionService
             .ConfigureAwait(false);
 
         return verification.Verified
-            ? Verified(
-                "connect_create_verified",
-                accepted,
-                verification.Observation)
+            ? Verified("connect_create_verified", accepted, verification.Observation)
             : AppliedUnverified(
                 "connect_create_verification_inconclusive",
                 accepted,
@@ -140,39 +141,28 @@ public sealed class ConnectMutationExecutionService
         ConnectUpdateCanonicalIntent canonical;
         try
         {
-            canonical =
-                ConnectMutationCanonicalization.Deserialize<
-                    ConnectUpdateCanonicalIntent>(
-                    context.Operation.CanonicalIntent);
+            canonical = ConnectMutationCanonicalization.Deserialize<
+                ConnectUpdateCanonicalIntent>(context.Operation.CanonicalIntent);
         }
         catch
         {
             return Unknown("connect_update_canonical_invalid");
         }
 
-        if (canonical.AlterKind !=
-                ConnectAlterIntentKind.ConfigurationUpdate ||
-            !TryBuildUpdateMutation(
-                canonical,
-                context.Material,
-                out var mutation))
+        if (canonical.AlterKind != ConnectAlterIntentKind.ConfigurationUpdate ||
+            !TryBuildUpdateMutation(canonical, context.Material, out var mutation))
         {
             return Unknown("connect_update_material_invalid");
         }
 
         var accepted = await InvokeAsync(
-                () => _mutations.AlterAsync(
-                    mutation!,
-                    cancellationToken),
+                () => _mutations.AlterAsync(mutation!, cancellationToken),
                 "connect_update",
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (accepted.ResultKind !=
-            MutationExecutionResultKind.AppliedUnverified)
-        {
+        if (accepted.ResultKind != MutationExecutionResultKind.AppliedUnverified)
             return accepted;
-        }
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
@@ -188,10 +178,7 @@ public sealed class ConnectMutationExecutionService
             .ConfigureAwait(false);
 
         return verification.Verified
-            ? Verified(
-                "connect_update_verified",
-                accepted,
-                verification.Observation)
+            ? Verified("connect_update_verified", accepted, verification.Observation)
             : AppliedUnverified(
                 "connect_update_verification_inconclusive",
                 accepted,
@@ -206,55 +193,42 @@ public sealed class ConnectMutationExecutionService
         ArgumentNullException.ThrowIfNull(canonical);
 
         if (canonical.AlterKind != ConnectAlterIntentKind.Control ||
-            !TryBuildControlMutation(
-                canonical,
-                out var mutation))
+            !TryBuildControlMutation(canonical, out var mutation))
         {
             return Unknown("connect_control_canonical_invalid");
         }
 
         var operationCode = canonical.Action switch
         {
-            ConnectControlAction.Pause =>
-                "connect_pause",
-            ConnectControlAction.Resume =>
-                "connect_resume",
-            ConnectControlAction.Restart
-                when canonical.TaskId.HasValue =>
+            ConnectControlAction.Pause => "connect_pause",
+            ConnectControlAction.Resume => "connect_resume",
+            ConnectControlAction.Restart when canonical.TaskId.HasValue =>
                 "connect_task_restart",
-            ConnectControlAction.Restart =>
-                "connect_restart",
+            ConnectControlAction.Restart => "connect_restart",
             _ => "connect_control",
         };
 
         var accepted = await InvokeAsync(
-                () => _mutations.ControlAsync(
-                    mutation!,
-                    cancellationToken),
+                () => _mutations.ControlAsync(mutation!, cancellationToken),
                 operationCode,
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (accepted.ResultKind !=
-            MutationExecutionResultKind.AppliedUnverified)
-        {
+        if (accepted.ResultKind != MutationExecutionResultKind.AppliedUnverified)
             return accepted;
-        }
 
         if (canonical.Action == ConnectControlAction.Restart)
         {
-            // A RUNNING readback is not proof that restart occurred, because the
-            // connector/task may have been RUNNING before the request.
+            // RUNNING after a restart request is not proof the restart happened.
             return AppliedUnverified(
                 $"{operationCode}_verification_inconclusive",
                 accepted,
                 observation: null);
         }
 
-        var expectedState =
-            canonical.Action == ConnectControlAction.Pause
-                ? "PAUSED"
-                : "RUNNING";
+        var expectedState = canonical.Action == ConnectControlAction.Pause
+            ? "PAUSED"
+            : "RUNNING";
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
@@ -270,10 +244,7 @@ public sealed class ConnectMutationExecutionService
             .ConfigureAwait(false);
 
         return verification.Verified
-            ? Verified(
-                $"{operationCode}_verified",
-                accepted,
-                verification.Observation)
+            ? Verified($"{operationCode}_verified", accepted, verification.Observation)
             : AppliedUnverified(
                 $"{operationCode}_verification_inconclusive",
                 accepted,
@@ -287,26 +258,17 @@ public sealed class ConnectMutationExecutionService
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        if (!TryBuildDeleteMutation(
-                canonical,
-                out var mutation))
-        {
+        if (!TryBuildDeleteMutation(canonical, out var mutation))
             return Unknown("connect_delete_canonical_invalid");
-        }
 
         var accepted = await InvokeAsync(
-                () => _mutations.DeleteAsync(
-                    mutation!,
-                    cancellationToken),
+                () => _mutations.DeleteAsync(mutation!, cancellationToken),
                 "connect_delete",
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (accepted.ResultKind !=
-            MutationExecutionResultKind.AppliedUnverified)
-        {
+        if (accepted.ResultKind != MutationExecutionResultKind.AppliedUnverified)
             return accepted;
-        }
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
@@ -317,10 +279,7 @@ public sealed class ConnectMutationExecutionService
             .ConfigureAwait(false);
 
         return verification.Verified
-            ? Verified(
-                "connect_delete_verified",
-                accepted,
-                verification.Observation)
+            ? Verified("connect_delete_verified", accepted, verification.Observation)
             : AppliedUnverified(
                 "connect_delete_verification_inconclusive",
                 accepted,
@@ -338,13 +297,11 @@ public sealed class ConnectMutationExecutionService
         }
         catch (OperationCanceledException)
         {
-            return Unknown(
-                $"{operationCode}_cancelled_or_timeout");
+            return Unknown($"{operationCode}_cancelled_or_timeout");
         }
         catch
         {
-            return Unknown(
-                $"{operationCode}_provider_exception");
+            return Unknown($"{operationCode}_provider_exception");
         }
     }
 
@@ -363,16 +320,12 @@ public sealed class ConnectMutationExecutionService
             var safeExecutionDeadline =
                 executionDeadlineUtc.Value - ExecutionCompletionReserve;
             if (safeExecutionDeadline < deadline)
-            {
                 deadline = safeExecutionDeadline;
-            }
         }
 
         ConnectMutationObservation? last = null;
         if (deadline <= now || cancellationToken.IsCancellationRequested)
-        {
             return new(false, last);
-        }
 
         using var verificationCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -382,33 +335,30 @@ public sealed class ConnectMutationExecutionService
         while (_timeProvider.GetUtcNow() < deadline)
         {
             if (verificationToken.IsCancellationRequested)
-            {
                 return new(false, last);
-            }
 
             try
             {
-                var observed =
-                    await _observations.ObserveConnectorAsync(
-                            clusterId,
-                            connectorName,
-                            new ReadViewOperationContext(
-                                deadline,
-                                maxItems: 256,
-                                maxResponseBytes:
-                                    ConnectMutationPolicy
-                                        .HardMaxConfigurationBytes * 2L),
-                            verificationToken)
-                        .ConfigureAwait(false);
+                var observed = await _observations.ObserveConnectorAsync(
+                        clusterId,
+                        connectorName,
+                        new ReadViewOperationContext(
+                            deadline,
+                            maxItems: 256,
+                            maxResponseBytes:
+                                ConnectMutationPolicy.HardMaxConfigurationBytes * 2L),
+                        verificationToken)
+                    .ConfigureAwait(false);
 
-                if (observed.IsSuccess &&
-                    observed.Value is not null)
+                if (observed.IsSuccess && observed.Value is not null)
                 {
-                    last = observed.Value;
-                    if (verify(observed.Value))
-                    {
-                        return new(true, observed.Value);
-                    }
+                    var protectedObservation =
+                        ConnectMutationSensitiveFingerprinting.ProtectObservation(
+                            observed.Value,
+                            _digest);
+                    last = protectedObservation;
+                    if (verify(protectedObservation))
+                        return new(true, protectedObservation);
                 }
             }
             catch (OperationCanceledException)
@@ -421,22 +371,17 @@ public sealed class ConnectMutationExecutionService
                 // evidence gaps, never proof that the mutation failed.
             }
 
-            var remaining =
-                deadline - _timeProvider.GetUtcNow();
+            var remaining = deadline - _timeProvider.GetUtcNow();
             if (remaining <= TimeSpan.Zero)
                 break;
 
-            var delay =
-                remaining < _verification.PollInterval
-                    ? remaining
-                    : _verification.PollInterval;
+            var delay = remaining < _verification.PollInterval
+                ? remaining
+                : _verification.PollInterval;
 
             try
             {
-                await Task.Delay(
-                        delay,
-                        _timeProvider,
-                        verificationToken)
+                await Task.Delay(delay, _timeProvider, verificationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -448,13 +393,12 @@ public sealed class ConnectMutationExecutionService
         return new(false, last);
     }
 
-    private static bool TryBuildCreateMutation(
+    private bool TryBuildCreateMutation(
         ConnectCreateCanonicalIntent canonical,
         MutationExecutionMaterial material,
         out ConnectCreateMutation? mutation)
     {
         mutation = null;
-
         if (!ValidateRequestedConfiguration(
                 canonical.MaterialName,
                 canonical.RequestedConfigurationFingerprint,
@@ -465,26 +409,19 @@ public sealed class ConnectMutationExecutionService
 
         try
         {
-            var cluster =
-                ConnectMutationCanonicalization.RequireIdentifier(
-                    canonical.ClusterId,
-                    "Cluster ID",
-                    256);
-            var connector =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    canonical.ConnectorName);
-            var encoded =
-                material.GetRequired(
-                    canonical.MaterialName);
-            var configuration =
-                ConnectMutationCanonicalization.DecodeConfiguration(
-                    encoded);
-            var projected =
-                ConnectMutationCanonicalization.ProjectConfiguration(
-                    configuration);
+            var cluster = ConnectMutationCanonicalization.RequireIdentifier(
+                canonical.ClusterId,
+                "Cluster ID",
+                256);
+            var connector = ConnectMutationCanonicalization.RequireConnectorName(
+                canonical.ConnectorName);
+            var encoded = material.GetRequired(canonical.MaterialName);
+            var configuration = ConnectMutationCanonicalization.DecodeConfiguration(encoded);
+            var projected = ConnectMutationSensitiveFingerprinting.ProjectRequested(
+                configuration,
+                _digest);
             var fingerprint =
-                ConnectMutationCanonicalization.ConfigurationFingerprint(
-                    projected);
+                ConnectMutationCanonicalization.ConfigurationFingerprint(projected);
 
             if (!string.Equals(
                     fingerprint,
@@ -494,30 +431,23 @@ public sealed class ConnectMutationExecutionService
                 return false;
             }
 
-            mutation = new ConnectCreateMutation(
-                cluster,
-                connector,
-                configuration);
+            mutation = new ConnectCreateMutation(cluster, connector, configuration);
             return true;
         }
         catch (Exception exception)
-            when (exception is
-                ArgumentException or
-                KeyNotFoundException or
-                MutationStateException or
-                JsonException)
+            when (exception is ArgumentException or KeyNotFoundException or
+                MutationStateException or JsonException)
         {
             return false;
         }
     }
 
-    private static bool TryBuildUpdateMutation(
+    private bool TryBuildUpdateMutation(
         ConnectUpdateCanonicalIntent canonical,
         MutationExecutionMaterial material,
         out ConnectAlterMutation? mutation)
     {
         mutation = null;
-
         if (!ValidateRequestedConfiguration(
                 canonical.MaterialName,
                 canonical.RequestedConfigurationFingerprint,
@@ -529,26 +459,19 @@ public sealed class ConnectMutationExecutionService
 
         try
         {
-            var cluster =
-                ConnectMutationCanonicalization.RequireIdentifier(
-                    canonical.ClusterId,
-                    "Cluster ID",
-                    256);
-            var connector =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    canonical.ConnectorName);
-            var encoded =
-                material.GetRequired(
-                    canonical.MaterialName);
-            var configuration =
-                ConnectMutationCanonicalization.DecodeConfiguration(
-                    encoded);
-            var projected =
-                ConnectMutationCanonicalization.ProjectConfiguration(
-                    configuration);
+            var cluster = ConnectMutationCanonicalization.RequireIdentifier(
+                canonical.ClusterId,
+                "Cluster ID",
+                256);
+            var connector = ConnectMutationCanonicalization.RequireConnectorName(
+                canonical.ConnectorName);
+            var encoded = material.GetRequired(canonical.MaterialName);
+            var configuration = ConnectMutationCanonicalization.DecodeConfiguration(encoded);
+            var projected = ConnectMutationSensitiveFingerprinting.ProjectRequested(
+                configuration,
+                _digest);
             var fingerprint =
-                ConnectMutationCanonicalization.ConfigurationFingerprint(
-                    projected);
+                ConnectMutationCanonicalization.ConfigurationFingerprint(projected);
 
             if (!string.Equals(
                     fingerprint,
@@ -558,18 +481,12 @@ public sealed class ConnectMutationExecutionService
                 return false;
             }
 
-            mutation = new ConnectAlterMutation(
-                cluster,
-                connector,
-                configuration);
+            mutation = new ConnectAlterMutation(cluster, connector, configuration);
             return true;
         }
         catch (Exception exception)
-            when (exception is
-                ArgumentException or
-                KeyNotFoundException or
-                MutationStateException or
-                JsonException)
+            when (exception is ArgumentException or KeyNotFoundException or
+                MutationStateException or JsonException)
         {
             return false;
         }
@@ -580,7 +497,6 @@ public sealed class ConnectMutationExecutionService
         out ConnectControlMutation? mutation)
     {
         mutation = null;
-
         if (!Enum.IsDefined(canonical.Action) ||
             canonical.StateFingerprint.Length != 64 ||
             !canonical.StateFingerprint.All(char.IsAsciiHexDigit))
@@ -590,34 +506,24 @@ public sealed class ConnectMutationExecutionService
 
         try
         {
-            var cluster =
-                ConnectMutationCanonicalization.RequireIdentifier(
-                    canonical.ClusterId,
-                    "Cluster ID",
-                    256);
-            var connector =
-                ConnectMutationCanonicalization.RequireConnectorName(
-                    canonical.ConnectorName);
+            var cluster = ConnectMutationCanonicalization.RequireIdentifier(
+                canonical.ClusterId,
+                "Cluster ID",
+                256);
+            var connector = ConnectMutationCanonicalization.RequireConnectorName(
+                canonical.ConnectorName);
 
-            if (canonical.Action is
-                    ConnectControlAction.Pause or
-                    ConnectControlAction.Resume)
+            if (canonical.Action is ConnectControlAction.Pause or ConnectControlAction.Resume)
             {
-                if (canonical.TaskId is not null ||
-                    canonical.CurrentTaskState is not null)
-                {
+                if (canonical.TaskId is not null || canonical.CurrentTaskState is not null)
                     return false;
-                }
             }
-            else if (canonical.Action ==
-                     ConnectControlAction.Restart)
+            else if (canonical.Action == ConnectControlAction.Restart)
             {
                 if (canonical.TaskId is < 0)
                     return false;
-
                 if (canonical.TaskId.HasValue &&
-                    string.IsNullOrWhiteSpace(
-                        canonical.CurrentTaskState))
+                    string.IsNullOrWhiteSpace(canonical.CurrentTaskState))
                 {
                     return false;
                 }
@@ -641,12 +547,10 @@ public sealed class ConnectMutationExecutionService
         out ConnectDeleteMutation? mutation)
     {
         mutation = null;
-
         if (canonical.StateFingerprint.Length != 64 ||
             !canonical.StateFingerprint.All(char.IsAsciiHexDigit) ||
             canonical.CurrentConfigurationFingerprint.Length != 64 ||
-            !canonical.CurrentConfigurationFingerprint.All(
-                char.IsAsciiHexDigit))
+            !canonical.CurrentConfigurationFingerprint.All(char.IsAsciiHexDigit))
         {
             return false;
         }
@@ -688,8 +592,7 @@ public sealed class ConnectMutationExecutionService
         if (fingerprint.Length != 64 ||
             !fingerprint.All(char.IsAsciiHexDigit) ||
             items is null ||
-            items.Count is < 1 or >
-                ConnectMutationPolicy.HardMaxConfigurationItems ||
+            items.Count is < 1 or > ConnectMutationPolicy.HardMaxConfigurationItems ||
             items.Any(item =>
                 item is null ||
                 item.ValueSha256.Length != 64 ||
@@ -699,8 +602,7 @@ public sealed class ConnectMutationExecutionService
         }
 
         return string.Equals(
-            ConnectMutationCanonicalization.ConfigurationFingerprint(
-                items),
+            ConnectMutationCanonicalization.ConfigurationFingerprint(items),
             fingerprint,
             StringComparison.Ordinal);
     }
@@ -710,18 +612,14 @@ public sealed class ConnectMutationExecutionService
         MutationProviderResult accepted,
         ConnectMutationObservation? observation)
     {
-        var evidence = MergeEvidence(
-            accepted.SafeEvidence);
+        var evidence = MergeEvidence(accepted.SafeEvidence);
         evidence["verification.state"] = "observed";
 
         if (observation is not null)
         {
-            evidence["connector.exists"] =
-                observation.Exists ? "true" : "false";
-            evidence["connector.state"] =
-                observation.State;
-            evidence["configuration.fingerprint"] =
-                observation.ConfigurationFingerprint;
+            evidence["connector.exists"] = observation.Exists ? "true" : "false";
+            evidence["connector.state"] = observation.State;
+            evidence["configuration.fingerprint"] = observation.ConfigurationFingerprint;
         }
 
         return new MutationProviderResult(
@@ -735,18 +633,14 @@ public sealed class ConnectMutationExecutionService
         MutationProviderResult accepted,
         ConnectMutationObservation? observation)
     {
-        var evidence = MergeEvidence(
-            accepted.SafeEvidence);
+        var evidence = MergeEvidence(accepted.SafeEvidence);
         evidence["verification.state"] = "inconclusive";
 
         if (observation is not null)
         {
-            evidence["connector.exists"] =
-                observation.Exists ? "true" : "false";
-            evidence["connector.state"] =
-                observation.State;
-            evidence["configuration.fingerprint"] =
-                observation.ConfigurationFingerprint;
+            evidence["connector.exists"] = observation.Exists ? "true" : "false";
+            evidence["connector.state"] = observation.State;
+            evidence["configuration.fingerprint"] = observation.ConfigurationFingerprint;
         }
 
         return new MutationProviderResult(
@@ -755,18 +649,13 @@ public sealed class ConnectMutationExecutionService
             evidence);
     }
 
-    private static MutationProviderResult Unknown(
-        string code) =>
-        new(
-            MutationExecutionResultKind.ExecutionUnknown,
-            code);
+    private static MutationProviderResult Unknown(string code) =>
+        new(MutationExecutionResultKind.ExecutionUnknown, code);
 
     private static Dictionary<string, string> MergeEvidence(
         IReadOnlyDictionary<string, string>? source)
     {
-        var result = new Dictionary<string, string>(
-            StringComparer.Ordinal);
-
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
         if (source is not null)
         {
             foreach (var pair in source)
@@ -776,46 +665,48 @@ public sealed class ConnectMutationExecutionService
         return result;
     }
 
+    private sealed class MissingMutationMaterialDigestService :
+        IMutationMaterialDigestService
+    {
+        public static MissingMutationMaterialDigestService Instance { get; } = new();
+
+        public string ComputeDigest(ReadOnlySpan<byte> material) =>
+            throw new MutationStateException(
+                "Sensitive Kafka Connect configuration fingerprinting requires the governed mutation material digest service.");
+    }
+
     private sealed record ConnectVerificationObservation(
         bool Verified,
         ConnectMutationObservation? Observation);
 }
 
-public sealed class ConnectCreateExecutionHandler :
-    IMutationExecutionHandler
+public sealed class ConnectCreateExecutionHandler : IMutationExecutionHandler
 {
     private readonly ConnectMutationExecutionService _service;
 
-    public ConnectCreateExecutionHandler(
-        ConnectMutationExecutionService service)
+    public ConnectCreateExecutionHandler(ConnectMutationExecutionService service)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
     }
 
-    public MutationOperationKind OperationKind =>
-        MutationOperationKind.ConnectCreate;
+    public MutationOperationKind OperationKind => MutationOperationKind.ConnectCreate;
 
     public Task<MutationProviderResult> ExecuteAsync(
         MutationExecutionContext context,
         CancellationToken cancellationToken = default) =>
-        _service.CreateAsync(
-            context,
-            cancellationToken);
+        _service.CreateAsync(context, cancellationToken);
 }
 
-public sealed class ConnectAlterExecutionHandler :
-    IMutationExecutionHandler
+public sealed class ConnectAlterExecutionHandler : IMutationExecutionHandler
 {
     private readonly ConnectMutationExecutionService _service;
 
-    public ConnectAlterExecutionHandler(
-        ConnectMutationExecutionService service)
+    public ConnectAlterExecutionHandler(ConnectMutationExecutionService service)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
     }
 
-    public MutationOperationKind OperationKind =>
-        MutationOperationKind.ConnectAlter;
+    public MutationOperationKind OperationKind => MutationOperationKind.ConnectAlter;
 
     public Task<MutationProviderResult> ExecuteAsync(
         MutationExecutionContext context,
@@ -830,9 +721,7 @@ public sealed class ConnectAlterExecutionHandler :
                     "connect_alter_operation_mismatch"));
         }
 
-        if (!TryReadAlterKind(
-                context.Operation.CanonicalIntent,
-                out var kind))
+        if (!TryReadAlterKind(context.Operation.CanonicalIntent, out var kind))
         {
             return Task.FromResult(
                 new MutationProviderResult(
@@ -843,18 +732,14 @@ public sealed class ConnectAlterExecutionHandler :
         switch (kind)
         {
             case ConnectAlterIntentKind.ConfigurationUpdate:
-                return _service.UpdateAsync(
-                    context,
-                    cancellationToken);
+                return _service.UpdateAsync(context, cancellationToken);
 
             case ConnectAlterIntentKind.Control:
                 ConnectControlCanonicalIntent canonical;
                 try
                 {
-                    canonical =
-                        ConnectMutationCanonicalization.Deserialize<
-                            ConnectControlCanonicalIntent>(
-                            context.Operation.CanonicalIntent);
+                    canonical = ConnectMutationCanonicalization.Deserialize<
+                        ConnectControlCanonicalIntent>(context.Operation.CanonicalIntent);
                 }
                 catch
                 {
@@ -882,20 +767,13 @@ public sealed class ConnectAlterExecutionHandler :
         out ConnectAlterIntentKind kind)
     {
         kind = default;
-
         try
         {
-            using var document =
-                JsonDocument.Parse(
-                    canonicalIntent);
-            if (document.RootElement.ValueKind !=
-                    JsonValueKind.Object ||
-                !document.RootElement.TryGetProperty(
-                    "alterKind",
-                    out var element) ||
+            using var document = JsonDocument.Parse(canonicalIntent);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("alterKind", out var element) ||
                 !element.TryGetInt32(out var raw) ||
-                !Enum.IsDefined(
-                    (ConnectAlterIntentKind)raw))
+                !Enum.IsDefined((ConnectAlterIntentKind)raw))
             {
                 return false;
             }
@@ -910,19 +788,16 @@ public sealed class ConnectAlterExecutionHandler :
     }
 }
 
-public sealed class ConnectDeleteExecutionHandler :
-    IMutationExecutionHandler
+public sealed class ConnectDeleteExecutionHandler : IMutationExecutionHandler
 {
     private readonly ConnectMutationExecutionService _service;
 
-    public ConnectDeleteExecutionHandler(
-        ConnectMutationExecutionService service)
+    public ConnectDeleteExecutionHandler(ConnectMutationExecutionService service)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
     }
 
-    public MutationOperationKind OperationKind =>
-        MutationOperationKind.ConnectDelete;
+    public MutationOperationKind OperationKind => MutationOperationKind.ConnectDelete;
 
     public Task<MutationProviderResult> ExecuteAsync(
         MutationExecutionContext context,
@@ -940,10 +815,8 @@ public sealed class ConnectDeleteExecutionHandler :
         ConnectDeleteCanonicalIntent canonical;
         try
         {
-            canonical =
-                ConnectMutationCanonicalization.Deserialize<
-                    ConnectDeleteCanonicalIntent>(
-                    context.Operation.CanonicalIntent);
+            canonical = ConnectMutationCanonicalization.Deserialize<
+                ConnectDeleteCanonicalIntent>(context.Operation.CanonicalIntent);
         }
         catch
         {

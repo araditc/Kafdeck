@@ -185,6 +185,13 @@
           "Kafdeck.Core": "[0.4.0, )"
         }
       },
+      "kafdeck.modules.connect": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
+        }
+      },
       "kafdeck.modules.consumers": {
         "type": "Project",
         "dependencies": {

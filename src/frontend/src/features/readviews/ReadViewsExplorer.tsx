@@ -16,6 +16,7 @@ import {
   type SchemaSubjectSummary,
   type SchemaVersionSummary,
 } from '../../shared/api.js';
+import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
 
 function readViewError(reason: unknown): string {
   if (reason instanceof ApiProblem && reason.status === 403) return 'Not authorized for this read view.';
@@ -194,5 +195,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       {ksqlInfo && <p>Version: {ksqlInfo.data.version ?? 'Unknown'} · Kafka cluster: {ksqlInfo.data.kafkaClusterId ?? 'Unknown'} · Health: {ksqlInfo.data.state ?? 'Unknown'}</p>}
       <p>v0.4 exposes no SQL or metadata-statement execution surface. Metadata that would require statement execution is reported unsupported.</p>
     </section>
+
+    <MutationOperationsPanel clusterId={clusterId} />
   </>;
 }

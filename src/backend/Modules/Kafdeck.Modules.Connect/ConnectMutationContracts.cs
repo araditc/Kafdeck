@@ -205,6 +205,9 @@ public sealed record ConnectMutationPolicy
 
 internal static class ConnectMutationCanonicalization
 {
+    private static readonly string RedactedValueFingerprint =
+        Sha256(Encoding.UTF8.GetBytes("Kafdeck.Connect.RedactedValue.v1"));
+
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -302,14 +305,16 @@ internal static class ConnectMutationCanonicalization
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .Select(pair =>
                 {
-                    var digest = Sha256(
-                        Encoding.UTF8.GetBytes(pair.Value));
-                    var safeValue =
+                    var explicitlySafe =
                         ConnectSafeConfigurationPolicy
                             .IsExplicitlySafeConfigKey(pair.Key) &&
-                        !ConnectSafeConfigurationPolicy.IsSecretKey(pair.Key)
-                            ? SafePreviewValue(pair.Value, digest)
-                            : "[REDACTED]";
+                        !ConnectSafeConfigurationPolicy.IsSecretKey(pair.Key);
+                    var digest = explicitlySafe
+                        ? Sha256(Encoding.UTF8.GetBytes(pair.Value))
+                        : RedactedValueFingerprint;
+                    var safeValue = explicitlySafe
+                        ? SafePreviewValue(pair.Value, digest)
+                        : "[REDACTED]";
 
                     return new ConnectConfigurationCanonicalItem(
                         pair.Key,
