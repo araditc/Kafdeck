@@ -56,16 +56,35 @@ public sealed class V05AntiforgeryTests
         app.MapPost("/mutation", () => Results.Ok())
             .RequireKafdeckAntiforgery();
 
-        var endpoint = ((IEndpointRouteBuilder)app).DataSources
-            .SelectMany(source => source.Endpoints)
-            .OfType<RouteEndpoint>()
-            .Single(item => string.Equals(
-                item.RoutePattern.RawText,
-                "/mutation",
-                StringComparison.Ordinal));
+        var endpoint = FindEndpoint(app, "/mutation");
         var metadata = endpoint.Metadata.GetMetadata<IAntiforgeryMetadata>();
 
         Assert.NotNull(metadata);
         Assert.True(metadata.RequiresValidation);
     }
+
+    [Fact]
+    public void Oidc_logout_carries_framework_antiforgery_metadata()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+
+        using var app = builder.Build();
+        app.MapKafdeckOidcSessionEndpoints();
+
+        var endpoint = FindEndpoint(app, "/api/v1/auth/logout");
+        var metadata = endpoint.Metadata.GetMetadata<IAntiforgeryMetadata>();
+
+        Assert.NotNull(metadata);
+        Assert.True(metadata.RequiresValidation);
+    }
+
+    private static RouteEndpoint FindEndpoint(WebApplication app, string pattern) =>
+        ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Single(item => string.Equals(
+                item.RoutePattern.RawText,
+                pattern,
+                StringComparison.Ordinal));
 }
