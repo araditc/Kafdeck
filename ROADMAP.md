@@ -1,9 +1,10 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 5 scope accepted; v0.1-v0.5 released; v0.6 not activated**  
+Status: **Gate 0–Gate 6 scope accepted; v0.1-v0.5.1 released; v0.6 planning active, implementation blocked pending governed planning admission**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
-Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
+Long-term capability roadmap approval: **Gate 2 — 2026-09-16**  
+v0.6 scope approval: **Gate 6 — 2026-09-23**
 
 Kafdeck is developed as an Apache-2.0, vendor-neutral, operations-first Kafka control plane. The roadmap is capability-driven rather than calendar-driven: a phase exits only when its quality, security, compatibility and governance gates are satisfied.
 
@@ -157,13 +158,13 @@ All mutations use:
 
 Risk classes: LOW, MODERATE, HIGH, CRITICAL.
 
-Scope authority: **Issue #121 / Gate 5 / RFC-0005**. W32-W40 were governed-admitted through tracker #122 and the v0.5 release was explicitly owner-approved. v0.6 remains inactive pending a separate owner scope decision.
+Scope authority: **Issue #121 / Gate 5 / RFC-0005**. W32-W40 were governed-admitted through tracker #122 and the v0.5 release was explicitly owner-approved. The scope-neutral v0.5.1 release-integrity correction is also complete. Gate 6 activates v0.6 planning while all v0.5 mutation invariants remain inherited.
 
 Mutation mode requires durable Kafdeck operation persistence. CRITICAL operations require a distinct eligible approver; a deployment that cannot establish that property fails closed for CRITICAL mutation.
 
 Irreversible operations such as topic deletion and record purge are never represented as generally reversible.
 
-## v0.6 — Fleet Operations, Broker Maintenance & Kafka Security
+## v0.6 — Fleet Operations, Broker Maintenance & Kafka Security — SCOPE ACCEPTED / PLANNING ACTIVE
 
 Capabilities:
 - Kafka ACL browser/editor
@@ -182,6 +183,12 @@ Capabilities:
 - MirrorMaker 2/replication integration rather than reimplementing replication
 
 There is no fabricated generic Kafka "broker read-only mode"; maintenance actions are capability-gated to actual Kafka/provider primitives.
+
+Scope authority: **Issue #145 / Gate 6 / RFC-0006 planning package / tracker #146**. Detailed scope and safety boundaries were explicitly owner-approved on 2026-09-23.
+
+Implementation remains blocked until the complete v0.6 planning package is admitted through protected `main` with fresh exact-head CI, fresh required CODEOWNER approval, resolved required threads and expected-head guarded merge. The planned workstreams are W41-W50. Release/tag/publication remains separately approval-bound.
+
+v0.6 inherits the RFC-0005 mutation kernel and adds stricter requirements for write-only SCRAM material, durable long-running progress/lease/fencing, explicit reassignment/decommission plans, capability-profile evidence and conjunctive authorization for cross-cluster data movement.
 
 ## v0.7 — Developer & Streaming Ecosystem Platform
 
