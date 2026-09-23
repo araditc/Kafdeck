@@ -11,9 +11,14 @@ import {
 type WorkflowKind = 'topic' | 'record' | 'consumer' | 'schema' | 'connect' | 'purge';
 
 function newIdempotencyKey(): string {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (
+    typeof globalThis.crypto === 'undefined' ||
+    typeof globalThis.crypto.randomUUID !== 'function'
+  ) {
+    throw new Error('Secure browser randomness is required to generate an Idempotency-Key.');
+  }
+
+  return globalThis.crypto.randomUUID();
 }
 
 function pairMap(source: string): Record<string, string> {
