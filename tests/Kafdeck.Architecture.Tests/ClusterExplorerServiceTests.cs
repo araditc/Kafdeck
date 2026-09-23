@@ -64,6 +64,7 @@ public sealed class ClusterExplorerServiceTests
     [Fact]
     public async Task Retryable_refresh_failure_serves_stale_metadata_as_degraded()
     {
+        var clock = new MutableTestTimeProvider(DateTimeOffset.UtcNow);
         var calls = 0;
         var port = new FakeKafkaAdministrationPort
         {
@@ -72,20 +73,20 @@ public sealed class ClusterExplorerServiceTests
                 var call = Interlocked.Increment(ref calls);
                 if (call == 1)
                 {
-                    var oldObservation = Observation(DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(1500));
+                    var oldObservation = Observation(clock.GetUtcNow() - TimeSpan.FromMilliseconds(1500));
                     return Task.FromResult(KafkaResult<ClusterMetadata>.Success(Metadata("cluster-a"), oldObservation));
                 }
 
                 return Task.FromResult(KafkaResult<ClusterMetadata>.Failed(
                     Failure(KafkaFailureCategory.Unavailable, "temporarily_unavailable", true),
-                    Observation()));
+                    Observation(clock.GetUtcNow())));
             },
             Capabilities = (_, _, _) => Task.FromResult(KafkaResult<KafkaCapabilities>.Success(
                 new KafkaCapabilities(Array.Empty<KafkaCapabilityStatus>()),
-                Observation())),
+                Observation(clock.GetUtcNow()))),
         };
         var policy = Policy(clusterMetadataTtl: TimeSpan.FromSeconds(1));
-        var service = new ClusterExplorerService(port, new KafkaSnapshotCoordinator(policy), policy);
+        var service = new ClusterExplorerService(port, new KafkaSnapshotCoordinator(policy, clock), policy);
 
         var initial = await service.GetClusterAsync("cluster-a");
         var stale = await service.GetClusterAsync("cluster-a");
@@ -148,6 +149,18 @@ public sealed class ClusterExplorerServiceTests
         string code,
         bool retryable) =>
         new(category, code, "Safe failure.", retryable);
+
+    private sealed class MutableTestTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _utcNow;
+
+        public MutableTestTimeProvider(DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+    }
 
     private sealed class FakeKafkaAdministrationPort : IKafkaAdministrationPort
     {
