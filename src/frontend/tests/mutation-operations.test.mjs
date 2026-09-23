@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -67,4 +68,14 @@ test('v0.5 mutation UI does not expose a generic provider or raw execution-mater
   }
 
   assert.match(markup, /does not provide a generic provider command console/);
+});
+
+test('v0.5 idempotency key generation never falls back to insecure randomness', () => {
+  const source = readFileSync(
+    new URL('../src/features/mutations/MutationPreviewWorkflows.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /crypto\.randomUUID/);
+  assert.doesNotMatch(source, /Math\.random/);
 });
