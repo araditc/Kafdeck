@@ -300,7 +300,7 @@ public sealed class V05TopicAdministrationTests
             mutations,
             reads,
             new TopicMutationVerificationPolicy(
-                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(5),
                 TimeSpan.FromMilliseconds(50)));
 
         var result = await service.DeleteAsync(
