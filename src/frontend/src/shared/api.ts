@@ -275,12 +275,28 @@ function recordParams(query: RecordQuery): URLSearchParams {
 
 export const kafdeckApi = {
   getOperatorSession(signal?: AbortSignal) { return readJson<OperatorSession>('/api/v1/auth/session', signal); },
-  logout() {
+  async logout() {
     sessionStorage.removeItem(deploymentTokenKey);
+    const token = await readJson<{ requestToken: string | null; formFieldName: string | null }>('/api/v1/auth/csrf');
+    if (!token.requestToken || !token.formFieldName) {
+      throw new ApiProblem(
+        500,
+        'The antiforgery token response was incomplete.',
+        'urn:kafdeck:problem:antiforgery-token-invalid',
+      );
+    }
+
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '/api/v1/auth/logout';
     form.hidden = true;
+
+    const antiforgery = document.createElement('input');
+    antiforgery.type = 'hidden';
+    antiforgery.name = token.formFieldName;
+    antiforgery.value = token.requestToken;
+    form.appendChild(antiforgery);
+
     document.body.appendChild(form);
     form.submit();
   },
