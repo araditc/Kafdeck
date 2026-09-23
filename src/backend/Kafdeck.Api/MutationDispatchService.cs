@@ -29,17 +29,21 @@ public sealed class MutationDispatchService
     private readonly IMutationOperationRepository _repository;
     private readonly MutationRequestAuthorizationService _authorization;
     private readonly MutationExecutionRequestContextAccessor _requestContext;
+    private readonly IMutationMaterialDigestService _materialDigestService;
     private readonly MutationExecutor _executor;
 
     public MutationDispatchService(
         IMutationOperationRepository repository,
         MutationRequestAuthorizationService authorization,
         MutationExecutionRequestContextAccessor requestContext,
+        IMutationMaterialDigestService materialDigestService,
         MutationExecutor executor)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
+        _materialDigestService = materialDigestService ??
+            throw new ArgumentNullException(nameof(materialDigestService));
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
     }
 
@@ -221,7 +225,8 @@ public sealed class MutationDispatchService
         {
             material = ConnectMutationExecutionMaterialBuilder.BuildConfiguration(
                 operation,
-                configuration);
+                configuration,
+                _materialDigestService);
         }
         catch (Exception exception)
             when (exception is
