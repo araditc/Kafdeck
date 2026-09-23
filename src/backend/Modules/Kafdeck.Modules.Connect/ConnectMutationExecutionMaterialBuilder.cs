@@ -14,16 +14,19 @@ public static class ConnectMutationExecutionMaterialBuilder
 {
     public static MutationExecutionMaterial BuildConfiguration(
         MutationOperationSnapshot operation,
-        IReadOnlyDictionary<string, string> configuration)
+        IReadOnlyDictionary<string, string> configuration,
+        IMutationMaterialDigestService digest)
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(digest);
 
         var normalized = ConnectMutationCanonicalization.NormalizeConfiguration(
             configuration,
             ConnectMutationPolicy.Default);
-        var projected = ConnectMutationCanonicalization.ProjectConfiguration(
-            normalized);
+        var projected = ConnectMutationSensitiveFingerprinting.ProjectRequested(
+            normalized,
+            digest);
         var fingerprint = ConnectMutationCanonicalization.ConfigurationFingerprint(
             projected);
 
