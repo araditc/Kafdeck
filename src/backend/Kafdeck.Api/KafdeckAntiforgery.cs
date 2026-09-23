@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Options;
 
 namespace Kafdeck.Api;
 
@@ -50,13 +51,15 @@ public static class KafdeckAntiforgeryExtensions
 
         app.MapGet("/api/v1/auth/csrf", (
                 HttpContext context,
-                IAntiforgery antiforgery) =>
+                IAntiforgery antiforgery,
+                IOptions<AntiforgeryOptions> options) =>
             {
                 var tokens = antiforgery.GetAndStoreTokens(context);
                 return Results.Ok(new
                 {
                     requestToken = tokens.RequestToken,
                     headerName = tokens.HeaderName ?? HeaderName,
+                    formFieldName = options.Value.FormFieldName,
                 });
             })
             .WithName("v05-auth-csrf");
