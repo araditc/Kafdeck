@@ -63,4 +63,5 @@ jobs:
         with:
           name: codeql-sarif-${{ matrix.language }}-${{ github.sha }}
           path: .artifacts/codeql/*.sarif
+          include-hidden-files: true
           if-no-files-found: warn
