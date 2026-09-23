@@ -43,7 +43,7 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.5 is the current published release.** The main branch can also contain capabilities that have passed implementation gates but are not yet part of a published release.
+Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.5.1 is the current published release.** The main branch can also contain capabilities that have passed implementation gates but are not yet part of a published release.
 
 | Capability | Status |
 | --- | --- |
