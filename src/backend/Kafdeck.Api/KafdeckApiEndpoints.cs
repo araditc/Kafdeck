@@ -12,6 +12,14 @@ public static class KafdeckApiEndpoints
 {
     private static readonly TimeSpan CapabilityTtl = TimeSpan.FromSeconds(30);
 
+    public static string ResolveKafkaAdministrationMode(KafdeckOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return options.Administration?.Mutations.Enabled == true
+            ? "controlledMutations"
+            : "readOnly";
+    }
+
     public static WebApplication MapKafdeckV01(this WebApplication app, KafdeckOptions options)
     {
         ArgumentNullException.ThrowIfNull(app);
@@ -27,7 +35,7 @@ public static class KafdeckApiEndpoints
                 description = ProductIdentity.Description,
                 version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown",
                 apiVersion = "v1",
-                kafkaAdministrationMode = "readOnly",
+                kafkaAdministrationMode = ResolveKafkaAdministrationMode(options),
             }))
             .WithName("v01-system-info")
             .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);

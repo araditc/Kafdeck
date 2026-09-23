@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 5 scope accepted; v0.1-v0.4 released; v0.5 planning proposed for governed admission**  
+Status: **Gate 0–Gate 5 scope accepted; v0.1-v0.5 released; v0.6 not activated**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -137,7 +137,7 @@ Capabilities:
 
 Scope authority: Issue #99 / Gate 4 / RFC-0004. v0.4 remains read-only: no consumer-offset, Schema Registry, Connect, ksqlDB, Kafka topic/configuration, or record mutation is introduced.
 
-## v0.5 — Safe Administration & Controlled Mutations — SCOPE ACCEPTED
+## v0.5 — Safe Administration & Controlled Mutations — RELEASED
 
 Initial mutations:
 - Create/alter/delete topics
@@ -157,7 +157,7 @@ All mutations use:
 
 Risk classes: LOW, MODERATE, HIGH, CRITICAL.
 
-Scope authority: **Issue #121 / Gate 5 / RFC-0005 planning package**. Implementation is permitted only after that planning package is admitted through protected-main governance. Issue #122 tracks W32-W40.
+Scope authority: **Issue #121 / Gate 5 / RFC-0005**. W32-W40 were governed-admitted through tracker #122 and the v0.5 release was explicitly owner-approved. v0.6 remains inactive pending a separate owner scope decision.
 
 Mutation mode requires durable Kafdeck operation persistence. CRITICAL operations require a distinct eligible approver; a deployment that cannot establish that property fails closed for CRITICAL mutation.
 

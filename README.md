@@ -28,7 +28,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> Kafdeck's **released** operating posture remains read-only. v0.4 is the current published release. The `main` branch now contains the unreleased v0.5 mutation-safety kernel, but no user-facing Kafka / Schema Registry / Connect mutation handler is enabled yet. Until the later v0.5 workstreams are admitted, Kafdeck does **not** expose topic creation/deletion, record production, consumer-offset mutation, schema mutation, connector mutation, record purge, or ksqlDB statement execution.
+> **v0.5.1 is the current release.** Read-only remains the default operating posture. Governed mutation workflows are opt-in and activate only when `Kafdeck:Administration:Mutations:Enabled=true` and the required durable persistence, digest material, authorization, and provider prerequisites validate successfully. ksqlDB statement execution and generic provider/CLI command surfaces remain unavailable.
 
 ## Why Kafdeck?
 
@@ -43,7 +43,7 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.4 is the current published release.** The main branch can also contain capabilities that have passed implementation gates but are not yet part of a published release.
+Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.5.1 is the current published release.** The main branch can also contain capabilities that have passed implementation gates but are not yet part of a published release.
 
 | Capability | Status |
 | --- | --- |
@@ -51,7 +51,7 @@ Stable releases are published through [GitHub Releases](https://github.com/aradi
 | Operator Identity / OIDC / RBAC | Released in v0.2 |
 | Safe Data Explorer + Server-Side Masking | Released in v0.3 |
 | Consumers / Schemas / Ecosystem Read Views | Released in v0.4 |
-| Controlled Kafka mutations | v0.5 in development; safety kernel implemented on `main`, user-facing mutation surfaces **not available yet** |
+| Controlled Kafka mutations | Released in v0.5 — governed and opt-in; read-only remains the default posture |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
 
@@ -128,9 +128,9 @@ Released in v0.4:
 - no connector mutation,
 - no arbitrary SQL / ksqlDB statement execution.
 
-### v0.5 safe administration foundation
+### v0.5 safe administration and controlled mutations
 
-Unreleased work on `main` now contains the mutation governance/runtime foundation required before any provider mutation surface can be admitted:
+Released in v0.5. Mutation features remain opt-in and fail closed unless deployment prerequisites are satisfied:
 
 - explicit mutation permissions; read access never implies write/admin access,
 - server-owned LOW / MODERATE / HIGH / CRITICAL risk floors,
@@ -145,7 +145,7 @@ Unreleased work on `main` now contains the mutation governance/runtime foundatio
 - bounded, typed and non-secret durable provider evidence,
 - fail-closed mutation runtime registration with no generic provider command tunnel.
 
-This is **foundation, not an exposed administration feature**. Topic, record, consumer, Schema Registry, Kafka Connect and purge handlers are admitted in later v0.5 workstreams and remain unavailable until their own implementation/review gates pass.
+v0.5 includes governed topic administration, bounded record production, consumer offset/group administration, Schema Registry mutations, Kafka Connect lifecycle mutations, controlled DeleteRecords purge, and REST/OpenAPI/UI mutation workflows. Each route still requires its exact authorization target, risk/approval path, current-state precondition checks, and durable operation state.
 
 For the design and safety contract, see:
 - [RFC-0005](docs/rfcs/0005-v0.5-safe-administration-controlled-mutations.md)
@@ -189,7 +189,7 @@ flowchart LR
 
 The important part is what is **not** in this diagram: Kafdeck is not a Kafka producer proxy, broker plugin, consumer-group member for normal browsing, or mandatory data-plane gateway.
 
-The unreleased v0.5 mutation kernel is intentionally not represented as an available provider path above. Its fail-closed runtime remains without admitted provider mutation handlers until the corresponding v0.5 workstreams pass their own governance and test gates.
+When mutation mode is enabled, v0.5 adds governed mutation services behind the same authorization and audit boundary; execution remains typed and bounded rather than a generic provider command path. When mutation mode is disabled, mutation routes fail closed and the operational posture remains read-only.
 
 A typical request flows like this:
 
@@ -622,7 +622,7 @@ Core rules include:
 
 - authorization is deny-by-default in OIDC mode;
 - v0.5 mutation mode is deny-by-default and requires an explicit mutation permission;
-- unreleased v0.5 mutation execution requires durable operation state; SQLite is standalone-only and PostgreSQL is required for HA mutation execution;
+- v0.5 mutation execution requires durable operation state; SQLite is standalone-only and PostgreSQL is required for HA mutation execution;
 - CRITICAL mutation flows require a distinct eligible approver and fail closed when that property cannot be established;
 - mutation concurrency is bounded per cluster across HA replicas through durable execution slots;
 - ambiguous post-dispatch outcomes are recorded as `ExecutionUnknown` rather than blindly retried;
