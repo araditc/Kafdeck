@@ -101,6 +101,13 @@ public sealed class V06W41FleetPersistenceTests
             var store = new AdoFleetMutationStateStore(seedFactory);
             await store.InitializeAsync();
 
+            // Build an actual pre-v3 database fixture. Current setup is used
+            // only to create the surrounding persistence tables; remove the
+            // current anti-downgrade trigger before replaying the exact v2
+            // installer so this fixture has the durable state an old binary
+            // would have left behind.
+            await RemoveSqliteConflictGuardDowngradeFenceForLegacyFixtureAsync(
+                seedFactory);
             await InstallLegacySqliteConflictGuardV2Async(seedFactory);
             Assert.Equal(
                 2,
@@ -1403,6 +1410,16 @@ public sealed class V06W41FleetPersistenceTests
         await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
             () => legacyFleetWriter.TryUpdateWithLegacySqlAsync(
                 backfillObligation.Snapshot.ObligationId));
+    }
+
+    private static async Task RemoveSqliteConflictGuardDowngradeFenceForLegacyFixtureAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "DROP TRIGGER IF EXISTS kafdeck_conflict_guard_schema_no_downgrade";
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task InstallLegacySqliteConflictGuardV2Async(
