@@ -1192,6 +1192,33 @@ public sealed class V06W41FleetPersistenceTests
             backfillLegacy.ClaimExpiresAtUtc);
         Assert.Equal(MutationResourceClaimOutcome.Conflict, backfillBlocked.Outcome);
         Assert.Equal(backfillPartitionKey, backfillBlocked.ConflictingResourceKey);
+
+        // Simulate an already-running pre-fence fleet-state binary after the
+        // current process has completed backfill/fence installation. Its old
+        // INSERT/UPDATE statement shapes do not carry writer fence fields and
+        // must be rejected by the database rather than recreating an obligation
+        // with no durable legacy guard identity or canonical binding.
+        var legacyFleetWriter = new LegacyFleetStateWriterProbe(factory);
+        var legacyWriteParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(legacyWriteParent.Snapshot)).Outcome);
+        var legacyWriteObligation = FleetConflictObligation.Create(
+            legacyWriteParent.Snapshot.OperationId,
+            "legacy-writer-insert",
+            FleetConflictKeyCodec.Topic(
+                "prod",
+                $"legacy-writer-{Guid.NewGuid():N}"),
+            "sha256:legacy-writer-insert",
+            DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
+            () => legacyFleetWriter.TryInsertWithLegacySqlAsync(
+                legacyWriteObligation.Snapshot));
+
+        await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
+            () => legacyFleetWriter.TryUpdateWithLegacySqlAsync(
+                backfillObligation.Snapshot.ObligationId));
     }
 
     private static async Task<(string ResourceKeyHash, string ResourceKey)>
@@ -1345,6 +1372,142 @@ public sealed class V06W41FleetPersistenceTests
             $"fleet-parent-{suffix}");
     }
 
+
+    private sealed class LegacyFleetStateWriterProbe
+    {
+        private readonly IMutationDbConnectionFactory _factory;
+
+        public LegacyFleetStateWriterProbe(IMutationDbConnectionFactory factory)
+        {
+            _factory = factory;
+        }
+
+        public async Task TryInsertWithLegacySqlAsync(
+            FleetConflictObligationSnapshot snapshot)
+        {
+            var node = JsonSerializer.SerializeToNode(
+                    snapshot,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web))?.AsObject()
+                ?? throw new InvalidOperationException(
+                    "Expected fleet conflict obligation JSON object.");
+            node.Remove("legacyResourceKey");
+
+            await using var connection = await _factory.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                INSERT INTO kafdeck_fleet_conflict_obligations (
+                    obligation_id,
+                    operation_id,
+                    step_id,
+                    conflict_key_hash,
+                    conflict_key,
+                    effect_fingerprint,
+                    schema_version,
+                    state,
+                    blocks_conflicting_dispatch,
+                    version,
+                    snapshot_json,
+                    created_at_utc,
+                    updated_at_utc)
+                VALUES (
+                    @obligation_id,
+                    @operation_id,
+                    @step_id,
+                    @conflict_key_hash,
+                    @conflict_key,
+                    @effect_fingerprint,
+                    @schema_version,
+                    @state,
+                    @blocks_conflicting_dispatch,
+                    @version,
+                    @snapshot_json,
+                    @created_at_utc,
+                    @updated_at_utc)
+                """;
+            AddTestParameter(
+                command,
+                "@obligation_id",
+                snapshot.ObligationId.ToString("D"));
+            AddTestParameter(
+                command,
+                "@operation_id",
+                snapshot.OperationId.ToString("D"));
+            AddTestParameter(command, "@step_id", snapshot.StepId);
+            AddTestParameter(
+                command,
+                "@conflict_key_hash",
+                Convert.ToHexString(
+                        SHA256.HashData(
+                            Encoding.UTF8.GetBytes(snapshot.ConflictKey)))
+                    .ToLowerInvariant());
+            AddTestParameter(command, "@conflict_key", snapshot.ConflictKey);
+            AddTestParameter(
+                command,
+                "@effect_fingerprint",
+                snapshot.EffectFingerprint);
+            AddTestParameter(command, "@schema_version", snapshot.SchemaVersion);
+            AddTestParameter(command, "@state", (int)snapshot.State);
+            AddTestParameter(
+                command,
+                "@blocks_conflicting_dispatch",
+                snapshot.BlocksConflictingDispatch ? 1 : 0);
+            AddTestParameter(command, "@version", snapshot.Version);
+            AddTestParameter(command, "@snapshot_json", node.ToJsonString());
+            AddTestParameter(
+                command,
+                "@created_at_utc",
+                snapshot.CreatedAtUtc.ToUniversalTime().ToString("O"));
+            AddTestParameter(
+                command,
+                "@updated_at_utc",
+                snapshot.UpdatedAtUtc.ToUniversalTime().ToString("O"));
+
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task TryUpdateWithLegacySqlAsync(Guid obligationId)
+        {
+            await using var connection = await _factory.OpenAsync();
+            await using var read = connection.CreateCommand();
+            read.CommandText =
+                """
+                SELECT snapshot_json
+                FROM kafdeck_fleet_conflict_obligations
+                WHERE obligation_id = @obligation_id
+                """;
+            AddTestParameter(
+                read,
+                "@obligation_id",
+                obligationId.ToString("D"));
+            var current = Convert.ToString(await read.ExecuteScalarAsync());
+            Assert.False(string.IsNullOrWhiteSpace(current));
+
+            var node = JsonNode.Parse(current!)?.AsObject()
+                ?? throw new InvalidOperationException(
+                    "Expected fleet conflict obligation JSON object.");
+            node.Remove("legacyResourceKey");
+
+            await using var update = connection.CreateCommand();
+            update.CommandText =
+                """
+                UPDATE kafdeck_fleet_conflict_obligations
+                SET snapshot_json = @snapshot_json,
+                    updated_at_utc = @updated_at_utc
+                WHERE obligation_id = @obligation_id
+                """;
+            AddTestParameter(update, "@snapshot_json", node.ToJsonString());
+            AddTestParameter(
+                update,
+                "@updated_at_utc",
+                DateTimeOffset.UtcNow.ToString("O"));
+            AddTestParameter(
+                update,
+                "@obligation_id",
+                obligationId.ToString("D"));
+            await update.ExecuteNonQueryAsync();
+        }
+    }
 
     private sealed class LegacyV05AdmissionProbe
     {
