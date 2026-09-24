@@ -385,7 +385,7 @@ internal static class MutationConflictGuardSchema
         ON CONFLICT (component) DO UPDATE
         SET schema_version = excluded.schema_version;
 
-        CREATE TRIGGER kafdeck_conflict_guard_schema_no_downgrade
+        CREATE TRIGGER IF NOT EXISTS kafdeck_conflict_guard_schema_no_downgrade
         BEFORE UPDATE OF schema_version
         ON kafdeck_mutation_conflict_guard_schema
         WHEN OLD.component = 'legacy-topic-guard-scope'
