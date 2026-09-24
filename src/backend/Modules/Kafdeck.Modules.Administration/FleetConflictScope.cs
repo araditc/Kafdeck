@@ -25,6 +25,48 @@ public static class FleetConflictScope
     public static string FromLegacyTopicResourceKey(string resourceKey) =>
         FromTarget(FleetConflictRelation.ParseLegacyTopicResourceKey(resourceKey));
 
+    /// <summary>
+    /// Returns the exact existing v0.5 topic resource key for a fleet
+    /// topic/partition/topic-config conflict. The round-trip check is mandatory:
+    /// a typed identity that cannot be represented unambiguously by the legacy
+    /// contract is rejected instead of silently weakening conflict exclusion.
+    /// Non-topic target families have no v0.5 topic bridge and return null.
+    /// </summary>
+    public static string? ToLegacyTopicResourceKey(string conflictKey)
+    {
+        var target = FleetConflictKeyCodec.Decode(conflictKey);
+        if (target.Kind is not (
+            FleetConflictTargetKind.Topic or
+            FleetConflictTargetKind.TopicPartition or
+            FleetConflictTargetKind.TopicConfiguration))
+        {
+            return null;
+        }
+
+        var legacy = $"cluster/{target.PhysicalClusterId}/topic/{target.ResourceId}";
+        FleetConflictTarget reparsed;
+        try
+        {
+            reparsed = FleetConflictRelation.ParseLegacyTopicResourceKey(legacy);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new MutationStateException(
+                $"Fleet topic conflict identity cannot be represented by the admitted v0.5 topic resource-key contract: {exception.Message}");
+        }
+
+        if (!string.Equals(
+                FromTarget(target),
+                FromTarget(reparsed),
+                StringComparison.Ordinal))
+        {
+            throw new MutationStateException(
+                "Fleet topic conflict identity does not round-trip through the admitted v0.5 topic resource-key contract.");
+        }
+
+        return legacy;
+    }
+
     public static string FromTarget(FleetConflictTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
