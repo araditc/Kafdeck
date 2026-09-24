@@ -34,6 +34,19 @@ public enum MutationOperationKind
     ConnectAlter = 12,
     ConnectDelete = 13,
     RecordsPurge = 14,
+    AclAlter = 15,
+    ScramAlter = 16,
+    QuotaAlter = 17,
+    ClusterConfigAlter = 18,
+    PreferredLeaderElection = 19,
+    PartitionReassign = 20,
+    ReplicationFactorAlter = 21,
+    ReassignmentThrottle = 22,
+    BrokerMaintenance = 23,
+    LogDirectoryMaintenance = 24,
+    ClusterTransfer = 25,
+    ReplicationIntegration = 26,
+    FleetUncertaintyDisposition = 27,
 }
 
 public enum MutationRiskClass
