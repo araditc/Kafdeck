@@ -22,6 +22,7 @@ internal static class MutationConflictGuardSchema
     private const string ClaimTrigger = "kafdeck_claim_fleet_conflict_guard";
     private const string ObligationInsertTrigger = "kafdeck_obligation_claim_conflict_guard_insert";
     private const string ObligationUpdateTrigger = "kafdeck_obligation_claim_conflict_guard_update";
+    private const string GuardSchemaDowngradeTrigger = "kafdeck_conflict_guard_schema_no_downgrade";
 
     public static async Task<bool> EnsureIfAvailableAsync(
         DbConnection connection,
@@ -123,10 +124,11 @@ internal static class MutationConflictGuardSchema
                   AND name IN (
                       '{ClaimTrigger}',
                       '{ObligationInsertTrigger}',
-                      '{ObligationUpdateTrigger}')
+                      '{ObligationUpdateTrigger}',
+                      '{GuardSchemaDowngradeTrigger}')
                 """;
             var count = await triggers.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-            if (Convert.ToInt32(count, CultureInfo.InvariantCulture) != 3)
+            if (Convert.ToInt32(count, CultureInfo.InvariantCulture) != 4)
             {
                 return false;
             }
@@ -154,7 +156,7 @@ internal static class MutationConflictGuardSchema
             SELECT COUNT(1)
             FROM kafdeck_mutation_conflict_guard_schema
             WHERE component = 'legacy-topic-guard-scope'
-              AND schema_version = 2
+              AND schema_version = 3
             """;
         var markerCount = await marker.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         return Convert.ToInt32(markerCount, CultureInfo.InvariantCulture) == 1;
@@ -379,9 +381,18 @@ internal static class MutationConflictGuardSchema
         END;
 
         INSERT INTO kafdeck_mutation_conflict_guard_schema (component, schema_version)
-        VALUES ('legacy-topic-guard-scope', 2)
+        VALUES ('legacy-topic-guard-scope', 3)
         ON CONFLICT (component) DO UPDATE
         SET schema_version = excluded.schema_version;
+
+        CREATE TRIGGER IF NOT EXISTS kafdeck_conflict_guard_schema_no_downgrade
+        BEFORE UPDATE OF schema_version
+        ON kafdeck_mutation_conflict_guard_schema
+        WHEN OLD.component = 'legacy-topic-guard-scope'
+         AND NEW.schema_version < OLD.schema_version
+        BEGIN
+            SELECT RAISE(ABORT, 'kafdeck conflict guard schema downgrade');
+        END;
         """;
 
     private const string PostgreSqlInstallSql =
