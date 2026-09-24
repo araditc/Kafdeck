@@ -250,20 +250,23 @@ internal static class MutationConflictGuardSchema
             INSERT OR IGNORE INTO kafdeck_mutation_conflict_guards (legacy_resource_key)
             VALUES (
                 CASE
-                    WHEN instr(NEW.resource_key, '/topic/') > 0
-                     AND instr(NEW.resource_key, '/partition/') >
-                         instr(NEW.resource_key, '/topic/') + length('/topic/')
+                    WHEN length(rtrim(NEW.resource_key, '0123456789')) <
+                         length(NEW.resource_key)
                      AND substr(
-                            NEW.resource_key,
-                            instr(NEW.resource_key, '/partition/') + length('/partition/')) <> ''
-                     AND substr(
-                            NEW.resource_key,
-                            instr(NEW.resource_key, '/partition/') + length('/partition/'))
-                         NOT GLOB '*[^0-9]*'
+                            rtrim(NEW.resource_key, '0123456789'),
+                            -length('/partition/')) = '/partition/'
+                     AND instr(
+                            substr(
+                                rtrim(NEW.resource_key, '0123456789'),
+                                1,
+                                length(rtrim(NEW.resource_key, '0123456789')) -
+                                    length('/partition/')),
+                            '/topic/') > 0
                     THEN substr(
-                            NEW.resource_key,
+                            rtrim(NEW.resource_key, '0123456789'),
                             1,
-                            instr(NEW.resource_key, '/partition/') - 1)
+                            length(rtrim(NEW.resource_key, '0123456789')) -
+                                length('/partition/'))
                     ELSE NEW.resource_key
                 END
             );
@@ -275,20 +278,23 @@ internal static class MutationConflictGuardSchema
                 WHERE obligation.blocks_conflicting_dispatch = 1
                   AND json_extract(obligation.snapshot_json, '$.legacyResourceKey') =
                       CASE
-                          WHEN instr(NEW.resource_key, '/topic/') > 0
-                           AND instr(NEW.resource_key, '/partition/') >
-                               instr(NEW.resource_key, '/topic/') + length('/topic/')
+                          WHEN length(rtrim(NEW.resource_key, '0123456789')) <
+                               length(NEW.resource_key)
                            AND substr(
-                                  NEW.resource_key,
-                                  instr(NEW.resource_key, '/partition/') + length('/partition/')) <> ''
-                           AND substr(
-                                  NEW.resource_key,
-                                  instr(NEW.resource_key, '/partition/') + length('/partition/'))
-                               NOT GLOB '*[^0-9]*'
+                                  rtrim(NEW.resource_key, '0123456789'),
+                                  -length('/partition/')) = '/partition/'
+                           AND instr(
+                                  substr(
+                                      rtrim(NEW.resource_key, '0123456789'),
+                                      1,
+                                      length(rtrim(NEW.resource_key, '0123456789')) -
+                                          length('/partition/')),
+                                  '/topic/') > 0
                           THEN substr(
-                                  NEW.resource_key,
+                                  rtrim(NEW.resource_key, '0123456789'),
                                   1,
-                                  instr(NEW.resource_key, '/partition/') - 1)
+                                  length(rtrim(NEW.resource_key, '0123456789')) -
+                                      length('/partition/'))
                           ELSE NEW.resource_key
                       END
                   AND obligation.operation_id <> NEW.operation_id
@@ -309,20 +315,23 @@ internal static class MutationConflictGuardSchema
                 FROM kafdeck_mutation_resource_claims AS claim
                 WHERE (
                     CASE
-                        WHEN instr(claim.resource_key, '/topic/') > 0
-                         AND instr(claim.resource_key, '/partition/') >
-                             instr(claim.resource_key, '/topic/') + length('/topic/')
+                        WHEN length(rtrim(claim.resource_key, '0123456789')) <
+                             length(claim.resource_key)
                          AND substr(
-                                claim.resource_key,
-                                instr(claim.resource_key, '/partition/') + length('/partition/')) <> ''
-                         AND substr(
-                                claim.resource_key,
-                                instr(claim.resource_key, '/partition/') + length('/partition/'))
-                             NOT GLOB '*[^0-9]*'
+                                rtrim(claim.resource_key, '0123456789'),
+                                -length('/partition/')) = '/partition/'
+                         AND instr(
+                                substr(
+                                    rtrim(claim.resource_key, '0123456789'),
+                                    1,
+                                    length(rtrim(claim.resource_key, '0123456789')) -
+                                        length('/partition/')),
+                                '/topic/') > 0
                         THEN substr(
-                                claim.resource_key,
+                                rtrim(claim.resource_key, '0123456789'),
                                 1,
-                                instr(claim.resource_key, '/partition/') - 1)
+                                length(rtrim(claim.resource_key, '0123456789')) -
+                                    length('/partition/'))
                         ELSE claim.resource_key
                     END
                 ) = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
@@ -345,20 +354,23 @@ internal static class MutationConflictGuardSchema
                 FROM kafdeck_mutation_resource_claims AS claim
                 WHERE (
                     CASE
-                        WHEN instr(claim.resource_key, '/topic/') > 0
-                         AND instr(claim.resource_key, '/partition/') >
-                             instr(claim.resource_key, '/topic/') + length('/topic/')
+                        WHEN length(rtrim(claim.resource_key, '0123456789')) <
+                             length(claim.resource_key)
                          AND substr(
-                                claim.resource_key,
-                                instr(claim.resource_key, '/partition/') + length('/partition/')) <> ''
-                         AND substr(
-                                claim.resource_key,
-                                instr(claim.resource_key, '/partition/') + length('/partition/'))
-                             NOT GLOB '*[^0-9]*'
+                                rtrim(claim.resource_key, '0123456789'),
+                                -length('/partition/')) = '/partition/'
+                         AND instr(
+                                substr(
+                                    rtrim(claim.resource_key, '0123456789'),
+                                    1,
+                                    length(rtrim(claim.resource_key, '0123456789')) -
+                                        length('/partition/')),
+                                '/topic/') > 0
                         THEN substr(
-                                claim.resource_key,
+                                rtrim(claim.resource_key, '0123456789'),
                                 1,
-                                instr(claim.resource_key, '/partition/') - 1)
+                                length(rtrim(claim.resource_key, '0123456789')) -
+                                    length('/partition/'))
                         ELSE claim.resource_key
                     END
                 ) = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
