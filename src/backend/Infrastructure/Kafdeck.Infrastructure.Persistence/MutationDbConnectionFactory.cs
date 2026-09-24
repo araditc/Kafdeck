@@ -14,6 +14,7 @@ public interface IMutationDbConnectionFactory
 public sealed class SqliteMutationDbConnectionFactory : IMutationDbConnectionFactory
 {
     private readonly string _connectionString;
+    private int _conflictGuardInstalled;
 
     public bool SupportsSelectForUpdate => false;
 
@@ -39,9 +40,20 @@ public sealed class SqliteMutationDbConnectionFactory : IMutationDbConnectionFac
         var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;";
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;";
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (Volatile.Read(ref _conflictGuardInstalled) == 0 &&
+            await MutationConflictGuardSchema.EnsureIfAvailableAsync(
+                    connection,
+                    cancellationToken)
+                .ConfigureAwait(false))
+        {
+            Interlocked.Exchange(ref _conflictGuardInstalled, 1);
+        }
 
         return connection;
     }
@@ -50,6 +62,7 @@ public sealed class SqliteMutationDbConnectionFactory : IMutationDbConnectionFac
 public sealed class PostgreSqlMutationDbConnectionFactory : IMutationDbConnectionFactory
 {
     private readonly string _connectionString;
+    private int _conflictGuardInstalled;
 
     public bool SupportsSelectForUpdate => true;
 
@@ -69,6 +82,16 @@ public sealed class PostgreSqlMutationDbConnectionFactory : IMutationDbConnectio
     {
         var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        if (Volatile.Read(ref _conflictGuardInstalled) == 0 &&
+            await MutationConflictGuardSchema.EnsureIfAvailableAsync(
+                    connection,
+                    cancellationToken)
+                .ConfigureAwait(false))
+        {
+            Interlocked.Exchange(ref _conflictGuardInstalled, 1);
+        }
+
         return connection;
     }
 }
