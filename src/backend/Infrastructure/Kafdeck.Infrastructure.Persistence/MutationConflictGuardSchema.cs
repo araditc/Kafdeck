@@ -43,11 +43,18 @@ internal static class MutationConflictGuardSchema
                 return true;
             }
 
-            await ExecuteAsync(
-                    connection,
-                    SqliteInstallSql,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            await using (var transaction =
+                await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await ExecuteAsync(
+                        connection,
+                        transaction,
+                        SqliteInstallSql,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return true;
         }
 
@@ -65,11 +72,18 @@ internal static class MutationConflictGuardSchema
                 return true;
             }
 
-            await ExecuteAsync(
-                    connection,
-                    PostgreSqlInstallSql,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            await using (var transaction =
+                await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await ExecuteAsync(
+                        connection,
+                        transaction,
+                        PostgreSqlInstallSql,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return true;
         }
 
@@ -205,10 +219,12 @@ internal static class MutationConflictGuardSchema
 
     private static async Task ExecuteAsync(
         DbConnection connection,
+        DbTransaction transaction,
         string sql,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
