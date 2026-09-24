@@ -224,9 +224,19 @@ internal static class MutationExecutionVersionFenceSchema
         triggers.CommandText =
             $"""
             SELECT COUNT(1)
-            FROM pg_catalog.pg_trigger
-            WHERE NOT tgisinternal
-              AND tgname IN ('{SlotTrigger}', '{ClaimTrigger}')
+            FROM pg_catalog.pg_trigger AS trigger
+            INNER JOIN pg_catalog.pg_class AS relation
+              ON relation.oid = trigger.tgrelid
+            INNER JOIN pg_catalog.pg_namespace AS namespace
+              ON namespace.oid = relation.relnamespace
+            WHERE NOT trigger.tgisinternal
+              AND namespace.nspname = current_schema()
+              AND (
+                    (trigger.tgname = '{SlotTrigger}'
+                     AND relation.relname = 'kafdeck_mutation_cluster_slots')
+                 OR (trigger.tgname = '{ClaimTrigger}'
+                     AND relation.relname = 'kafdeck_mutation_resource_claims')
+              )
             """;
         return Convert.ToInt32(
                    await triggers.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
