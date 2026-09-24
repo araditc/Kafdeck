@@ -64,7 +64,7 @@ public sealed record FleetUncertaintyDispositionBinding(
         }
 
         var steps = NormalizeStrings(StepIds, "step ID", 128);
-        var conflicts = NormalizeStrings(ConflictKeys, "conflict key", 2048);
+        var conflicts = NormalizeConflictKeys(ConflictKeys);
         if (steps.Count == 0 || conflicts.Count == 0)
         {
             throw new MutationStateException(
@@ -98,6 +98,23 @@ public sealed record FleetUncertaintyDispositionBinding(
             .Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray());
+    }
+
+    private static IReadOnlyList<string> NormalizeConflictKeys(
+        IReadOnlyList<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return Array.AsReadOnly(values
+            .Select(NormalizeConflictKey)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray());
+    }
+
+    private static string NormalizeConflictKey(string value)
+    {
+        var target = FleetConflictKeyCodec.Decode(value);
+        return FleetConflictKeyCodec.Encode(target);
     }
 
     private static string RequireBounded(
@@ -143,7 +160,7 @@ public sealed class FleetConflictObligation
             ObligationId = Guid.NewGuid(),
             OperationId = operationId,
             StepId = RequireBounded(stepId, nameof(stepId), 128),
-            ConflictKey = RequireBounded(conflictKey, nameof(conflictKey), 2048),
+            ConflictKey = NormalizeConflictKey(conflictKey),
             EffectFingerprint = RequireBounded(
                 effectFingerprint,
                 nameof(effectFingerprint),
@@ -228,10 +245,7 @@ public sealed class FleetConflictObligation
         }
 
         var normalizedStep = RequireBounded(snapshot.StepId, nameof(snapshot.StepId), 128);
-        var normalizedConflict = RequireBounded(
-            snapshot.ConflictKey,
-            nameof(snapshot.ConflictKey),
-            2048);
+        var normalizedConflict = NormalizeConflictKey(snapshot.ConflictKey);
         var normalizedFingerprint = RequireBounded(
             snapshot.EffectFingerprint,
             nameof(snapshot.EffectFingerprint),
@@ -264,6 +278,12 @@ public sealed class FleetConflictObligation
                     nameof(snapshot.SafeResolutionEvidenceHash),
                     256),
         };
+    }
+
+    private static string NormalizeConflictKey(string value)
+    {
+        var target = FleetConflictKeyCodec.Decode(value);
+        return FleetConflictKeyCodec.Encode(target);
     }
 
     private static string RequireBounded(

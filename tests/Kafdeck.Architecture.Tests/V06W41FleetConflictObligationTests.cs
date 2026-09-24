@@ -88,10 +88,12 @@ public sealed class V06W41FleetConflictObligationTests
     public void Disposition_binding_normalizes_and_binds_original_evidence()
     {
         var originalId = Guid.NewGuid();
+        var conflictA = FleetConflictKeyCodec.Topic("prod", "payments-a");
+        var conflictB = FleetConflictKeyCodec.TopicPartition("prod", "payments-b", 2);
         var normalized = new FleetUncertaintyDispositionBinding(
             originalId,
             new[] { " step-b ", "step-a", "step-a" },
-            new[] { " conflict-b ", "conflict-a" },
+            new[] { conflictB, conflictA },
             " sha256:evidence ",
             " kafka-4.3.1/confluent-dotnet-2.15.1 ",
             " bounded readback remains inconclusive ")
@@ -99,11 +101,25 @@ public sealed class V06W41FleetConflictObligationTests
 
         Assert.Equal(originalId, normalized.OriginalOperationId);
         Assert.Equal(new[] { "step-a", "step-b" }, normalized.StepIds);
-        Assert.Equal(new[] { "conflict-a", "conflict-b" }, normalized.ConflictKeys);
+        Assert.Equal(
+            new[] { conflictA, conflictB }.OrderBy(value => value, StringComparer.Ordinal),
+            normalized.ConflictKeys);
         Assert.Equal("sha256:evidence", normalized.LastReadbackEvidenceHash);
         Assert.Equal(
             "kafka-4.3.1/confluent-dotnet-2.15.1",
             normalized.ProviderCapabilityVersion);
+    }
+
+    [Fact]
+    public void Arbitrary_or_legacy_conflict_key_is_not_accepted_as_durable_fleet_identity()
+    {
+        Assert.Throws<MutationStateException>(() =>
+            FleetConflictObligation.Create(
+                Guid.NewGuid(),
+                "step-1",
+                "cluster/prod/topic/payments",
+                "sha256:effect",
+                Now));
     }
 
     [Fact]
@@ -124,7 +140,7 @@ public sealed class V06W41FleetConflictObligationTests
         FleetConflictObligation.Create(
             Guid.NewGuid(),
             "step-1",
-            "v1:cluster:prod:topic:payments",
+            FleetConflictKeyCodec.Topic("prod", "payments"),
             "sha256:effect",
             Now);
 }

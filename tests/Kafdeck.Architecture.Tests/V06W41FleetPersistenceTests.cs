@@ -91,7 +91,7 @@ public sealed class V06W41FleetPersistenceTests
             var obligation = FleetConflictObligation.Create(
                 missingOperationId,
                 "step-1",
-                "cluster/prod/topic/orphan",
+                FleetConflictKeyCodec.Topic("prod", "orphan"),
                 "sha256:orphan-effect",
                 Now);
             var obligationCreate = await store.CreateConflictObligationAsync(
@@ -159,7 +159,9 @@ public sealed class V06W41FleetPersistenceTests
         Assert.Equal(TimeSpan.FromHours(3), reloadedProgress!.ActiveObservationElapsed);
         Assert.Equal(1, reloadedProgress.Version);
 
-        var conflictKey = $"cluster/prod/topic/fleet-{Guid.NewGuid():N}";
+        var conflictKey = FleetConflictKeyCodec.Topic(
+            "prod",
+            $"fleet-{Guid.NewGuid():N}");
         var obligation = FleetConflictObligation.Create(
             parent.Snapshot.OperationId,
             "submit-1",

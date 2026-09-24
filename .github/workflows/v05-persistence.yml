@@ -13,6 +13,8 @@ on:
       - 'tests/Kafdeck.Architecture.Tests/KafkaRecordsPurgeIntegrationTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V05MutationKernelTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V05MutationPersistenceTests.cs'
+      - 'tests/Kafdeck.Architecture.Tests/V06W41FleetConflictObligationTests.cs'
+      - 'tests/Kafdeck.Architecture.Tests/V06W41FleetConflictRelationTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V06W41FleetPersistenceTests.cs'
       - 'docs/implementation/v0.5-w40-readiness.md'
       - '.github/workflows/v05-persistence.yml'
@@ -61,7 +63,7 @@ jobs:
       - name: Restore locked dependencies
         run: dotnet restore Kafdeck.slnx --locked-mode
 
-      - name: Run v0.5 mutation kernel and persistence tests
+      - name: Run v0.5 mutation kernel and W41 durable conflict tests
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
           DOTNET_NOLOGO: '1'
@@ -70,5 +72,5 @@ jobs:
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release
           --no-restore
-          --filter 'FullyQualifiedName~V05MutationKernelTests|FullyQualifiedName~V05MutationPersistenceTests|FullyQualifiedName~V06W41FleetPersistenceTests'
+          --filter 'FullyQualifiedName~V05MutationKernelTests|FullyQualifiedName~V05MutationPersistenceTests|FullyQualifiedName~V06W41FleetConflictObligationTests|FullyQualifiedName~V06W41FleetConflictRelationTests|FullyQualifiedName~V06W41FleetPersistenceTests'
           --logger 'console;verbosity=detailed'
