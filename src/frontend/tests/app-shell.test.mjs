@@ -9,7 +9,7 @@ test('AppShell exposes product identity and accessible operator landmarks', () =
   const markup = renderToStaticMarkup(React.createElement(AppShell));
 
   assert.match(markup, /<main[^>]+aria-labelledby="kafdeck-title"/);
-  assert.match(markup, /<h1 id="kafdeck-title">Kafdeck<\/h1>/);
+  assert.match(markup, /<h1 id="kafdeck-title"><img src="\/kafdeck-logo\.webp" alt="Kafdeck" width="240" height="240"\/><\/h1>/);
   assert.match(markup, /Open Source Kafka Control Plane/);
   assert.match(markup, /<label for="cluster-selector">Cluster<\/label>/);
   assert.match(markup, /aria-label="Kafdeck sections"/);
