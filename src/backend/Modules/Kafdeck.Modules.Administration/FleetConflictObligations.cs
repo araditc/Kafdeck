@@ -27,6 +27,7 @@ public sealed record FleetConflictObligationSnapshot
     public required Guid OperationId { get; init; }
     public required string StepId { get; init; }
     public required string ConflictKey { get; init; }
+    public string? LegacyResourceKey { get; init; }
     public required string EffectFingerprint { get; init; }
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public FleetConflictObligationState State { get; init; } =
@@ -155,12 +156,14 @@ public sealed class FleetConflictObligation
             throw new ArgumentException("Operation ID is required.", nameof(operationId));
         }
 
+        var normalizedConflict = NormalizeConflictKey(conflictKey);
         return new FleetConflictObligation(new FleetConflictObligationSnapshot
         {
             ObligationId = Guid.NewGuid(),
             OperationId = operationId,
             StepId = RequireBounded(stepId, nameof(stepId), 128),
-            ConflictKey = NormalizeConflictKey(conflictKey),
+            ConflictKey = normalizedConflict,
+            LegacyResourceKey = FleetConflictScope.ToLegacyTopicResourceKey(normalizedConflict),
             EffectFingerprint = RequireBounded(
                 effectFingerprint,
                 nameof(effectFingerprint),
@@ -250,6 +253,8 @@ public sealed class FleetConflictObligation
             snapshot.EffectFingerprint,
             nameof(snapshot.EffectFingerprint),
             256);
+        var legacyResourceKey =
+            FleetConflictScope.ToLegacyTopicResourceKey(normalizedConflict);
 
         if (snapshot.State == FleetConflictObligationState.SupersededUnknown &&
             (!snapshot.NoRedispatchTombstone ||
@@ -270,6 +275,7 @@ public sealed class FleetConflictObligation
         {
             StepId = normalizedStep,
             ConflictKey = normalizedConflict,
+            LegacyResourceKey = legacyResourceKey,
             EffectFingerprint = normalizedFingerprint,
             SafeResolutionEvidenceHash = snapshot.SafeResolutionEvidenceHash is null
                 ? null
