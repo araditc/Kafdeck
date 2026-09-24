@@ -245,7 +245,6 @@ internal static class MutationConflictGuardSchema
         DROP TRIGGER IF EXISTS kafdeck_claim_fleet_conflict_guard;
         DROP TRIGGER IF EXISTS kafdeck_obligation_claim_conflict_guard_insert;
         DROP TRIGGER IF EXISTS kafdeck_obligation_claim_conflict_guard_update;
-        DROP TRIGGER IF EXISTS kafdeck_conflict_guard_schema_no_downgrade;
 
         CREATE TRIGGER kafdeck_claim_fleet_conflict_guard
         BEFORE INSERT ON kafdeck_mutation_resource_claims
