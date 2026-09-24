@@ -12,8 +12,10 @@ namespace Kafdeck.Infrastructure.Persistence;
 /// The guard is deliberately installed only after both persistence tables are
 /// present. No application-level precheck is used as the exclusion authority:
 /// SQLite obtains its database writer serialization before evaluating the
-/// trigger predicate, while PostgreSQL serializes competing admissions on an
-/// exact resource-key guard row locked FOR UPDATE.
+/// trigger predicate, while PostgreSQL serializes competing admissions on a
+/// normalized legacy topic guard scope locked FOR UPDATE. Persisted v0.5 claim
+/// keys and hashes remain unchanged; normalization exists only inside the
+/// cross-generation admission guard.
 /// </summary>
 internal static class MutationConflictGuardSchema
 {
@@ -97,19 +99,51 @@ internal static class MutationConflictGuardSchema
         DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            $"""
+        await using (var triggers = connection.CreateCommand())
+        {
+            triggers.CommandText =
+                $"""
+                SELECT COUNT(1)
+                FROM sqlite_master
+                WHERE type = 'trigger'
+                  AND name IN (
+                      '{ClaimTrigger}',
+                      '{ObligationInsertTrigger}',
+                      '{ObligationUpdateTrigger}')
+                """;
+            var count = await triggers.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (Convert.ToInt32(count, CultureInfo.InvariantCulture) != 3)
+            {
+                return false;
+            }
+        }
+
+        await using (var markerTable = connection.CreateCommand())
+        {
+            markerTable.CommandText =
+                """
+                SELECT COUNT(1)
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'kafdeck_mutation_conflict_guard_schema'
+                """;
+            var exists = await markerTable.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (Convert.ToInt32(exists, CultureInfo.InvariantCulture) != 1)
+            {
+                return false;
+            }
+        }
+
+        await using var marker = connection.CreateCommand();
+        marker.CommandText =
+            """
             SELECT COUNT(1)
-            FROM sqlite_master
-            WHERE type = 'trigger'
-              AND name IN (
-                  '{ClaimTrigger}',
-                  '{ObligationInsertTrigger}',
-                  '{ObligationUpdateTrigger}')
+            FROM kafdeck_mutation_conflict_guard_schema
+            WHERE component = 'legacy-topic-guard-scope'
+              AND schema_version = 2
             """;
-        var count = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToInt32(count, CultureInfo.InvariantCulture) == 3;
+        var markerCount = await marker.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return Convert.ToInt32(markerCount, CultureInfo.InvariantCulture) == 1;
     }
 
     private static async Task<bool> PostgreSqlTablesAvailableAsync(
@@ -133,22 +167,40 @@ internal static class MutationConflictGuardSchema
         DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            $"""
+        await using (var triggers = connection.CreateCommand())
+        {
+            triggers.CommandText =
+                $"""
+                SELECT COUNT(1)
+                FROM pg_catalog.pg_trigger
+                WHERE NOT tgisinternal
+                  AND tgname IN (
+                      '{ClaimTrigger}',
+                      '{ObligationInsertTrigger}',
+                      '{ObligationUpdateTrigger}')
+                  AND tgrelid IN (
+                      'kafdeck_mutation_resource_claims'::regclass,
+                      'kafdeck_fleet_conflict_obligations'::regclass)
+                """;
+            var count = await triggers.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (Convert.ToInt32(count, CultureInfo.InvariantCulture) != 3)
+            {
+                return false;
+            }
+        }
+
+        await using var helper = connection.CreateCommand();
+        helper.CommandText =
+            """
             SELECT COUNT(1)
-            FROM pg_catalog.pg_trigger
-            WHERE NOT tgisinternal
-              AND tgname IN (
-                  '{ClaimTrigger}',
-                  '{ObligationInsertTrigger}',
-                  '{ObligationUpdateTrigger}')
-              AND tgrelid IN (
-                  'kafdeck_mutation_resource_claims'::regclass,
-                  'kafdeck_fleet_conflict_obligations'::regclass)
+            FROM pg_catalog.pg_proc AS proc
+            INNER JOIN pg_catalog.pg_namespace AS namespace
+              ON namespace.oid = proc.pronamespace
+            WHERE namespace.nspname = current_schema()
+              AND proc.proname = 'kafdeck_legacy_topic_guard_scope_v2'
             """;
-        var count = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToInt32(count, CultureInfo.InvariantCulture) == 3;
+        var helperCount = await helper.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return Convert.ToInt32(helperCount, CultureInfo.InvariantCulture) == 1;
     }
 
     private static async Task ExecuteAsync(
@@ -167,23 +219,67 @@ internal static class MutationConflictGuardSchema
             legacy_resource_key TEXT PRIMARY KEY
         );
 
-        CREATE TRIGGER IF NOT EXISTS kafdeck_claim_fleet_conflict_guard
+        CREATE TABLE IF NOT EXISTS kafdeck_mutation_conflict_guard_schema (
+            component TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL
+        );
+
+        DROP TRIGGER IF EXISTS kafdeck_claim_fleet_conflict_guard;
+        DROP TRIGGER IF EXISTS kafdeck_obligation_claim_conflict_guard_insert;
+        DROP TRIGGER IF EXISTS kafdeck_obligation_claim_conflict_guard_update;
+
+        CREATE TRIGGER kafdeck_claim_fleet_conflict_guard
         BEFORE INSERT ON kafdeck_mutation_resource_claims
         BEGIN
             INSERT OR IGNORE INTO kafdeck_mutation_conflict_guards (legacy_resource_key)
-            VALUES (NEW.resource_key);
+            VALUES (
+                CASE
+                    WHEN instr(NEW.resource_key, '/topic/') > 0
+                     AND instr(NEW.resource_key, '/partition/') >
+                         instr(NEW.resource_key, '/topic/') + length('/topic/')
+                     AND substr(
+                            NEW.resource_key,
+                            instr(NEW.resource_key, '/partition/') + length('/partition/')) <> ''
+                     AND substr(
+                            NEW.resource_key,
+                            instr(NEW.resource_key, '/partition/') + length('/partition/'))
+                         NOT GLOB '*[^0-9]*'
+                    THEN substr(
+                            NEW.resource_key,
+                            1,
+                            instr(NEW.resource_key, '/partition/') - 1)
+                    ELSE NEW.resource_key
+                END
+            );
 
             SELECT RAISE(IGNORE)
             WHERE EXISTS (
                 SELECT 1
                 FROM kafdeck_fleet_conflict_obligations AS obligation
                 WHERE obligation.blocks_conflicting_dispatch = 1
-                  AND json_extract(obligation.snapshot_json, '$.legacyResourceKey') = NEW.resource_key
+                  AND json_extract(obligation.snapshot_json, '$.legacyResourceKey') =
+                      CASE
+                          WHEN instr(NEW.resource_key, '/topic/') > 0
+                           AND instr(NEW.resource_key, '/partition/') >
+                               instr(NEW.resource_key, '/topic/') + length('/topic/')
+                           AND substr(
+                                  NEW.resource_key,
+                                  instr(NEW.resource_key, '/partition/') + length('/partition/')) <> ''
+                           AND substr(
+                                  NEW.resource_key,
+                                  instr(NEW.resource_key, '/partition/') + length('/partition/'))
+                               NOT GLOB '*[^0-9]*'
+                          THEN substr(
+                                  NEW.resource_key,
+                                  1,
+                                  instr(NEW.resource_key, '/partition/') - 1)
+                          ELSE NEW.resource_key
+                      END
                   AND obligation.operation_id <> NEW.operation_id
             );
         END;
 
-        CREATE TRIGGER IF NOT EXISTS kafdeck_obligation_claim_conflict_guard_insert
+        CREATE TRIGGER kafdeck_obligation_claim_conflict_guard_insert
         BEFORE INSERT ON kafdeck_fleet_conflict_obligations
         WHEN NEW.blocks_conflicting_dispatch = 1
          AND json_extract(NEW.snapshot_json, '$.legacyResourceKey') IS NOT NULL
@@ -195,12 +291,30 @@ internal static class MutationConflictGuardSchema
             WHERE EXISTS (
                 SELECT 1
                 FROM kafdeck_mutation_resource_claims AS claim
-                WHERE claim.resource_key = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
+                WHERE (
+                    CASE
+                        WHEN instr(claim.resource_key, '/topic/') > 0
+                         AND instr(claim.resource_key, '/partition/') >
+                             instr(claim.resource_key, '/topic/') + length('/topic/')
+                         AND substr(
+                                claim.resource_key,
+                                instr(claim.resource_key, '/partition/') + length('/partition/')) <> ''
+                         AND substr(
+                                claim.resource_key,
+                                instr(claim.resource_key, '/partition/') + length('/partition/'))
+                             NOT GLOB '*[^0-9]*'
+                        THEN substr(
+                                claim.resource_key,
+                                1,
+                                instr(claim.resource_key, '/partition/') - 1)
+                        ELSE claim.resource_key
+                    END
+                ) = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
                   AND claim.operation_id <> NEW.operation_id
             );
         END;
 
-        CREATE TRIGGER IF NOT EXISTS kafdeck_obligation_claim_conflict_guard_update
+        CREATE TRIGGER kafdeck_obligation_claim_conflict_guard_update
         BEFORE UPDATE OF blocks_conflicting_dispatch, snapshot_json
         ON kafdeck_fleet_conflict_obligations
         WHEN NEW.blocks_conflicting_dispatch = 1
@@ -213,10 +327,33 @@ internal static class MutationConflictGuardSchema
             WHERE EXISTS (
                 SELECT 1
                 FROM kafdeck_mutation_resource_claims AS claim
-                WHERE claim.resource_key = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
+                WHERE (
+                    CASE
+                        WHEN instr(claim.resource_key, '/topic/') > 0
+                         AND instr(claim.resource_key, '/partition/') >
+                             instr(claim.resource_key, '/topic/') + length('/topic/')
+                         AND substr(
+                                claim.resource_key,
+                                instr(claim.resource_key, '/partition/') + length('/partition/')) <> ''
+                         AND substr(
+                                claim.resource_key,
+                                instr(claim.resource_key, '/partition/') + length('/partition/'))
+                             NOT GLOB '*[^0-9]*'
+                        THEN substr(
+                                claim.resource_key,
+                                1,
+                                instr(claim.resource_key, '/partition/') - 1)
+                        ELSE claim.resource_key
+                    END
+                ) = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
                   AND claim.operation_id <> NEW.operation_id
             );
         END;
+
+        INSERT INTO kafdeck_mutation_conflict_guard_schema (component, schema_version)
+        VALUES ('legacy-topic-guard-scope', 2)
+        ON CONFLICT (component) DO UPDATE
+        SET schema_version = excluded.schema_version;
         """;
 
     private const string PostgreSqlInstallSql =
@@ -225,25 +362,42 @@ internal static class MutationConflictGuardSchema
             legacy_resource_key TEXT PRIMARY KEY
         );
 
+        CREATE OR REPLACE FUNCTION kafdeck_legacy_topic_guard_scope_v2(resource_key TEXT)
+        RETURNS TEXT
+        LANGUAGE sql
+        IMMUTABLE
+        STRICT
+        AS $function$
+            SELECT CASE
+                WHEN resource_key ~ '^cluster/.+/topic/[^/]+/partition/[0-9]+$'
+                THEN regexp_replace(resource_key, '/partition/[0-9]+$', '')
+                ELSE resource_key
+            END
+        $function$;
+
         CREATE OR REPLACE FUNCTION kafdeck_guard_legacy_claim_against_fleet_obligation()
         RETURNS trigger
         LANGUAGE plpgsql
         AS $function$
+        DECLARE
+            guard_key TEXT;
         BEGIN
+            guard_key := kafdeck_legacy_topic_guard_scope_v2(NEW.resource_key);
+
             INSERT INTO kafdeck_mutation_conflict_guards (legacy_resource_key)
-            VALUES (NEW.resource_key)
+            VALUES (guard_key)
             ON CONFLICT (legacy_resource_key) DO NOTHING;
 
             PERFORM legacy_resource_key
             FROM kafdeck_mutation_conflict_guards
-            WHERE legacy_resource_key = NEW.resource_key
+            WHERE legacy_resource_key = guard_key
             FOR UPDATE;
 
             IF EXISTS (
                 SELECT 1
                 FROM kafdeck_fleet_conflict_obligations AS obligation
                 WHERE obligation.blocks_conflicting_dispatch = 1
-                  AND obligation.snapshot_json::jsonb ->> 'legacyResourceKey' = NEW.resource_key
+                  AND obligation.snapshot_json::jsonb ->> 'legacyResourceKey' = guard_key
                   AND obligation.operation_id <> NEW.operation_id
             ) THEN
                 RETURN NULL;
@@ -277,7 +431,7 @@ internal static class MutationConflictGuardSchema
             IF EXISTS (
                 SELECT 1
                 FROM kafdeck_mutation_resource_claims AS claim
-                WHERE claim.resource_key = legacy_key
+                WHERE kafdeck_legacy_topic_guard_scope_v2(claim.resource_key) = legacy_key
                   AND claim.operation_id <> NEW.operation_id
             ) THEN
                 RETURN NULL;
@@ -328,4 +482,5 @@ internal static class MutationConflictGuardSchema
         END;
         $block$;
         """;
+
 }
