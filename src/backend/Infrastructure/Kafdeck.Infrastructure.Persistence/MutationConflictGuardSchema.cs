@@ -154,7 +154,7 @@ internal static class MutationConflictGuardSchema
             SELECT COUNT(1)
             FROM kafdeck_mutation_conflict_guard_schema
             WHERE component = 'legacy-topic-guard-scope'
-              AND schema_version = 2
+              AND schema_version = 3
             """;
         var markerCount = await marker.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         return Convert.ToInt32(markerCount, CultureInfo.InvariantCulture) == 1;
@@ -379,7 +379,7 @@ internal static class MutationConflictGuardSchema
         END;
 
         INSERT INTO kafdeck_mutation_conflict_guard_schema (component, schema_version)
-        VALUES ('legacy-topic-guard-scope', 2)
+        VALUES ('legacy-topic-guard-scope', 3)
         ON CONFLICT (component) DO UPDATE
         SET schema_version = excluded.schema_version;
         """;

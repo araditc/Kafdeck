@@ -87,6 +87,92 @@ public sealed class V06W41FleetPersistenceTests
     }
 
     [Fact]
+    public async Task Sqlite_v2_conflict_guard_is_reinstalled_before_terminal_partition_admission()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-v06-guard-upgrade-{Guid.NewGuid():N}.db");
+        try
+        {
+            var seedFactory = new SqliteMutationDbConnectionFactory(path);
+            var repository = new AdoMutationOperationRepository(seedFactory);
+            await repository.InitializeAsync();
+
+            var store = new AdoFleetMutationStateStore(seedFactory);
+            await store.InitializeAsync();
+
+            await InstallLegacySqliteConflictGuardV2Async(seedFactory);
+            Assert.Equal(
+                2,
+                await ReadSqliteConflictGuardSchemaVersionAsync(seedFactory));
+
+            var clusterId = "prod/partition/eu";
+            var topic = $"guard-upgrade-{Guid.NewGuid():N}";
+            var parent = CreateParentOperation(clusterId);
+            Assert.Equal(
+                MutationCreateOutcome.Created,
+                (await repository.CreateAsync(parent.Snapshot)).Outcome);
+
+            var obligation = FleetConflictObligation.Create(
+                parent.Snapshot.OperationId,
+                "guard-upgrade",
+                FleetConflictKeyCodec.Topic(clusterId, topic),
+                "sha256:guard-upgrade",
+                DateTimeOffset.UtcNow);
+            Assert.Equal(
+                FleetConflictObligationCreateOutcome.Created,
+                (await store.CreateConflictObligationAsync(obligation.Snapshot)).Outcome);
+
+            var preUpgrade = CreateExecutingLegacyTopicOperation(topic, clusterId);
+            Assert.Equal(
+                MutationCreateOutcome.Created,
+                (await repository.CreateAsync(preUpgrade.Operation.Snapshot)).Outcome);
+            var partitionKey =
+                $"cluster/{clusterId}/topic/{topic}/partition/4";
+            var admittedByV2 = await repository.TryAcquireResourceClaimsAsync(
+                preUpgrade.Operation.Snapshot.OperationId,
+                preUpgrade.Generation,
+                new[] { partitionKey },
+                preUpgrade.ClaimExpiresAtUtc);
+            Assert.Equal(MutationResourceClaimOutcome.Acquired, admittedByV2.Outcome);
+            await repository.ReleaseResourceClaimsAsync(
+                preUpgrade.Operation.Snapshot.OperationId,
+                preUpgrade.Generation);
+
+            // A new process must reject the stale v2 marker, reinstall the
+            // corrected terminal-suffix triggers transactionally, and advance
+            // the durable marker before any new admission can use the guard.
+            var upgradedFactory = new SqliteMutationDbConnectionFactory(path);
+            await using (var connection = await upgradedFactory.OpenAsync())
+            {
+            }
+
+            Assert.Equal(
+                3,
+                await ReadSqliteConflictGuardSchemaVersionAsync(upgradedFactory));
+
+            var upgradedRepository = new AdoMutationOperationRepository(upgradedFactory);
+            await upgradedRepository.InitializeAsync();
+
+            var postUpgrade = CreateExecutingLegacyTopicOperation(topic, clusterId);
+            Assert.Equal(
+                MutationCreateOutcome.Created,
+                (await upgradedRepository.CreateAsync(postUpgrade.Operation.Snapshot)).Outcome);
+            var blocked = await upgradedRepository.TryAcquireResourceClaimsAsync(
+                postUpgrade.Operation.Snapshot.OperationId,
+                postUpgrade.Generation,
+                new[] { partitionKey },
+                postUpgrade.ClaimExpiresAtUtc);
+            Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
+            Assert.Equal(partitionKey, blocked.ConflictingResourceKey);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task PostgreSql_shared_conflict_guard_is_bidirectional_and_race_safe_when_available()
     {
         var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
@@ -1293,6 +1379,178 @@ public sealed class V06W41FleetPersistenceTests
         await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
             () => legacyFleetWriter.TryUpdateWithLegacySqlAsync(
                 backfillObligation.Snapshot.ObligationId));
+    }
+
+    private static async Task InstallLegacySqliteConflictGuardV2Async(
+        IMutationDbConnectionFactory factory)
+    {
+        const string sql =
+            """
+                CREATE TABLE IF NOT EXISTS kafdeck_mutation_conflict_guards (
+                    legacy_resource_key TEXT PRIMARY KEY
+                );
+        
+                CREATE TABLE IF NOT EXISTS kafdeck_mutation_conflict_guard_schema (
+                    component TEXT PRIMARY KEY,
+                    schema_version INTEGER NOT NULL
+                );
+        
+                DROP TRIGGER IF EXISTS kafdeck_claim_fleet_conflict_guard;
+                DROP TRIGGER IF EXISTS kafdeck_obligation_claim_conflict_guard_insert;
+                DROP TRIGGER IF EXISTS kafdeck_obligation_claim_conflict_guard_update;
+        
+                CREATE TRIGGER kafdeck_claim_fleet_conflict_guard
+                BEFORE INSERT ON kafdeck_mutation_resource_claims
+                BEGIN
+                    INSERT OR IGNORE INTO kafdeck_mutation_conflict_guards (legacy_resource_key)
+                    VALUES (
+                        CASE
+                            WHEN instr(NEW.resource_key, '/topic/') > 0
+                             AND instr(NEW.resource_key, '/partition/') >
+                                 instr(NEW.resource_key, '/topic/') + length('/topic/')
+                             AND substr(
+                                    NEW.resource_key,
+                                    instr(NEW.resource_key, '/partition/') + length('/partition/')) <> ''
+                             AND substr(
+                                    NEW.resource_key,
+                                    instr(NEW.resource_key, '/partition/') + length('/partition/'))
+                                 NOT GLOB '*[^0-9]*'
+                            THEN substr(
+                                    NEW.resource_key,
+                                    1,
+                                    instr(NEW.resource_key, '/partition/') - 1)
+                            ELSE NEW.resource_key
+                        END
+                    );
+        
+                    SELECT RAISE(IGNORE)
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM kafdeck_fleet_conflict_obligations AS obligation
+                        WHERE obligation.blocks_conflicting_dispatch = 1
+                          AND json_extract(obligation.snapshot_json, '$.legacyResourceKey') =
+                              CASE
+                                  WHEN instr(NEW.resource_key, '/topic/') > 0
+                                   AND instr(NEW.resource_key, '/partition/') >
+                                       instr(NEW.resource_key, '/topic/') + length('/topic/')
+                                   AND substr(
+                                          NEW.resource_key,
+                                          instr(NEW.resource_key, '/partition/') + length('/partition/')) <> ''
+                                   AND substr(
+                                          NEW.resource_key,
+                                          instr(NEW.resource_key, '/partition/') + length('/partition/'))
+                                       NOT GLOB '*[^0-9]*'
+                                  THEN substr(
+                                          NEW.resource_key,
+                                          1,
+                                          instr(NEW.resource_key, '/partition/') - 1)
+                                  ELSE NEW.resource_key
+                              END
+                          AND obligation.operation_id <> NEW.operation_id
+                    );
+                END;
+        
+                CREATE TRIGGER kafdeck_obligation_claim_conflict_guard_insert
+                BEFORE INSERT ON kafdeck_fleet_conflict_obligations
+                WHEN NEW.blocks_conflicting_dispatch = 1
+                 AND json_extract(NEW.snapshot_json, '$.legacyResourceKey') IS NOT NULL
+                BEGIN
+                    INSERT OR IGNORE INTO kafdeck_mutation_conflict_guards (legacy_resource_key)
+                    VALUES (json_extract(NEW.snapshot_json, '$.legacyResourceKey'));
+        
+                    SELECT RAISE(IGNORE)
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM kafdeck_mutation_resource_claims AS claim
+                        WHERE (
+                            CASE
+                                WHEN instr(claim.resource_key, '/topic/') > 0
+                                 AND instr(claim.resource_key, '/partition/') >
+                                     instr(claim.resource_key, '/topic/') + length('/topic/')
+                                 AND substr(
+                                        claim.resource_key,
+                                        instr(claim.resource_key, '/partition/') + length('/partition/')) <> ''
+                                 AND substr(
+                                        claim.resource_key,
+                                        instr(claim.resource_key, '/partition/') + length('/partition/'))
+                                     NOT GLOB '*[^0-9]*'
+                                THEN substr(
+                                        claim.resource_key,
+                                        1,
+                                        instr(claim.resource_key, '/partition/') - 1)
+                                ELSE claim.resource_key
+                            END
+                        ) = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
+                          AND claim.operation_id <> NEW.operation_id
+                    );
+                END;
+        
+                CREATE TRIGGER kafdeck_obligation_claim_conflict_guard_update
+                BEFORE UPDATE OF blocks_conflicting_dispatch, snapshot_json
+                ON kafdeck_fleet_conflict_obligations
+                WHEN NEW.blocks_conflicting_dispatch = 1
+                 AND json_extract(NEW.snapshot_json, '$.legacyResourceKey') IS NOT NULL
+                BEGIN
+                    INSERT OR IGNORE INTO kafdeck_mutation_conflict_guards (legacy_resource_key)
+                    VALUES (json_extract(NEW.snapshot_json, '$.legacyResourceKey'));
+        
+                    SELECT RAISE(IGNORE)
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM kafdeck_mutation_resource_claims AS claim
+                        WHERE (
+                            CASE
+                                WHEN instr(claim.resource_key, '/topic/') > 0
+                                 AND instr(claim.resource_key, '/partition/') >
+                                     instr(claim.resource_key, '/topic/') + length('/topic/')
+                                 AND substr(
+                                        claim.resource_key,
+                                        instr(claim.resource_key, '/partition/') + length('/partition/')) <> ''
+                                 AND substr(
+                                        claim.resource_key,
+                                        instr(claim.resource_key, '/partition/') + length('/partition/'))
+                                     NOT GLOB '*[^0-9]*'
+                                THEN substr(
+                                        claim.resource_key,
+                                        1,
+                                        instr(claim.resource_key, '/partition/') - 1)
+                                ELSE claim.resource_key
+                            END
+                        ) = json_extract(NEW.snapshot_json, '$.legacyResourceKey')
+                          AND claim.operation_id <> NEW.operation_id
+                    );
+                END;
+        
+                INSERT INTO kafdeck_mutation_conflict_guard_schema (component, schema_version)
+                VALUES ('legacy-topic-guard-scope', 2)
+                ON CONFLICT (component) DO UPDATE
+                SET schema_version = excluded.schema_version;
+        
+            """;
+
+        await using var connection = await factory.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+    }
+
+    private static async Task<int> ReadSqliteConflictGuardSchemaVersionAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT schema_version
+            FROM kafdeck_mutation_conflict_guard_schema
+            WHERE component = 'legacy-topic-guard-scope'
+            """;
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static async Task<(string ResourceKeyHash, string ResourceKey)>
