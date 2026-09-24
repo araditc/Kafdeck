@@ -220,11 +220,32 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
 
         foreach (var row in rows)
         {
-            var snapshot = FleetConflictObligation.Restore(
-                    Deserialize<FleetConflictObligationSnapshot>(row.SnapshotJson))
-                .Snapshot;
+            var persistedSnapshot =
+                Deserialize<FleetConflictObligationSnapshot>(row.SnapshotJson);
+            var snapshot = FleetConflictObligation.Restore(persistedSnapshot).Snapshot;
             var scopeKey = FleetConflictScope.FromFleetConflictKey(snapshot.ConflictKey);
             var scopeHash = HashConflictKey(scopeKey);
+
+            if (persistedSnapshot.LegacyResourceKey is null &&
+                snapshot.LegacyResourceKey is not null)
+            {
+                await PersistNormalizedLegacyResourceKeyAsync(
+                        connection,
+                        transaction,
+                        row.ObligationId,
+                        row.SnapshotJson,
+                        snapshot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else if (!string.Equals(
+                         persistedSnapshot.LegacyResourceKey,
+                         snapshot.LegacyResourceKey,
+                         StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Persisted fleet conflict obligation legacy resource identity conflicts with its canonical typed conflict identity.");
+            }
 
             if (row.ScopeHash is not null || row.ScopeKey is not null)
             {
@@ -249,6 +270,34 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task PersistNormalizedLegacyResourceKeyAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string obligationId,
+        string originalSnapshotJson,
+        FleetConflictObligationSnapshot normalizedSnapshot,
+        CancellationToken cancellationToken)
+    {
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText =
+            """
+            UPDATE kafdeck_fleet_conflict_obligations
+            SET snapshot_json = @snapshot_json
+            WHERE obligation_id = @obligation_id
+              AND snapshot_json = @original_snapshot_json
+            """;
+        AddParameter(update, "@snapshot_json", Serialize(normalizedSnapshot));
+        AddParameter(update, "@obligation_id", obligationId);
+        AddParameter(update, "@original_snapshot_json", originalSnapshotJson);
+
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException(
+                "Fleet conflict obligation legacy resource identity could not be atomically backfilled. Refusing fleet mutation state.");
+        }
     }
 
     public async Task<FleetProgressCreateResult> CreateProgressAsync(
