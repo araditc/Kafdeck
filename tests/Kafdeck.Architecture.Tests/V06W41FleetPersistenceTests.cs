@@ -165,6 +165,30 @@ public sealed class V06W41FleetPersistenceTests
                 postUpgrade.ClaimExpiresAtUtc);
             Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
             Assert.Equal(partitionKey, blocked.ConflictingResourceKey);
+
+            // A late v2 process must not be able to reinstall its stale trigger
+            // set after v3 activation. The v3 marker owns a DB-level
+            // anti-downgrade fence, so the old install transaction aborts and
+            // its trigger DDL is rolled back atomically.
+            await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
+                () => InstallLegacySqliteConflictGuardV2Async(upgradedFactory));
+            Assert.Equal(
+                3,
+                await ReadSqliteConflictGuardSchemaVersionAsync(upgradedFactory));
+
+            var afterDowngradeAttempt =
+                CreateExecutingLegacyTopicOperation(topic, clusterId);
+            Assert.Equal(
+                MutationCreateOutcome.Created,
+                (await upgradedRepository.CreateAsync(
+                    afterDowngradeAttempt.Operation.Snapshot)).Outcome);
+            var stillBlocked = await upgradedRepository.TryAcquireResourceClaimsAsync(
+                afterDowngradeAttempt.Operation.Snapshot.OperationId,
+                afterDowngradeAttempt.Generation,
+                new[] { partitionKey },
+                afterDowngradeAttempt.ClaimExpiresAtUtc);
+            Assert.Equal(MutationResourceClaimOutcome.Conflict, stillBlocked.Outcome);
+            Assert.Equal(partitionKey, stillBlocked.ConflictingResourceKey);
         }
         finally
         {
