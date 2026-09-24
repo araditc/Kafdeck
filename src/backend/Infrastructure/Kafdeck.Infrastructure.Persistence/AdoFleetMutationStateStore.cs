@@ -341,8 +341,15 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
 
         if (existing is null)
         {
-            throw new InvalidOperationException(
-                "Fleet conflict obligation uniqueness conflict was observed but the existing obligation could not be read.");
+            // The only admitted non-uniqueness path that can suppress this INSERT
+            // without producing an obligation row is the database-native W41
+            // legacy-claim guard. Keep it a typed admission conflict rather than
+            // throwing or retrying; the competing claim may disappear immediately
+            // after the serialized admission point and that must not turn this
+            // original attempt into an implicit retry.
+            return new FleetConflictObligationCreateResult(
+                FleetConflictObligationCreateOutcome.LegacyResourceClaimConflict,
+                null);
         }
 
         return new FleetConflictObligationCreateResult(
