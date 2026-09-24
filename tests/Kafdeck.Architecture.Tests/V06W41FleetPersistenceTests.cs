@@ -77,8 +77,8 @@ public sealed class V06W41FleetPersistenceTests
         try
         {
             var factory = new SqliteMutationDbConnectionFactory(path);
-            await ExerciseSharedConflictGuardAsync(factory);
             await ExerciseLegacyPartitionGuardAndBackfillAsync(factory);
+            await ExerciseSharedConflictGuardAsync(factory);
         }
         finally
         {
@@ -110,8 +110,8 @@ public sealed class V06W41FleetPersistenceTests
                 $"{connectionString.TrimEnd(';')};Search Path={schema}";
             var factory =
                 new PostgreSqlMutationDbConnectionFactory(isolatedConnectionString);
-            await ExerciseSharedConflictGuardAsync(factory);
             await ExerciseLegacyPartitionGuardAndBackfillAsync(factory);
+            await ExerciseSharedConflictGuardAsync(factory);
         }
         finally
         {
@@ -1012,11 +1012,52 @@ public sealed class V06W41FleetPersistenceTests
     {
         var repository = new AdoMutationOperationRepository(factory);
         await repository.InitializeAsync();
+
+        // Seed one pre-fence fleet obligation using the legacy table/statement
+        // shape before the current fleet store initializes. This models a
+        // durable row created by an older fleet-state binary before rolling
+        // upgrade/backfill installs the writer fence.
+        var backfillTopic = $"legacy-backfill-{Guid.NewGuid():N}";
+        var backfillParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(backfillParent.Snapshot)).Outcome);
+        var backfillObligation = FleetConflictObligation.Create(
+            backfillParent.Snapshot.OperationId,
+            "legacy-backfill",
+            FleetConflictKeyCodec.Topic("prod", backfillTopic),
+            "sha256:legacy-backfill",
+            DateTimeOffset.UtcNow);
+        await SeedLegacyObligationBeforeFenceAsync(
+            factory,
+            backfillObligation.Snapshot);
+
         var store = new AdoFleetMutationStateStore(factory);
         await store.InitializeAsync();
 
+        var durableLegacyKey = await ReadPersistedLegacyResourceKeyAsync(
+            factory,
+            backfillObligation.Snapshot.ObligationId);
+        Assert.Equal(
+            $"cluster/prod/topic/{backfillTopic}",
+            durableLegacyKey);
+
+        var backfillLegacy = CreateExecutingLegacyTopicOperation(backfillTopic);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(backfillLegacy.Operation.Snapshot)).Outcome);
+        var backfillPartitionKey =
+            $"cluster/prod/topic/{backfillTopic}/partition/9";
+        var backfillBlocked = await repository.TryAcquireResourceClaimsAsync(
+            backfillLegacy.Operation.Snapshot.OperationId,
+            backfillLegacy.Generation,
+            new[] { backfillPartitionKey },
+            backfillLegacy.ClaimExpiresAtUtc);
+        Assert.Equal(MutationResourceClaimOutcome.Conflict, backfillBlocked.Outcome);
+        Assert.Equal(backfillPartitionKey, backfillBlocked.ConflictingResourceKey);
+
         // Ensure the cross-generation trigger set is installed/upgraded before
-        // exercising legacy claim admission.
+        // exercising the remaining legacy claim admission races.
         await using (var guardConnection = await factory.OpenAsync())
         {
         }
@@ -1150,49 +1191,6 @@ public sealed class V06W41FleetPersistenceTests
             Assert.Equal(racePartitionKey, raceClaim.ConflictingResourceKey);
         }
 
-        var backfillTopic = $"legacy-backfill-{Guid.NewGuid():N}";
-        var backfillParent = CreateParentOperation();
-        Assert.Equal(
-            MutationCreateOutcome.Created,
-            (await repository.CreateAsync(backfillParent.Snapshot)).Outcome);
-        var backfillObligation = FleetConflictObligation.Create(
-            backfillParent.Snapshot.OperationId,
-            "legacy-backfill",
-            FleetConflictKeyCodec.Topic("prod", backfillTopic),
-            "sha256:legacy-backfill",
-            DateTimeOffset.UtcNow);
-        Assert.Equal(
-            FleetConflictObligationCreateOutcome.Created,
-            (await store.CreateConflictObligationAsync(backfillObligation.Snapshot)).Outcome);
-
-        await RewriteObligationSnapshotWithoutLegacyResourceKeyAsync(
-            factory,
-            backfillObligation.Snapshot.ObligationId);
-
-        var restartedStore = new AdoFleetMutationStateStore(factory);
-        await restartedStore.InitializeAsync();
-
-        var durableLegacyKey = await ReadPersistedLegacyResourceKeyAsync(
-            factory,
-            backfillObligation.Snapshot.ObligationId);
-        Assert.Equal(
-            $"cluster/prod/topic/{backfillTopic}",
-            durableLegacyKey);
-
-        var backfillLegacy = CreateExecutingLegacyTopicOperation(backfillTopic);
-        Assert.Equal(
-            MutationCreateOutcome.Created,
-            (await repository.CreateAsync(backfillLegacy.Operation.Snapshot)).Outcome);
-        var backfillPartitionKey =
-            $"cluster/prod/topic/{backfillTopic}/partition/9";
-        var backfillBlocked = await repository.TryAcquireResourceClaimsAsync(
-            backfillLegacy.Operation.Snapshot.OperationId,
-            backfillLegacy.Generation,
-            new[] { backfillPartitionKey },
-            backfillLegacy.ClaimExpiresAtUtc);
-        Assert.Equal(MutationResourceClaimOutcome.Conflict, backfillBlocked.Outcome);
-        Assert.Equal(backfillPartitionKey, backfillBlocked.ConflictingResourceKey);
-
         // Simulate an already-running pre-fence fleet-state binary after the
         // current process has completed backfill/fence installation. Its old
         // INSERT/UPDATE statement shapes do not carry writer fence fields and
@@ -1245,36 +1243,115 @@ public sealed class V06W41FleetPersistenceTests
         return result;
     }
 
-    private static async Task RewriteObligationSnapshotWithoutLegacyResourceKeyAsync(
+    private static async Task SeedLegacyObligationBeforeFenceAsync(
         IMutationDbConnectionFactory factory,
-        Guid obligationId)
+        FleetConflictObligationSnapshot snapshot)
     {
-        await using var connection = await factory.OpenAsync();
-        await using var read = connection.CreateCommand();
-        read.CommandText =
-            """
-            SELECT snapshot_json
-            FROM kafdeck_fleet_conflict_obligations
-            WHERE obligation_id = @obligation_id
-            """;
-        AddTestParameter(read, "@obligation_id", obligationId.ToString("D"));
-        var current = Convert.ToString(await read.ExecuteScalarAsync());
-        Assert.False(string.IsNullOrWhiteSpace(current));
-
-        var node = JsonNode.Parse(current!)?.AsObject()
-            ?? throw new InvalidOperationException("Expected fleet obligation JSON object.");
+        var node = JsonSerializer.SerializeToNode(
+                snapshot,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))?.AsObject()
+            ?? throw new InvalidOperationException(
+                "Expected fleet conflict obligation JSON object.");
         Assert.True(node.Remove("legacyResourceKey"));
 
-        await using var update = connection.CreateCommand();
-        update.CommandText =
+        await using var connection = await factory.OpenAsync();
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText =
+                """
+                CREATE TABLE IF NOT EXISTS kafdeck_fleet_conflict_obligations (
+                    obligation_id TEXT PRIMARY KEY,
+                    operation_id TEXT NOT NULL,
+                    step_id TEXT NOT NULL,
+                    conflict_key_hash TEXT NOT NULL,
+                    conflict_key TEXT NOT NULL,
+                    effect_fingerprint TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL,
+                    state INTEGER NOT NULL,
+                    blocks_conflicting_dispatch INTEGER NOT NULL,
+                    version BIGINT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    updated_at_utc TEXT NOT NULL,
+                    FOREIGN KEY (operation_id)
+                        REFERENCES kafdeck_mutation_operations(operation_id)
+                        ON DELETE RESTRICT,
+                    UNIQUE (operation_id, step_id, conflict_key_hash, conflict_key)
+                )
+                """;
+            await create.ExecuteNonQueryAsync();
+        }
+
+        await using var insert = connection.CreateCommand();
+        insert.CommandText =
             """
-            UPDATE kafdeck_fleet_conflict_obligations
-            SET snapshot_json = @snapshot_json
-            WHERE obligation_id = @obligation_id
+            INSERT INTO kafdeck_fleet_conflict_obligations (
+                obligation_id,
+                operation_id,
+                step_id,
+                conflict_key_hash,
+                conflict_key,
+                effect_fingerprint,
+                schema_version,
+                state,
+                blocks_conflicting_dispatch,
+                version,
+                snapshot_json,
+                created_at_utc,
+                updated_at_utc)
+            VALUES (
+                @obligation_id,
+                @operation_id,
+                @step_id,
+                @conflict_key_hash,
+                @conflict_key,
+                @effect_fingerprint,
+                @schema_version,
+                @state,
+                @blocks_conflicting_dispatch,
+                @version,
+                @snapshot_json,
+                @created_at_utc,
+                @updated_at_utc)
             """;
-        AddTestParameter(update, "@snapshot_json", node.ToJsonString());
-        AddTestParameter(update, "@obligation_id", obligationId.ToString("D"));
-        Assert.Equal(1, await update.ExecuteNonQueryAsync());
+        AddTestParameter(
+            insert,
+            "@obligation_id",
+            snapshot.ObligationId.ToString("D"));
+        AddTestParameter(
+            insert,
+            "@operation_id",
+            snapshot.OperationId.ToString("D"));
+        AddTestParameter(insert, "@step_id", snapshot.StepId);
+        AddTestParameter(
+            insert,
+            "@conflict_key_hash",
+            Convert.ToHexString(
+                    SHA256.HashData(
+                        Encoding.UTF8.GetBytes(snapshot.ConflictKey)))
+                .ToLowerInvariant());
+        AddTestParameter(insert, "@conflict_key", snapshot.ConflictKey);
+        AddTestParameter(
+            insert,
+            "@effect_fingerprint",
+            snapshot.EffectFingerprint);
+        AddTestParameter(insert, "@schema_version", snapshot.SchemaVersion);
+        AddTestParameter(insert, "@state", (int)snapshot.State);
+        AddTestParameter(
+            insert,
+            "@blocks_conflicting_dispatch",
+            snapshot.BlocksConflictingDispatch ? 1 : 0);
+        AddTestParameter(insert, "@version", snapshot.Version);
+        AddTestParameter(insert, "@snapshot_json", node.ToJsonString());
+        AddTestParameter(
+            insert,
+            "@created_at_utc",
+            snapshot.CreatedAtUtc.ToUniversalTime().ToString("O"));
+        AddTestParameter(
+            insert,
+            "@updated_at_utc",
+            snapshot.UpdatedAtUtc.ToUniversalTime().ToString("O"));
+        Assert.Equal(1, await insert.ExecuteNonQueryAsync());
     }
 
     private static async Task<string?> ReadPersistedLegacyResourceKeyAsync(
