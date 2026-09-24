@@ -754,7 +754,7 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
               AND obligation.blocks_conflicting_dispatch = 1
             """ +
             (excludedOperationId.HasValue
-                ? " AND obligation.operation_id <> @excluded_operation_id"
+                ? " AND obligation.operation_id <> @excluded_operation_id\n"
                 : string.Empty) +
             """
             ORDER BY obligation.created_at_utc, obligation.obligation_id
