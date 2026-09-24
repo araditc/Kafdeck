@@ -29,6 +29,7 @@ public enum FleetConflictObligationCreateOutcome
     ExistingDifferentEffect = 3,
     ParentOperationNotFound = 4,
     LegacyResourceClaimConflict = 5,
+    FleetConflictScopeConflict = 6,
 }
 
 public sealed record FleetConflictObligationCreateResult(
