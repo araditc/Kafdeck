@@ -269,6 +269,12 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
                 .ConfigureAwait(false);
         }
 
+        await FleetConflictWriterFenceSchema.EnsureInstalledAsync(
+                connection,
+                transaction,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -414,6 +420,10 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
               AND version = @expected_version
             """;
         AddParameter(command, "@new_version", normalized.Version);
+        AddParameter(
+            command,
+            "@writer_fence_version",
+            FleetConflictWriterFenceSchema.CurrentWriterVersion);
         AddParameter(command, "@snapshot_json", Serialize(normalized));
         AddParameter(command, "@updated_at_utc", FormatTimestamp(normalized.UpdatedAtUtc));
         AddParameter(command, "@operation_id", normalized.OperationId.ToString("D"));
@@ -502,6 +512,8 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
                 state,
                 blocks_conflicting_dispatch,
                 version,
+                writer_fence_version,
+                writer_fence_token,
                 snapshot_json,
                 created_at_utc,
                 updated_at_utc)
@@ -516,6 +528,8 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
                 @state,
                 @blocks_conflicting_dispatch,
                 @version,
+                @writer_fence_version,
+                @writer_fence_token,
                 @snapshot_json,
                 @created_at_utc,
                 @updated_at_utc)
@@ -531,6 +545,11 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         AddParameter(insert, "@state", (int)normalized.State);
         AddParameter(insert, "@blocks_conflicting_dispatch", normalized.BlocksConflictingDispatch ? 1 : 0);
         AddParameter(insert, "@version", normalized.Version);
+        AddParameter(
+            insert,
+            "@writer_fence_version",
+            FleetConflictWriterFenceSchema.CurrentWriterVersion);
+        AddParameter(insert, "@writer_fence_token", 1L);
         AddParameter(insert, "@snapshot_json", Serialize(normalized));
         AddParameter(insert, "@created_at_utc", FormatTimestamp(normalized.CreatedAtUtc));
         AddParameter(insert, "@updated_at_utc", FormatTimestamp(normalized.UpdatedAtUtc));
@@ -672,6 +691,8 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             SET state = @state,
                 blocks_conflicting_dispatch = @blocks_conflicting_dispatch,
                 version = @new_version,
+                writer_fence_version = @writer_fence_version,
+                writer_fence_token = writer_fence_token + 1,
                 snapshot_json = @snapshot_json,
                 updated_at_utc = @updated_at_utc
             WHERE obligation_id = @obligation_id
