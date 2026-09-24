@@ -115,6 +115,58 @@ public sealed class V06W41FleetPersistenceTests
         }
     }
 
+
+    [Fact]
+    public async Task Sqlite_mixed_version_execution_fence_requires_drain_and_upgrades_schema()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-v06-version-fence-{Guid.NewGuid():N}.db");
+        try
+        {
+            await ExerciseMixedVersionFenceAsync(
+                new SqliteMutationDbConnectionFactory(path));
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_mixed_version_execution_fence_requires_drain_and_upgrades_schema_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var adminFactory = new PostgreSqlMutationDbConnectionFactory(connectionString);
+        var schema = $"kafdeck_v06_version_{Guid.NewGuid():N}";
+        await using (var connection = await adminFactory.OpenAsync())
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText = $"CREATE SCHEMA {schema}";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var isolatedConnectionString =
+                $"{connectionString.TrimEnd(';')};Search Path={schema}";
+            await ExerciseMixedVersionFenceAsync(
+                new PostgreSqlMutationDbConnectionFactory(isolatedConnectionString));
+        }
+        finally
+        {
+            await using var connection = await adminFactory.OpenAsync();
+            await using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
     [Fact]
     public async Task Fleet_state_refuses_orphan_parent_identity()
     {
@@ -306,6 +358,98 @@ public sealed class V06W41FleetPersistenceTests
         Assert.True(staleObligationSave.Obligation!.NoRedispatchTombstone);
     }
 
+
+
+    private static async Task ExerciseMixedVersionFenceAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        var repository = new AdoMutationOperationRepository(factory);
+        await repository.InitializeAsync();
+        Assert.Equal(5, await ReadMutationSchemaVersionAsync(factory));
+
+        var executing = CreateExecutingLegacyTopicOperation(
+            $"mixed-version-{Guid.NewGuid():N}");
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(executing.Operation.Snapshot)).Outcome);
+
+        var slot = await repository.TryAcquireClusterExecutionSlotAsync(
+            executing.Operation.Snapshot.OperationId,
+            executing.Generation,
+            "prod",
+            maxConcurrentPerCluster: 4,
+            executing.ClaimExpiresAtUtc);
+        Assert.Equal(MutationClusterSlotOutcome.Acquired, slot.Outcome);
+
+        await SetMutationSchemaVersionAsync(factory, 4);
+
+        var blockedUpgrade = new AdoMutationOperationRepository(factory);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => blockedUpgrade.InitializeAsync());
+        Assert.Contains("drained", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(4, await ReadMutationSchemaVersionAsync(factory));
+
+        var aggregate = MutationOperation.Restore(executing.Operation.Snapshot);
+        aggregate.Complete(
+            MutationExecutionResultKind.FailedBeforeDispatch,
+            "maintenance_window_drain",
+            DateTimeOffset.UtcNow);
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await repository.TrySaveAsync(
+                aggregate.Snapshot,
+                executing.Operation.Snapshot.Version)).Outcome);
+        await repository.ReleaseClusterExecutionSlotAsync(
+            executing.Operation.Snapshot.OperationId,
+            executing.Generation);
+
+        var upgraded = new AdoMutationOperationRepository(factory);
+        await upgraded.InitializeAsync();
+        Assert.Equal(5, await ReadMutationSchemaVersionAsync(factory));
+
+        await SetMutationSchemaVersionAsync(factory, 6);
+        var futureVersion = new AdoMutationOperationRepository(factory);
+        var unsupported = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => futureVersion.InitializeAsync());
+        Assert.Contains("unsupported", unsupported.Message, StringComparison.OrdinalIgnoreCase);
+
+        await SetMutationSchemaVersionAsync(factory, 5);
+    }
+
+    private static async Task<int> ReadMutationSchemaVersionAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT schema_version
+            FROM kafdeck_schema_info
+            WHERE component = 'mutation-operations'
+            """;
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task SetMutationSchemaVersionAsync(
+        IMutationDbConnectionFactory factory,
+        int version)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE kafdeck_schema_info
+            SET schema_version = @schema_version
+            WHERE component = 'mutation-operations'
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@schema_version";
+        parameter.Value = version;
+        command.Parameters.Add(parameter);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
 
     private static async Task ExerciseSharedConflictGuardAsync(
         IMutationDbConnectionFactory factory)
