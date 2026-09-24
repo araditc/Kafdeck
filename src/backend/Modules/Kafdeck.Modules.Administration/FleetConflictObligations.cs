@@ -27,6 +27,7 @@ public sealed record FleetConflictObligationSnapshot
     public required Guid OperationId { get; init; }
     public required string StepId { get; init; }
     public required string ConflictKey { get; init; }
+    public string? LegacyResourceKey { get; init; }
     public required string EffectFingerprint { get; init; }
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public FleetConflictObligationState State { get; init; } =
@@ -64,7 +65,7 @@ public sealed record FleetUncertaintyDispositionBinding(
         }
 
         var steps = NormalizeStrings(StepIds, "step ID", 128);
-        var conflicts = NormalizeStrings(ConflictKeys, "conflict key", 2048);
+        var conflicts = NormalizeConflictKeys(ConflictKeys);
         if (steps.Count == 0 || conflicts.Count == 0)
         {
             throw new MutationStateException(
@@ -98,6 +99,23 @@ public sealed record FleetUncertaintyDispositionBinding(
             .Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray());
+    }
+
+    private static IReadOnlyList<string> NormalizeConflictKeys(
+        IReadOnlyList<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return Array.AsReadOnly(values
+            .Select(NormalizeConflictKey)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray());
+    }
+
+    private static string NormalizeConflictKey(string value)
+    {
+        var target = FleetConflictKeyCodec.Decode(value);
+        return FleetConflictKeyCodec.Encode(target);
     }
 
     private static string RequireBounded(
@@ -138,12 +156,14 @@ public sealed class FleetConflictObligation
             throw new ArgumentException("Operation ID is required.", nameof(operationId));
         }
 
+        var normalizedConflict = NormalizeConflictKey(conflictKey);
         return new FleetConflictObligation(new FleetConflictObligationSnapshot
         {
             ObligationId = Guid.NewGuid(),
             OperationId = operationId,
             StepId = RequireBounded(stepId, nameof(stepId), 128),
-            ConflictKey = RequireBounded(conflictKey, nameof(conflictKey), 2048),
+            ConflictKey = normalizedConflict,
+            LegacyResourceKey = FleetConflictScope.ToLegacyTopicResourceKey(normalizedConflict),
             EffectFingerprint = RequireBounded(
                 effectFingerprint,
                 nameof(effectFingerprint),
@@ -228,14 +248,13 @@ public sealed class FleetConflictObligation
         }
 
         var normalizedStep = RequireBounded(snapshot.StepId, nameof(snapshot.StepId), 128);
-        var normalizedConflict = RequireBounded(
-            snapshot.ConflictKey,
-            nameof(snapshot.ConflictKey),
-            2048);
+        var normalizedConflict = NormalizeConflictKey(snapshot.ConflictKey);
         var normalizedFingerprint = RequireBounded(
             snapshot.EffectFingerprint,
             nameof(snapshot.EffectFingerprint),
             256);
+        var legacyResourceKey =
+            FleetConflictScope.ToLegacyTopicResourceKey(normalizedConflict);
 
         if (snapshot.State == FleetConflictObligationState.SupersededUnknown &&
             (!snapshot.NoRedispatchTombstone ||
@@ -256,6 +275,7 @@ public sealed class FleetConflictObligation
         {
             StepId = normalizedStep,
             ConflictKey = normalizedConflict,
+            LegacyResourceKey = legacyResourceKey,
             EffectFingerprint = normalizedFingerprint,
             SafeResolutionEvidenceHash = snapshot.SafeResolutionEvidenceHash is null
                 ? null
@@ -264,6 +284,12 @@ public sealed class FleetConflictObligation
                     nameof(snapshot.SafeResolutionEvidenceHash),
                     256),
         };
+    }
+
+    private static string NormalizeConflictKey(string value)
+    {
+        var target = FleetConflictKeyCodec.Decode(value);
+        return FleetConflictKeyCodec.Encode(target);
     }
 
     private static string RequireBounded(

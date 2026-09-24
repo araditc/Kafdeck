@@ -108,7 +108,8 @@ public sealed class ConnectMutationPreconditionValidator
                 "connect_create_precondition_changed");
         }
 
-        return MutationPreDispatchGuardResult.Allowed;
+        return ConnectReplicationActivationGuard.ValidateCreate(
+            canonical.RequestedConfiguration);
     }
 
     private async Task<MutationPreDispatchGuardResult> ValidateAlterAsync(
@@ -215,7 +216,9 @@ public sealed class ConnectMutationPreconditionValidator
                 "connect_update_precondition_changed");
         }
 
-        return MutationPreDispatchGuardResult.Allowed;
+        return ConnectReplicationActivationGuard.ValidateUpdate(
+            canonical.RequestedConfiguration,
+            observed.Value.Configuration);
     }
 
     private async Task<MutationPreDispatchGuardResult> ValidateControlAsync(
@@ -299,7 +302,9 @@ public sealed class ConnectMutationPreconditionValidator
             }
         }
 
-        return MutationPreDispatchGuardResult.Allowed;
+        return ConnectReplicationActivationGuard.ValidateControl(
+            canonical.Action,
+            observed.Value.Configuration);
     }
 
     private async Task<MutationPreDispatchGuardResult> ValidateDeleteAsync(

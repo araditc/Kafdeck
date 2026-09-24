@@ -9,6 +9,8 @@ namespace Kafdeck.Infrastructure.Persistence;
 
 public sealed class AdoMutationOperationRepository : IMutationOperationRepository
 {
+    private const int MutationSchemaVersion = 5;
+    private const int PreviousMutationSchemaVersion = 4;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IMutationDbConnectionFactory _connectionFactory;
     private readonly TimeProvider _timeProvider;
@@ -71,6 +73,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 operation_id TEXT NOT NULL,
                 execution_generation BIGINT NOT NULL,
                 expires_at_utc TEXT NOT NULL,
+                execution_schema_version INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (cluster_id, slot_number),
                 UNIQUE (operation_id, execution_generation)
             )
@@ -85,7 +88,8 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 resource_key TEXT NOT NULL,
                 operation_id TEXT NOT NULL,
                 execution_generation BIGINT NOT NULL,
-                expires_at_utc TEXT NOT NULL
+                expires_at_utc TEXT NOT NULL,
+                execution_schema_version INTEGER NOT NULL DEFAULT 0
             )
             """,
             """
@@ -101,7 +105,119 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        await EnsureExecutionSchemaCompatibilityAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task EnsureExecutionSchemaCompatibilityAsync(
+        DbConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        await using (var migrationLock = connection.CreateCommand())
+        {
+            migrationLock.Transaction = transaction;
+            migrationLock.CommandText =
+                """
+                UPDATE kafdeck_schema_info
+                SET schema_version = schema_version
+                WHERE component = 'mutation-operations'
+                """;
+            if (await migrationLock.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Mutation persistence schema metadata is missing. Refusing to start mutation mode.");
+            }
+        }
+
+        var version = await ReadMutationSchemaVersionAsync(
+            connection,
+            transaction,
+            cancellationToken).ConfigureAwait(false);
+
+        if (version == MutationSchemaVersion)
+        {
+            await MutationExecutionVersionFenceSchema.ValidateInstalledAsync(
+                    connection,
+                    transaction,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (version != PreviousMutationSchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"Mutation persistence schema version '{version}' is unsupported. Refusing to start mutation mode.");
+        }
+
+        await MutationExecutionVersionFenceSchema.PrepareMigrationAsync(
+                connection,
+                transaction,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await using (var drainCheck = connection.CreateCommand())
+        {
+            drainCheck.Transaction = transaction;
+            drainCheck.CommandText =
+                """
+                SELECT
+                    (SELECT COUNT(1)
+                     FROM kafdeck_mutation_operations
+                     WHERE state = @executing_state)
+                  + (SELECT COUNT(1)
+                     FROM kafdeck_mutation_cluster_slots)
+                """;
+            AddParameter(
+                drainCheck,
+                "@executing_state",
+                (int)MutationOperationState.Executing);
+
+            var active = await drainCheck.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (Convert.ToInt64(active, CultureInfo.InvariantCulture) != 0)
+            {
+                throw new InvalidOperationException(
+                    "Mutation execution must be drained before upgrading persistence schema from v0.5 to v0.6. " +
+                    "Executing operations or cluster execution slots are still present.");
+            }
+        }
+
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.Transaction = transaction;
+            migrate.CommandText =
+                """
+                UPDATE kafdeck_schema_info
+                SET schema_version = @schema_version
+                WHERE component = 'mutation-operations'
+                  AND schema_version = @previous_schema_version
+                """;
+            AddParameter(migrate, "@schema_version", MutationSchemaVersion);
+            AddParameter(migrate, "@previous_schema_version", PreviousMutationSchemaVersion);
+
+            if (await migrate.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Mutation persistence execution-version fence changed during migration. Refusing to start mutation mode.");
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<int> ReadMutationSchemaVersionAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
         await using var versionCommand = connection.CreateCommand();
+        versionCommand.Transaction = transaction;
         versionCommand.CommandText =
             """
             SELECT schema_version
@@ -109,11 +225,13 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             WHERE component = 'mutation-operations'
             """;
         var version = await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        if (Convert.ToInt32(version, CultureInfo.InvariantCulture) != 4)
+        if (version is null or DBNull)
         {
             throw new InvalidOperationException(
-                "Mutation persistence schema version is unsupported. Refusing to start mutation mode.");
+                "Mutation persistence schema metadata is missing. Refusing to start mutation mode.");
         }
+
+        return Convert.ToInt32(version, CultureInfo.InvariantCulture);
     }
 
     public async Task<MutationCreateResult> CreateAsync(
@@ -504,13 +622,15 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                     slot_number,
                     operation_id,
                     execution_generation,
-                    expires_at_utc)
+                    expires_at_utc,
+                    execution_schema_version)
                 VALUES (
                     @cluster_id,
                     @slot_number,
                     @operation_id,
                     @execution_generation,
-                    @expires_at_utc)
+                    @expires_at_utc,
+                    @execution_schema_version)
                 ON CONFLICT (cluster_id, slot_number) DO NOTHING
                 """;
             AddParameter(insert, "@cluster_id", normalizedClusterId);
@@ -518,6 +638,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             AddParameter(insert, "@operation_id", operationId.ToString("D"));
             AddParameter(insert, "@execution_generation", executionClaimGeneration);
             AddParameter(insert, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+            AddParameter(insert, "@execution_schema_version", MutationSchemaVersion);
 
             if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
             {
@@ -723,13 +844,15 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                     resource_key,
                     operation_id,
                     execution_generation,
-                    expires_at_utc)
+                    expires_at_utc,
+                    execution_schema_version)
                 VALUES (
                     @resource_key_hash,
                     @resource_key,
                     @operation_id,
                     @execution_generation,
-                    @expires_at_utc)
+                    @expires_at_utc,
+                    @execution_schema_version)
                 ON CONFLICT (resource_key_hash) DO NOTHING
                 """;
             AddParameter(insert, "@resource_key_hash", resourceKeyHash);
@@ -737,6 +860,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             AddParameter(insert, "@operation_id", operationId.ToString("D"));
             AddParameter(insert, "@execution_generation", executionClaimGeneration);
             AddParameter(insert, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+            AddParameter(insert, "@execution_schema_version", MutationSchemaVersion);
 
             var inserted = await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             if (inserted == 1)
