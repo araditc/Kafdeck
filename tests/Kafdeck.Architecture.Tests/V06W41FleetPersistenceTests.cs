@@ -167,6 +167,58 @@ public sealed class V06W41FleetPersistenceTests
         }
     }
 
+
+    [Fact]
+    public async Task Sqlite_recovery_preserves_sticky_obligation_after_lease_expiry()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-v06-recovery-obligation-{Guid.NewGuid():N}.db");
+        try
+        {
+            await ExerciseRecoveryPreservesStickyObligationAsync(
+                new SqliteMutationDbConnectionFactory(path));
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_recovery_preserves_sticky_obligation_after_lease_expiry_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var adminFactory = new PostgreSqlMutationDbConnectionFactory(connectionString);
+        var schema = $"kafdeck_v06_recovery_{Guid.NewGuid():N}";
+        await using (var connection = await adminFactory.OpenAsync())
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText = $"CREATE SCHEMA {schema}";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var isolatedConnectionString =
+                $"{connectionString.TrimEnd(';')};Search Path={schema}";
+            await ExerciseRecoveryPreservesStickyObligationAsync(
+                new PostgreSqlMutationDbConnectionFactory(isolatedConnectionString));
+        }
+        finally
+        {
+            await using var connection = await adminFactory.OpenAsync();
+            await using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
     [Fact]
     public async Task Fleet_state_refuses_orphan_parent_identity()
     {
@@ -359,6 +411,165 @@ public sealed class V06W41FleetPersistenceTests
     }
 
 
+
+
+    private static async Task ExerciseRecoveryPreservesStickyObligationAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        var now = new DateTimeOffset(2026, 9, 24, 13, 0, 0, TimeSpan.Zero);
+        var time = new MutableTimeProvider(now);
+        var repository = new AdoMutationOperationRepository(factory, time);
+        await repository.InitializeAsync();
+
+        var store = new AdoFleetMutationStateStore(factory);
+        await store.InitializeAsync();
+
+        var topic = $"recovery-{Guid.NewGuid():N}";
+        var legacyKey = $"cluster/prod/topic/{topic}";
+        var requester = "oidc:https://idp.example|w41-recovery";
+        var operation = MutationOperation.CreatePreview(
+            requester,
+            new MutationIntentDescriptor(
+                MutationOperationKind.TopicCreate,
+                "prod",
+                $"{{\"operation\":\"recovery\",\"topic\":\"{topic}\"}}",
+                new[] { legacyKey },
+                Preconditions: new[]
+                {
+                    new MutationPrecondition("topic", "absent"),
+                }),
+            MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.TopicCreate)),
+            "v0.6-w41-recovery",
+            now.AddHours(2),
+            now,
+            $"recovery-{Guid.NewGuid():N}");
+
+        operation.OpenForConfirmation(now.AddMilliseconds(1));
+        operation.Confirm(
+            requester,
+            operation.Snapshot.PreviewHash,
+            now.AddMilliseconds(2),
+            operation.Snapshot.ConfirmationChallenge);
+
+        var created = await repository.CreateAsync(operation.Snapshot);
+        Assert.Equal(MutationCreateOutcome.Created, created.Outcome);
+
+        var executing = MutationOperation.Restore(created.Operation);
+        var generation = executing.ClaimExecution(
+            now.AddSeconds(1),
+            now.AddMinutes(2));
+        var executingSave = await repository.TrySaveAsync(
+            executing.Snapshot,
+            created.Operation.Version);
+        Assert.Equal(MutationSaveOutcome.Saved, executingSave.Outcome);
+
+        var claim = await repository.TryAcquireResourceClaimsAsync(
+            executing.Snapshot.OperationId,
+            generation,
+            new[] { legacyKey },
+            now.AddMinutes(2));
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, claim.Outcome);
+
+        // Same-operation claim + obligation coexistence is intentional: the
+        // durable obligation represents outstanding effect uncertainty while
+        // the renewable claim is only a worker/execution lease boundary.
+        var obligation = FleetConflictObligation.Create(
+            executing.Snapshot.OperationId,
+            "dispatch-intent",
+            FleetConflictKeyCodec.Topic("prod", topic),
+            "sha256:recovery-effect",
+            now.AddSeconds(2));
+        var obligationCreate = await store.CreateConflictObligationAsync(
+            obligation.Snapshot);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.Created,
+            obligationCreate.Outcome);
+
+        var ready = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|ready-restored",
+            new MutationIntentDescriptor(
+                MutationOperationKind.TopicCreate,
+                "prod",
+                $"{{\"operation\":\"ready\",\"topic\":\"ready-{topic}\"}}",
+                new[] { $"cluster/prod/topic/ready-{topic}" }),
+            MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.TopicCreate)),
+            "v0.6-w41-recovery",
+            now.AddHours(2),
+            now,
+            $"ready-{Guid.NewGuid():N}");
+        ready.OpenForConfirmation(now.AddMilliseconds(1));
+        ready.Confirm(
+            ready.Snapshot.RequesterPrincipalId,
+            ready.Snapshot.PreviewHash,
+            now.AddMilliseconds(2),
+            ready.Snapshot.ConfirmationChallenge);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(ready.Snapshot)).Outcome);
+
+        time.SetUtcNow(now.AddMinutes(3));
+        var recovery = new MutationRecoveryCoordinator(
+            repository,
+            new NoopMutationAuditSink(),
+            time);
+        var recovered = await recovery.RecoverInterruptedExecutionsAsync();
+        Assert.Equal(1, recovered);
+
+        var recoveredParent = await repository.GetAsync(executing.Snapshot.OperationId);
+        Assert.NotNull(recoveredParent);
+        Assert.Equal(
+            MutationOperationState.FailedBeforeDispatch,
+            recoveredParent!.State);
+
+        var readyAfterRecovery = await repository.GetAsync(ready.Snapshot.OperationId);
+        Assert.NotNull(readyAfterRecovery);
+        Assert.Equal(MutationOperationState.Ready, readyAfterRecovery!.State);
+
+        var blocking = await store.FindBlockingConflictObligationAsync(
+            FleetConflictKeyCodec.Topic("prod", topic));
+        Assert.NotNull(blocking);
+        Assert.True(blocking!.BlocksConflictingDispatch);
+
+        var competitor = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|competitor",
+            new MutationIntentDescriptor(
+                MutationOperationKind.TopicCreate,
+                "prod",
+                $"{{\"operation\":\"competitor\",\"topic\":\"{topic}\"}}",
+                new[] { legacyKey }),
+            MutationRiskClassifier.Classify(
+                new MutationRiskInput(MutationOperationKind.TopicCreate)),
+            "v0.6-w41-recovery",
+            now.AddHours(3),
+            now.AddMinutes(3),
+            $"competitor-{Guid.NewGuid():N}");
+        competitor.OpenForConfirmation(now.AddMinutes(3).AddMilliseconds(1));
+        competitor.Confirm(
+            competitor.Snapshot.RequesterPrincipalId,
+            competitor.Snapshot.PreviewHash,
+            now.AddMinutes(3).AddMilliseconds(2),
+            competitor.Snapshot.ConfirmationChallenge);
+        var competitorCreated = await repository.CreateAsync(competitor.Snapshot);
+        var competitorExecuting = MutationOperation.Restore(competitorCreated.Operation);
+        var competitorGeneration = competitorExecuting.ClaimExecution(
+            now.AddMinutes(3).AddSeconds(1),
+            now.AddMinutes(5));
+        Assert.Equal(
+            MutationSaveOutcome.Saved,
+            (await repository.TrySaveAsync(
+                competitorExecuting.Snapshot,
+                competitorCreated.Operation.Version)).Outcome);
+
+        var blocked = await repository.TryAcquireResourceClaimsAsync(
+            competitorExecuting.Snapshot.OperationId,
+            competitorGeneration,
+            new[] { legacyKey },
+            now.AddMinutes(5));
+        Assert.Equal(MutationResourceClaimOutcome.Conflict, blocked.Outcome);
+        Assert.Equal(legacyKey, blocked.ConflictingResourceKey);
+    }
 
     private static async Task ExerciseMixedVersionFenceAsync(
         IMutationDbConnectionFactory factory)
@@ -637,6 +848,32 @@ public sealed class V06W41FleetPersistenceTests
             Now.AddHours(8),
             Now,
             $"fleet-parent-{suffix}");
+    }
+
+
+    private sealed class MutableTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now;
+
+        public MutableTimeProvider(DateTimeOffset now)
+        {
+            _now = now;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void SetUtcNow(DateTimeOffset now) => _now = now;
+    }
+
+    private sealed class NoopMutationAuditSink : IMutationAuditSink
+    {
+        public ValueTask WriteAsync(
+            MutationAuditEvent auditEvent,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.CompletedTask;
+        }
     }
 
     private static void DeleteSqliteFiles(string path)
