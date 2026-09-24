@@ -109,6 +109,146 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             throw new InvalidOperationException(
                 "Fleet mutation persistence schema version is unsupported. Refusing to activate fleet mutation state.");
         }
+
+        await EnsureConflictScopePersistenceAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task EnsureConflictScopePersistenceAsync(
+        DbConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var statements = new[]
+        {
+            """
+            CREATE TABLE IF NOT EXISTS kafdeck_fleet_conflict_scope_guards (
+                conflict_scope_hash TEXT NOT NULL,
+                conflict_scope_key TEXT NOT NULL,
+                PRIMARY KEY (conflict_scope_hash, conflict_scope_key)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS kafdeck_fleet_conflict_scope_bindings (
+                obligation_id TEXT PRIMARY KEY,
+                conflict_scope_hash TEXT NOT NULL,
+                conflict_scope_key TEXT NOT NULL,
+                FOREIGN KEY (obligation_id)
+                    REFERENCES kafdeck_fleet_conflict_obligations(obligation_id)
+                    ON DELETE RESTRICT
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_kafdeck_fleet_conflict_scope_blocking
+            ON kafdeck_fleet_conflict_scope_bindings (
+                conflict_scope_hash,
+                conflict_scope_key,
+                obligation_id)
+            """,
+        };
+
+        foreach (var statement in statements)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = statement;
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        if (_connectionFactory.SupportsSelectForUpdate)
+        {
+            await using var tableLock = connection.CreateCommand();
+            tableLock.Transaction = transaction;
+            tableLock.CommandText =
+                """
+                LOCK TABLE kafdeck_fleet_conflict_obligations
+                IN SHARE ROW EXCLUSIVE MODE
+                """;
+            await tableLock.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            // SQLite serializes writers at database scope. Take that writer
+            // boundary before enumerating legacy rows so backfill cannot miss a
+            // concurrent obligation committed by an older process.
+            await using var writerLock = connection.CreateCommand();
+            writerLock.Transaction = transaction;
+            writerLock.CommandText =
+                """
+                UPDATE kafdeck_schema_info
+                SET schema_version = schema_version
+                WHERE component = 'fleet-mutation-state'
+                """;
+            if (await writerLock.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Fleet mutation persistence schema metadata is missing while installing canonical conflict scopes.");
+            }
+        }
+
+        var rows = new List<(string ObligationId, string SnapshotJson, string? ScopeHash, string? ScopeKey)>();
+        await using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText =
+                """
+                SELECT
+                    obligation.obligation_id,
+                    obligation.snapshot_json,
+                    binding.conflict_scope_hash,
+                    binding.conflict_scope_key
+                FROM kafdeck_fleet_conflict_obligations AS obligation
+                LEFT JOIN kafdeck_fleet_conflict_scope_bindings AS binding
+                  ON binding.obligation_id = obligation.obligation_id
+                ORDER BY obligation.obligation_id
+                """;
+
+            await using var reader =
+                await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                rows.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3)));
+            }
+        }
+
+        foreach (var row in rows)
+        {
+            var snapshot = FleetConflictObligation.Restore(
+                    Deserialize<FleetConflictObligationSnapshot>(row.SnapshotJson))
+                .Snapshot;
+            var scopeKey = FleetConflictScope.FromFleetConflictKey(snapshot.ConflictKey);
+            var scopeHash = HashConflictKey(scopeKey);
+
+            if (row.ScopeHash is not null || row.ScopeKey is not null)
+            {
+                if (!string.Equals(row.ScopeHash, scopeHash, StringComparison.Ordinal) ||
+                    !string.Equals(row.ScopeKey, scopeKey, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Persisted fleet conflict scope binding does not match the canonical typed conflict identity.");
+                }
+
+                continue;
+            }
+
+            await EnsureConflictScopeBindingAsync(
+                    connection,
+                    transaction,
+                    row.ObligationId,
+                    scopeHash,
+                    scopeKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<FleetProgressCreateResult> CreateProgressAsync(
@@ -257,6 +397,8 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         }
 
         var conflictHash = HashConflictKey(normalized.ConflictKey);
+        var conflictScopeKey = FleetConflictScope.FromFleetConflictKey(normalized.ConflictKey);
+        var conflictScopeHash = HashConflictKey(conflictScopeKey);
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -270,6 +412,30 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             return new FleetConflictObligationCreateResult(
                 FleetConflictObligationCreateOutcome.ParentOperationNotFound,
                 null);
+        }
+
+        await LockConflictScopeAsync(
+                connection,
+                transaction,
+                conflictScopeHash,
+                conflictScopeKey,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var blockingScope = await FindBlockingConflictObligationByScopeAsync(
+                connection,
+                transaction,
+                conflictScopeHash,
+                conflictScopeKey,
+                normalized.OperationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (blockingScope is not null)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new FleetConflictObligationCreateResult(
+                FleetConflictObligationCreateOutcome.FleetConflictScopeConflict,
+                blockingScope);
         }
 
         await using var insert = connection.CreateCommand();
@@ -323,6 +489,14 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         var inserted = await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         if (inserted == 1)
         {
+            await EnsureConflictScopeBindingAsync(
+                    connection,
+                    transaction,
+                    normalized.ObligationId.ToString("D"),
+                    conflictScopeHash,
+                    conflictScopeKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new FleetConflictObligationCreateResult(
                 FleetConflictObligationCreateOutcome.Created,
@@ -337,6 +511,18 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             conflictHash,
             normalized.ConflictKey,
             cancellationToken).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            await EnsureConflictScopeBindingAsync(
+                    connection,
+                    transaction,
+                    existing.ObligationId.ToString("D"),
+                    conflictScopeHash,
+                    conflictScopeKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         if (existing is null)
@@ -385,23 +571,18 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         CancellationToken cancellationToken = default)
     {
         var normalizedKey = RequireConflictKey(conflictKey);
-        var hash = HashConflictKey(normalizedKey);
+        var conflictScopeKey = FleetConflictScope.FromFleetConflictKey(normalizedKey);
+        var conflictScopeHash = HashConflictKey(conflictScopeKey);
 
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            """
-            SELECT snapshot_json
-            FROM kafdeck_fleet_conflict_obligations
-            WHERE conflict_key_hash = @conflict_key_hash
-              AND conflict_key = @conflict_key
-              AND blocks_conflicting_dispatch = 1
-            ORDER BY created_at_utc, obligation_id
-            LIMIT 1
-            """;
-        AddParameter(command, "@conflict_key_hash", hash);
-        AddParameter(command, "@conflict_key", normalizedKey);
-        return await ReadConflictObligationAsync(command, cancellationToken).ConfigureAwait(false);
+        return await FindBlockingConflictObligationByScopeAsync(
+                connection,
+                transaction: null,
+                conflictScopeHash,
+                conflictScopeKey,
+                excludedOperationId: null,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<FleetConflictObligationSaveResult> TrySaveConflictObligationAsync(
@@ -489,6 +670,159 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             : new FleetConflictObligationSaveResult(
                 FleetConflictObligationSaveOutcome.VersionConflict,
                 latest);
+    }
+
+    private async Task LockConflictScopeAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string conflictScopeHash,
+        string conflictScopeKey,
+        CancellationToken cancellationToken)
+    {
+        await using (var ensure = connection.CreateCommand())
+        {
+            ensure.Transaction = transaction;
+            ensure.CommandText =
+                """
+                INSERT INTO kafdeck_fleet_conflict_scope_guards (
+                    conflict_scope_hash,
+                    conflict_scope_key)
+                VALUES (
+                    @conflict_scope_hash,
+                    @conflict_scope_key)
+                ON CONFLICT (conflict_scope_hash, conflict_scope_key) DO NOTHING
+                """;
+            AddParameter(ensure, "@conflict_scope_hash", conflictScopeHash);
+            AddParameter(ensure, "@conflict_scope_key", conflictScopeKey);
+            await ensure.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var lockScope = connection.CreateCommand();
+        lockScope.Transaction = transaction;
+        lockScope.CommandText = _connectionFactory.SupportsSelectForUpdate
+            ? """
+              SELECT conflict_scope_key
+              FROM kafdeck_fleet_conflict_scope_guards
+              WHERE conflict_scope_hash = @conflict_scope_hash
+                AND conflict_scope_key = @conflict_scope_key
+              FOR UPDATE
+              """
+            : """
+              UPDATE kafdeck_fleet_conflict_scope_guards
+              SET conflict_scope_key = conflict_scope_key
+              WHERE conflict_scope_hash = @conflict_scope_hash
+                AND conflict_scope_key = @conflict_scope_key
+              """;
+        AddParameter(lockScope, "@conflict_scope_hash", conflictScopeHash);
+        AddParameter(lockScope, "@conflict_scope_key", conflictScopeKey);
+
+        if (_connectionFactory.SupportsSelectForUpdate)
+        {
+            var locked = await lockScope.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (locked is null or DBNull)
+            {
+                throw new InvalidOperationException(
+                    "Canonical fleet conflict scope guard could not be locked.");
+            }
+        }
+        else if (await lockScope.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException(
+                "Canonical fleet conflict scope guard could not be locked.");
+        }
+    }
+
+    private static async Task<FleetConflictObligationSnapshot?>
+        FindBlockingConflictObligationByScopeAsync(
+            DbConnection connection,
+            DbTransaction? transaction,
+            string conflictScopeHash,
+            string conflictScopeKey,
+            Guid? excludedOperationId,
+            CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT obligation.snapshot_json
+            FROM kafdeck_fleet_conflict_scope_bindings AS binding
+            INNER JOIN kafdeck_fleet_conflict_obligations AS obligation
+              ON obligation.obligation_id = binding.obligation_id
+            WHERE binding.conflict_scope_hash = @conflict_scope_hash
+              AND binding.conflict_scope_key = @conflict_scope_key
+              AND obligation.blocks_conflicting_dispatch = 1
+            """ +
+            (excludedOperationId.HasValue
+                ? " AND obligation.operation_id <> @excluded_operation_id"
+                : string.Empty) +
+            """
+            ORDER BY obligation.created_at_utc, obligation.obligation_id
+            LIMIT 1
+            """;
+        AddParameter(command, "@conflict_scope_hash", conflictScopeHash);
+        AddParameter(command, "@conflict_scope_key", conflictScopeKey);
+        if (excludedOperationId.HasValue)
+        {
+            AddParameter(
+                command,
+                "@excluded_operation_id",
+                excludedOperationId.Value.ToString("D"));
+        }
+
+        return await ReadConflictObligationAsync(command, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureConflictScopeBindingAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string obligationId,
+        string conflictScopeHash,
+        string conflictScopeKey,
+        CancellationToken cancellationToken)
+    {
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText =
+                """
+                INSERT INTO kafdeck_fleet_conflict_scope_bindings (
+                    obligation_id,
+                    conflict_scope_hash,
+                    conflict_scope_key)
+                VALUES (
+                    @obligation_id,
+                    @conflict_scope_hash,
+                    @conflict_scope_key)
+                ON CONFLICT (obligation_id) DO NOTHING
+                """;
+            AddParameter(insert, "@obligation_id", obligationId);
+            AddParameter(insert, "@conflict_scope_hash", conflictScopeHash);
+            AddParameter(insert, "@conflict_scope_key", conflictScopeKey);
+            if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+            {
+                return;
+            }
+        }
+
+        await using var verify = connection.CreateCommand();
+        verify.Transaction = transaction;
+        verify.CommandText =
+            """
+            SELECT conflict_scope_hash, conflict_scope_key
+            FROM kafdeck_fleet_conflict_scope_bindings
+            WHERE obligation_id = @obligation_id
+            """;
+        AddParameter(verify, "@obligation_id", obligationId);
+        await using var reader =
+            await verify.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ||
+            !string.Equals(reader.GetString(0), conflictScopeHash, StringComparison.Ordinal) ||
+            !string.Equals(reader.GetString(1), conflictScopeKey, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Fleet conflict obligation has a non-canonical or conflicting durable scope binding.");
+        }
     }
 
     private static async Task<bool> ParentExistsAsync(
