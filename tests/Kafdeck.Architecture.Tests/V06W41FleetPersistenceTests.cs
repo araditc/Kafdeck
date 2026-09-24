@@ -618,6 +618,51 @@ public sealed class V06W41FleetPersistenceTests
         await upgraded.InitializeAsync();
         Assert.Equal(5, await ReadMutationSchemaVersionAsync(factory));
 
+        // Model an already-running v0.5 process: it initialized successfully
+        // while the durable marker was v4, stays alive and does not re-run
+        // startup after another process activates v5.
+        await SetMutationSchemaVersionAsync(factory, 4);
+        var legacyExecutor = new LegacyV05AdmissionProbe(factory);
+        await legacyExecutor.InitializeAsync();
+
+        var activatingV06 = new AdoMutationOperationRepository(factory);
+        await activatingV06.InitializeAsync();
+        Assert.Equal(5, await ReadMutationSchemaVersionAsync(factory));
+
+        await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
+            () => legacyExecutor.TryAcquireClusterSlotWithLegacySqlAsync());
+        await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
+            () => legacyExecutor.TryAcquireResourceClaimWithLegacySqlAsync());
+
+        // Current v0.6 SQL carries the durable execution epoch and remains
+        // admissible after the old statement shape has been fenced out.
+        var current = CreateExecutingLegacyTopicOperation(
+            $"current-v5-{Guid.NewGuid():N}");
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await activatingV06.CreateAsync(current.Operation.Snapshot)).Outcome);
+        Assert.Equal(
+            MutationClusterSlotOutcome.Acquired,
+            (await activatingV06.TryAcquireClusterExecutionSlotAsync(
+                current.Operation.Snapshot.OperationId,
+                current.Generation,
+                "prod",
+                maxConcurrentPerCluster: 4,
+                current.ClaimExpiresAtUtc)).Outcome);
+        Assert.Equal(
+            MutationResourceClaimOutcome.Acquired,
+            (await activatingV06.TryAcquireResourceClaimsAsync(
+                current.Operation.Snapshot.OperationId,
+                current.Generation,
+                current.Operation.Snapshot.ResourceKeys,
+                current.ClaimExpiresAtUtc)).Outcome);
+        await activatingV06.ReleaseResourceClaimsAsync(
+            current.Operation.Snapshot.OperationId,
+            current.Generation);
+        await activatingV06.ReleaseClusterExecutionSlotAsync(
+            current.Operation.Snapshot.OperationId,
+            current.Generation);
+
         await SetMutationSchemaVersionAsync(factory, 6);
         var futureVersion = new AdoMutationOperationRepository(factory);
         var unsupported = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -850,6 +895,111 @@ public sealed class V06W41FleetPersistenceTests
             $"fleet-parent-{suffix}");
     }
 
+
+    private sealed class LegacyV05AdmissionProbe
+    {
+        private readonly IMutationDbConnectionFactory _factory;
+        private bool _initialized;
+
+        public LegacyV05AdmissionProbe(IMutationDbConnectionFactory factory)
+        {
+            _factory = factory;
+        }
+
+        public async Task InitializeAsync()
+        {
+            var version = await ReadMutationSchemaVersionAsync(_factory);
+            if (version != 4)
+            {
+                throw new InvalidOperationException(
+                    "Legacy v0.5 executor accepts only mutation schema v4.");
+            }
+
+            _initialized = true;
+        }
+
+        public async Task TryAcquireClusterSlotWithLegacySqlAsync()
+        {
+            RequireInitialized();
+            await using var connection = await _factory.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                INSERT INTO kafdeck_mutation_cluster_slots (
+                    cluster_id,
+                    slot_number,
+                    operation_id,
+                    execution_generation,
+                    expires_at_utc)
+                VALUES (
+                    @cluster_id,
+                    @slot_number,
+                    @operation_id,
+                    @execution_generation,
+                    @expires_at_utc)
+                """;
+            AddLegacyParameter(command, "@cluster_id", "legacy-v05");
+            AddLegacyParameter(command, "@slot_number", 0);
+            AddLegacyParameter(command, "@operation_id", Guid.NewGuid().ToString("D"));
+            AddLegacyParameter(command, "@execution_generation", 1L);
+            AddLegacyParameter(
+                command,
+                "@expires_at_utc",
+                DateTimeOffset.UtcNow.AddMinutes(5).ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task TryAcquireResourceClaimWithLegacySqlAsync()
+        {
+            RequireInitialized();
+            await using var connection = await _factory.OpenAsync();
+            await using var command = connection.CreateCommand();
+            var suffix = Guid.NewGuid().ToString("N");
+            command.CommandText =
+                """
+                INSERT INTO kafdeck_mutation_resource_claims (
+                    resource_key_hash,
+                    resource_key,
+                    operation_id,
+                    execution_generation,
+                    expires_at_utc)
+                VALUES (
+                    @resource_key_hash,
+                    @resource_key,
+                    @operation_id,
+                    @execution_generation,
+                    @expires_at_utc)
+                """;
+            AddLegacyParameter(command, "@resource_key_hash", $"legacy-hash-{suffix}");
+            AddLegacyParameter(command, "@resource_key", $"cluster/prod/topic/legacy-{suffix}");
+            AddLegacyParameter(command, "@operation_id", Guid.NewGuid().ToString("D"));
+            AddLegacyParameter(command, "@execution_generation", 1L);
+            AddLegacyParameter(
+                command,
+                "@expires_at_utc",
+                DateTimeOffset.UtcNow.AddMinutes(5).ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        private void RequireInitialized()
+        {
+            if (!_initialized)
+            {
+                throw new InvalidOperationException("Legacy executor was not initialized.");
+            }
+        }
+
+        private static void AddLegacyParameter(
+            System.Data.Common.DbCommand command,
+            string name,
+            object value)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+    }
 
     private sealed class MutableTimeProvider : TimeProvider
     {
