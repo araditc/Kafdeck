@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Kafdeck.Infrastructure.Persistence;
 using Kafdeck.Modules.Administration;
 using Xunit;
@@ -72,8 +76,9 @@ public sealed class V06W41FleetPersistenceTests
             $"kafdeck-v06-shared-conflict-{Guid.NewGuid():N}.db");
         try
         {
-            await ExerciseSharedConflictGuardAsync(
-                new SqliteMutationDbConnectionFactory(path));
+            var factory = new SqliteMutationDbConnectionFactory(path);
+            await ExerciseSharedConflictGuardAsync(factory);
+            await ExerciseLegacyPartitionGuardAndBackfillAsync(factory);
         }
         finally
         {
@@ -103,8 +108,10 @@ public sealed class V06W41FleetPersistenceTests
         {
             var isolatedConnectionString =
                 $"{connectionString.TrimEnd(';')};Search Path={schema}";
-            await ExerciseSharedConflictGuardAsync(
-                new PostgreSqlMutationDbConnectionFactory(isolatedConnectionString));
+            var factory =
+                new PostgreSqlMutationDbConnectionFactory(isolatedConnectionString);
+            await ExerciseSharedConflictGuardAsync(factory);
+            await ExerciseLegacyPartitionGuardAndBackfillAsync(factory);
         }
         finally
         {
@@ -998,6 +1005,285 @@ public sealed class V06W41FleetPersistenceTests
             Assert.Equal(MutationResourceClaimOutcome.Conflict, raceClaim.Outcome);
             Assert.Equal(raceLegacyKey, raceClaim.ConflictingResourceKey);
         }
+    }
+
+    private static async Task ExerciseLegacyPartitionGuardAndBackfillAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        var repository = new AdoMutationOperationRepository(factory);
+        await repository.InitializeAsync();
+        var store = new AdoFleetMutationStateStore(factory);
+        await store.InitializeAsync();
+
+        // Ensure the cross-generation trigger set is installed/upgraded before
+        // exercising legacy claim admission.
+        await using (var guardConnection = await factory.OpenAsync())
+        {
+        }
+
+        var claimFirstTopic = $"partition-claim-first-{Guid.NewGuid():N}";
+        var claimFirst = CreateExecutingLegacyTopicOperation(claimFirstTopic);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(claimFirst.Operation.Snapshot)).Outcome);
+        var partitionKey =
+            $"cluster/prod/topic/{claimFirstTopic}/partition/0";
+        var acquired = await repository.TryAcquireResourceClaimsAsync(
+            claimFirst.Operation.Snapshot.OperationId,
+            claimFirst.Generation,
+            new[] { partitionKey },
+            claimFirst.ClaimExpiresAtUtc);
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, acquired.Outcome);
+
+        var persistedClaim = await ReadPersistedResourceClaimAsync(
+            factory,
+            claimFirst.Operation.Snapshot.OperationId,
+            claimFirst.Generation);
+        Assert.Equal(partitionKey, persistedClaim.ResourceKey);
+        Assert.Equal(
+            Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(partitionKey)))
+                .ToLowerInvariant(),
+            persistedClaim.ResourceKeyHash);
+
+        var claimFirstFleetParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(claimFirstFleetParent.Snapshot)).Outcome);
+        var blockedObligation = FleetConflictObligation.Create(
+            claimFirstFleetParent.Snapshot.OperationId,
+            "partition-claim-first",
+            FleetConflictKeyCodec.TopicConfiguration(
+                "prod",
+                claimFirstTopic,
+                "retention.ms"),
+            "sha256:partition-claim-first",
+            DateTimeOffset.UtcNow);
+        var blockedCreate = await store.CreateConflictObligationAsync(
+            blockedObligation.Snapshot);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.LegacyResourceClaimConflict,
+            blockedCreate.Outcome);
+
+        await repository.ReleaseResourceClaimsAsync(
+            claimFirst.Operation.Snapshot.OperationId,
+            claimFirst.Generation);
+
+        var obligationFirstTopic =
+            $"partition-obligation-first-{Guid.NewGuid():N}";
+        var obligationFirstParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(obligationFirstParent.Snapshot)).Outcome);
+        var firstObligation = FleetConflictObligation.Create(
+            obligationFirstParent.Snapshot.OperationId,
+            "partition-obligation-first",
+            FleetConflictKeyCodec.TopicPartition(
+                "prod",
+                obligationFirstTopic,
+                3),
+            "sha256:partition-obligation-first",
+            DateTimeOffset.UtcNow);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.Created,
+            (await store.CreateConflictObligationAsync(firstObligation.Snapshot)).Outcome);
+
+        var obligationFirstLegacy =
+            CreateExecutingLegacyTopicOperation(obligationFirstTopic);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(obligationFirstLegacy.Operation.Snapshot)).Outcome);
+        var obligationFirstPartitionKey =
+            $"cluster/prod/topic/{obligationFirstTopic}/partition/3";
+        var blockedClaim = await repository.TryAcquireResourceClaimsAsync(
+            obligationFirstLegacy.Operation.Snapshot.OperationId,
+            obligationFirstLegacy.Generation,
+            new[] { obligationFirstPartitionKey },
+            obligationFirstLegacy.ClaimExpiresAtUtc);
+        Assert.Equal(MutationResourceClaimOutcome.Conflict, blockedClaim.Outcome);
+        Assert.Equal(obligationFirstPartitionKey, blockedClaim.ConflictingResourceKey);
+
+        var raceTopic = $"partition-race-{Guid.NewGuid():N}";
+        var raceLegacy = CreateExecutingLegacyTopicOperation(raceTopic);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(raceLegacy.Operation.Snapshot)).Outcome);
+        var raceFleetParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(raceFleetParent.Snapshot)).Outcome);
+
+        var racePartitionKey = $"cluster/prod/topic/{raceTopic}/partition/1";
+        var raceObligation = FleetConflictObligation.Create(
+            raceFleetParent.Snapshot.OperationId,
+            "partition-race",
+            FleetConflictKeyCodec.Topic("prod", raceTopic),
+            "sha256:partition-race",
+            DateTimeOffset.UtcNow);
+
+        var claimTask = repository.TryAcquireResourceClaimsAsync(
+            raceLegacy.Operation.Snapshot.OperationId,
+            raceLegacy.Generation,
+            new[] { racePartitionKey },
+            raceLegacy.ClaimExpiresAtUtc);
+        var obligationTask = store.CreateConflictObligationAsync(
+            raceObligation.Snapshot);
+        await Task.WhenAll(claimTask, obligationTask);
+
+        var raceClaim = await claimTask;
+        var raceCreate = await obligationTask;
+        Assert.NotEqual(
+            raceClaim.Outcome == MutationResourceClaimOutcome.Acquired,
+            raceCreate.Outcome == FleetConflictObligationCreateOutcome.Created);
+        if (raceClaim.Outcome == MutationResourceClaimOutcome.Acquired)
+        {
+            Assert.Equal(
+                FleetConflictObligationCreateOutcome.LegacyResourceClaimConflict,
+                raceCreate.Outcome);
+            await repository.ReleaseResourceClaimsAsync(
+                raceLegacy.Operation.Snapshot.OperationId,
+                raceLegacy.Generation);
+        }
+        else
+        {
+            Assert.Equal(MutationResourceClaimOutcome.Conflict, raceClaim.Outcome);
+            Assert.Equal(racePartitionKey, raceClaim.ConflictingResourceKey);
+        }
+
+        var backfillTopic = $"legacy-backfill-{Guid.NewGuid():N}";
+        var backfillParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(backfillParent.Snapshot)).Outcome);
+        var backfillObligation = FleetConflictObligation.Create(
+            backfillParent.Snapshot.OperationId,
+            "legacy-backfill",
+            FleetConflictKeyCodec.Topic("prod", backfillTopic),
+            "sha256:legacy-backfill",
+            DateTimeOffset.UtcNow);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.Created,
+            (await store.CreateConflictObligationAsync(backfillObligation.Snapshot)).Outcome);
+
+        await RewriteObligationSnapshotWithoutLegacyResourceKeyAsync(
+            factory,
+            backfillObligation.Snapshot.ObligationId);
+
+        var restartedStore = new AdoFleetMutationStateStore(factory);
+        await restartedStore.InitializeAsync();
+
+        var durableLegacyKey = await ReadPersistedLegacyResourceKeyAsync(
+            factory,
+            backfillObligation.Snapshot.ObligationId);
+        Assert.Equal(
+            $"cluster/prod/topic/{backfillTopic}",
+            durableLegacyKey);
+
+        var backfillLegacy = CreateExecutingLegacyTopicOperation(backfillTopic);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(backfillLegacy.Operation.Snapshot)).Outcome);
+        var backfillPartitionKey =
+            $"cluster/prod/topic/{backfillTopic}/partition/9";
+        var backfillBlocked = await repository.TryAcquireResourceClaimsAsync(
+            backfillLegacy.Operation.Snapshot.OperationId,
+            backfillLegacy.Generation,
+            new[] { backfillPartitionKey },
+            backfillLegacy.ClaimExpiresAtUtc);
+        Assert.Equal(MutationResourceClaimOutcome.Conflict, backfillBlocked.Outcome);
+        Assert.Equal(backfillPartitionKey, backfillBlocked.ConflictingResourceKey);
+    }
+
+    private static async Task<(string ResourceKeyHash, string ResourceKey)>
+        ReadPersistedResourceClaimAsync(
+            IMutationDbConnectionFactory factory,
+            Guid operationId,
+            long generation)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT resource_key_hash, resource_key
+            FROM kafdeck_mutation_resource_claims
+            WHERE operation_id = @operation_id
+              AND execution_generation = @execution_generation
+            """;
+        AddTestParameter(command, "@operation_id", operationId.ToString("D"));
+        AddTestParameter(command, "@execution_generation", generation);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var result = (reader.GetString(0), reader.GetString(1));
+        Assert.False(await reader.ReadAsync());
+        return result;
+    }
+
+    private static async Task RewriteObligationSnapshotWithoutLegacyResourceKeyAsync(
+        IMutationDbConnectionFactory factory,
+        Guid obligationId)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var read = connection.CreateCommand();
+        read.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_fleet_conflict_obligations
+            WHERE obligation_id = @obligation_id
+            """;
+        AddTestParameter(read, "@obligation_id", obligationId.ToString("D"));
+        var current = Convert.ToString(await read.ExecuteScalarAsync());
+        Assert.False(string.IsNullOrWhiteSpace(current));
+
+        var node = JsonNode.Parse(current!)?.AsObject()
+            ?? throw new InvalidOperationException("Expected fleet obligation JSON object.");
+        Assert.True(node.Remove("legacyResourceKey"));
+
+        await using var update = connection.CreateCommand();
+        update.CommandText =
+            """
+            UPDATE kafdeck_fleet_conflict_obligations
+            SET snapshot_json = @snapshot_json
+            WHERE obligation_id = @obligation_id
+            """;
+        AddTestParameter(update, "@snapshot_json", node.ToJsonString());
+        AddTestParameter(update, "@obligation_id", obligationId.ToString("D"));
+        Assert.Equal(1, await update.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<string?> ReadPersistedLegacyResourceKeyAsync(
+        IMutationDbConnectionFactory factory,
+        Guid obligationId)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_fleet_conflict_obligations
+            WHERE obligation_id = @obligation_id
+            """;
+        AddTestParameter(command, "@obligation_id", obligationId.ToString("D"));
+        var json = Convert.ToString(await command.ExecuteScalarAsync());
+        Assert.False(string.IsNullOrWhiteSpace(json));
+
+        using var document = JsonDocument.Parse(json!);
+        Assert.True(document.RootElement.TryGetProperty(
+            "legacyResourceKey",
+            out var property));
+        return property.ValueKind == JsonValueKind.Null
+            ? null
+            : property.GetString();
+    }
+
+    private static void AddTestParameter(
+        System.Data.Common.DbCommand command,
+        string name,
+        object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
     }
 
     private static (MutationOperation Operation, long Generation, DateTimeOffset ClaimExpiresAtUtc)
