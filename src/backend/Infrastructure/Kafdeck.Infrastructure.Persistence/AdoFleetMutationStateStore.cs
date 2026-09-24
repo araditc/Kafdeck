@@ -755,7 +755,7 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             """ +
             (excludedOperationId.HasValue
                 ? " AND obligation.operation_id <> @excluded_operation_id\n"
-                : string.Empty) +
+                : "\n") +
             """
             ORDER BY obligation.created_at_utc, obligation.obligation_id
             LIMIT 1
