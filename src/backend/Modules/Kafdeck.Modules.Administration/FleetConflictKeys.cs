@@ -208,7 +208,7 @@ public static class FleetConflictKeyCodec
         var padded = base64Url
             .Replace('-', '+')
             .Replace('_', '/');
-        padded += padded.Length % 4 switch
+        padded += (padded.Length % 4) switch
         {
             0 => string.Empty,
             2 => "==",
