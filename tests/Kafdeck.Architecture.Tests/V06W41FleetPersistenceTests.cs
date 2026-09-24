@@ -361,6 +361,106 @@ public sealed class V06W41FleetPersistenceTests
         Assert.NotNull(blocking);
         Assert.True(blocking!.BlocksConflictingDispatch);
 
+        // The durable admission path must apply the same conservative relation
+        // as FleetConflictScope, not only exact typed-key equality.
+        var conflictTarget = FleetConflictKeyCodec.Decode(conflictKey);
+        var partitionBlocking = await restartedStore.FindBlockingConflictObligationAsync(
+            FleetConflictKeyCodec.TopicPartition(
+                conflictTarget.PhysicalClusterId,
+                conflictTarget.ResourceId,
+                partitionId: 0));
+        Assert.NotNull(partitionBlocking);
+        Assert.Equal(
+            blocking.ObligationId,
+            partitionBlocking!.ObligationId);
+
+        var configurationBlocking = await restartedStore.FindBlockingConflictObligationAsync(
+            FleetConflictKeyCodec.TopicConfiguration(
+                conflictTarget.PhysicalClusterId,
+                conflictTarget.ResourceId,
+                "retention.ms"));
+        Assert.NotNull(configurationBlocking);
+        Assert.Equal(
+            blocking.ObligationId,
+            configurationBlocking!.ObligationId);
+
+        var siblingParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await parentRepository.CreateAsync(siblingParent.Snapshot)).Outcome);
+        var siblingObligation = FleetConflictObligation.Create(
+            siblingParent.Snapshot.OperationId,
+            "submit-sibling",
+            FleetConflictKeyCodec.TopicConfiguration(
+                conflictTarget.PhysicalClusterId,
+                conflictTarget.ResourceId,
+                "cleanup.policy"),
+            "sha256:sibling-effect",
+            Now.AddMinutes(4));
+        var siblingCreate = await restartedStore.CreateConflictObligationAsync(
+            siblingObligation.Snapshot);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.FleetConflictScopeConflict,
+            siblingCreate.Outcome);
+        Assert.NotNull(siblingCreate.Obligation);
+        Assert.Equal(
+            blocking.ObligationId,
+            siblingCreate.Obligation!.ObligationId);
+
+        // Two different typed targets in the same physical-topic scope racing
+        // from independent operations must have exactly one admission winner.
+        var raceTopic = $"fleet-scope-race-{Guid.NewGuid():N}";
+        var raceTopicParent = CreateParentOperation();
+        var racePartitionParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await parentRepository.CreateAsync(raceTopicParent.Snapshot)).Outcome);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await parentRepository.CreateAsync(racePartitionParent.Snapshot)).Outcome);
+
+        var raceTopicObligation = FleetConflictObligation.Create(
+            raceTopicParent.Snapshot.OperationId,
+            "scope-race-topic",
+            FleetConflictKeyCodec.Topic("prod", raceTopic),
+            "sha256:scope-race-topic",
+            Now.AddMinutes(5));
+        var racePartitionObligation = FleetConflictObligation.Create(
+            racePartitionParent.Snapshot.OperationId,
+            "scope-race-partition",
+            FleetConflictKeyCodec.TopicPartition("prod", raceTopic, 1),
+            "sha256:scope-race-partition",
+            Now.AddMinutes(5));
+
+        var raceTopicTask = restartedStore.CreateConflictObligationAsync(
+            raceTopicObligation.Snapshot);
+        var racePartitionTask = restartedStore.CreateConflictObligationAsync(
+            racePartitionObligation.Snapshot);
+        await Task.WhenAll(raceTopicTask, racePartitionTask);
+
+        var raceResults = new[] { await raceTopicTask, await racePartitionTask };
+        Assert.Single(
+            raceResults,
+            result => result.Outcome == FleetConflictObligationCreateOutcome.Created);
+        Assert.Single(
+            raceResults,
+            result => result.Outcome ==
+                FleetConflictObligationCreateOutcome.FleetConflictScopeConflict);
+
+        var raceBlocker = await restartedStore.FindBlockingConflictObligationAsync(
+            FleetConflictKeyCodec.TopicConfiguration(
+                "prod",
+                raceTopic,
+                "retention.ms"));
+        Assert.NotNull(raceBlocker);
+        Assert.Contains(
+            raceBlocker!.ObligationId,
+            new[]
+            {
+                raceTopicObligation.Snapshot.ObligationId,
+                racePartitionObligation.Snapshot.ObligationId,
+            });
+
         var quarantined = FleetConflictObligation.Restore(blocking);
         quarantined.ApplyDisposition(
             FleetUncertaintyDispositionOutcome.QuarantineUnknown,
