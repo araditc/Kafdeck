@@ -169,6 +169,70 @@ public sealed class V06W41FleetPersistenceTests
 
 
     [Fact]
+    public async Task PostgreSql_execution_version_fence_validation_is_schema_local_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var adminFactory = new PostgreSqlMutationDbConnectionFactory(connectionString);
+        var firstSchema = $"kafdeck_v06_fence_a_{Guid.NewGuid():N}";
+        var secondSchema = $"kafdeck_v06_fence_b_{Guid.NewGuid():N}";
+
+        await using (var connection = await adminFactory.OpenAsync())
+        {
+            foreach (var schema in new[] { firstSchema, secondSchema })
+            {
+                await using var create = connection.CreateCommand();
+                create.CommandText = $"CREATE SCHEMA {schema}";
+                await create.ExecuteNonQueryAsync();
+            }
+        }
+
+        try
+        {
+            var firstFactory = new PostgreSqlMutationDbConnectionFactory(
+                $"{connectionString.TrimEnd(';')};Search Path={firstSchema}");
+            var secondFactory = new PostgreSqlMutationDbConnectionFactory(
+                $"{connectionString.TrimEnd(';')};Search Path={secondSchema}");
+
+            var first = new AdoMutationOperationRepository(firstFactory);
+            var second = new AdoMutationOperationRepository(secondFactory);
+            await first.InitializeAsync();
+            await second.InitializeAsync();
+
+            Assert.Equal(5, await ReadMutationSchemaVersionAsync(firstFactory));
+            Assert.Equal(5, await ReadMutationSchemaVersionAsync(secondFactory));
+
+            // Both schemas now contain triggers with the same PostgreSQL names.
+            // Re-validating either schema must inspect only its own trigger
+            // relations rather than counting same-named triggers database-wide.
+            var firstReloaded = new AdoMutationOperationRepository(
+                new PostgreSqlMutationDbConnectionFactory(
+                    $"{connectionString.TrimEnd(';')};Search Path={firstSchema}"));
+            var secondReloaded = new AdoMutationOperationRepository(
+                new PostgreSqlMutationDbConnectionFactory(
+                    $"{connectionString.TrimEnd(';')};Search Path={secondSchema}"));
+
+            await firstReloaded.InitializeAsync();
+            await secondReloaded.InitializeAsync();
+        }
+        finally
+        {
+            await using var connection = await adminFactory.OpenAsync();
+            foreach (var schema in new[] { firstSchema, secondSchema })
+            {
+                await using var drop = connection.CreateCommand();
+                drop.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
+                await drop.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+
+    [Fact]
     public async Task Sqlite_recovery_preserves_sticky_obligation_after_lease_expiry()
     {
         var path = Path.Combine(
