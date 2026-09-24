@@ -707,6 +707,10 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         AddParameter(command, "@state", (int)normalized.State);
         AddParameter(command, "@blocks_conflicting_dispatch", normalized.BlocksConflictingDispatch ? 1 : 0);
         AddParameter(command, "@new_version", normalized.Version);
+        AddParameter(
+            command,
+            "@writer_fence_version",
+            FleetConflictWriterFenceSchema.CurrentWriterVersion);
         AddParameter(command, "@snapshot_json", Serialize(normalized));
         AddParameter(command, "@updated_at_utc", FormatTimestamp(normalized.UpdatedAtUtc));
         AddParameter(command, "@obligation_id", normalized.ObligationId.ToString("D"));
