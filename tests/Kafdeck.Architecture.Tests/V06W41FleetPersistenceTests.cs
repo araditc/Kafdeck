@@ -196,6 +196,33 @@ public sealed class V06W41FleetPersistenceTests
                 afterDowngradeAttempt.ClaimExpiresAtUtc);
             Assert.Equal(MutationResourceClaimOutcome.Conflict, stillBlocked.Outcome);
             Assert.Equal(partitionKey, stillBlocked.ConflictingResourceKey);
+
+            // Repair must also be safe when the monotonic fence already exists
+            // but one business trigger is missing. The fresh current process
+            // must recreate the business trigger without dropping/replacing the
+            // fence that protects against old installers.
+            await DropSqliteConflictGuardBusinessTriggerAsync(upgradedFactory);
+            var repairFactory = new SqliteMutationDbConnectionFactory(path);
+            await using (var repairConnection = await repairFactory.OpenAsync())
+            {
+            }
+            Assert.Equal(
+                3,
+                await ReadSqliteConflictGuardSchemaVersionAsync(repairFactory));
+
+            var repairedRepository = new AdoMutationOperationRepository(repairFactory);
+            await repairedRepository.InitializeAsync();
+            var afterRepair = CreateExecutingLegacyTopicOperation(topic, clusterId);
+            Assert.Equal(
+                MutationCreateOutcome.Created,
+                (await repairedRepository.CreateAsync(afterRepair.Operation.Snapshot)).Outcome);
+            var repairBlocked = await repairedRepository.TryAcquireResourceClaimsAsync(
+                afterRepair.Operation.Snapshot.OperationId,
+                afterRepair.Generation,
+                new[] { partitionKey },
+                afterRepair.ClaimExpiresAtUtc);
+            Assert.Equal(MutationResourceClaimOutcome.Conflict, repairBlocked.Outcome);
+            Assert.Equal(partitionKey, repairBlocked.ConflictingResourceKey);
         }
         finally
         {
@@ -1410,6 +1437,16 @@ public sealed class V06W41FleetPersistenceTests
         await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
             () => legacyFleetWriter.TryUpdateWithLegacySqlAsync(
                 backfillObligation.Snapshot.ObligationId));
+    }
+
+    private static async Task DropSqliteConflictGuardBusinessTriggerAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        await using var connection = await factory.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "DROP TRIGGER IF EXISTS kafdeck_claim_fleet_conflict_guard";
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task RemoveSqliteConflictGuardDowngradeFenceForLegacyFixtureAsync(
