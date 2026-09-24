@@ -73,6 +73,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 operation_id TEXT NOT NULL,
                 execution_generation BIGINT NOT NULL,
                 expires_at_utc TEXT NOT NULL,
+                execution_schema_version INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (cluster_id, slot_number),
                 UNIQUE (operation_id, execution_generation)
             )
@@ -87,7 +88,8 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                 resource_key TEXT NOT NULL,
                 operation_id TEXT NOT NULL,
                 execution_generation BIGINT NOT NULL,
-                expires_at_utc TEXT NOT NULL
+                expires_at_utc TEXT NOT NULL,
+                execution_schema_version INTEGER NOT NULL DEFAULT 0
             )
             """,
             """
@@ -139,6 +141,11 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
 
         if (version == MutationSchemaVersion)
         {
+            await MutationExecutionVersionFenceSchema.ValidateInstalledAsync(
+                    connection,
+                    transaction,
+                    cancellationToken)
+                .ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -148,6 +155,12 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             throw new InvalidOperationException(
                 $"Mutation persistence schema version '{version}' is unsupported. Refusing to start mutation mode.");
         }
+
+        await MutationExecutionVersionFenceSchema.PrepareMigrationAsync(
+                connection,
+                transaction,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         await using (var drainCheck = connection.CreateCommand())
         {
@@ -609,13 +622,15 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                     slot_number,
                     operation_id,
                     execution_generation,
-                    expires_at_utc)
+                    expires_at_utc,
+                    execution_schema_version)
                 VALUES (
                     @cluster_id,
                     @slot_number,
                     @operation_id,
                     @execution_generation,
-                    @expires_at_utc)
+                    @expires_at_utc,
+                    @execution_schema_version)
                 ON CONFLICT (cluster_id, slot_number) DO NOTHING
                 """;
             AddParameter(insert, "@cluster_id", normalizedClusterId);
@@ -623,6 +638,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             AddParameter(insert, "@operation_id", operationId.ToString("D"));
             AddParameter(insert, "@execution_generation", executionClaimGeneration);
             AddParameter(insert, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+            AddParameter(insert, "@execution_schema_version", MutationSchemaVersion);
 
             if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
             {
@@ -828,13 +844,15 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
                     resource_key,
                     operation_id,
                     execution_generation,
-                    expires_at_utc)
+                    expires_at_utc,
+                    execution_schema_version)
                 VALUES (
                     @resource_key_hash,
                     @resource_key,
                     @operation_id,
                     @execution_generation,
-                    @expires_at_utc)
+                    @expires_at_utc,
+                    @execution_schema_version)
                 ON CONFLICT (resource_key_hash) DO NOTHING
                 """;
             AddParameter(insert, "@resource_key_hash", resourceKeyHash);
@@ -842,6 +860,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             AddParameter(insert, "@operation_id", operationId.ToString("D"));
             AddParameter(insert, "@execution_generation", executionClaimGeneration);
             AddParameter(insert, "@expires_at_utc", FormatTimestamp(expiresAtUtc));
+            AddParameter(insert, "@execution_schema_version", MutationSchemaVersion);
 
             var inserted = await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             if (inserted == 1)
