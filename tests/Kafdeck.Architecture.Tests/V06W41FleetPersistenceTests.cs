@@ -1191,6 +1191,82 @@ public sealed class V06W41FleetPersistenceTests
             Assert.Equal(racePartitionKey, raceClaim.ConflictingResourceKey);
         }
 
+        // A cluster ID may itself contain "/partition/". Only the terminal
+        // numeric partition suffix belongs to the legacy resource child; the
+        // cluster portion must remain intact when deriving the guard scope.
+        var markerCluster = "prod/partition/eu";
+        var markerTopic = $"marker-topic-{Guid.NewGuid():N}";
+        var markerLegacy = CreateExecutingLegacyTopicOperation(
+            markerTopic,
+            markerCluster);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(markerLegacy.Operation.Snapshot)).Outcome);
+        var markerPartitionKey =
+            $"cluster/{markerCluster}/topic/{markerTopic}/partition/4";
+        var markerClaim = await repository.TryAcquireResourceClaimsAsync(
+            markerLegacy.Operation.Snapshot.OperationId,
+            markerLegacy.Generation,
+            new[] { markerPartitionKey },
+            markerLegacy.ClaimExpiresAtUtc);
+        Assert.Equal(MutationResourceClaimOutcome.Acquired, markerClaim.Outcome);
+
+        var markerFleetParent = CreateParentOperation(markerCluster);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(markerFleetParent.Snapshot)).Outcome);
+        var markerBlockedObligation = FleetConflictObligation.Create(
+            markerFleetParent.Snapshot.OperationId,
+            "terminal-partition-marker",
+            FleetConflictKeyCodec.TopicConfiguration(
+                markerCluster,
+                markerTopic,
+                "retention.ms"),
+            "sha256:terminal-partition-marker",
+            DateTimeOffset.UtcNow);
+        var markerBlockedCreate = await store.CreateConflictObligationAsync(
+            markerBlockedObligation.Snapshot);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.LegacyResourceClaimConflict,
+            markerBlockedCreate.Outcome);
+
+        await repository.ReleaseResourceClaimsAsync(
+            markerLegacy.Operation.Snapshot.OperationId,
+            markerLegacy.Generation);
+
+        var markerObligationParent = CreateParentOperation(markerCluster);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(markerObligationParent.Snapshot)).Outcome);
+        var markerObligationFirst = FleetConflictObligation.Create(
+            markerObligationParent.Snapshot.OperationId,
+            "terminal-partition-marker-obligation-first",
+            FleetConflictKeyCodec.Topic(
+                markerCluster,
+                markerTopic),
+            "sha256:terminal-partition-marker-obligation-first",
+            DateTimeOffset.UtcNow);
+        Assert.Equal(
+            FleetConflictObligationCreateOutcome.Created,
+            (await store.CreateConflictObligationAsync(
+                markerObligationFirst.Snapshot)).Outcome);
+
+        var markerSecondLegacy = CreateExecutingLegacyTopicOperation(
+            markerTopic,
+            markerCluster);
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(markerSecondLegacy.Operation.Snapshot)).Outcome);
+        var markerBlockedClaim = await repository.TryAcquireResourceClaimsAsync(
+            markerSecondLegacy.Operation.Snapshot.OperationId,
+            markerSecondLegacy.Generation,
+            new[] { markerPartitionKey },
+            markerSecondLegacy.ClaimExpiresAtUtc);
+        Assert.Equal(
+            MutationResourceClaimOutcome.Conflict,
+            markerBlockedClaim.Outcome);
+        Assert.Equal(markerPartitionKey, markerBlockedClaim.ConflictingResourceKey);
+
         // Simulate an already-running pre-fence fleet-state binary after the
         // current process has completed backfill/fence installation. Its old
         // INSERT/UPDATE statement shapes do not carry writer fence fields and
@@ -1391,7 +1467,9 @@ public sealed class V06W41FleetPersistenceTests
     }
 
     private static (MutationOperation Operation, long Generation, DateTimeOffset ClaimExpiresAtUtc)
-        CreateExecutingLegacyTopicOperation(string topic)
+        CreateExecutingLegacyTopicOperation(
+            string topic,
+            string clusterId = "prod")
     {
         var now = DateTimeOffset.UtcNow;
         var requester = "oidc:https://idp.example|legacy-guard";
@@ -1399,9 +1477,9 @@ public sealed class V06W41FleetPersistenceTests
             requester,
             new MutationIntentDescriptor(
                 MutationOperationKind.TopicCreate,
-                "prod",
+                clusterId,
                 $"{{\"operation\":\"guard\",\"topic\":\"{topic}\"}}",
-                new[] { $"cluster/prod/topic/{topic}" },
+                new[] { $"cluster/{clusterId}/topic/{topic}" },
                 Preconditions: new[]
                 {
                     new MutationPrecondition("topic", "absent"),
@@ -1427,16 +1505,17 @@ public sealed class V06W41FleetPersistenceTests
         return (operation, generation, claimExpiresAtUtc);
     }
 
-    private static MutationOperation CreateParentOperation()
+    private static MutationOperation CreateParentOperation(
+        string clusterId = "prod")
     {
         var suffix = Guid.NewGuid().ToString("N");
         return MutationOperation.CreatePreview(
             "oidc:https://idp.example|fleet-persistence",
             new MutationIntentDescriptor(
                 MutationOperationKind.TopicCreate,
-                "prod",
+                clusterId,
                 $"{{\"operation\":\"fleet-parent\",\"id\":\"{suffix}\"}}",
-                new[] { $"cluster/prod/topic/fleet-{suffix}" },
+                new[] { $"cluster/{clusterId}/topic/fleet-{suffix}" },
                 Preconditions: new[]
                 {
                     new MutationPrecondition("topic", "absent"),
