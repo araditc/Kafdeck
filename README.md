@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="src/frontend/public/kafdeck-logo.webp" alt="Kafdeck logo" width="320" />
+
 **The Open Source Kafka Control Plane**
 
 Secure, vendor-neutral, operations-first visibility for Apache Kafka.
