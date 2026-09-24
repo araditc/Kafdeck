@@ -35,8 +35,32 @@ public sealed class V06W41FleetPersistenceTests
             return;
         }
 
-        await ExerciseDurableStoreAsync(
-            new PostgreSqlMutationDbConnectionFactory(connectionString));
+        // The persistence suite runs PostgreSQL facts in parallel. Give this
+        // W41 schema its own namespace so concurrent CREATE TABLE IF NOT EXISTS
+        // statements from unrelated tests cannot contend on pg_type creation.
+        var adminFactory = new PostgreSqlMutationDbConnectionFactory(connectionString);
+        var schema = $"kafdeck_v06_{Guid.NewGuid():N}";
+        await using (var connection = await adminFactory.OpenAsync())
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText = $"CREATE SCHEMA {schema}";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var isolatedConnectionString =
+                $"{connectionString.TrimEnd(';')};Search Path={schema}";
+            await ExerciseDurableStoreAsync(
+                new PostgreSqlMutationDbConnectionFactory(isolatedConnectionString));
+        }
+        finally
+        {
+            await using var connection = await adminFactory.OpenAsync();
+            await using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
     }
 
     [Fact]
