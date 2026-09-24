@@ -14,8 +14,14 @@ public sealed class V06W41ConnectReplicationBypassGuardTests
 
     [Theory]
     [InlineData("org.apache.kafka.connect.mirror.MirrorSourceConnector")]
+    [InlineData("MirrorSourceConnector")]
+    [InlineData("MirrorSource")]
     [InlineData("org.apache.kafka.connect.mirror.MirrorCheckpointConnector")]
+    [InlineData("MirrorCheckpointConnector")]
+    [InlineData("MirrorCheckpoint")]
     [InlineData("org.apache.kafka.connect.mirror.MirrorHeartbeatConnector")]
+    [InlineData("MirrorHeartbeatConnector")]
+    [InlineData("MirrorHeartbeat")]
     public async Task Existing_connect_create_cannot_activate_recognized_mm2_connector(
         string connectorClass)
     {

@@ -20,8 +20,14 @@ public static class ConnectReplicationActivationGuard
         new(StringComparer.Ordinal)
         {
             "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+            "MirrorSourceConnector",
+            "MirrorSource",
             "org.apache.kafka.connect.mirror.MirrorCheckpointConnector",
+            "MirrorCheckpointConnector",
+            "MirrorCheckpoint",
             "org.apache.kafka.connect.mirror.MirrorHeartbeatConnector",
+            "MirrorHeartbeatConnector",
+            "MirrorHeartbeat",
         };
 
     public static MutationPreDispatchGuardResult ValidateCreate(
