@@ -119,6 +119,14 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
   --filter FullyQualifiedName~KafkaRecordsPurgeIntegrationTests
 
+# W42 ACL mutation evidence runs before restricted fixtures while the plaintext
+# integration identity is a broker super-user. It exercises only the typed
+# exact-binding ACL port and verifies allow, deny, prefixed and wildcard entries
+# through bounded DescribeAcls readback before exact cleanup.
+KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
+  --filter FullyQualifiedName~KafkaAclMutationIntegrationTests
+
 # Explicitly retain metadata Describe while denying DescribeConfigs so the second
 # pass exercises genuine partial access rather than a total authorization failure.
 docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck_restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null

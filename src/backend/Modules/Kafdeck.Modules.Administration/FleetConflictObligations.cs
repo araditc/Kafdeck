@@ -177,6 +177,46 @@ public sealed class FleetConflictObligation
         FleetConflictObligationSnapshot snapshot) =>
         new(snapshot ?? throw new ArgumentNullException(nameof(snapshot)));
 
+    public void ApplyObservedResolution(
+        FleetUncertaintyDispositionOutcome outcome,
+        string safeResolutionEvidenceHash,
+        DateTimeOffset nowUtc)
+    {
+        if (outcome is not (
+            FleetUncertaintyDispositionOutcome.ObservedNonApplication or
+            FleetUncertaintyDispositionOutcome.ObservedTerminalEffect))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(outcome),
+                outcome,
+                "Automatic evidence resolution admits only observed non-application or observed terminal effect.");
+        }
+
+        if (Snapshot.State is not (
+            FleetConflictObligationState.Outstanding or
+            FleetConflictObligationState.QuarantinedUnknown))
+        {
+            throw new MutationStateException(
+                $"Conflict obligation in state '{Snapshot.State}' cannot receive observed resolution.");
+        }
+
+        var evidence = RequireBounded(
+            safeResolutionEvidenceHash,
+            nameof(safeResolutionEvidenceHash),
+            256);
+
+        Snapshot = Snapshot with
+        {
+            State = outcome == FleetUncertaintyDispositionOutcome.ObservedNonApplication
+                ? FleetConflictObligationState.ObservedNonApplication
+                : FleetConflictObligationState.ObservedTerminalEffect,
+            DispositionOperationId = null,
+            SafeResolutionEvidenceHash = evidence,
+            Version = checked(Snapshot.Version + 1),
+            UpdatedAtUtc = nowUtc,
+        };
+    }
+
     public void ApplyDisposition(
         FleetUncertaintyDispositionOutcome outcome,
         Guid dispositionOperationId,

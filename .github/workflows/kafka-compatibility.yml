@@ -63,7 +63,7 @@ jobs:
       - name: Restore backend dependencies
         run: dotnet restore Kafdeck.slnx --locked-mode
 
-      - name: Run read-only Kafka security and compatibility matrix
+      - name: Run Kafka security and compatibility matrix
         env:
           KAFDECK_KAFKA_VERSION: ${{ matrix.kafka-version }}
         run: bash scripts/ci/kafka-smoke.sh
