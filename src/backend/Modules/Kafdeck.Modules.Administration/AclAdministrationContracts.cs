@@ -845,21 +845,35 @@ public static class AclMutationPolicy
             return true;
         }
 
-        if (binding.PermissionType != KafkaAclPermissionType.Allow)
+        if (binding.PermissionType == KafkaAclPermissionType.Allow)
         {
-            return false;
+            return requestedOperation switch
+            {
+                KafkaAclOperation.Describe =>
+                    binding.Operation is
+                        KafkaAclOperation.Read or
+                        KafkaAclOperation.Write or
+                        KafkaAclOperation.Delete or
+                        KafkaAclOperation.Alter,
+                KafkaAclOperation.DescribeConfigs =>
+                    binding.Operation == KafkaAclOperation.AlterConfigs,
+                _ => false,
+            };
         }
 
-        return requestedOperation switch
+        // Kafka deny implications run in the inverse direction of allow
+        // implications: denying Describe also denies operations that imply
+        // Describe, and denying DescribeConfigs also denies AlterConfigs.
+        return binding.Operation switch
         {
             KafkaAclOperation.Describe =>
-                binding.Operation is
+                requestedOperation is
                     KafkaAclOperation.Read or
                     KafkaAclOperation.Write or
                     KafkaAclOperation.Delete or
                     KafkaAclOperation.Alter,
             KafkaAclOperation.DescribeConfigs =>
-                binding.Operation == KafkaAclOperation.AlterConfigs,
+                requestedOperation == KafkaAclOperation.AlterConfigs,
             _ => false,
         };
     }
