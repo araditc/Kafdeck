@@ -335,6 +335,106 @@ public sealed class V06W42AclPolicyTests
     }
 
     [Fact]
+    public void Common_preview_preserves_acl_specific_multi_binding_high_floor()
+    {
+        var bindings = new[]
+        {
+            Binding(
+                "payments-orders",
+                "User:alice",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Allow),
+            Binding(
+                "payments-audit",
+                "User:alice",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Allow),
+        };
+        var plan = new AclMutationPlan(
+            AclMutationMode.Create,
+            "prod",
+            bindings,
+            Array.Empty<KafkaAclBinding>(),
+            null,
+            AclMutationPolicy.FingerprintBindings(
+                Array.Empty<KafkaAclBinding>()));
+        var intent = AclMutationPolicy.BuildIntent(plan);
+        var risk = AclMutationPolicy.ClassifyRisk(
+            plan.CreateBindings,
+            plan.RemoveBindings);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            intent,
+            risk,
+            "v0.6-w42",
+            Now.AddMinutes(5),
+            Now,
+            "w42-acl-multi-preview");
+
+        Assert.Equal(MutationRiskClass.High, operation.Snapshot.Risk.RiskClass);
+        Assert.False(operation.Snapshot.Risk.RequiresIndependentApproval);
+        Assert.DoesNotContain(
+            "multiple_targets",
+            operation.Snapshot.Risk.Reasons);
+    }
+
+    [Fact]
+    public void Access_evidence_models_inverse_deny_operation_implications()
+    {
+        var read = AclMutationPolicy.AnalyzeObservedAccess(
+            new AclAccessQuery(
+                KafkaAclResourceType.Topic,
+                "payments",
+                "User:alice",
+                "10.0.0.10",
+                KafkaAclOperation.Read),
+            new[]
+            {
+                Binding(
+                    "payments",
+                    "User:alice",
+                    KafkaAclOperation.Read,
+                    KafkaAclPermissionType.Allow),
+                Binding(
+                    "payments",
+                    "User:alice",
+                    KafkaAclOperation.Describe,
+                    KafkaAclPermissionType.Deny),
+            });
+
+        Assert.Equal(
+            AclAccessEvidenceState.ConflictingEvidence,
+            read.EvidenceState);
+
+        var alterConfigs = AclMutationPolicy.AnalyzeObservedAccess(
+            new AclAccessQuery(
+                KafkaAclResourceType.Topic,
+                "payments",
+                "User:alice",
+                "10.0.0.10",
+                KafkaAclOperation.AlterConfigs),
+            new[]
+            {
+                Binding(
+                    "payments",
+                    "User:alice",
+                    KafkaAclOperation.AlterConfigs,
+                    KafkaAclPermissionType.Allow),
+                Binding(
+                    "payments",
+                    "User:alice",
+                    KafkaAclOperation.DescribeConfigs,
+                    KafkaAclPermissionType.Deny),
+            });
+
+        Assert.Equal(
+            AclAccessEvidenceState.ConflictingEvidence,
+            alterConfigs.EvidenceState);
+        Assert.False(alterConfigs.EffectiveAccessKnown);
+    }
+
+    [Fact]
     public void Acl_request_budget_matches_admitted_25_default_and_100_hard_cap()
     {
         Assert.Equal(25, AclMutationPolicy.DefaultMaxBindings);
