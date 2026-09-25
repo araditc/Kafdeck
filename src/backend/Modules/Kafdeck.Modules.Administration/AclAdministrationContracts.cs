@@ -302,6 +302,127 @@ public static class AclMutationPolicy
         };
     }
 
+    public static KafkaAclBindingFilter NormalizeMutationFilter(
+        KafkaAclBindingFilter filter)
+    {
+        var normalized = NormalizeFilter(filter);
+        if (normalized.ResourceType is null ||
+            normalized.ResourceName is null ||
+            normalized.Principal is null)
+        {
+            throw new AclPolicyException(
+                AclPolicyFailureCode.InvalidFilter,
+                "ACL mutation filters must bind resource type, resource name and principal before provider expansion.");
+        }
+
+        return normalized;
+    }
+
+    public static KafkaAclBindingFilter ExactFilter(KafkaAclBinding binding)
+    {
+        var normalized = NormalizeBinding(binding);
+        return new KafkaAclBindingFilter(
+            normalized.ResourceType,
+            normalized.ResourceName,
+            normalized.PatternType == KafkaAclPatternType.Literal
+                ? KafkaAclFilterPatternMode.Literal
+                : KafkaAclFilterPatternMode.Prefixed,
+            normalized.Principal,
+            normalized.Host,
+            normalized.Operation,
+            normalized.PermissionType);
+    }
+
+    public static bool MatchesFilter(
+        KafkaAclBinding binding,
+        KafkaAclBindingFilter filter)
+    {
+        var normalizedBinding = NormalizeBinding(binding);
+        var normalizedFilter = NormalizeFilter(filter);
+
+        if (normalizedFilter.ResourceType is { } resourceType &&
+            normalizedBinding.ResourceType != resourceType)
+        {
+            return false;
+        }
+
+        if (normalizedFilter.Principal is { } principal &&
+            !string.Equals(normalizedBinding.Principal, principal, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (normalizedFilter.Host is { } host &&
+            !string.Equals(normalizedBinding.Host, host, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (normalizedFilter.Operation is { } operation &&
+            normalizedBinding.Operation != operation)
+        {
+            return false;
+        }
+
+        if (normalizedFilter.PermissionType is { } permission &&
+            normalizedBinding.PermissionType != permission)
+        {
+            return false;
+        }
+
+        if (normalizedFilter.ResourceName is null)
+        {
+            return normalizedFilter.PatternMode == KafkaAclFilterPatternMode.Any;
+        }
+
+        return normalizedFilter.PatternMode switch
+        {
+            KafkaAclFilterPatternMode.Any =>
+                string.Equals(
+                    normalizedBinding.ResourceName,
+                    normalizedFilter.ResourceName,
+                    StringComparison.Ordinal),
+            KafkaAclFilterPatternMode.Literal =>
+                normalizedBinding.PatternType == KafkaAclPatternType.Literal &&
+                string.Equals(
+                    normalizedBinding.ResourceName,
+                    normalizedFilter.ResourceName,
+                    StringComparison.Ordinal),
+            KafkaAclFilterPatternMode.Prefixed =>
+                normalizedBinding.PatternType == KafkaAclPatternType.Prefixed &&
+                string.Equals(
+                    normalizedBinding.ResourceName,
+                    normalizedFilter.ResourceName,
+                    StringComparison.Ordinal),
+            KafkaAclFilterPatternMode.Match =>
+                normalizedBinding.PatternType switch
+                {
+                    KafkaAclPatternType.Literal =>
+                        normalizedBinding.ResourceName == "*" ||
+                        string.Equals(
+                            normalizedBinding.ResourceName,
+                            normalizedFilter.ResourceName,
+                            StringComparison.Ordinal),
+                    KafkaAclPatternType.Prefixed =>
+                        normalizedFilter.ResourceName.StartsWith(
+                            normalizedBinding.ResourceName,
+                            StringComparison.Ordinal),
+                    _ => false,
+                },
+            _ => false,
+        };
+    }
+
+    public static AclMutationPlan DeserializePlan(string canonicalIntent)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalIntent);
+        return JsonSerializer.Deserialize<AclMutationPlan>(
+                   canonicalIntent,
+                   CanonicalJsonOptions) ??
+               throw new MutationStateException(
+                   "Canonical ACL mutation intent could not be deserialized.");
+    }
+
     public static IReadOnlyList<KafkaAclBinding> NormalizeExactBindings(
         IEnumerable<KafkaAclBinding> bindings,
         int maxBindings)
