@@ -36,6 +36,21 @@ public sealed record FleetConflictObligationCreateResult(
     FleetConflictObligationCreateOutcome Outcome,
     FleetConflictObligationSnapshot? Obligation);
 
+public enum FleetConflictObligationBatchCreateOutcome
+{
+    Created = 1,
+    ExistingSameEffects = 2,
+    ExistingDifferentEffect = 3,
+    ParentOperationNotFound = 4,
+    LegacyResourceClaimConflict = 5,
+    FleetConflictScopeConflict = 6,
+}
+
+public sealed record FleetConflictObligationBatchCreateResult(
+    FleetConflictObligationBatchCreateOutcome Outcome,
+    IReadOnlyList<FleetConflictObligationSnapshot> Obligations,
+    FleetConflictObligationSnapshot? ConflictingObligation = null);
+
 public enum FleetConflictObligationSaveOutcome
 {
     Saved = 1,
@@ -73,6 +88,10 @@ public interface IFleetMutationStateStore
 
     Task<FleetConflictObligationCreateResult> CreateConflictObligationAsync(
         FleetConflictObligationSnapshot obligation,
+        CancellationToken cancellationToken = default);
+
+    Task<FleetConflictObligationBatchCreateResult> CreateConflictObligationsAsync(
+        IReadOnlyList<FleetConflictObligationSnapshot> obligations,
         CancellationToken cancellationToken = default);
 
     Task<FleetConflictObligationSnapshot?> GetConflictObligationAsync(
