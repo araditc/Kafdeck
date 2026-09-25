@@ -310,9 +310,7 @@ internal static class ConfluentKafkaAclMapper
         {
             KafkaAclResourceType.Topic => ProviderResourceType.Topic,
             KafkaAclResourceType.Group => ProviderResourceType.Group,
-            KafkaAclResourceType.Cluster =>
-                throw new NotSupportedException(
-                    "The pinned Confluent.Kafka ResourceType enum exposes Broker, not Kafka ACL Cluster; the cluster ACL subpath remains blocked."),
+            KafkaAclResourceType.Cluster => ProviderResourceType.Broker,
             KafkaAclResourceType.TransactionalId =>
                 throw new NotSupportedException(
                     "The pinned Confluent.Kafka ResourceType enum does not expose TransactionalId; that ACL subpath remains blocked."),
@@ -357,11 +355,13 @@ internal static class ConfluentKafkaAclMapper
         {
             ProviderResourceType.Topic => KafkaAclResourceType.Topic,
             ProviderResourceType.Group => KafkaAclResourceType.Group,
+            ProviderResourceType.Broker => KafkaAclResourceType.Cluster,
             _ => default,
         };
         return resourceType is
             ProviderResourceType.Topic or
-            ProviderResourceType.Group;
+            ProviderResourceType.Group or
+            ProviderResourceType.Broker;
     }
 
     private static bool TryFromProviderPattern(
