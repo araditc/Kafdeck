@@ -95,11 +95,6 @@ public sealed class ConfluentKafkaScramObservationAdapter :
             }
 
             var description = result.UserScramCredentialsDescriptions[0];
-            if (description.Error.IsError)
-            {
-                return Failed(KafkaFailureMapper.FromKafka(description.Error));
-            }
-
             if (!string.Equals(
                     description.User,
                     normalizedUser,
@@ -110,6 +105,19 @@ public sealed class ConfluentKafkaScramObservationAdapter :
                     "scram_description_user_mismatch",
                     "Kafka returned SCRAM metadata for an unexpected user identity.",
                     false));
+            }
+
+            if (description.Error.IsError)
+            {
+                if (description.Error.Code == ErrorCode.ResourceNotFound)
+                {
+                    return KafkaResult<
+                        IReadOnlyList<KafkaScramCredentialMetadata>>.Success(
+                            Array.Empty<KafkaScramCredentialMetadata>(),
+                            LiveObservation());
+                }
+
+                return Failed(KafkaFailureMapper.FromKafka(description.Error));
             }
 
             var metadata = new List<KafkaScramCredentialMetadata>(
