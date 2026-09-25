@@ -115,25 +115,6 @@ public sealed class ScramMutationExecutionService
             return Failed("scram_execution_canonical_invalid");
         }
 
-        var preconditions = await _preconditions.ValidateAsync(
-                context.Operation,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (preconditions.Outcome != MutationPreDispatchGuardOutcome.Allowed)
-        {
-            return Failed(preconditions.ResultCode);
-        }
-
-        var authorization = await _authorization
-            .ValidateCurrentRequesterAsync(
-                context.Operation,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (authorization.Outcome != MutationPreDispatchGuardOutcome.Allowed)
-        {
-            return Failed("scram_current_authorization_denied");
-        }
-
         return plan.Mode switch
         {
             ScramMutationMode.Upsert => await ExecuteUpsertAsync(
@@ -194,6 +175,34 @@ public sealed class ScramMutationExecutionService
                 return Failed("scram_upsert_material_context_mismatch");
             }
 
+            var existing = await FindExistingBlockingEffectAsync(
+                    context.Operation,
+                    plan,
+                    UpsertStep,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (existing.Result is not null)
+            {
+                return existing.Result;
+            }
+
+            if (existing.SameEffect)
+            {
+                // Never redispatch an already-admitted SCRAM upsert. Safe
+                // metadata cannot establish password equality after ambiguity.
+                return Unknown(
+                    "scram_upsert_existing_effect_unresolved");
+            }
+
+            var newEffectGate = await ValidateBeforeNewEffectAsync(
+                    context.Operation,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (newEffectGate is not null)
+            {
+                return newEffectGate;
+            }
+
             try
             {
                 _serverPolicy.ValidateMutation(
@@ -220,8 +229,8 @@ public sealed class ScramMutationExecutionService
             var obligation = admitted.Obligation!;
             if (admitted.ExistingSameEffect)
             {
-                // Never redispatch an upsert after its effect was already
-                // admitted. SCRAM metadata cannot prove password equality.
+                // A concurrent coordinator admitted the same effect after the
+                // preflight lookup. Do not redispatch it.
                 return Unknown(
                     "scram_upsert_existing_effect_unresolved");
             }
@@ -341,6 +350,49 @@ public sealed class ScramMutationExecutionService
         ScramMutationPlan plan,
         CancellationToken cancellationToken)
     {
+        var existing = await FindExistingBlockingEffectAsync(
+                context.Operation,
+                plan,
+                DeleteStep,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (existing.Result is not null)
+        {
+            return existing.Result;
+        }
+
+        if (existing.SameEffect)
+        {
+            if (await VerifyUntilAsync(
+                    context,
+                    plan,
+                    shouldExist: false,
+                    cancellationToken)
+                .ConfigureAwait(false) &&
+                await ResolveTerminalAsync(
+                    existing.Obligation!,
+                    "scram-delete-absence-observed",
+                    plan,
+                    cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return Verified(
+                    "scram_delete_recovered_by_observation");
+            }
+
+            return Unknown(
+                "scram_delete_existing_effect_unresolved");
+        }
+
+        var newEffectGate = await ValidateBeforeNewEffectAsync(
+                context.Operation,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (newEffectGate is not null)
+        {
+            return newEffectGate;
+        }
+
         try
         {
             _serverPolicy.ValidateDelete(
@@ -469,6 +521,88 @@ public sealed class ScramMutationExecutionService
             : Unknown(
                 "scram_delete_outcome_unknown",
                 provider);
+    }
+
+    private async Task<(
+        bool SameEffect,
+        FleetConflictObligationSnapshot? Obligation,
+        MutationProviderResult? Result)> FindExistingBlockingEffectAsync(
+        MutationOperationSnapshot operation,
+        ScramMutationPlan plan,
+        string stepId,
+        CancellationToken cancellationToken)
+    {
+        var conflictKey =
+            ScramMutationContract.ConflictResource(plan.Credential);
+
+        FleetConflictObligationSnapshot? existing;
+        try
+        {
+            existing = await _fleetState
+                .FindBlockingConflictObligationAsync(
+                    conflictKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            return (
+                false,
+                null,
+                Unknown("scram_obligation_store_unavailable"));
+        }
+
+        if (existing is null)
+        {
+            return (false, null, null);
+        }
+
+        var expectedFingerprint = EffectFingerprint(
+            operation.PreviewHash,
+            stepId,
+            conflictKey);
+        if (existing.OperationId == operation.OperationId &&
+            string.Equals(
+                existing.StepId,
+                stepId,
+                StringComparison.Ordinal) &&
+            string.Equals(
+                existing.EffectFingerprint,
+                expectedFingerprint,
+                StringComparison.Ordinal))
+        {
+            return (true, existing, null);
+        }
+
+        return (
+            false,
+            existing,
+            Failed("scram_effect_conflict_obligation_blocked"));
+    }
+
+    private async Task<MutationProviderResult?> ValidateBeforeNewEffectAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken)
+    {
+        var preconditions = await _preconditions.ValidateAsync(
+                operation,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (preconditions.Outcome !=
+            MutationPreDispatchGuardOutcome.Allowed)
+        {
+            return Failed(preconditions.ResultCode);
+        }
+
+        var authorization = await _authorization
+            .ValidateCurrentRequesterAsync(
+                operation,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return authorization.Outcome ==
+               MutationPreDispatchGuardOutcome.Allowed
+            ? null
+            : Failed("scram_current_authorization_denied");
     }
 
     private async Task<(
