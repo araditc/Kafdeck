@@ -54,7 +54,7 @@ public sealed class V06W42AclAuthorizationIntegrationTests
     {
         var operation = CreateAclOperation();
         var observation = new EmptyAclObservationPort();
-        var (_, context, authorization) = CreateAuthorization(operation);
+        var (_, context, authorization, _) = CreateAuthorization(operation);
         var guard = CreateW39(
             context,
             authorization,
@@ -75,7 +75,7 @@ public sealed class V06W42AclAuthorizationIntegrationTests
     {
         var operation = CreateAclOperation();
         var observation = new EmptyAclObservationPort();
-        var (_, context, authorization) = CreateAuthorization(operation);
+        var (_, context, authorization, _) = CreateAuthorization(operation);
         var policy = Policy();
         var guard = CreateW39(
             context,
@@ -125,18 +125,21 @@ public sealed class V06W42AclAuthorizationIntegrationTests
         MutationExecutionRequestContextAccessor Context) CreateEffectGuard(
         MutationOperationSnapshot operation)
     {
-        var (_, context, authorization) = CreateAuthorization(operation);
+        var (_, context, authorization, approvalAuthorizer) =
+            CreateAuthorization(operation);
         return (
             new W42AclEffectAuthorizationGuard(
                 context,
-                authorization),
+                authorization,
+                approvalAuthorizer),
             context);
     }
 
     private static (
         string Resource,
         MutationExecutionRequestContextAccessor Context,
-        MutationRequestAuthorizationService Authorization) CreateAuthorization(
+        MutationRequestAuthorizationService Authorization,
+        MutationApprovalAuthorizer ApprovalAuthorizer) CreateAuthorization(
         MutationOperationSnapshot operation)
     {
         var resource = Assert.Single(
@@ -186,7 +189,8 @@ public sealed class V06W42AclAuthorizationIntegrationTests
         return (
             resource,
             new MutationExecutionRequestContextAccessor(),
-            authorization);
+            authorization,
+            new MutationApprovalAuthorizer(evaluator));
     }
 
     private static W39MutationPreDispatchGuard CreateW39(
