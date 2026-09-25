@@ -174,19 +174,37 @@ public sealed class ConfluentKafkaScramObservationAdapter :
         }
         catch (DescribeUserScramCredentialsException exception)
         {
-            // The exact-user Describe API reports a user with no SCRAM
-            // credentials as ResourceNotFound on some supported Kafka/client
-            // combinations. For this one-user request only, absence is a
-            // successful empty observation rather than a provider failure.
-            if (exception.Error.Code == ErrorCode.ResourceNotFound)
+            // Confluent surfaces per-user Describe errors through a
+            // Local_Partial exception. The underlying ResourceNotFound lives
+            // in Results, not exception.Error. Because this adapter always
+            // requests exactly one normalized user, only that exact one-user
+            // ResourceNotFound is absence; every other shape remains a
+            // provider/protocol failure.
+            var descriptions =
+                exception.Results?.UserScramCredentialsDescriptions;
+            if (descriptions is { Count: 1 } &&
+                string.Equals(
+                    descriptions[0].User,
+                    normalizedUser,
+                    StringComparison.Ordinal))
             {
-                return KafkaResult<
-                    IReadOnlyList<KafkaScramCredentialMetadata>>.Success(
-                        Array.Empty<KafkaScramCredentialMetadata>(),
-                        LiveObservation());
+                var userError = descriptions[0].Error;
+                if (userError.Code == ErrorCode.ResourceNotFound)
+                {
+                    return KafkaResult<
+                        IReadOnlyList<KafkaScramCredentialMetadata>>.Success(
+                            Array.Empty<KafkaScramCredentialMetadata>(),
+                            LiveObservation());
+                }
+
+                return Failed(KafkaFailureMapper.FromKafka(userError));
             }
 
-            return Failed(KafkaFailureMapper.FromKafka(exception.Error));
+            return Failed(new KafkaFailure(
+                KafkaFailureCategory.ProtocolError,
+                "scram_description_exception_shape_invalid",
+                "Kafka returned an unexpected SCRAM error result shape.",
+                false));
         }
         catch (KafkaException exception)
         {
