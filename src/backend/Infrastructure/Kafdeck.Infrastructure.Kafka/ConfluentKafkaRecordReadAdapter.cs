@@ -417,7 +417,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 // No record has been observed and the operation is side-effect
                 // free, so retry only mapper-approved Unavailable failures inside
                 // the existing operation and budget bounds.
-                PauseSetupRetry(slice, cancellationToken);
+                PauseSetupRetry(operation, budgetDeadlineUtc, cancellationToken);
             }
         }
     }
@@ -455,7 +455,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             }
             catch (KafkaException exception) when (IsRetryableSetupUnavailable(exception.Error))
             {
-                PauseSetupRetry(slice, cancellationToken);
+                PauseSetupRetry(operation, budgetDeadlineUtc, cancellationToken);
             }
         }
     }
@@ -465,6 +465,16 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         DateTimeOffset budgetDeadlineUtc)
     {
         var now = _timeProvider.GetUtcNow();
+
+        // Preserve the first exhausted bound when scheduler delay crosses both.
+        // A record budget that expires before the outer operation deadline must
+        // remain a budget outcome rather than being reclassified as deadline.
+        if (now >= budgetDeadlineUtc &&
+            budgetDeadlineUtc <= operation.DeadlineUtc)
+        {
+            return SetupResult<T>.BudgetExhausted();
+        }
+
         if (operation.IsExpired(now))
         {
             return SetupResult<T>.Failed(KafkaFailureMapper.DeadlineExceeded());
@@ -490,14 +500,22 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                failure.Category == KafkaFailureCategory.Unavailable;
     }
 
-    private static void PauseSetupRetry(
-        TimeSpan delay,
+    private void PauseSetupRetry(
+        KafkaOperationContext operation,
+        DateTimeOffset budgetDeadlineUtc,
         CancellationToken cancellationToken)
     {
-        if (delay <= TimeSpan.Zero)
+        // Recompute after the Kafka call: an immediate/unavailable error may
+        // arrive after consuming most of the previous setup slice.
+        var remaining = RemainingIoTime(operation, budgetDeadlineUtc);
+        if (remaining <= TimeSpan.Zero)
         {
             return;
         }
+
+        var delay = remaining < SetupPollInterval
+            ? remaining
+            : SetupPollInterval;
 
         if (cancellationToken.WaitHandle.WaitOne(delay))
         {
