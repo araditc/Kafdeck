@@ -43,6 +43,14 @@ public sealed class KafkaAclMutationIntegrationTests
                 KafkaAclPatternType.Literal,
                 principal,
                 "*",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Deny),
+            new KafkaAclBinding(
+                KafkaAclResourceType.Topic,
+                literalTopic,
+                KafkaAclPatternType.Literal,
+                principal,
+                "*",
                 KafkaAclOperation.Write,
                 KafkaAclPermissionType.Deny),
             new KafkaAclBinding(
@@ -101,6 +109,34 @@ public sealed class KafkaAclMutationIntegrationTests
                     },
                     cancellation.Token);
             }
+
+            var observedAccess = await observations.DescribeAsync(
+                profile.Id,
+                new KafkaAclBindingFilter(
+                    KafkaAclResourceType.Topic,
+                    literalTopic,
+                    KafkaAclFilterPatternMode.Literal,
+                    principal,
+                    "*",
+                    Operation: null,
+                    PermissionType: null),
+                Operation(),
+                cancellation.Token);
+            Assert.True(observedAccess.IsSuccess);
+            Assert.NotNull(observedAccess.Value);
+
+            var analysis = AclMutationPolicy.AnalyzeObservedAccess(
+                new AclAccessQuery(
+                    KafkaAclResourceType.Topic,
+                    literalTopic,
+                    principal,
+                    "*",
+                    KafkaAclOperation.Read),
+                observedAccess.Value!);
+            Assert.Equal(
+                AclAccessEvidenceState.ConflictingEvidence,
+                analysis.EvidenceState);
+            Assert.False(analysis.EffectiveAccessKnown);
 
             var removed = await mutations.RemoveAsync(
                 new AclRemoveMutation(
