@@ -197,8 +197,13 @@ public sealed class AclMutationPlanner
             var cluster = RequireCluster(clusterId);
             var normalizedFilter =
                 AclMutationPolicy.NormalizeMutationFilter(sourceFilter);
-            var desired =
-                AclMutationPolicy.ValidateCreates(desiredBindings, _policy);
+            ArgumentNullException.ThrowIfNull(desiredBindings);
+            IReadOnlyList<KafkaAclBinding> desired =
+                desiredBindings.Count == 0
+                    ? Array.Empty<KafkaAclBinding>()
+                    : AclMutationPolicy.ValidateCreates(
+                        desiredBindings,
+                        _policy);
 
             if (desired.Any(binding =>
                     !AclMutationPolicy.MatchesFilter(binding, normalizedFilter)))
