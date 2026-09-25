@@ -225,6 +225,133 @@ public sealed class V06W42AclPolicyTests
     }
 
     [Fact]
+    public void Grant_principal_ceiling_and_wildcard_overlap_protect_service_principals()
+    {
+        var policy = new AclServerPolicy(
+            new[] { "User:kafdeck-service" },
+            new[] { "User:alice" },
+            new[] { KafkaAclResourceType.Topic },
+            new[] { KafkaAclOperation.Read },
+            allowPrefixedGrants: false,
+            allowWildcardResourceGrants: false,
+            allowAllOperationGrants: false);
+
+        var unauthorizedPrincipal = Binding(
+            "payments",
+            "User:attacker",
+            KafkaAclOperation.Read,
+            KafkaAclPermissionType.Allow);
+        var grant = Assert.Throws<AclPolicyException>(() =>
+            AclMutationPolicy.ValidateCreates(
+                new[] { unauthorizedPrincipal },
+                policy));
+        Assert.Equal(AclPolicyFailureCode.GrantCeilingExceeded, grant.Code);
+
+        var wildcard = Binding(
+            "payments",
+            "User:*",
+            KafkaAclOperation.Read,
+            KafkaAclPermissionType.Deny);
+        var protectedOverlap = Assert.Throws<AclPolicyException>(() =>
+            AclMutationPolicy.ValidateRemovals(
+                new[] { wildcard },
+                policy));
+        Assert.Equal(AclPolicyFailureCode.ProtectedPrincipal, protectedOverlap.Code);
+    }
+
+    [Fact]
+    public void Narrow_multi_binding_edits_remain_high_until_acl_count_threshold()
+    {
+        var narrow = Enumerable.Range(0, AclMutationPolicy.DefaultMaxBindings)
+            .Select(index => Binding(
+                $"payments-{index}",
+                "User:alice",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Allow))
+            .ToArray();
+
+        var high = AclMutationPolicy.ClassifyRisk(
+            narrow,
+            Array.Empty<KafkaAclBinding>());
+        Assert.Equal(MutationRiskClass.High, high.RiskClass);
+        Assert.False(high.RequiresIndependentApproval);
+
+        var aboveDefault = narrow
+            .Append(Binding(
+                "payments-over-threshold",
+                "User:alice",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Allow))
+            .ToArray();
+        var critical = AclMutationPolicy.ClassifyRisk(
+            aboveDefault,
+            Array.Empty<KafkaAclBinding>());
+        Assert.Equal(MutationRiskClass.Critical, critical.RiskClass);
+        Assert.True(critical.RequiresIndependentApproval);
+        Assert.Contains("acl_entry_count_above_default", critical.Reasons);
+    }
+
+    [Fact]
+    public void Access_evidence_includes_wildcard_principal_and_allow_implications()
+    {
+        var observed = new[]
+        {
+            Binding(
+                "payments",
+                "User:*",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Allow),
+            Binding(
+                "payments",
+                "User:alice",
+                KafkaAclOperation.AlterConfigs,
+                KafkaAclPermissionType.Allow),
+        };
+
+        var describe = AclMutationPolicy.AnalyzeObservedAccess(
+            new AclAccessQuery(
+                KafkaAclResourceType.Topic,
+                "payments",
+                "User:alice",
+                "10.0.0.10",
+                KafkaAclOperation.Describe),
+            observed);
+        Assert.Equal(AclAccessEvidenceState.ObservedAllow, describe.EvidenceState);
+        Assert.Single(describe.MatchingBindings);
+
+        var describeConfigs = AclMutationPolicy.AnalyzeObservedAccess(
+            new AclAccessQuery(
+                KafkaAclResourceType.Topic,
+                "payments",
+                "User:alice",
+                "10.0.0.10",
+                KafkaAclOperation.DescribeConfigs),
+            observed);
+        Assert.Equal(
+            AclAccessEvidenceState.ObservedAllow,
+            describeConfigs.EvidenceState);
+        Assert.Single(describeConfigs.MatchingBindings);
+        Assert.False(describeConfigs.EffectiveAccessKnown);
+    }
+
+    [Fact]
+    public void Acl_request_budget_matches_admitted_25_default_and_100_hard_cap()
+    {
+        Assert.Equal(25, AclMutationPolicy.DefaultMaxBindings);
+        Assert.Equal(100, AclMutationPolicy.HardMaxBindings);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new AclServerPolicy(
+                Array.Empty<string>(),
+                new[] { "User:alice" },
+                new[] { KafkaAclResourceType.Topic },
+                new[] { KafkaAclOperation.Read },
+                false,
+                false,
+                false,
+                maxBindingsPerMutation: 101));
+    }
+
+    [Fact]
     public void Completely_unbounded_acl_filter_is_rejected()
     {
         var exception = Assert.Throws<AclPolicyException>(() =>
@@ -255,6 +382,7 @@ public sealed class V06W42AclPolicyTests
         bool allowAll) =>
         new(
             protectedPrincipals,
+            new[] { "User:alice" },
             Enum.GetValues<KafkaAclResourceType>(),
             Enum.GetValues<KafkaAclOperation>(),
             allowPrefixed,

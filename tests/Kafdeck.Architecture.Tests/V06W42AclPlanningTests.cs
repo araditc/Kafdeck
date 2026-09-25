@@ -148,6 +148,35 @@ public sealed class V06W42AclPlanningTests
     }
 
     [Fact]
+    public async Task Access_service_observes_exact_and_wildcard_principals_separately()
+    {
+        var exact = Binding(
+            "payments.orders",
+            KafkaAclOperation.Read,
+            KafkaAclPermissionType.Allow);
+        var wildcard = exact with { Principal = "User:*" };
+        var observation = new SelectivePrincipalObservationPort(exact, wildcard);
+        var service = new AclAccessAnalysisService(
+            observation,
+            timeProvider: new FixedTimeProvider());
+
+        var result = await service.AnalyzeAsync(
+            "prod",
+            new AclAccessQuery(
+                KafkaAclResourceType.Topic,
+                "payments.orders",
+                "User:alice",
+                "10.0.0.10",
+                KafkaAclOperation.Describe));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, observation.Principals.Count);
+        Assert.Contains("User:alice", observation.Principals);
+        Assert.Contains("User:*", observation.Principals);
+        Assert.Equal(AclAccessEvidenceState.ObservedAllow, result.Value!.EvidenceState);
+    }
+
+    [Fact]
     public void Provider_mapper_uses_typed_acl_filters_and_blocks_unproven_transactional_id()
     {
         var filter = ConfluentKafkaAclMapper.ToProviderFilter(
@@ -194,6 +223,7 @@ public sealed class V06W42AclPlanningTests
     private static AclServerPolicy Policy() =>
         new(
             Array.Empty<string>(),
+            new[] { "User:alice" },
             new[]
             {
                 KafkaAclResourceType.Topic,
@@ -205,6 +235,39 @@ public sealed class V06W42AclPlanningTests
             allowWildcardResourceGrants: false,
             allowAllOperationGrants: false,
             maxBindingsPerMutation: 64);
+
+    private sealed class SelectivePrincipalObservationPort : IAclObservationPort
+    {
+        private readonly KafkaAclBinding _exact;
+        private readonly KafkaAclBinding _wildcard;
+
+        public SelectivePrincipalObservationPort(
+            KafkaAclBinding exact,
+            KafkaAclBinding wildcard)
+        {
+            _exact = exact;
+            _wildcard = wildcard;
+        }
+
+        public List<string?> Principals { get; } = new();
+
+        public Task<KafkaResult<IReadOnlyList<KafkaAclBinding>>> DescribeAsync(
+            string clusterId,
+            KafkaAclBindingFilter filter,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken = default)
+        {
+            Principals.Add(filter.Principal);
+            IReadOnlyList<KafkaAclBinding> values =
+                string.Equals(filter.Principal, "User:*", StringComparison.Ordinal)
+                    ? new[] { _wildcard }
+                    : new[] { _exact };
+            return Task.FromResult(
+                KafkaResult<IReadOnlyList<KafkaAclBinding>>.Success(
+                    values,
+                    Observation()));
+        }
+    }
 
     private sealed class FixedTimeProvider : TimeProvider
     {

@@ -415,8 +415,32 @@ public sealed class AclAccessAnalysisService
                 observed.Observation);
         }
 
+        // Kafka's wildcard principal is a distinct stored ACL string, so an
+        // exact-principal DescribeAcls filter will not return it. Observe the
+        // wildcard principal separately and combine bounded evidence locally.
+        var wildcardFilter = filter with { Principal = "User:*" };
+        var wildcard = await _observations.DescribeAsync(
+                clusterId,
+                wildcardFilter,
+                new KafkaOperationContext(
+                    _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout)),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!wildcard.IsSuccess || wildcard.Value is null)
+        {
+            return KafkaResult<AclAccessAnalysis>.Failed(
+                wildcard.Failure!,
+                wildcard.Observation);
+        }
+
+        var combined = observed.Value
+            .Concat(wildcard.Value)
+            .Distinct()
+            .OrderBy(AclBindingIdentity.Canonical, StringComparer.Ordinal)
+            .ToArray();
+
         return KafkaResult<AclAccessAnalysis>.Success(
-            AclMutationPolicy.AnalyzeObservedAccess(query, observed.Value),
-            observed.Observation);
+            AclMutationPolicy.AnalyzeObservedAccess(query, combined),
+            wildcard.Observation);
     }
 }

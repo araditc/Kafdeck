@@ -125,19 +125,22 @@ public sealed class AclPolicyException : ArgumentException
 public sealed class AclServerPolicy
 {
     private readonly HashSet<string> _protectedPrincipals;
+    private readonly HashSet<string> _allowedGrantPrincipals;
     private readonly HashSet<KafkaAclResourceType> _grantResourceTypes;
     private readonly HashSet<KafkaAclOperation> _grantOperations;
 
     public AclServerPolicy(
         IEnumerable<string> protectedPrincipals,
+        IEnumerable<string> allowedGrantPrincipals,
         IEnumerable<KafkaAclResourceType> grantResourceTypes,
         IEnumerable<KafkaAclOperation> grantOperations,
         bool allowPrefixedGrants,
         bool allowWildcardResourceGrants,
         bool allowAllOperationGrants,
-        int maxBindingsPerMutation = 256)
+        int maxBindingsPerMutation = AclMutationPolicy.DefaultMaxBindings)
     {
         ArgumentNullException.ThrowIfNull(protectedPrincipals);
+        ArgumentNullException.ThrowIfNull(allowedGrantPrincipals);
         ArgumentNullException.ThrowIfNull(grantResourceTypes);
         ArgumentNullException.ThrowIfNull(grantOperations);
 
@@ -153,13 +156,22 @@ public sealed class AclServerPolicy
                 AclMutationPolicy.MaxPrincipalLength))
             .ToHashSet(StringComparer.Ordinal);
 
+        _allowedGrantPrincipals = allowedGrantPrincipals
+            .Select(value => AclMutationPolicy.RequireExactIdentifier(
+                value,
+                "Allowed ACL grant principal",
+                AclMutationPolicy.MaxPrincipalLength))
+            .ToHashSet(StringComparer.Ordinal);
+
         _grantResourceTypes = grantResourceTypes.ToHashSet();
         _grantOperations = grantOperations.ToHashSet();
 
-        if (_grantResourceTypes.Count == 0 || _grantOperations.Count == 0)
+        if (_allowedGrantPrincipals.Count == 0 ||
+            _grantResourceTypes.Count == 0 ||
+            _grantOperations.Count == 0)
         {
             throw new ArgumentException(
-                "ACL grant ceiling must admit at least one resource type and operation.");
+                "ACL grant ceiling must admit at least one principal, resource type and operation.");
         }
 
         if (_grantResourceTypes.Any(value => !Enum.IsDefined(value)) ||
@@ -181,8 +193,20 @@ public sealed class AclServerPolicy
     public bool AllowAllOperationGrants { get; }
     public int MaxBindingsPerMutation { get; }
 
-    public bool IsProtectedPrincipal(string principal) =>
-        _protectedPrincipals.Contains(principal);
+    public bool TargetsProtectedPrincipal(string principal)
+    {
+        if (_protectedPrincipals.Contains(principal))
+        {
+            return true;
+        }
+
+        return AclMutationPolicy.IsWildcardPrincipal(principal) &&
+               _protectedPrincipals.Any(value =>
+                   value.StartsWith("User:", StringComparison.Ordinal));
+    }
+
+    public bool AllowsGrantPrincipal(string principal) =>
+        _allowedGrantPrincipals.Contains(principal);
 
     public bool AllowsGrantResourceType(KafkaAclResourceType resourceType) =>
         _grantResourceTypes.Contains(resourceType);
@@ -193,7 +217,8 @@ public sealed class AclServerPolicy
 
 public static class AclMutationPolicy
 {
-    public const int HardMaxBindings = 1_024;
+    public const int DefaultMaxBindings = 25;
+    public const int HardMaxBindings = 100;
     public const int MaxResourceNameLength = 249;
     public const int MaxPrincipalLength = 256;
     public const int MaxHostLength = 255;
@@ -473,7 +498,8 @@ public static class AclMutationPolicy
                 continue;
             }
 
-            if (!policy.AllowsGrantResourceType(binding.ResourceType) ||
+            if (!policy.AllowsGrantPrincipal(binding.Principal) ||
+                !policy.AllowsGrantResourceType(binding.ResourceType) ||
                 !policy.AllowsGrantOperation(binding.Operation) ||
                 (binding.PatternType == KafkaAclPatternType.Prefixed &&
                  !policy.AllowPrefixedGrants) ||
@@ -524,13 +550,28 @@ public static class AclMutationPolicy
             throw InvalidBinding("ACL mutation must contain at least one exact effect.");
         }
 
-        var proposed = MutationRiskClassifier.Classify(
-            new MutationRiskInput(
-                MutationOperationKind.AclAlter,
-                total));
+        if (total > HardMaxBindings)
+        {
+            throw new AclPolicyException(
+                AclPolicyFailureCode.TooManyBindings,
+                $"ACL mutation exceeds the approved hard limit of {HardMaxBindings} exact entries.");
+        }
 
-        var reasons = proposed.Reasons.ToList();
-        var risk = proposed.RiskClass;
+        // ACL count has its own admitted budget: narrow edits remain HIGH up to
+        // the default 25-entry threshold. The generic mutation classifier's
+        // any-multiple-target escalation is intentionally not reused here.
+        var floorInput = new MutationRiskInput(
+            MutationOperationKind.AclAlter,
+            TargetCount: 1);
+        var floor = MutationRiskClassifier.Classify(floorInput);
+        var reasons = floor.Reasons.ToList();
+        var risk = floor.RiskClass;
+
+        if (total > DefaultMaxBindings)
+        {
+            risk = MutationRiskClass.Critical;
+            reasons.Add("acl_entry_count_above_default");
+        }
 
         if (creates.Any(IsBroadGrant))
         {
@@ -545,9 +586,7 @@ public static class AclMutationPolicy
         }
 
         return MutationRiskClassifier.EnforceBuiltInFloor(
-            new MutationRiskInput(
-                MutationOperationKind.AclAlter,
-                total),
+            floorInput,
             new MutationRiskDecision(
                 risk,
                 Array.AsReadOnly(
@@ -555,9 +594,7 @@ public static class AclMutationPolicy
                         .Distinct(StringComparer.Ordinal)
                         .OrderBy(value => value, StringComparer.Ordinal)
                         .ToArray()),
-                risk >= MutationRiskClass.High
-                    ? MutationConfirmationMode.TypedTarget
-                    : MutationConfirmationMode.Explicit,
+                MutationConfirmationMode.TypedTarget,
                 risk == MutationRiskClass.Critical));
     }
 
@@ -729,7 +766,8 @@ public static class AclMutationPolicy
         return normalized.PermissionType == KafkaAclPermissionType.Allow &&
                (normalized.ResourceName == "*" ||
                 normalized.PatternType == KafkaAclPatternType.Prefixed ||
-                normalized.Operation == KafkaAclOperation.All);
+                normalized.Operation == KafkaAclOperation.All ||
+                IsWildcardPrincipal(normalized.Principal));
     }
 
     public static bool IsSecuritySensitiveRemoval(KafkaAclBinding binding)
@@ -738,7 +776,8 @@ public static class AclMutationPolicy
         return normalized.PermissionType == KafkaAclPermissionType.Deny ||
                normalized.ResourceName == "*" ||
                normalized.PatternType == KafkaAclPatternType.Prefixed ||
-               normalized.Operation == KafkaAclOperation.All;
+               normalized.Operation == KafkaAclOperation.All ||
+               IsWildcardPrincipal(normalized.Principal);
     }
 
     internal static string RequireExactIdentifier(
@@ -781,16 +820,48 @@ public static class AclMutationPolicy
         }
     }
 
+    public static bool IsWildcardPrincipal(string principal) =>
+        string.Equals(principal, "User:*", StringComparison.Ordinal);
+
     private static void EnsurePrincipalMutable(
         string principal,
         AclServerPolicy policy)
     {
-        if (policy.IsProtectedPrincipal(principal))
+        if (policy.TargetsProtectedPrincipal(principal))
         {
             throw new AclPolicyException(
                 AclPolicyFailureCode.ProtectedPrincipal,
-                "ACL mutation targets a server-protected principal.");
+                "ACL mutation targets or overlaps a server-protected principal.");
         }
+    }
+
+    private static bool OperationProvidesEvidence(
+        KafkaAclBinding binding,
+        KafkaAclOperation requestedOperation)
+    {
+        if (binding.Operation == KafkaAclOperation.All ||
+            binding.Operation == requestedOperation)
+        {
+            return true;
+        }
+
+        if (binding.PermissionType != KafkaAclPermissionType.Allow)
+        {
+            return false;
+        }
+
+        return requestedOperation switch
+        {
+            KafkaAclOperation.Describe =>
+                binding.Operation is
+                    KafkaAclOperation.Read or
+                    KafkaAclOperation.Write or
+                    KafkaAclOperation.Delete or
+                    KafkaAclOperation.Alter,
+            KafkaAclOperation.DescribeConfigs =>
+                binding.Operation == KafkaAclOperation.AlterConfigs,
+            _ => false,
+        };
     }
 
     private static bool BindingMatches(
@@ -802,11 +873,11 @@ public static class AclMutationPolicy
         KafkaAclOperation operation)
     {
         if (binding.ResourceType != resourceType ||
-            !string.Equals(binding.Principal, principal, StringComparison.Ordinal) ||
+            !(string.Equals(binding.Principal, principal, StringComparison.Ordinal) ||
+              IsWildcardPrincipal(binding.Principal)) ||
             !(string.Equals(binding.Host, host, StringComparison.Ordinal) ||
               binding.Host == "*") ||
-            !(binding.Operation == operation ||
-              binding.Operation == KafkaAclOperation.All))
+            !OperationProvidesEvidence(binding, operation))
         {
             return false;
         }
