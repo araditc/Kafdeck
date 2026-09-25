@@ -48,8 +48,15 @@ public sealed class AclMutationPreconditionValidator
                 return Stale("acl_precondition_binding_changed");
             }
 
-            _ = AclMutationPolicy.ValidateCreates(plan.CreateBindings, _policy);
-            _ = AclMutationPolicy.ValidateRemovals(plan.RemoveBindings, _policy);
+            if (plan.CreateBindings.Count > 0)
+            {
+                _ = AclMutationPolicy.ValidateCreates(plan.CreateBindings, _policy);
+            }
+
+            if (plan.RemoveBindings.Count > 0)
+            {
+                _ = AclMutationPolicy.ValidateRemovals(plan.RemoveBindings, _policy);
+            }
 
             var requiredRisk = AclMutationPolicy.ClassifyRisk(
                 plan.CreateBindings,
@@ -119,13 +126,14 @@ public sealed class AclMutationPreconditionValidator
     {
         var observed = new HashSet<KafkaAclBinding>();
         ObservationMetadata? metadata = null;
+        var operation = Operation();
 
         foreach (var binding in plan.CreateBindings)
         {
             var result = await _observations.DescribeAsync(
                     plan.ClusterId,
                     AclMutationPolicy.ExactFilter(binding),
-                    Operation(),
+                    operation,
                     cancellationToken)
                 .ConfigureAwait(false);
             metadata = result.Observation;
