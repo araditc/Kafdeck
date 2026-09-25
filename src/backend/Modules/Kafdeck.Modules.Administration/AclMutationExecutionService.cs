@@ -250,7 +250,7 @@ public sealed class AclMutationExecutionService
         {
             return VerifiedResult(
                 "acl_replace_verified",
-                current.Count,
+                plan.RemoveBindings.Count,
                 source: null);
         }
 
