@@ -28,8 +28,15 @@ public sealed record ScramMutationPlanningFailure(
     ScramMutationPlanningFailureCode Code,
     string SafeMessage);
 
+public sealed record ScramPreviewBindingContext(
+    Guid OperationId,
+    string RequesterPrincipalId,
+    string PolicyVersion,
+    string? DigestKeyId);
+
 public sealed record ScramMutationPlan(
     ScramMutationMode Mode,
+    ScramPreviewBindingContext PreviewBinding,
     ScramCredentialBindingDescriptor Credential,
     string ObservedMetadataFingerprint,
     string? MaterialName);
@@ -70,7 +77,8 @@ public sealed class ScramServerPolicy
     {
         ArgumentNullException.ThrowIfNull(protectedUsers);
         ArgumentNullException.ThrowIfNull(allowedMechanisms);
-        if (minIterations < 1 || maxIterations < minIterations)
+        if (minIterations < 1 ||
+            maxIterations < minIterations)
         {
             throw new ArgumentOutOfRangeException(nameof(minIterations));
         }
@@ -193,7 +201,8 @@ public sealed class ScramMutationPlanner
     {
         _observations = observations ??
                         throw new ArgumentNullException(nameof(observations));
-        _digest = digest ?? throw new ArgumentNullException(nameof(digest));
+        _digest = digest ??
+                  throw new ArgumentNullException(nameof(digest));
         _serverPolicy = serverPolicy ??
                         throw new ArgumentNullException(nameof(serverPolicy));
         _plannerPolicy = plannerPolicy ?? ScramMutationPlannerPolicy.Default;
@@ -207,6 +216,7 @@ public sealed class ScramMutationPlanner
     }
 
     public async Task<ScramMutationPlanningResult> PlanUpsertAsync(
+        ScramPreviewBindingContext previewBinding,
         string clusterId,
         string user,
         KafkaScramMechanism mechanism,
@@ -217,6 +227,9 @@ public sealed class ScramMutationPlanner
         byte[]? envelope = null;
         try
         {
+            var preview = NormalizePreviewBinding(
+                previewBinding,
+                requireDigestKey: true);
             var descriptor = NormalizeDescriptor(
                 clusterId,
                 user,
@@ -232,25 +245,39 @@ public sealed class ScramMutationPlanner
                     descriptor.User,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (!observed.IsSuccess || observed.Value is null)
+            if (!observed.IsSuccess ||
+                observed.Value is null)
             {
                 return Failed(observed.Failure);
             }
 
+            var materialContext =
+                new ScramCredentialMaterialBindingContext(
+                    preview.OperationId,
+                    preview.RequesterPrincipalId,
+                    preview.PolicyVersion,
+                    preview.DigestKeyId!,
+                    descriptor);
             envelope = ScramCredentialMaterialCodec.Encode(
-                descriptor,
+                materialContext,
                 password.Span);
             var digest = _digest.ComputeDigest(envelope);
+
             var plan = new ScramMutationPlan(
                 ScramMutationMode.Upsert,
+                preview,
                 descriptor,
-                FingerprintMetadata(descriptor.User, observed.Value),
+                FingerprintMetadata(
+                    descriptor.User,
+                    observed.Value),
                 MaterialName);
             return Success(
                 plan,
                 new[]
                 {
-                    new MutationMaterialDigest(MaterialName, digest),
+                    new MutationMaterialDigest(
+                        MaterialName,
+                        digest),
                 });
         }
         catch (ScramPolicyException exception)
@@ -273,6 +300,7 @@ public sealed class ScramMutationPlanner
     }
 
     public async Task<ScramMutationPlanningResult> PlanDeleteAsync(
+        ScramPreviewBindingContext previewBinding,
         string clusterId,
         string user,
         KafkaScramMechanism mechanism,
@@ -280,20 +308,28 @@ public sealed class ScramMutationPlanner
     {
         try
         {
+            var preview = NormalizePreviewBinding(
+                previewBinding,
+                requireDigestKey: false);
             var normalizedCluster = NormalizeCluster(clusterId);
-            var normalizedUser = ScramCredentialPolicy.NormalizeUser(user);
+            var normalizedUser =
+                ScramCredentialPolicy.NormalizeUser(user);
             if (!Enum.IsDefined(mechanism))
             {
-                throw new ArgumentOutOfRangeException(nameof(mechanism));
+                throw new ArgumentOutOfRangeException(
+                    nameof(mechanism));
             }
 
-            _serverPolicy.ValidateDelete(normalizedUser, mechanism);
+            _serverPolicy.ValidateDelete(
+                normalizedUser,
+                mechanism);
             var observed = await ObserveAsync(
                     normalizedCluster,
                     normalizedUser,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (!observed.IsSuccess || observed.Value is null)
+            if (!observed.IsSuccess ||
+                observed.Value is null)
             {
                 return Failed(observed.Failure);
             }
@@ -307,17 +343,23 @@ public sealed class ScramMutationPlanner
                     "The requested SCRAM mechanism is not currently observed for the exact user.");
             }
 
-            var descriptor = new ScramCredentialBindingDescriptor(
-                normalizedCluster,
-                normalizedUser,
-                mechanism,
-                current.Iterations);
+            var descriptor =
+                new ScramCredentialBindingDescriptor(
+                    normalizedCluster,
+                    normalizedUser,
+                    mechanism,
+                    current.Iterations);
             var plan = new ScramMutationPlan(
                 ScramMutationMode.Delete,
+                preview,
                 descriptor,
-                FingerprintMetadata(normalizedUser, observed.Value),
+                FingerprintMetadata(
+                    normalizedUser,
+                    observed.Value),
                 MaterialName: null);
-            return Success(plan, Array.Empty<MutationMaterialDigest>());
+            return Success(
+                plan,
+                Array.Empty<MutationMaterialDigest>());
         }
         catch (ScramPolicyException exception)
         {
@@ -335,9 +377,10 @@ public sealed class ScramMutationPlanner
         string user,
         IEnumerable<KafkaScramCredentialMetadata> metadata)
     {
-        var normalized = ScramCredentialPolicy.NormalizeMetadataSet(
-            user,
-            metadata);
+        var normalized =
+            ScramCredentialPolicy.NormalizeMetadataSet(
+                user,
+                metadata);
         var builder = new StringBuilder();
         foreach (var item in normalized)
         {
@@ -349,11 +392,59 @@ public sealed class ScramMutationPlanner
         }
 
         return Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        builder.ToString())))
             .ToLowerInvariant();
     }
 
-    private async Task<KafkaResult<IReadOnlyList<KafkaScramCredentialMetadata>>>
+    public static ScramPreviewBindingContext NormalizePreviewBinding(
+        ScramPreviewBindingContext context,
+        bool requireDigestKey)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (context.OperationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "SCRAM preview binding requires a non-empty operation ID.",
+                nameof(context));
+        }
+
+        var requester = RequireExactBounded(
+            context.RequesterPrincipalId,
+            "SCRAM requester principal",
+            4096);
+        var policy = RequireExactBounded(
+            context.PolicyVersion,
+            "SCRAM policy version",
+            256);
+
+        string? digestKeyId = null;
+        if (requireDigestKey)
+        {
+            digestKeyId = RequireExactBounded(
+                context.DigestKeyId,
+                "SCRAM digest-key ID",
+                256);
+        }
+        else if (context.DigestKeyId is not null)
+        {
+            digestKeyId = RequireExactBounded(
+                context.DigestKeyId,
+                "SCRAM digest-key ID",
+                256);
+        }
+
+        return context with
+        {
+            RequesterPrincipalId = requester,
+            PolicyVersion = policy,
+            DigestKeyId = digestKeyId,
+        };
+    }
+
+    private async Task<
+        KafkaResult<IReadOnlyList<KafkaScramCredentialMetadata>>>
         ObserveAsync(
             string clusterId,
             string user,
@@ -373,30 +464,34 @@ public sealed class ScramMutationPlanner
         ScramMutationPlan plan,
         IReadOnlyList<MutationMaterialDigest> materialDigests)
     {
-        var conflictResource = FleetConflictKeyCodec.Encode(
-            new FleetConflictTarget(
-                FleetConflictTargetKind.ScramCredential,
-                plan.Credential.ClusterId,
-                plan.Credential.User,
-                ((int)plan.Credential.Mechanism).ToString(
-                    System.Globalization.CultureInfo.InvariantCulture)));
-
-        var requirements = FleetMutationAuthorization.NormalizeRequirements(
-            MutationOperationKind.ScramAlter,
-            new[]
-            {
-                new MutationAuthorizationTarget(
-                    AuthorizationAction.ScramRead,
+        var conflictResource =
+            FleetConflictKeyCodec.Encode(
+                new FleetConflictTarget(
+                    FleetConflictTargetKind.ScramCredential,
                     plan.Credential.ClusterId,
-                    conflictResource),
-                new MutationAuthorizationTarget(
-                    AuthorizationAction.ScramAlter,
-                    plan.Credential.ClusterId,
-                    conflictResource),
-            });
+                    plan.Credential.User,
+                    ((int)plan.Credential.Mechanism).ToString(
+                        System.Globalization.CultureInfo.InvariantCulture)));
 
-        var canonical = JsonSerializer.Serialize(plan, CanonicalJson);
-        if (canonical.Length > MutationLimits.MaxCanonicalIntentCharacters)
+        var requirements =
+            FleetMutationAuthorization.NormalizeRequirements(
+                MutationOperationKind.ScramAlter,
+                new[]
+                {
+                    new MutationAuthorizationTarget(
+                        AuthorizationAction.ScramRead,
+                        plan.Credential.ClusterId,
+                        conflictResource),
+                    new MutationAuthorizationTarget(
+                        AuthorizationAction.ScramAlter,
+                        plan.Credential.ClusterId,
+                        conflictResource),
+                });
+
+        var canonical =
+            JsonSerializer.Serialize(plan, CanonicalJson);
+        if (canonical.Length >
+            MutationLimits.MaxCanonicalIntentCharacters)
         {
             return Failed(
                 ScramMutationPlanningFailureCode.InvalidInput,
@@ -447,28 +542,43 @@ public sealed class ScramMutationPlanner
                 mechanism,
                 iterations));
 
-    private static string NormalizeCluster(string clusterId)
+    private static string NormalizeCluster(string clusterId) =>
+        RequireExactBounded(
+            clusterId,
+            "SCRAM physical cluster ID",
+            256);
+
+    private static string RequireExactBounded(
+        string? value,
+        string field,
+        int maxLength)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
-        if (clusterId.Length > 256 ||
-            clusterId.Any(char.IsControl) ||
-            !string.Equals(clusterId, clusterId.Trim(), StringComparison.Ordinal))
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        if (value.Length > maxLength ||
+            value.Any(char.IsControl) ||
+            !string.Equals(
+                value,
+                value.Trim(),
+                StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                "SCRAM physical cluster ID is invalid.",
-                nameof(clusterId));
+                $"{field} is invalid or exceeds the admitted bound.",
+                field);
         }
 
-        return clusterId;
+        return value;
     }
 
     private static ScramMutationPlanningResult Failed(
         ScramMutationPlanningFailureCode code,
         string safeMessage) =>
         ScramMutationPlanningResult.Failed(
-            new ScramMutationPlanningFailure(code, safeMessage));
+            new ScramMutationPlanningFailure(
+                code,
+                safeMessage));
 
-    private static ScramMutationPlanningResult Failed(KafkaFailure? failure) =>
+    private static ScramMutationPlanningResult Failed(
+        KafkaFailure? failure) =>
         failure?.Category switch
         {
             KafkaFailureCategory.Unauthorized =>
