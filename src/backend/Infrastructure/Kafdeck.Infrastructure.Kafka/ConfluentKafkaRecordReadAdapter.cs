@@ -410,6 +410,15 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 // A short timeout is used as an interruption point so request
                 // cancellation is observed without waiting for the full operation deadline.
             }
+            catch (KafkaException exception) when (IsRetryableSetupUnavailable(exception.Error))
+            {
+                // Initial metadata can briefly report transport/all-brokers-down
+                // while the read-only consumer establishes a usable connection.
+                // No record has been observed and the operation is side-effect
+                // free, so retry only mapper-approved Unavailable failures inside
+                // the existing operation and budget bounds.
+                PauseSetupRetry(slice, cancellationToken);
+            }
         }
     }
 
@@ -444,6 +453,10 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 // Retry only before any record has been observed. Each slice is
                 // bounded so cancellation/deadline/budget state is re-evaluated.
             }
+            catch (KafkaException exception) when (IsRetryableSetupUnavailable(exception.Error))
+            {
+                PauseSetupRetry(slice, cancellationToken);
+            }
         }
     }
 
@@ -469,6 +482,28 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         error.Code is ErrorCode.Local_TimedOut or
             ErrorCode.Local_TimedOutQueue or
             ErrorCode.RequestTimedOut;
+
+    private static bool IsRetryableSetupUnavailable(Error error)
+    {
+        var failure = KafkaFailureMapper.FromKafka(error);
+        return failure.IsRetryable &&
+               failure.Category == KafkaFailureCategory.Unavailable;
+    }
+
+    private static void PauseSetupRetry(
+        TimeSpan delay,
+        CancellationToken cancellationToken)
+    {
+        if (delay <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        if (cancellationToken.WaitHandle.WaitOne(delay))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
 
     private static KafkaRawRecord ToCoreRecord(ConsumeResult<byte[], byte[]> consumed)
     {
