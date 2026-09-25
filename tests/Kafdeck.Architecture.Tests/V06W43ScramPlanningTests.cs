@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Kafdeck.Api;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
@@ -298,6 +299,92 @@ public sealed class V06W43ScramPlanningTests
         finally
         {
             CryptographicOperations.ZeroMemory(password);
+        }
+    }
+
+    [Fact]
+    public async Task Stable_idempotency_identity_keeps_retry_binding_stable_but_detects_secret_change()
+    {
+        const string requester = "oidc:https://idp.example|alice";
+        const string idempotencyKey = "w43-stable-retry";
+        var firstId = MutationIdempotency.DeriveOperationId(
+            requester,
+            "prod",
+            MutationOperationKind.ScramAlter,
+            idempotencyKey);
+        var retryId = MutationIdempotency.DeriveOperationId(
+            requester,
+            "prod",
+            MutationOperationKind.ScramAlter,
+            idempotencyKey);
+        var differentKeyId = MutationIdempotency.DeriveOperationId(
+            requester,
+            "prod",
+            MutationOperationKind.ScramAlter,
+            idempotencyKey + "-different");
+
+        Assert.Equal(firstId, retryId);
+        Assert.NotEqual(firstId, differentKeyId);
+
+        var observation = new StubScramObservation(
+            Array.Empty<KafkaScramCredentialMetadata>());
+        using var digest =
+            new HmacMutationMaterialDigestService(new string('k', 32));
+        var planner = new ScramMutationPlanner(
+            observation,
+            digest,
+            Policy());
+        var firstPassword = Encoding.UTF8.GetBytes(
+            "synthetic-w43-stable-secret");
+        var changedPassword = Encoding.UTF8.GetBytes(
+            "synthetic-w43-changed-secret");
+
+        try
+        {
+            var binding = new ScramPreviewBindingContext(
+                firstId,
+                requester,
+                MutationAdmissionService.PolicyVersion,
+                "digest-key-v1");
+            var first = await planner.PlanUpsertAsync(
+                binding,
+                "prod",
+                "User:alice",
+                KafkaScramMechanism.ScramSha256,
+                4096,
+                firstPassword);
+            var retry = await planner.PlanUpsertAsync(
+                binding with { OperationId = retryId },
+                "prod",
+                "User:alice",
+                KafkaScramMechanism.ScramSha256,
+                4096,
+                firstPassword);
+            var changed = await planner.PlanUpsertAsync(
+                binding,
+                "prod",
+                "User:alice",
+                KafkaScramMechanism.ScramSha256,
+                4096,
+                changedPassword);
+
+            Assert.True(first.IsSuccess);
+            Assert.True(retry.IsSuccess);
+            Assert.True(changed.IsSuccess);
+            Assert.Equal(
+                first.Intent!.CanonicalIntent,
+                retry.Intent!.CanonicalIntent);
+            Assert.Equal(
+                Assert.Single(first.Intent.MaterialDigests!).Digest,
+                Assert.Single(retry.Intent.MaterialDigests!).Digest);
+            Assert.NotEqual(
+                Assert.Single(first.Intent.MaterialDigests!).Digest,
+                Assert.Single(changed.Intent!.MaterialDigests!).Digest);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(firstPassword);
+            CryptographicOperations.ZeroMemory(changedPassword);
         }
     }
 
