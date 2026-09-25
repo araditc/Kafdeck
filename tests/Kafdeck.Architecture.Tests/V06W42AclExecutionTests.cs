@@ -77,7 +77,10 @@ public sealed class V06W42AclExecutionTests
         var service = Service(state, store, guard, preconditions, policy);
         var result = await service.ExecuteAsync(context);
 
-        Assert.Equal(MutationExecutionResultKind.PartiallyApplied, result.ResultKind);
+        Assert.True(
+            result.ResultKind == MutationExecutionResultKind.PartiallyApplied,
+            $"Expected PartiallyApplied, got {result.ResultKind} ({result.ResultCode}); " +
+            $"guard={guard.Calls}, remove={state.RemoveCalls}, create={state.CreateCalls}.");
         Assert.Equal(1, state.RemoveCalls);
         Assert.Equal(0, state.CreateCalls);
         Assert.Equal(2, guard.Calls);
