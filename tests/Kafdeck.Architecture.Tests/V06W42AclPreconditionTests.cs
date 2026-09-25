@@ -127,6 +127,49 @@ public sealed class V06W42AclPreconditionTests
     }
 
     [Fact]
+    public async Task Pre_dispatch_create_reuses_one_bounded_deadline_for_all_exact_targets()
+    {
+        var bindings = new[]
+        {
+            Binding("payments.orders", "User:alice"),
+            Binding("payments.audit", "User:alice"),
+        };
+        var plan = new AclMutationPlan(
+            AclMutationMode.Create,
+            "prod",
+            bindings,
+            Array.Empty<KafkaAclBinding>(),
+            null,
+            AclMutationPolicy.FingerprintBindings(
+                Array.Empty<KafkaAclBinding>()));
+        var intent = AclMutationPolicy.BuildIntent(plan);
+        var risk = AclMutationPolicy.ClassifyRisk(
+            plan.CreateBindings,
+            plan.RemoveBindings);
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            intent,
+            risk,
+            "v0.6-w42",
+            Now.AddMinutes(5),
+            Now,
+            "w42-create-deadline");
+
+        var observation = new DeadlineCapturingObservation();
+        var validator = new AclMutationPreconditionValidator(
+            observation,
+            Policy(),
+            new AclMutationPlannerPolicy(TimeSpan.FromSeconds(10)),
+            new AdvancingTimeProvider());
+
+        var result = await validator.ValidateAsync(operation.Snapshot);
+
+        Assert.Equal(MutationPreDispatchGuardOutcome.Allowed, result.Outcome);
+        Assert.Equal(2, observation.Remaining.Count);
+        Assert.Equal(observation.Remaining[0], observation.Remaining[1]);
+    }
+
+    [Fact]
     public void Pinned_provider_does_not_invent_cluster_or_transactional_id_acl_resources()
     {
         Assert.Throws<NotSupportedException>(() =>
@@ -193,6 +236,32 @@ public sealed class V06W42AclPreconditionTests
                     Array.AsReadOnly(matches),
                     Observation()));
         }
+    }
+
+    private sealed class DeadlineCapturingObservation : IAclObservationPort
+    {
+        public List<TimeSpan> Remaining { get; } = new();
+
+        public Task<KafkaResult<IReadOnlyList<KafkaAclBinding>>> DescribeAsync(
+            string clusterId,
+            KafkaAclBindingFilter filter,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken = default)
+        {
+            Remaining.Add(operation.Remaining(Now));
+            return Task.FromResult(
+                KafkaResult<IReadOnlyList<KafkaAclBinding>>.Success(
+                    Array.Empty<KafkaAclBinding>(),
+                    Observation()));
+        }
+    }
+
+    private sealed class AdvancingTimeProvider : TimeProvider
+    {
+        private int _callCount;
+
+        public override DateTimeOffset GetUtcNow() =>
+            Now.AddSeconds(_callCount++);
     }
 
     private sealed class FixedTimeProvider : TimeProvider
