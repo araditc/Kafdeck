@@ -41,10 +41,7 @@ public sealed class ConfluentKafkaAclMutationAdapter :
         IReadOnlyList<AclBinding> providerBindings;
         try
         {
-            _ = AclMutationPolicy.RequireExactIdentifier(
-                request.ClusterId,
-                "ACL cluster ID",
-                256);
+            ValidateClusterId(request.ClusterId);
             bindings = AclMutationPolicy.NormalizeExactBindings(
                 request.Bindings,
                 AclMutationPolicy.HardMaxBindings);
@@ -140,10 +137,7 @@ public sealed class ConfluentKafkaAclMutationAdapter :
         IReadOnlyList<AclBindingFilter> filters;
         try
         {
-            _ = AclMutationPolicy.RequireExactIdentifier(
-                request.ClusterId,
-                "ACL cluster ID",
-                256);
+            ValidateClusterId(request.ClusterId);
             bindings = AclMutationPolicy.NormalizeExactBindings(
                 request.Bindings,
                 AclMutationPolicy.HardMaxBindings);
@@ -400,6 +394,19 @@ public sealed class ConfluentKafkaAclMutationAdapter :
 
         deletedCount = observed.Count;
         return true;
+    }
+
+    private static void ValidateClusterId(string clusterId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+        if (!string.Equals(clusterId, clusterId.Trim(), StringComparison.Ordinal) ||
+            clusterId.Length > 256 ||
+            clusterId.Any(char.IsControl))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(clusterId),
+                "ACL cluster ID is invalid or exceeds the admitted bound.");
+        }
     }
 
     private static bool IsAmbiguous(Error error)
