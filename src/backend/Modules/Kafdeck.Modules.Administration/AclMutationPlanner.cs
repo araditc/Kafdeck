@@ -219,9 +219,11 @@ public sealed class AclMutationPlanner
                 return Failed(observed.Failure!);
             }
 
-            var current = AclMutationPolicy.ValidateRemovals(
-                observed.Value,
-                _policy);
+            var current = observed.Value.Count == 0
+                ? Array.Empty<KafkaAclBinding>()
+                : AclMutationPolicy.ValidateRemovals(
+                    observed.Value,
+                    _policy);
             var currentSet = current.ToHashSet();
             var desiredSet = desired.ToHashSet();
 
