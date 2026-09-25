@@ -42,7 +42,7 @@ public sealed class V06W42AclPreconditionTests
         var result = await validator.ValidateAsync(operation.Snapshot);
 
         Assert.Equal(MutationPreDispatchGuardOutcome.StalePreview, result.Outcome);
-        Assert.Equal("acl_precondition_binding_set_changed", result.Code);
+        Assert.Equal("acl_precondition_binding_set_changed", result.ResultCode);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class V06W42AclPreconditionTests
         var result = await validator.ValidateAsync(operation.Snapshot);
 
         Assert.Equal(MutationPreDispatchGuardOutcome.StalePreview, result.Outcome);
-        Assert.Equal("acl_precondition_binding_set_changed", result.Code);
+        Assert.Equal("acl_precondition_binding_set_changed", result.ResultCode);
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public sealed class V06W42AclPreconditionTests
         var result = await validator.ValidateAsync(operation.Snapshot);
 
         Assert.Equal(MutationPreDispatchGuardOutcome.StalePreview, result.Outcome);
-        Assert.Equal("acl_precondition_policy_changed", result.Code);
+        Assert.Equal("acl_precondition_policy_changed", result.ResultCode);
     }
 
     [Fact]
