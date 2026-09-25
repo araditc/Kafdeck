@@ -94,6 +94,52 @@ public sealed class V06W42AclPreconditionTests
     }
 
     [Fact]
+    public async Task Replace_preview_with_multiple_exact_bindings_rebuilds_the_same_immutable_resources()
+    {
+        var current = Binding("payments", "User:alice");
+        var desired = current with { Operation = KafkaAclOperation.Write };
+        var observation = new MutableObservation
+        {
+            Bindings = new[] { current },
+        };
+        var policy = Policy();
+        var planner = new AclMutationPlanner(
+            observation,
+            policy,
+            timeProvider: new FixedTimeProvider());
+
+        var planned = await planner.PlanReplaceAsync(
+            "prod",
+            new KafkaAclBindingFilter(
+                KafkaAclResourceType.Topic,
+                "payments",
+                KafkaAclFilterPatternMode.Literal,
+                "User:alice",
+                "*"),
+            new[] { desired });
+        Assert.True(planned.IsSuccess);
+        Assert.Single(planned.Plan!.CreateBindings);
+        Assert.Single(planned.Plan.RemoveBindings);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Intent!,
+            planned.Risk!,
+            "v0.6-w42",
+            Now.AddMinutes(5),
+            Now,
+            "w42-replace-precondition");
+
+        var validator = new AclMutationPreconditionValidator(
+            observation,
+            policy,
+            timeProvider: new FixedTimeProvider());
+        var result = await validator.ValidateAsync(operation.Snapshot);
+
+        Assert.Equal(MutationPreDispatchGuardOutcome.Allowed, result.Outcome);
+    }
+
+    [Fact]
     public async Task Dispatch_revalidates_server_grant_policy()
     {
         var binding = Binding("payments", "User:alice");
