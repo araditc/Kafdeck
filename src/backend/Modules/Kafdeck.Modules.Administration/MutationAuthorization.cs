@@ -216,6 +216,43 @@ public sealed class MutationApprovalAuthorizer
             evidenceHash);
     }
 
+    /// <summary>
+    /// Rechecks the approved principal against the current direct-subject
+    /// authorization policy without reconstructing persisted OIDC groups.
+    /// Group-derived eligibility therefore remains unavailable/fail-closed
+    /// unless a live authoritative identity context is supplied by a future
+    /// typed resolver.
+    /// </summary>
+    public bool IsCurrentlyEligibleDirectSubject(
+        string canonicalPrincipalId,
+        MutationOperationSnapshot operation)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalPrincipalId);
+        ArgumentNullException.ThrowIfNull(operation);
+
+        if (operation.AuthorizationTargets.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var target in operation.AuthorizationTargets)
+        {
+            var decision = _authorization.EvaluateCanonicalDirectSubject(
+                canonicalPrincipalId,
+                new AuthorizationRequest(
+                    target.Action,
+                    target.ClusterId,
+                    target.ResourceName));
+
+            if (!decision.IsAllowed)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static string ComputeEvidenceHash(
         Guid operationId,
         string principalId,
