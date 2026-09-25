@@ -241,6 +241,14 @@ public sealed class AclMutationPlanner
                     "Replacement ACL set already matches the observed provider state.");
             }
 
+            var totalEffects = checked(removals.Length + creates.Length);
+            if (totalEffects > _policy.MaxBindingsPerMutation)
+            {
+                return Failed(
+                    AclMutationPlanningFailureCode.TooManyBindings,
+                    $"ACL replacement delta exceeds the server-owned {_policy.MaxBindingsPerMutation}-binding limit.");
+            }
+
             var plan = new AclMutationPlan(
                 AclMutationMode.Replace,
                 cluster,
