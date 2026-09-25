@@ -66,6 +66,48 @@ public sealed class V06W41FleetConflictObligationTests
         Assert.False(obligation.Snapshot.RequiresUnresolvedPredecessorBinding);
     }
 
+    [Theory]
+    [InlineData(FleetUncertaintyDispositionOutcome.ObservedNonApplication)]
+    [InlineData(FleetUncertaintyDispositionOutcome.ObservedTerminalEffect)]
+    public void Bounded_readback_can_resolve_obligation_without_manual_disposition(
+        FleetUncertaintyDispositionOutcome outcome)
+    {
+        var obligation = NewObligation();
+
+        obligation.ApplyObservedResolution(
+            outcome,
+            "sha256:bounded-readback",
+            Now.AddMinutes(1));
+
+        Assert.False(obligation.Snapshot.BlocksConflictingDispatch);
+        Assert.Null(obligation.Snapshot.DispositionOperationId);
+        Assert.Equal(
+            "sha256:bounded-readback",
+            obligation.Snapshot.SafeResolutionEvidenceHash);
+        Assert.Equal(
+            outcome == FleetUncertaintyDispositionOutcome.ObservedNonApplication
+                ? FleetConflictObligationState.ObservedNonApplication
+                : FleetConflictObligationState.ObservedTerminalEffect,
+            obligation.Snapshot.State);
+    }
+
+    [Fact]
+    public void Automatic_resolution_cannot_be_used_for_quarantine_or_supersede()
+    {
+        var obligation = NewObligation();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            obligation.ApplyObservedResolution(
+                FleetUncertaintyDispositionOutcome.QuarantineUnknown,
+                "sha256:not-admitted",
+                Now.AddMinutes(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            obligation.ApplyObservedResolution(
+                FleetUncertaintyDispositionOutcome.SupersedeUnknownForNewIntent,
+                "sha256:not-admitted",
+                Now.AddMinutes(1)));
+    }
+
     [Fact]
     public void Closed_outcome_set_cannot_be_applied_twice_after_terminal_resolution()
     {
