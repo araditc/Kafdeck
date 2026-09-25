@@ -58,6 +58,12 @@ public sealed class AclMutationPreconditionValidator
                 _ = AclMutationPolicy.ValidateRemovals(plan.RemoveBindings, _policy);
             }
 
+            if (plan.CreateBindings.Count + plan.RemoveBindings.Count >
+                _policy.MaxBindingsPerMutation)
+            {
+                return Stale("acl_precondition_policy_changed");
+            }
+
             var requiredRisk = AclMutationPolicy.ClassifyRisk(
                 plan.CreateBindings,
                 plan.RemoveBindings);
