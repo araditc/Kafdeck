@@ -140,9 +140,8 @@ public sealed class V06W42AclAuthorizationIntegrationTests
         MutationOperationSnapshot operation)
     {
         var resource = Assert.Single(
-            operation.AuthorizationTargets
-                .Where(target =>
-                    target.Action == AuthorizationAction.AclAlter))
+            operation.AuthorizationTargets,
+            target => target.Action == AuthorizationAction.AclAlter)
             .ResourceName;
 
         var definition = new AuthorizationPolicyDefinition(
