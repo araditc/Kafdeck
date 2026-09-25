@@ -140,6 +140,53 @@ public sealed class V06W42AclPreconditionTests
     }
 
     [Fact]
+    public async Task Replace_preview_becomes_stale_when_current_combined_delta_limit_is_lower()
+    {
+        var current = Binding("payments", "User:alice");
+        var desired = current with { Operation = KafkaAclOperation.Write };
+        var observation = new MutableObservation
+        {
+            Bindings = new[] { current },
+        };
+        var planningPolicy = PolicyWithLimit(2);
+        var planner = new AclMutationPlanner(
+            observation,
+            planningPolicy,
+            timeProvider: new FixedTimeProvider());
+
+        var planned = await planner.PlanReplaceAsync(
+            "prod",
+            new KafkaAclBindingFilter(
+                KafkaAclResourceType.Topic,
+                "payments",
+                KafkaAclFilterPatternMode.Literal,
+                "User:alice",
+                "*"),
+            new[] { desired });
+        Assert.True(planned.IsSuccess);
+        Assert.Single(planned.Plan!.CreateBindings);
+        Assert.Single(planned.Plan.RemoveBindings);
+
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Intent!,
+            planned.Risk!,
+            "v0.6-w42",
+            Now.AddMinutes(5),
+            Now,
+            "w42-replace-policy-limit");
+
+        var validator = new AclMutationPreconditionValidator(
+            observation,
+            PolicyWithLimit(1),
+            timeProvider: new FixedTimeProvider());
+        var result = await validator.ValidateAsync(operation.Snapshot);
+
+        Assert.Equal(MutationPreDispatchGuardOutcome.StalePreview, result.Outcome);
+        Assert.Equal("acl_precondition_policy_changed", result.ResultCode);
+    }
+
+    [Fact]
     public async Task Dispatch_revalidates_server_grant_policy()
     {
         var binding = Binding("payments", "User:alice");
@@ -244,6 +291,21 @@ public sealed class V06W42AclPreconditionTests
             "*",
             KafkaAclOperation.Read,
             KafkaAclPermissionType.Allow);
+
+    private static AclServerPolicy PolicyWithLimit(int maxBindingsPerMutation) =>
+        new(
+            Array.Empty<string>(),
+            new[] { "User:alice" },
+            new[]
+            {
+                KafkaAclResourceType.Topic,
+                KafkaAclResourceType.Group,
+            },
+            Enum.GetValues<KafkaAclOperation>(),
+            allowPrefixedGrants: true,
+            allowWildcardResourceGrants: false,
+            allowAllOperationGrants: false,
+            maxBindingsPerMutation: maxBindingsPerMutation);
 
     private static AclServerPolicy Policy(
         params string[] allowedPrincipals) =>
