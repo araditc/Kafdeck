@@ -15,6 +15,12 @@ public static class ScramCredentialMaterialCodec
     private static readonly byte[] Domain =
         Encoding.UTF8.GetBytes("kafdeck:v0.6:scram-execution:v1");
 
+    private const int HardMaxEnvelopeBytes =
+        ScramCredentialExecutionMaterial.HardMaxPasswordBytes +
+        (256 * 4) +
+        (ScramCredentialPolicy.MaxUserCharacters * 4) +
+        1024;
+
     public static byte[] Encode(
         ScramCredentialBindingDescriptor descriptor,
         ReadOnlySpan<byte> password)
@@ -66,8 +72,7 @@ public static class ScramCredentialMaterialCodec
         ReadOnlyMemory<byte> envelope)
     {
         if (envelope.Length == 0 ||
-            envelope.Length >
-            ScramCredentialExecutionMaterial.HardMaxPasswordBytes + 2048)
+            envelope.Length > HardMaxEnvelopeBytes)
         {
             throw Invalid();
         }
