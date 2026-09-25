@@ -124,3 +124,86 @@ public sealed class W42AclEffectAuthorizationGuard :
             MutationPreDispatchGuardOutcome.AuthorizationDenied,
             code);
 }
+
+
+/// <summary>
+/// Supplies W43 with the live original requester and current independent
+/// approver. Durable claims/groups are never reconstructed to authorize a
+/// SCRAM provider effect.
+/// </summary>
+public sealed class W43ScramEffectAuthorizationGuard :
+    IScramEffectAuthorizationGuard
+{
+    private readonly MutationExecutionRequestContextAccessor _requestContext;
+    private readonly MutationRequestAuthorizationService _authorization;
+    private readonly MutationApprovalAuthorizer _approvalAuthorizer;
+
+    public W43ScramEffectAuthorizationGuard(
+        MutationExecutionRequestContextAccessor requestContext,
+        MutationRequestAuthorizationService authorization,
+        MutationApprovalAuthorizer approvalAuthorizer)
+    {
+        _requestContext = requestContext ??
+            throw new ArgumentNullException(nameof(requestContext));
+        _authorization = authorization ??
+            throw new ArgumentNullException(nameof(authorization));
+        _approvalAuthorizer = approvalAuthorizer ??
+            throw new ArgumentNullException(nameof(approvalAuthorizer));
+    }
+
+    public Task<MutationPreDispatchGuardResult> ValidateCurrentRequesterAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var requester = MutationCurrentRequesterAuthorization.Evaluate(
+            _requestContext,
+            _authorization,
+            operation);
+        if (requester.Outcome != MutationPreDispatchGuardOutcome.Allowed)
+        {
+            return Task.FromResult(requester);
+        }
+
+        if (!operation.Risk.RequiresIndependentApproval ||
+            operation.Risk.RiskClass != MutationRiskClass.Critical)
+        {
+            return Task.FromResult(Denied(
+                "current_scram_critical_approval_required"));
+        }
+
+        if (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
+            string.IsNullOrWhiteSpace(
+                operation.ApprovalAuthorizationEvidenceHash) ||
+            operation.ApprovedAtUtc is null)
+        {
+            return Task.FromResult(Denied(
+                "current_required_approver_missing"));
+        }
+
+        if (string.Equals(
+                operation.RequesterPrincipalId,
+                operation.ApprovedByPrincipalId,
+                StringComparison.Ordinal))
+        {
+            return Task.FromResult(Denied(
+                "current_required_approver_not_distinct"));
+        }
+
+        if (!_approvalAuthorizer.IsCurrentlyEligibleDirectSubject(
+                operation.ApprovedByPrincipalId,
+                operation))
+        {
+            return Task.FromResult(Denied(
+                "current_required_approver_eligibility_unavailable_or_denied"));
+        }
+
+        return Task.FromResult(MutationPreDispatchGuardResult.Allowed);
+    }
+
+    private static MutationPreDispatchGuardResult Denied(string code) =>
+        new(
+            MutationPreDispatchGuardOutcome.AuthorizationDenied,
+            code);
+}
