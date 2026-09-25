@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Kafdeck.Core.Security;
 
 namespace Kafdeck.Modules.Administration;
 
@@ -229,7 +230,8 @@ public static class ScramMutationContract
         }
     }
 
-    private static bool IsSha256(string value) =>
+    private static bool IsSha256(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
         value.Length == 64 &&
         value.All(char.IsAsciiHexDigit);
 
