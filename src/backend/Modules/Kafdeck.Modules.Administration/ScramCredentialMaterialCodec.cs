@@ -6,32 +6,46 @@ namespace Kafdeck.Modules.Administration;
 
 /// <summary>
 /// Strict in-memory envelope for one SCRAM upsert finalization. The envelope is
-/// request-scoped execution material: it may be HMAC-bound by the existing
-/// mutation kernel, but it must never be persisted, logged, audited or exposed
-/// as safe provider evidence.
+/// request-scoped execution material and must never be persisted, logged,
+/// audited or exposed as safe provider evidence.
 /// </summary>
 public static class ScramCredentialMaterialCodec
 {
     private static readonly byte[] Domain =
-        Encoding.UTF8.GetBytes("kafdeck:v0.6:scram-execution:v1");
+        Encoding.UTF8.GetBytes("kafdeck:v0.6:scram-execution:v2");
 
     private const int HardMaxEnvelopeBytes =
         ScramCredentialExecutionMaterial.HardMaxPasswordBytes +
-        (256 * 4) +
-        (ScramCredentialPolicy.MaxUserCharacters * 4) +
-        1024;
+        (4096 * 4) +
+        (256 * 4 * 4) +
+        4096;
 
     public static byte[] Encode(
-        ScramCredentialBindingDescriptor descriptor,
+        ScramCredentialMaterialBindingContext context,
         ReadOnlySpan<byte> password)
     {
-        var normalized = ScramCredentialMaterialBinding.Normalize(descriptor);
+        var normalized = ScramCredentialMaterialBinding.Normalize(context);
         ValidatePassword(password);
 
-        var cluster = Encoding.UTF8.GetBytes(normalized.ClusterId);
-        var user = Encoding.UTF8.GetBytes(normalized.User);
+        var operationId = Encoding.UTF8.GetBytes(
+            normalized.OperationId.ToString("D"));
+        var requester = Encoding.UTF8.GetBytes(
+            normalized.RequesterPrincipalId);
+        var policyVersion = Encoding.UTF8.GetBytes(
+            normalized.PolicyVersion);
+        var digestKeyId = Encoding.UTF8.GetBytes(
+            normalized.DigestKeyId);
+        var cluster = Encoding.UTF8.GetBytes(
+            normalized.Credential.ClusterId);
+        var user = Encoding.UTF8.GetBytes(
+            normalized.Credential.User);
+
         var envelope = new byte[checked(
             sizeof(int) + Domain.Length +
+            sizeof(int) + operationId.Length +
+            sizeof(int) + requester.Length +
+            sizeof(int) + policyVersion.Length +
+            sizeof(int) + digestKeyId.Length +
             sizeof(int) + cluster.Length +
             sizeof(int) + user.Length +
             sizeof(int) +
@@ -42,16 +56,25 @@ public static class ScramCredentialMaterialCodec
         {
             var position = 0;
             WriteBytes(envelope, ref position, Domain);
+            WriteBytes(envelope, ref position, operationId);
+            WriteBytes(envelope, ref position, requester);
+            WriteBytes(envelope, ref position, policyVersion);
+            WriteBytes(envelope, ref position, digestKeyId);
             WriteBytes(envelope, ref position, cluster);
             WriteBytes(envelope, ref position, user);
-            WriteInt32(envelope, ref position, (int)normalized.Mechanism);
-            WriteInt32(envelope, ref position, normalized.Iterations);
+            WriteInt32(
+                envelope,
+                ref position,
+                (int)normalized.Credential.Mechanism);
+            WriteInt32(
+                envelope,
+                ref position,
+                normalized.Credential.Iterations);
             WriteBytes(envelope, ref position, password);
 
             if (position != envelope.Length)
             {
-                throw new MutationStateException(
-                    "SCRAM execution material envelope length is inconsistent.");
+                throw Invalid();
             }
 
             return envelope;
@@ -63,6 +86,10 @@ public static class ScramCredentialMaterialCodec
         }
         finally
         {
+            CryptographicOperations.ZeroMemory(operationId);
+            CryptographicOperations.ZeroMemory(requester);
+            CryptographicOperations.ZeroMemory(policyVersion);
+            CryptographicOperations.ZeroMemory(digestKeyId);
             CryptographicOperations.ZeroMemory(cluster);
             CryptographicOperations.ZeroMemory(user);
         }
@@ -86,6 +113,10 @@ public static class ScramCredentialMaterialCodec
             throw Invalid();
         }
 
+        var operationIdBytes = ReadBytes(span, ref position, 64);
+        var requesterBytes = ReadBytes(span, ref position, 4096 * 4);
+        var policyBytes = ReadBytes(span, ref position, 256 * 4);
+        var digestKeyBytes = ReadBytes(span, ref position, 256 * 4);
         var clusterBytes = ReadBytes(span, ref position, 256 * 4);
         var userBytes = ReadBytes(
             span,
@@ -106,15 +137,35 @@ public static class ScramCredentialMaterialCodec
                 throw Invalid();
             }
 
-            var descriptor = ScramCredentialMaterialBinding.Normalize(
-                new ScramCredentialBindingDescriptor(
-                    DecodeUtf8(clusterBytes),
-                    DecodeUtf8(userBytes),
-                    (KafkaScramMechanism)mechanismValue,
-                    iterations));
+            var operationIdText = DecodeUtf8(operationIdBytes);
+            if (!Guid.TryParseExact(
+                    operationIdText,
+                    "D",
+                    out var operationId) ||
+                !string.Equals(
+                    operationId.ToString("D"),
+                    operationIdText,
+                    StringComparison.Ordinal))
+            {
+                throw Invalid();
+            }
+
+            var context = ScramCredentialMaterialBinding.Normalize(
+                new ScramCredentialMaterialBindingContext(
+                    operationId,
+                    DecodeUtf8(requesterBytes),
+                    DecodeUtf8(policyBytes),
+                    DecodeUtf8(digestKeyBytes),
+                    new ScramCredentialBindingDescriptor(
+                        DecodeUtf8(clusterBytes),
+                        DecodeUtf8(userBytes),
+                        (KafkaScramMechanism)mechanismValue,
+                        iterations)));
 
             ValidatePassword(password);
-            return new ScramDecodedCredentialMaterial(descriptor, password);
+            return new ScramDecodedCredentialMaterial(
+                context,
+                password);
         }
         catch
         {
@@ -197,7 +248,8 @@ public static class ScramCredentialMaterialCodec
         ReadOnlySpan<byte> source,
         ref int position)
     {
-        if (position < 0 || source.Length - position < sizeof(int))
+        if (position < 0 ||
+            source.Length - position < sizeof(int))
         {
             throw Invalid();
         }
@@ -209,7 +261,8 @@ public static class ScramCredentialMaterialCodec
     }
 
     private static MutationStateException Invalid() =>
-        new("SCRAM execution material does not match the admitted bounded envelope.");
+        new(
+            "SCRAM execution material does not match the admitted bounded envelope.");
 }
 
 public sealed class ScramDecodedCredentialMaterial : IDisposable
@@ -218,16 +271,16 @@ public sealed class ScramDecodedCredentialMaterial : IDisposable
     private bool _disposed;
 
     internal ScramDecodedCredentialMaterial(
-        ScramCredentialBindingDescriptor descriptor,
+        ScramCredentialMaterialBindingContext context,
         byte[] password)
     {
-        Descriptor = descriptor ??
-                     throw new ArgumentNullException(nameof(descriptor));
+        Context = context ??
+                  throw new ArgumentNullException(nameof(context));
         _password = password ??
                     throw new ArgumentNullException(nameof(password));
     }
 
-    public ScramCredentialBindingDescriptor Descriptor { get; }
+    public ScramCredentialMaterialBindingContext Context { get; }
 
     public ReadOnlyMemory<byte> Password
     {
