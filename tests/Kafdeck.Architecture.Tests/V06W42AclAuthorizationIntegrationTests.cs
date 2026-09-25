@@ -170,14 +170,20 @@ public sealed class V06W42AclAuthorizationIntegrationTests
     {
         var operation = CreateAclOperation();
         var observation = new EmptyAclObservationPort();
-        var (_, context, authorization, _) = CreateAuthorization(operation);
+        var (_, context, authorization, approvalAuthorizer) =
+            CreateAuthorization(operation);
         var policy = Policy();
+        var aclAuthorization = new W42AclEffectAuthorizationGuard(
+            context,
+            authorization,
+            approvalAuthorizer);
         var guard = CreateW39(
             context,
             authorization,
             new AclMutationPreconditionValidator(
                 observation,
-                policy));
+                policy),
+            aclAuthorization);
 
         using var scope = context.Push(CreateOperatorPrincipal("alice"));
         var result = await guard.ValidateAsync(operation);
@@ -186,6 +192,47 @@ public sealed class V06W42AclAuthorizationIntegrationTests
             MutationPreDispatchGuardOutcome.Allowed,
             result.Outcome);
         Assert.Equal(1, observation.Calls);
+    }
+
+    [Fact]
+    public async Task W39_critical_acl_denies_before_dispatch_when_current_approver_cannot_be_resolved()
+    {
+        var operation = WithCriticalApproval(
+            CreateAclOperation(),
+            "oidc:https://idp.example|carol");
+        var observation = new EmptyAclObservationPort();
+        var (_, context, authorization, approvalAuthorizer) =
+            CreateAuthorization(
+                operation,
+                directSubjects: new[] { "alice" },
+                groupBindings: new[]
+                {
+                    new AuthorizationGroupBindingDefinition(
+                        "acl-admins",
+                        new[] { "acl-operator" }),
+                });
+        var aclAuthorization = new W42AclEffectAuthorizationGuard(
+            context,
+            authorization,
+            approvalAuthorizer);
+        var guard = CreateW39(
+            context,
+            authorization,
+            new AclMutationPreconditionValidator(
+                observation,
+                Policy()),
+            aclAuthorization);
+
+        using var scope = context.Push(CreateOperatorPrincipal("alice"));
+        var result = await guard.ValidateAsync(operation);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.AuthorizationDenied,
+            result.Outcome);
+        Assert.Equal(
+            "current_required_approver_eligibility_unavailable_or_denied",
+            result.ResultCode);
+        Assert.Equal(0, observation.Calls);
     }
 
     private static MutationOperationSnapshot CreateAclOperation()
@@ -293,7 +340,8 @@ public sealed class V06W42AclAuthorizationIntegrationTests
     private static W39MutationPreDispatchGuard CreateW39(
         MutationExecutionRequestContextAccessor context,
         MutationRequestAuthorizationService authorization,
-        AclMutationPreconditionValidator? acls)
+        AclMutationPreconditionValidator? acls,
+        IAclEffectAuthorizationGuard? aclAuthorization = null)
     {
         var kafka = new ThrowingKafkaAdministrationPort();
         return new W39MutationPreDispatchGuard(
@@ -305,7 +353,8 @@ public sealed class V06W42AclAuthorizationIntegrationTests
                 new ThrowingConsumerMutationObservationPort()),
             new RecordsPurgePreconditionValidator(
                 new ThrowingRecordsPurgeObservationPort()),
-            acls: acls);
+            acls: acls,
+            aclAuthorization: aclAuthorization);
     }
 
     private static MutationOperationSnapshot WithCriticalApproval(
