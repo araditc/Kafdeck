@@ -53,10 +53,18 @@ public sealed class MutationOperation
             AuthorizationTargets = authorizationTargets,
         };
         var riskContext = intent.RiskContext ?? new MutationRiskContext();
+        // ACL alterations use the admitted ACL-specific exact-entry thresholds
+        // supplied by AclMutationPolicy.ClassifyRisk. Reapplying the generic
+        // multi-target rule here would incorrectly escalate every narrow ACL
+        // edit with more than one binding from HIGH to CRITICAL. Other
+        // mutation kinds retain their existing resource-count floor unchanged.
+        var floorTargetCount = intent.Kind == MutationOperationKind.AclAlter
+            ? 1
+            : resources.Count;
         var effectiveRisk = MutationRiskClassifier.EnforceBuiltInFloor(
             new MutationRiskInput(
                 intent.Kind,
-                resources.Count,
+                floorTargetCount,
                 riskContext.PermanentDelete,
                 riskContext.DurabilitySensitiveChange),
             risk);
