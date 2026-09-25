@@ -10,6 +10,13 @@ public sealed record ScramCredentialBindingDescriptor(
     KafkaScramMechanism Mechanism,
     int Iterations);
 
+public sealed record ScramCredentialMaterialBindingContext(
+    Guid OperationId,
+    string RequesterPrincipalId,
+    string PolicyVersion,
+    string DigestKeyId,
+    ScramCredentialBindingDescriptor Credential);
+
 /// <summary>
 /// Ephemeral credential bytes supplied by the original requester. The material
 /// is never part of canonical intent, audit, safe evidence or durable state.
@@ -56,22 +63,20 @@ public sealed class ScramCredentialExecutionMaterial : IDisposable
 }
 
 /// <summary>
-/// Builds the durable, keyed binding for write-only SCRAM material. The HMAC
-/// input is domain-separated and binds exact physical cluster, exact user,
-/// mechanism and iteration metadata before password bytes. The resulting
-/// digest is internal coordinator state and must never be projected as a
-/// requester-visible credential verifier.
+/// Builds the durable keyed binding for write-only SCRAM material. The input
+/// envelope binds operation identity, requester principal, policy/digest-key
+/// identity and exact credential target before password bytes.
 /// </summary>
 public static class ScramCredentialMaterialBinding
 {
     public static string Compute(
         IMutationMaterialDigestService digestService,
-        ScramCredentialBindingDescriptor descriptor,
+        ScramCredentialMaterialBindingContext context,
         ReadOnlySpan<byte> password)
     {
         ArgumentNullException.ThrowIfNull(digestService);
         var envelope = ScramCredentialMaterialCodec.Encode(
-            descriptor,
+            context,
             password);
         try
         {
@@ -85,7 +90,7 @@ public static class ScramCredentialMaterialBinding
 
     public static bool Matches(
         IMutationMaterialDigestService digestService,
-        ScramCredentialBindingDescriptor descriptor,
+        ScramCredentialMaterialBindingContext context,
         ReadOnlySpan<byte> password,
         string expectedBinding)
     {
@@ -98,8 +103,9 @@ public static class ScramCredentialMaterialBinding
                 nameof(expectedBinding));
         }
 
-        var actual = Compute(digestService, descriptor, password);
-        var expectedBytes = Encoding.ASCII.GetBytes(expectedBinding.ToLowerInvariant());
+        var actual = Compute(digestService, context, password);
+        var expectedBytes = Encoding.ASCII.GetBytes(
+            expectedBinding.ToLowerInvariant());
         var actualBytes = Encoding.ASCII.GetBytes(actual);
         try
         {
@@ -118,19 +124,10 @@ public static class ScramCredentialMaterialBinding
         ScramCredentialBindingDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
-        ArgumentException.ThrowIfNullOrWhiteSpace(descriptor.ClusterId);
-
-        if (descriptor.ClusterId.Length > 256 ||
-            descriptor.ClusterId.Any(char.IsControl) ||
-            !string.Equals(
-                descriptor.ClusterId,
-                descriptor.ClusterId.Trim(),
-                StringComparison.Ordinal))
-        {
-            throw new ArgumentException(
-                "SCRAM physical cluster identity is invalid.",
-                nameof(descriptor));
-        }
+        var clusterId = RequireExactBounded(
+            descriptor.ClusterId,
+            "SCRAM physical cluster identity",
+            256);
 
         if (!Enum.IsDefined(descriptor.Mechanism))
         {
@@ -148,8 +145,55 @@ public static class ScramCredentialMaterialBinding
 
         return descriptor with
         {
+            ClusterId = clusterId,
             User = ScramCredentialPolicy.NormalizeUser(descriptor.User),
         };
     }
 
+    public static ScramCredentialMaterialBindingContext Normalize(
+        ScramCredentialMaterialBindingContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (context.OperationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "SCRAM material binding requires a non-empty operation ID.",
+                nameof(context));
+        }
+
+        return context with
+        {
+            RequesterPrincipalId = RequireExactBounded(
+                context.RequesterPrincipalId,
+                "SCRAM requester principal",
+                4096),
+            PolicyVersion = RequireExactBounded(
+                context.PolicyVersion,
+                "SCRAM policy version",
+                256),
+            DigestKeyId = RequireExactBounded(
+                context.DigestKeyId,
+                "SCRAM digest-key ID",
+                256),
+            Credential = Normalize(context.Credential),
+        };
+    }
+
+    private static string RequireExactBounded(
+        string value,
+        string field,
+        int maxLength)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        if (value.Length > maxLength ||
+            value.Any(char.IsControl) ||
+            !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"{field} is invalid or exceeds the admitted bound.",
+                field);
+        }
+
+        return value;
+    }
 }
