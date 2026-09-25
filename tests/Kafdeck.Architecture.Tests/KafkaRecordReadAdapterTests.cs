@@ -245,6 +245,43 @@ public sealed class KafkaRecordReadAdapterTests
     }
 
     [Fact]
+    public async Task Retryable_unavailable_does_not_wait_past_an_exhausted_record_budget()
+    {
+        var time = new AdvancingTimeProvider(
+            new DateTimeOffset(2026, 9, 25, 13, 0, 0, TimeSpan.Zero));
+        var session = new AdvancingUnavailableSetupSession(
+            () => time.Advance(TimeSpan.FromSeconds(2)));
+        var factory = new FixedRecordConsumerFactory(session);
+        var budget = new RecordOperationBudget(
+            maxRecords: 10,
+            maxRawBytes: 1024,
+            maxProjectedBytes: 1024,
+            maxDuration: TimeSpan.FromSeconds(1),
+            maxRecordsPerSecond: 10);
+
+        using var adapter = new ConfluentKafkaRecordReadAdapter(
+            [PlaintextProfile("records")],
+            factory,
+            new KafkaRecordReadConcurrencyOptions(perClusterLimit: 1, globalLimit: 1),
+            time);
+
+        var result = await adapter.ReadPageAsync(
+            new RecordReadRequest(
+                "records",
+                "topic",
+                0,
+                RecordAnchor.Earliest(),
+                RecordReadDirection.Forward,
+                budget),
+            new KafkaOperationContext(time.GetUtcNow().AddSeconds(10)),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(RecordBudgetOutcome.DurationLimit, result.Value!.BudgetOutcome);
+        Assert.Equal(1, session.WatermarkCalls);
+    }
+
+    [Fact]
     public async Task Budget_expiry_after_watermark_setup_does_not_replace_requested_anchor()
     {
         var time = new AdvancingTimeProvider(
@@ -470,6 +507,43 @@ public sealed class KafkaRecordReadAdapterTests
 
             return Offset.Unset;
         }
+
+        public void Assign(TopicPartitionOffset offset)
+        {
+        }
+
+        public ConsumeResult<byte[], byte[]>? Consume(TimeSpan timeout) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class AdvancingUnavailableSetupSession :
+        IKafkaRecordConsumerSession
+    {
+        private readonly Action _advance;
+
+        public AdvancingUnavailableSetupSession(Action advance)
+        {
+            _advance = advance;
+        }
+
+        public int WatermarkCalls { get; private set; }
+
+        public WatermarkOffsets QueryWatermarkOffsets(
+            TopicPartition topicPartition,
+            TimeSpan timeout)
+        {
+            WatermarkCalls++;
+            _advance();
+            throw new KafkaException(new Error(ErrorCode.Local_AllBrokersDown));
+        }
+
+        public Offset OffsetForTimestamp(
+            TopicPartition topicPartition,
+            DateTimeOffset timestampUtc,
+            TimeSpan timeout) => Offset.Unset;
 
         public void Assign(TopicPartitionOffset offset)
         {
