@@ -173,7 +173,37 @@ public sealed class V06W42AclPlanningTests
         Assert.Equal(2, observation.Principals.Count);
         Assert.Contains("User:alice", observation.Principals);
         Assert.Contains("User:*", observation.Principals);
+        Assert.All(observation.Operations, operation => Assert.Null(operation));
         Assert.Equal(AclAccessEvidenceState.ObservedAllow, result.Value!.EvidenceState);
+    }
+
+    [Fact]
+    public async Task Create_reuses_one_bounded_deadline_for_all_exact_targets()
+    {
+        var observation = new DeadlineCapturingObservationPort();
+        var planner = new AclMutationPlanner(
+            observation,
+            Policy(),
+            new AclMutationPlannerPolicy(TimeSpan.FromSeconds(10)),
+            new AdvancingTimeProvider());
+
+        var result = await planner.PlanCreateAsync(
+            "prod",
+            new[]
+            {
+                Binding(
+                    "payments.orders",
+                    KafkaAclOperation.Read,
+                    KafkaAclPermissionType.Allow),
+                Binding(
+                    "payments.audit",
+                    KafkaAclOperation.Write,
+                    KafkaAclPermissionType.Allow),
+            });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, observation.Remaining.Count);
+        Assert.Equal(observation.Remaining[0], observation.Remaining[1]);
     }
 
     [Fact]
@@ -251,6 +281,8 @@ public sealed class V06W42AclPlanningTests
 
         public List<string?> Principals { get; } = new();
 
+        public List<KafkaAclOperation?> Operations { get; } = new();
+
         public Task<KafkaResult<IReadOnlyList<KafkaAclBinding>>> DescribeAsync(
             string clusterId,
             KafkaAclBindingFilter filter,
@@ -258,6 +290,7 @@ public sealed class V06W42AclPlanningTests
             CancellationToken cancellationToken = default)
         {
             Principals.Add(filter.Principal);
+            Operations.Add(filter.Operation);
             IReadOnlyList<KafkaAclBinding> values =
                 string.Equals(filter.Principal, "User:*", StringComparison.Ordinal)
                     ? new[] { _wildcard }
@@ -267,6 +300,37 @@ public sealed class V06W42AclPlanningTests
                     values,
                     Observation()));
         }
+    }
+
+    private sealed class DeadlineCapturingObservationPort : IAclObservationPort
+    {
+        private static readonly DateTimeOffset ReferenceTime =
+            new(2026, 9, 25, 6, 30, 0, TimeSpan.Zero);
+
+        public List<TimeSpan> Remaining { get; } = new();
+
+        public Task<KafkaResult<IReadOnlyList<KafkaAclBinding>>> DescribeAsync(
+            string clusterId,
+            KafkaAclBindingFilter filter,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken = default)
+        {
+            Remaining.Add(operation.Remaining(ReferenceTime));
+            return Task.FromResult(
+                KafkaResult<IReadOnlyList<KafkaAclBinding>>.Success(
+                    Array.Empty<KafkaAclBinding>(),
+                    Observation()));
+        }
+    }
+
+    private sealed class AdvancingTimeProvider : TimeProvider
+    {
+        private static readonly DateTimeOffset Start =
+            new(2026, 9, 25, 6, 30, 0, TimeSpan.Zero);
+        private int _callCount;
+
+        public override DateTimeOffset GetUtcNow() =>
+            Start.AddSeconds(_callCount++);
     }
 
     private sealed class FixedTimeProvider : TimeProvider
