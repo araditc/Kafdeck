@@ -206,6 +206,102 @@ public sealed class V06W43ScramPlanningTests
     }
 
     [Fact]
+    public async Task Common_preview_and_finalization_bind_the_same_durable_operation_identity()
+    {
+        var preview = Preview();
+        var requester = preview.RequesterPrincipalId;
+        var observation = new StubScramObservation(
+            Array.Empty<KafkaScramCredentialMetadata>());
+        using var digest =
+            new HmacMutationMaterialDigestService(new string('k', 32));
+        var planner = new ScramMutationPlanner(
+            observation,
+            digest,
+            Policy());
+        var password = Encoding.UTF8.GetBytes(
+            "synthetic-w43-finalization-secret");
+
+        try
+        {
+            var planned = await planner.PlanUpsertAsync(
+                preview,
+                "prod",
+                "User:alice",
+                KafkaScramMechanism.ScramSha256,
+                4096,
+                password);
+            Assert.True(planned.IsSuccess);
+
+            var now = DateTimeOffset.UtcNow;
+            var created = MutationOperation.CreatePreview(
+                preview.OperationId,
+                requester,
+                planned.Intent!,
+                planned.Risk!,
+                preview.PolicyVersion,
+                now.AddMinutes(5),
+                now,
+                $"w43-finalize-{Guid.NewGuid():N}");
+
+            Assert.Equal(preview.OperationId, created.Snapshot.OperationId);
+            Assert.Equal(
+                MutationRiskClass.Critical,
+                created.Snapshot.Risk.RiskClass);
+            Assert.True(created.Snapshot.Risk.RequiresIndependentApproval);
+
+            var ready = created.Snapshot with
+            {
+                State = MutationOperationState.Ready,
+                ConfirmedByPrincipalId = requester,
+                ConfirmedAtUtc = now,
+                ApprovedByPrincipalId = "principal:independent-approver",
+                ApprovalAuthorizationEvidenceHash = new string('a', 64),
+                ApprovedAtUtc = now,
+            };
+
+            using var material =
+                ScramMutationExecutionMaterialBuilder.BuildUpsert(
+                    ready,
+                    password);
+            var envelope = material.GetRequired(
+                ScramMutationPlanner.MaterialName);
+            using var decoded =
+                ScramCredentialMaterialCodec.Decode(envelope);
+
+            Assert.Equal(
+                ready.OperationId,
+                decoded.Context.OperationId);
+            Assert.Equal(
+                ready.RequesterPrincipalId,
+                decoded.Context.RequesterPrincipalId);
+            Assert.Equal(
+                ready.PolicyVersion,
+                decoded.Context.PolicyVersion);
+            Assert.Equal(
+                preview.DigestKeyId,
+                decoded.Context.DigestKeyId);
+            Assert.Equal(
+                planned.Plan!.Credential,
+                decoded.Context.Credential);
+            Assert.True(
+                decoded.Password.Span.SequenceEqual(password));
+
+            var wrongIdentity = ready with
+            {
+                OperationId = Guid.NewGuid(),
+            };
+            Assert.Throws<MutationStateException>(() =>
+                ScramMutationExecutionMaterialBuilder.BuildUpsert(
+                    wrongIdentity,
+                    password));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(password);
+        }
+    }
+
+    [Fact]
     public void Metadata_fingerprint_is_order_independent_and_iteration_sensitive()
     {
         var first = new KafkaScramCredentialMetadata(
