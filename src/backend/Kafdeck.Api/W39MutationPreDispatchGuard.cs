@@ -26,6 +26,8 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly ConnectMutationPreconditionValidator? _connect;
     private readonly AclMutationPreconditionValidator? _acls;
     private readonly IAclEffectAuthorizationGuard? _aclAuthorization;
+    private readonly ScramMutationPreconditionValidator? _scram;
+    private readonly IScramEffectAuthorizationGuard? _scramAuthorization;
 
     public W39MutationPreDispatchGuard(
         MutationExecutionRequestContextAccessor requestContext,
@@ -37,7 +39,9 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         SchemaMutationPreconditionValidator? schemas = null,
         ConnectMutationPreconditionValidator? connect = null,
         AclMutationPreconditionValidator? acls = null,
-        IAclEffectAuthorizationGuard? aclAuthorization = null)
+        IAclEffectAuthorizationGuard? aclAuthorization = null,
+        ScramMutationPreconditionValidator? scram = null,
+        IScramEffectAuthorizationGuard? scramAuthorization = null)
     {
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -49,6 +53,8 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _connect = connect;
         _acls = acls;
         _aclAuthorization = aclAuthorization;
+        _scram = scram;
+        _scramAuthorization = scramAuthorization;
     }
 
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(
@@ -141,6 +147,26 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
                     .ConfigureAwait(false);
                 break;
 
+            case MutationOperationKind.ScramAlter:
+                if (_scram is null || _scramAuthorization is null)
+                {
+                    return Unsupported();
+                }
+
+                var scramAuthorization = await _scramAuthorization
+                    .ValidateCurrentRequesterAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                if (scramAuthorization.Outcome !=
+                    MutationPreDispatchGuardOutcome.Allowed)
+                {
+                    return scramAuthorization;
+                }
+
+                preconditions = await _scram
+                    .ValidateAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
             default:
                 return Unsupported();
         }
@@ -157,6 +183,13 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         if (operation.OperationKind == MutationOperationKind.AclAlter)
         {
             return await _aclAuthorization!
+                .ValidateCurrentRequesterAsync(operation, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (operation.OperationKind == MutationOperationKind.ScramAlter)
+        {
+            return await _scramAuthorization!
                 .ValidateCurrentRequesterAsync(operation, cancellationToken)
                 .ConfigureAwait(false);
         }
