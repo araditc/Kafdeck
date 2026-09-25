@@ -255,7 +255,21 @@ public sealed class MutationExecutor
         var expectedVersion = current.Version;
         var claimNowUtc = _timeProvider.GetUtcNow();
         var claimExpiresAtUtc = claimNowUtc.Add(_policy.ResourceClaimTtl);
-        var generation = operation.ClaimExecution(claimNowUtc, claimExpiresAtUtc);
+        long generation;
+        try
+        {
+            generation = operation.ClaimExecution(
+                claimNowUtc,
+                claimExpiresAtUtc);
+        }
+        catch
+        {
+            // The executor owns a private clone of request-scoped material
+            // from this point. Claim failure (including preview expiry) must
+            // zero that clone before propagating the state error.
+            executionMaterial.Dispose();
+            throw;
+        }
 
         MutationSaveResult claimed;
         try
