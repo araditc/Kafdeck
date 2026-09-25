@@ -434,6 +434,38 @@ public sealed class AuthorizationPolicyEvaluator
         return false;
     }
 
+    /// <summary>
+    /// Re-evaluates only current direct subject bindings for a durable canonical
+    /// operator identity. External-group roles are intentionally excluded:
+    /// callers must not reconstruct or trust persisted OIDC group claims.
+    /// Ambiguous canonical identities fail closed.
+    /// </summary>
+    public AuthorizationDecision EvaluateCanonicalDirectSubject(
+        string canonicalPrincipalId,
+        AuthorizationRequest request)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalPrincipalId);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var keys = _snapshot.SubjectBindings.Keys
+            .Where(key => string.Equals(
+                SecurityAuditPrincipal.FromOperatorKey(key),
+                canonicalPrincipalId,
+                StringComparison.Ordinal))
+            .Take(2)
+            .ToArray();
+
+        if (keys.Length != 1)
+        {
+            return AuthorizationDecision.Denied(
+                AuthorizationDecisionReason.NoMatchingBinding);
+        }
+
+        return Evaluate(
+            new OperatorIdentity(keys[0]),
+            request);
+    }
+
     public AuthorizationDecision Evaluate(OperatorIdentity? identity, AuthorizationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
