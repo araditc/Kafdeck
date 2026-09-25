@@ -313,6 +313,96 @@ public sealed class V06W43ScramContractsTests
     }
 
     [Fact]
+    public void Scram_mutation_port_keeps_password_outside_safe_request_records()
+    {
+        Assert.DoesNotContain(
+            typeof(ScramUpsertMutation).GetProperties(),
+            property =>
+                property.Name.Contains(
+                    "Password",
+                    StringComparison.OrdinalIgnoreCase) ||
+                property.PropertyType == typeof(byte[]));
+
+        var upsert = typeof(IScramMutationPort)
+            .GetMethod(nameof(IScramMutationPort.UpsertAsync));
+        Assert.NotNull(upsert);
+        Assert.Equal(
+            typeof(ScramUpsertMutation),
+            upsert!.GetParameters()[0].ParameterType);
+        Assert.Equal(
+            typeof(ReadOnlyMemory<byte>),
+            upsert.GetParameters()[1].ParameterType);
+
+        var adapterMethods =
+            typeof(ConfluentKafkaScramMutationAdapter)
+                .GetMethods()
+                .Where(method =>
+                    method.DeclaringType ==
+                    typeof(ConfluentKafkaScramMutationAdapter))
+                .Select(method => method.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+
+        Assert.Equal(
+            new[] { "DeleteAsync", "Dispose", "UpsertAsync" },
+            adapterMethods);
+    }
+
+    [Fact]
+    public void Scram_provider_error_classifier_preserves_ambiguous_outcomes()
+    {
+        var timeout = ConfluentKafkaScramMutationResultClassifier
+            .ClassifyException(
+                "scram_upsert",
+                "User:alice",
+                new[]
+                {
+                    new AlterUserScramCredentialsReport
+                    {
+                        User = "User:alice",
+                        Error = new Error(ErrorCode.Local_TimedOut),
+                    },
+                });
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            timeout.ResultKind);
+
+        var denied = ConfluentKafkaScramMutationResultClassifier
+            .ClassifyException(
+                "scram_upsert",
+                "User:alice",
+                new[]
+                {
+                    new AlterUserScramCredentialsReport
+                    {
+                        User = "User:alice",
+                        Error = new Error(
+                            ErrorCode.ClusterAuthorizationFailed),
+                    },
+                });
+        Assert.Equal(
+            MutationExecutionResultKind.FailedDefinitive,
+            denied.ResultKind);
+
+        var unexpected = ConfluentKafkaScramMutationResultClassifier
+            .ClassifyException(
+                "scram_delete",
+                "User:alice",
+                new[]
+                {
+                    new AlterUserScramCredentialsReport
+                    {
+                        User = "User:bob",
+                        Error = new Error(
+                            ErrorCode.ClusterAuthorizationFailed),
+                    },
+                });
+        Assert.Equal(
+            MutationExecutionResultKind.ExecutionUnknown,
+            unexpected.ResultKind);
+    }
+
+    [Fact]
     public void Scram_conflict_identity_binds_cluster_user_and_mechanism()
     {
         var baseline = ScramCredentialPolicy.ConflictIdentity(
