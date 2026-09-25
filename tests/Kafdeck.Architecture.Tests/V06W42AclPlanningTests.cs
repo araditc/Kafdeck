@@ -236,6 +236,66 @@ public sealed class V06W42AclPlanningTests
                     "User:alice")));
     }
 
+    [Fact]
+    public void Provider_mapper_preserves_exact_binding_shape_for_mutation()
+    {
+        var provider = ConfluentKafkaAclMapper.ToProviderBinding(
+            Binding(
+                "payments.",
+                KafkaAclOperation.Write,
+                KafkaAclPermissionType.Deny,
+                KafkaAclPatternType.Prefixed));
+
+        Assert.Equal(
+            Confluent.Kafka.Admin.ResourceType.Topic,
+            provider.Pattern.Type);
+        Assert.Equal("payments.", provider.Pattern.Name);
+        Assert.Equal(
+            Confluent.Kafka.Admin.ResourcePatternType.Prefixed,
+            provider.Pattern.ResourcePatternType);
+        Assert.Equal("User:alice", provider.Entry.Principal);
+        Assert.Equal("*", provider.Entry.Host);
+        Assert.Equal(
+            Confluent.Kafka.Admin.AclOperation.Write,
+            provider.Entry.Operation);
+        Assert.Equal(
+            Confluent.Kafka.Admin.AclPermissionType.Deny,
+            provider.Entry.PermissionType);
+
+        Assert.Throws<NotSupportedException>(() =>
+            ConfluentKafkaAclMapper.ToProviderBinding(
+                new KafkaAclBinding(
+                    KafkaAclResourceType.TransactionalId,
+                    "tx-1",
+                    KafkaAclPatternType.Literal,
+                    "User:alice",
+                    "*",
+                    KafkaAclOperation.Write,
+                    KafkaAclPermissionType.Allow)));
+    }
+
+    [Fact]
+    public void Acl_mutation_port_exposes_only_exact_typed_create_and_remove_batches()
+    {
+        var methods = typeof(IAclMutationPort)
+            .GetMethods()
+            .OrderBy(method => method.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[] { "CreateAsync", "RemoveAsync" },
+            methods.Select(method => method.Name).ToArray());
+        Assert.Contains(
+            methods,
+            method => method.GetParameters()[0].ParameterType == typeof(AclCreateMutation));
+        Assert.Contains(
+            methods,
+            method => method.GetParameters()[0].ParameterType == typeof(AclRemoveMutation));
+        Assert.DoesNotContain(
+            methods.SelectMany(method => method.GetParameters()),
+            parameter => parameter.ParameterType == typeof(KafkaAclBindingFilter));
+    }
+
     private static KafkaAclBinding Binding(
         string resource,
         KafkaAclOperation operation,
