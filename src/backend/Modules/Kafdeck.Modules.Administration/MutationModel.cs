@@ -247,7 +247,7 @@ public static class MutationIdempotency
             Append(builder, "material-digest", digest.Digest);
         }
 
-        foreach (var target in MutationAuthorization.NormalizeTargets(
+        foreach (var target in MutationAuthorizationRequirements.Normalize(
                      intent.Kind,
                      intent.ClusterId,
                      intent.AuthorizationTargets,

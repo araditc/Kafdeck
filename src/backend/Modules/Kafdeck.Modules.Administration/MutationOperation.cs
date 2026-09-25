@@ -32,7 +32,7 @@ public sealed class MutationOperation
         var resources = MutationPreviewHasher.NormalizeResources(intent.ResourceKeys);
         var preconditions = MutationPreviewHasher.NormalizePreconditions(intent.Preconditions);
         var digests = MutationPreviewHasher.NormalizeDigests(intent.MaterialDigests);
-        var authorizationTargets = MutationAuthorization.NormalizeTargets(
+        var authorizationTargets = MutationAuthorizationRequirements.Normalize(
             intent.Kind,
             clusterId,
             intent.AuthorizationTargets,

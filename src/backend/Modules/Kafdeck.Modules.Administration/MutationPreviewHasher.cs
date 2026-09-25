@@ -37,7 +37,7 @@ public static class MutationPreviewHasher
             Append(builder, "material-digest", digest.Digest);
         }
 
-        var authorizationTargets = MutationAuthorization.NormalizeTargets(
+        var authorizationTargets = MutationAuthorizationRequirements.Normalize(
             intent.Kind,
             intent.ClusterId,
             intent.AuthorizationTargets,
