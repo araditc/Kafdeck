@@ -613,6 +613,252 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             existing);
     }
 
+    public async Task<FleetConflictObligationBatchCreateResult> CreateConflictObligationsAsync(
+        IReadOnlyList<FleetConflictObligationSnapshot> obligations,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(obligations);
+        if (obligations.Count is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(obligations),
+                "Fleet conflict obligation batches must contain between one and one hundred exact effects.");
+        }
+
+        var normalized = obligations
+            .Select(obligation => FleetConflictObligation.Restore(
+                    obligation ?? throw new ArgumentException(
+                        "Fleet conflict obligation batches cannot contain null entries.",
+                        nameof(obligations)))
+                .Snapshot)
+            .ToArray();
+
+        if (normalized.Any(obligation =>
+                obligation.Version != 0 ||
+                obligation.State != FleetConflictObligationState.Outstanding))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(obligations),
+                "New fleet conflict obligations must start outstanding at version zero.");
+        }
+
+        var operationId = normalized[0].OperationId;
+        if (normalized.Any(obligation => obligation.OperationId != operationId))
+        {
+            throw new ArgumentException(
+                "One atomic fleet conflict obligation batch must belong to one parent operation.",
+                nameof(obligations));
+        }
+
+        var entries = normalized
+            .Select(obligation => new
+            {
+                Obligation = obligation,
+                ConflictHash = HashConflictKey(obligation.ConflictKey),
+                ScopeKey = FleetConflictScope.FromFleetConflictKey(obligation.ConflictKey),
+            })
+            .Select(entry => new
+            {
+                entry.Obligation,
+                entry.ConflictHash,
+                entry.ScopeKey,
+                ScopeHash = HashConflictKey(entry.ScopeKey),
+            })
+            .OrderBy(entry => entry.ScopeKey, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Obligation.ConflictKey, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Obligation.StepId, StringComparer.Ordinal)
+            .ToArray();
+
+        var duplicateIdentity = entries
+            .GroupBy(
+                entry => (entry.Obligation.StepId, entry.Obligation.ConflictKey))
+            .Any(group => group.Count() > 1);
+        if (duplicateIdentity)
+        {
+            throw new ArgumentException(
+                "Atomic fleet conflict obligation batches cannot contain duplicate step/conflict identities.",
+                nameof(obligations));
+        }
+
+        await using var connection =
+            await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!await ParentExistsAsync(
+                connection,
+                transaction,
+                operationId,
+                cancellationToken).ConfigureAwait(false))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return new FleetConflictObligationBatchCreateResult(
+                FleetConflictObligationBatchCreateOutcome.ParentOperationNotFound,
+                Array.Empty<FleetConflictObligationSnapshot>());
+        }
+
+        foreach (var scope in entries
+                     .Select(entry => (entry.ScopeHash, entry.ScopeKey))
+                     .Distinct()
+                     .OrderBy(scope => scope.ScopeKey, StringComparer.Ordinal))
+        {
+            await LockConflictScopeAsync(
+                    connection,
+                    transaction,
+                    scope.ScopeHash,
+                    scope.ScopeKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            var blocking = await FindBlockingConflictObligationByScopeAsync(
+                    connection,
+                    transaction,
+                    scope.ScopeHash,
+                    scope.ScopeKey,
+                    operationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (blocking is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new FleetConflictObligationBatchCreateResult(
+                    FleetConflictObligationBatchCreateOutcome.FleetConflictScopeConflict,
+                    Array.Empty<FleetConflictObligationSnapshot>(),
+                    blocking);
+            }
+        }
+
+        var persisted = new List<FleetConflictObligationSnapshot>(entries.Length);
+        var createdAny = false;
+
+        foreach (var entry in entries)
+        {
+            var obligation = entry.Obligation;
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText =
+                """
+                INSERT INTO kafdeck_fleet_conflict_obligations (
+                    obligation_id,
+                    operation_id,
+                    step_id,
+                    conflict_key_hash,
+                    conflict_key,
+                    effect_fingerprint,
+                    schema_version,
+                    state,
+                    blocks_conflicting_dispatch,
+                    version,
+                    writer_fence_version,
+                    writer_fence_token,
+                    snapshot_json,
+                    created_at_utc,
+                    updated_at_utc)
+                VALUES (
+                    @obligation_id,
+                    @operation_id,
+                    @step_id,
+                    @conflict_key_hash,
+                    @conflict_key,
+                    @effect_fingerprint,
+                    @schema_version,
+                    @state,
+                    @blocks_conflicting_dispatch,
+                    @version,
+                    @writer_fence_version,
+                    @writer_fence_token,
+                    @snapshot_json,
+                    @created_at_utc,
+                    @updated_at_utc)
+                ON CONFLICT (operation_id, step_id, conflict_key_hash, conflict_key) DO NOTHING
+                """;
+            AddParameter(insert, "@obligation_id", obligation.ObligationId.ToString("D"));
+            AddParameter(insert, "@operation_id", obligation.OperationId.ToString("D"));
+            AddParameter(insert, "@step_id", obligation.StepId);
+            AddParameter(insert, "@conflict_key_hash", entry.ConflictHash);
+            AddParameter(insert, "@conflict_key", obligation.ConflictKey);
+            AddParameter(insert, "@effect_fingerprint", obligation.EffectFingerprint);
+            AddParameter(insert, "@schema_version", obligation.SchemaVersion);
+            AddParameter(insert, "@state", (int)obligation.State);
+            AddParameter(
+                insert,
+                "@blocks_conflicting_dispatch",
+                obligation.BlocksConflictingDispatch ? 1 : 0);
+            AddParameter(insert, "@version", obligation.Version);
+            AddParameter(
+                insert,
+                "@writer_fence_version",
+                FleetConflictWriterFenceSchema.CurrentWriterVersion);
+            AddParameter(insert, "@writer_fence_token", 1L);
+            AddParameter(insert, "@snapshot_json", Serialize(obligation));
+            AddParameter(insert, "@created_at_utc", FormatTimestamp(obligation.CreatedAtUtc));
+            AddParameter(insert, "@updated_at_utc", FormatTimestamp(obligation.UpdatedAtUtc));
+
+            if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+            {
+                createdAny = true;
+                await EnsureConflictScopeBindingAsync(
+                        connection,
+                        transaction,
+                        obligation.ObligationId.ToString("D"),
+                        entry.ScopeHash,
+                        entry.ScopeKey,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                persisted.Add(obligation);
+                continue;
+            }
+
+            var existing = await GetConflictObligationByIdentityAsync(
+                    connection,
+                    transaction,
+                    obligation.OperationId,
+                    obligation.StepId,
+                    entry.ConflictHash,
+                    obligation.ConflictKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (existing is null)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new FleetConflictObligationBatchCreateResult(
+                    FleetConflictObligationBatchCreateOutcome.LegacyResourceClaimConflict,
+                    Array.Empty<FleetConflictObligationSnapshot>());
+            }
+
+            if (!string.Equals(
+                    existing.EffectFingerprint,
+                    obligation.EffectFingerprint,
+                    StringComparison.Ordinal))
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new FleetConflictObligationBatchCreateResult(
+                    FleetConflictObligationBatchCreateOutcome.ExistingDifferentEffect,
+                    Array.Empty<FleetConflictObligationSnapshot>(),
+                    existing);
+            }
+
+            await EnsureConflictScopeBindingAsync(
+                    connection,
+                    transaction,
+                    existing.ObligationId.ToString("D"),
+                    entry.ScopeHash,
+                    entry.ScopeKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            persisted.Add(existing);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return new FleetConflictObligationBatchCreateResult(
+            createdAny
+                ? FleetConflictObligationBatchCreateOutcome.Created
+                : FleetConflictObligationBatchCreateOutcome.ExistingSameEffects,
+            Array.AsReadOnly(persisted.ToArray()));
+    }
+
     public async Task<FleetConflictObligationSnapshot?> GetConflictObligationAsync(
         Guid obligationId,
         CancellationToken cancellationToken = default)
