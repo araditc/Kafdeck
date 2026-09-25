@@ -32,6 +32,7 @@ public sealed class V06W43ScramPlanningTests
         try
         {
             var result = await planner.PlanUpsertAsync(
+                Preview(),
                 "prod",
                 "User:alice",
                 KafkaScramMechanism.ScramSha512,
@@ -88,7 +89,12 @@ public sealed class V06W43ScramPlanningTests
                 result.Intent.MaterialDigests![0].Name);
 
             var envelope = ScramCredentialMaterialCodec.Encode(
-                result.Plan.Credential,
+                new ScramCredentialMaterialBindingContext(
+                    result.Plan.PreviewBinding.OperationId,
+                    result.Plan.PreviewBinding.RequesterPrincipalId,
+                    result.Plan.PreviewBinding.PolicyVersion,
+                    result.Plan.PreviewBinding.DigestKeyId!,
+                    result.Plan.Credential),
                 password);
             try
             {
@@ -126,6 +132,7 @@ public sealed class V06W43ScramPlanningTests
             Policy());
 
         var missing = await planner.PlanDeleteAsync(
+            Preview(),
             "prod",
             "User:alice",
             KafkaScramMechanism.ScramSha512);
@@ -135,6 +142,7 @@ public sealed class V06W43ScramPlanningTests
             missing.Failure!.Code);
 
         var result = await planner.PlanDeleteAsync(
+            Preview(),
             "prod",
             "User:alice",
             KafkaScramMechanism.ScramSha256);
@@ -168,6 +176,7 @@ public sealed class V06W43ScramPlanningTests
         try
         {
             var protectedResult = await planner.PlanUpsertAsync(
+                Preview(),
                 "prod",
                 "User:kafdeck-service",
                 KafkaScramMechanism.ScramSha256,
@@ -179,6 +188,7 @@ public sealed class V06W43ScramPlanningTests
                 protectedResult.Failure!.Code);
 
             var iterationResult = await planner.PlanUpsertAsync(
+                Preview(),
                 "prod",
                 "User:alice",
                 KafkaScramMechanism.ScramSha256,
@@ -224,6 +234,13 @@ public sealed class V06W43ScramPlanningTests
         Assert.Equal(baseline, reordered);
         Assert.NotEqual(baseline, changed);
     }
+
+    private static ScramPreviewBindingContext Preview() =>
+        new(
+            Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            "principal:owner",
+            "policy-v1",
+            "digest-key-v1");
 
     private static ScramServerPolicy Policy() =>
         new(
