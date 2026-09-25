@@ -228,10 +228,13 @@ public sealed class KafkaRecordReadAdapterTests
             factory,
             new KafkaRecordReadConcurrencyOptions(perClusterLimit: 1, globalLimit: 1));
 
-        var request = Request("records") with
-        {
-            Anchor = RecordAnchor.AtTimestamp(DateTimeOffset.UtcNow.AddMinutes(-1)),
-        };
+        var request = new RecordReadRequest(
+            "records",
+            "topic",
+            0,
+            RecordAnchor.AtTimestamp(DateTimeOffset.UtcNow.AddMinutes(-1)),
+            RecordReadDirection.Forward,
+            RecordOperationBudget.Default);
         var result = await adapter.ReadPageAsync(
             request,
             new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
