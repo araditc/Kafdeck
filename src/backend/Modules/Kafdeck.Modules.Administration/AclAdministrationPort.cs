@@ -15,3 +15,31 @@ public interface IAclObservationPort
         KafkaOperationContext operation,
         CancellationToken cancellationToken = default);
 }
+
+
+/// <summary>
+/// Typed ACL mutation boundary for W42. Requests contain only the exact,
+/// server-materialized ACL bindings that were frozen by the governed preview.
+/// There is deliberately no arbitrary filter delete or generic AdminClient
+/// surface here.
+/// </summary>
+public sealed record AclCreateMutation(
+    string ClusterId,
+    IReadOnlyList<KafkaAclBinding> Bindings);
+
+public sealed record AclRemoveMutation(
+    string ClusterId,
+    IReadOnlyList<KafkaAclBinding> Bindings);
+
+public interface IAclMutationPort
+{
+    Task<MutationProviderResult> CreateAsync(
+        AclCreateMutation request,
+        KafkaOperationContext operation,
+        CancellationToken cancellationToken = default);
+
+    Task<MutationProviderResult> RemoveAsync(
+        AclRemoveMutation request,
+        KafkaOperationContext operation,
+        CancellationToken cancellationToken = default);
+}
