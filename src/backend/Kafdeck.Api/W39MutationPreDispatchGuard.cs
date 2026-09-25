@@ -25,6 +25,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly SchemaMutationPreconditionValidator? _schemas;
     private readonly ConnectMutationPreconditionValidator? _connect;
     private readonly AclMutationPreconditionValidator? _acls;
+    private readonly IAclEffectAuthorizationGuard? _aclAuthorization;
 
     public W39MutationPreDispatchGuard(
         MutationExecutionRequestContextAccessor requestContext,
@@ -35,7 +36,8 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         RecordsPurgePreconditionValidator recordsPurge,
         SchemaMutationPreconditionValidator? schemas = null,
         ConnectMutationPreconditionValidator? connect = null,
-        AclMutationPreconditionValidator? acls = null)
+        AclMutationPreconditionValidator? acls = null,
+        IAclEffectAuthorizationGuard? aclAuthorization = null)
     {
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -46,6 +48,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _schemas = schemas;
         _connect = connect;
         _acls = acls;
+        _aclAuthorization = aclAuthorization;
     }
 
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(
@@ -119,9 +122,18 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
                 break;
 
             case MutationOperationKind.AclAlter:
-                if (_acls is null)
+                if (_acls is null || _aclAuthorization is null)
                 {
                     return Unsupported();
+                }
+
+                var aclAuthorization = await _aclAuthorization
+                    .ValidateCurrentRequesterAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                if (aclAuthorization.Outcome !=
+                    MutationPreDispatchGuardOutcome.Allowed)
+                {
+                    return aclAuthorization;
                 }
 
                 preconditions = await _acls
@@ -139,7 +151,16 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         }
 
         // Re-evaluate after all provider observations and immediately before the
-        // executor is permitted to cross its dispatch boundary.
+        // executor is permitted to cross its dispatch boundary. ACL effects
+        // additionally require the still-current independent approver when the
+        // risk decision is CRITICAL.
+        if (operation.OperationKind == MutationOperationKind.AclAlter)
+        {
+            return await _aclAuthorization!
+                .ValidateCurrentRequesterAsync(operation, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         return AuthorizeCurrentRequester(operation);
     }
 
