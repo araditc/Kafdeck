@@ -16,6 +16,137 @@ public static class ScramMutationContract
         WriteIndented = false,
     };
 
+    public static ScramMutationPlan ValidateAdmissionIntent(
+        MutationIntentDescriptor intent,
+        Guid operationId,
+        string requesterPrincipalId,
+        string policyVersion)
+    {
+        ArgumentNullException.ThrowIfNull(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requesterPrincipalId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
+        if (operationId == Guid.Empty ||
+            intent.Kind != MutationOperationKind.ScramAlter)
+        {
+            throw new MutationStateException(
+                "SCRAM admission requires a non-empty derived operation identity and ScramAlter intent.");
+        }
+
+        var plan = DeserializePlan(intent.CanonicalIntent);
+        var preview = ScramMutationPlanner.NormalizePreviewBinding(
+            plan.PreviewBinding,
+            requireDigestKey: plan.Mode == ScramMutationMode.Upsert);
+        var credential = ScramCredentialMaterialBinding.Normalize(
+            plan.Credential);
+
+        if (preview.OperationId != operationId ||
+            !string.Equals(
+                preview.RequesterPrincipalId,
+                requesterPrincipalId,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                preview.PolicyVersion,
+                policyVersion,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                credential.ClusterId,
+                intent.ClusterId,
+                StringComparison.Ordinal))
+        {
+            throw new MutationStateException(
+                "SCRAM planning identity does not match server admission identity.");
+        }
+
+        var resource = ConflictResource(credential);
+        var resources = MutationPreviewHasher.NormalizeResources(
+            intent.ResourceKeys);
+        if (resources.Count != 1 ||
+            !string.Equals(resources[0], resource, StringComparison.Ordinal))
+        {
+            throw new MutationStateException(
+                "SCRAM admission resource does not match the exact credential target.");
+        }
+
+        var expectedRequirements =
+            FleetMutationAuthorization.NormalizeRequirements(
+                MutationOperationKind.ScramAlter,
+                new[]
+                {
+                    new MutationAuthorizationTarget(
+                        AuthorizationAction.ScramRead,
+                        credential.ClusterId,
+                        resource),
+                    new MutationAuthorizationTarget(
+                        AuthorizationAction.ScramAlter,
+                        credential.ClusterId,
+                        resource),
+                });
+        var actualRequirements =
+            MutationAuthorizationRequirements.Normalize(
+                intent.Kind,
+                intent.ClusterId,
+                intent.AuthorizationTargets,
+                resources);
+        if (!actualRequirements.SequenceEqual(expectedRequirements))
+        {
+            throw new MutationStateException(
+                "SCRAM admission authorization conjunction is not server-closed.");
+        }
+
+        var preconditions = MutationPreviewHasher.NormalizePreconditions(
+            intent.Preconditions);
+        if (preconditions.Count != 1 ||
+            !string.Equals(
+                preconditions[0].Key,
+                "scram.metadata",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                preconditions[0].Fingerprint,
+                plan.ObservedMetadataFingerprint,
+                StringComparison.Ordinal))
+        {
+            throw new MutationStateException(
+                "SCRAM admission metadata precondition does not match the plan.");
+        }
+
+        var digests = MutationPreviewHasher.NormalizeDigests(
+            intent.MaterialDigests);
+        if (plan.Mode == ScramMutationMode.Upsert)
+        {
+            if (digests.Count != 1 ||
+                !string.Equals(
+                    digests[0].Name,
+                    ScramMutationPlanner.MaterialName,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    plan.MaterialName,
+                    ScramMutationPlanner.MaterialName,
+                    StringComparison.Ordinal))
+            {
+                throw new MutationStateException(
+                    "SCRAM upsert admission requires one exact material digest.");
+            }
+        }
+        else if (plan.Mode == ScramMutationMode.Delete)
+        {
+            if (digests.Count != 0 || plan.MaterialName is not null)
+            {
+                throw new MutationStateException(
+                    "SCRAM delete admission must not bind credential material.");
+            }
+        }
+        else
+        {
+            throw Invalid();
+        }
+
+        return plan with
+        {
+            PreviewBinding = preview,
+            Credential = credential,
+        };
+    }
+
     public static ScramMutationPlan ValidateBoundOperation(
         MutationOperationSnapshot operation,
         bool requireReadyForFinalization = false)
@@ -27,23 +158,7 @@ public static class ScramMutationContract
                 "SCRAM contract requires the exact ScramAlter operation kind.");
         }
 
-        ScramMutationPlan plan;
-        try
-        {
-            plan = JsonSerializer.Deserialize<ScramMutationPlan>(
-                       operation.CanonicalIntent,
-                       CanonicalJson) ??
-                   throw Invalid();
-        }
-        catch (JsonException)
-        {
-            throw Invalid();
-        }
-
-        if (!Enum.IsDefined(plan.Mode))
-        {
-            throw Invalid();
-        }
+        var plan = DeserializePlan(operation.CanonicalIntent);
 
         var preview = ScramMutationPlanner.NormalizePreviewBinding(
             plan.PreviewBinding,
@@ -234,6 +349,28 @@ public static class ScramMutationContract
         !string.IsNullOrWhiteSpace(value) &&
         value.Length == 64 &&
         value.All(char.IsAsciiHexDigit);
+
+    private static ScramMutationPlan DeserializePlan(
+        string canonicalIntent)
+    {
+        try
+        {
+            var plan = JsonSerializer.Deserialize<ScramMutationPlan>(
+                           canonicalIntent,
+                           CanonicalJson) ??
+                       throw Invalid();
+            if (!Enum.IsDefined(plan.Mode))
+            {
+                throw Invalid();
+            }
+
+            return plan;
+        }
+        catch (JsonException)
+        {
+            throw Invalid();
+        }
+    }
 
     private static MutationStateException Invalid() =>
         new("SCRAM canonical intent is invalid or unsupported.");
