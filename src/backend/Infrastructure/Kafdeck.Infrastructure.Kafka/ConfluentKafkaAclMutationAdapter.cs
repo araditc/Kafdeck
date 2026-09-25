@@ -298,24 +298,12 @@ public sealed class ConfluentKafkaAclMutationAdapter :
         var successful = reports.Count(report => !report.Error.IsError);
         var failures = reports
             .Where(report => report.Error.IsError)
-            .Select(report => report.Error)
+            .Select(report => KafkaFailureMapper.FromKafka(report.Error).Category)
             .ToArray();
 
-        if (failures.Any(IsAmbiguous))
-        {
-            return Unknown(
-                "acl_create_result_ambiguous",
-                successful);
-        }
-
-        if (successful > 0)
-        {
-            return PartiallyApplied(
-                "acl_create_partially_applied",
-                successful);
-        }
-
-        return Failed("acl_create_failed_definitive");
+        return ConfluentKafkaAclMutationResultClassifier.ClassifyCreateException(
+            successful,
+            failures);
     }
 
     private static MutationProviderResult FromDeleteReports(
@@ -344,21 +332,12 @@ public sealed class ConfluentKafkaAclMutationAdapter :
             return Unknown("acl_remove_unexpected_provider_result");
         }
 
-        if (failures.Any(IsAmbiguous))
-        {
-            return Unknown(
-                "acl_remove_result_ambiguous",
-                deletedCount);
-        }
-
-        if (successfulReports.Length > 0)
-        {
-            return PartiallyApplied(
-                "acl_remove_partially_applied",
-                deletedCount);
-        }
-
-        return Failed("acl_remove_failed_definitive");
+        return ConfluentKafkaAclMutationResultClassifier.ClassifyDeleteException(
+            deletedCount,
+            failures
+                .Select(KafkaFailureMapper.FromKafka)
+                .Select(failure => failure.Category)
+                .ToArray());
     }
 
     private static bool TryValidateDeletedBindings(
@@ -407,15 +386,6 @@ public sealed class ConfluentKafkaAclMutationAdapter :
                 nameof(clusterId),
                 "ACL cluster ID is invalid or exceeds the admitted bound.");
         }
-    }
-
-    private static bool IsAmbiguous(Error error)
-    {
-        var failure = KafkaFailureMapper.FromKafka(error);
-        return failure.Category is
-            KafkaFailureCategory.Timeout or
-            KafkaFailureCategory.Unavailable or
-            KafkaFailureCategory.Unknown;
     }
 
     private static MutationProviderResult FromError(
@@ -478,6 +448,110 @@ public sealed class ConfluentKafkaAclMutationAdapter :
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["provider.accepted"] = providerAccepted ? "true" : "false",
+            ["acknowledged.count"] = acknowledgedCount.ToString(
+                CultureInfo.InvariantCulture),
+        };
+}
+
+
+internal static class ConfluentKafkaAclMutationResultClassifier
+{
+    internal static MutationProviderResult ClassifyCreateException(
+        int successfulCount,
+        IReadOnlyList<KafkaFailureCategory> failureCategories)
+    {
+        ArgumentNullException.ThrowIfNull(failureCategories);
+        if (successfulCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(successfulCount));
+        }
+
+        if (failureCategories.Count == 0)
+        {
+            return Unknown("acl_create_unexpected_provider_report");
+        }
+
+        if (failureCategories.Any(IsAmbiguous))
+        {
+            return Unknown(
+                "acl_create_result_ambiguous",
+                successfulCount);
+        }
+
+        return successfulCount > 0
+            ? PartiallyApplied(
+                "acl_create_partially_applied",
+                successfulCount)
+            : Failed("acl_create_failed_definitive");
+    }
+
+    internal static MutationProviderResult ClassifyDeleteException(
+        int deletedCount,
+        IReadOnlyList<KafkaFailureCategory> failureCategories)
+    {
+        ArgumentNullException.ThrowIfNull(failureCategories);
+        if (deletedCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deletedCount));
+        }
+
+        if (failureCategories.Count == 0)
+        {
+            return Unknown("acl_remove_unexpected_provider_report");
+        }
+
+        if (failureCategories.Any(IsAmbiguous))
+        {
+            return Unknown(
+                "acl_remove_result_ambiguous",
+                deletedCount);
+        }
+
+        // A successful delete filter that matched no binding is not evidence
+        // that any provider state changed. Partial application is claimed only
+        // when the provider report proves at least one exact binding deletion.
+        return deletedCount > 0
+            ? PartiallyApplied(
+                "acl_remove_partially_applied",
+                deletedCount)
+            : Failed("acl_remove_failed_definitive");
+    }
+
+    private static bool IsAmbiguous(KafkaFailureCategory category) =>
+        category is
+            KafkaFailureCategory.Timeout or
+            KafkaFailureCategory.Unavailable or
+            KafkaFailureCategory.Unknown;
+
+    private static MutationProviderResult Failed(string code) =>
+        new(
+            MutationExecutionResultKind.FailedDefinitive,
+            code);
+
+    private static MutationProviderResult Unknown(
+        string code,
+        int acknowledgedCount = 0) =>
+        acknowledgedCount > 0
+            ? new(
+                MutationExecutionResultKind.ExecutionUnknown,
+                code,
+                Evidence(acknowledgedCount))
+            : new(
+                MutationExecutionResultKind.ExecutionUnknown,
+                code);
+
+    private static MutationProviderResult PartiallyApplied(
+        string code,
+        int acknowledgedCount) =>
+        new(
+            MutationExecutionResultKind.PartiallyApplied,
+            code,
+            Evidence(acknowledgedCount));
+
+    private static IReadOnlyDictionary<string, string> Evidence(
+        int acknowledgedCount) =>
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
             ["acknowledged.count"] = acknowledgedCount.ToString(
                 CultureInfo.InvariantCulture),
         };
