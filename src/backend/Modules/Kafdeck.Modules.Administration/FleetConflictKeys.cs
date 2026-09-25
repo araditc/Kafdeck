@@ -156,6 +156,25 @@ public static class FleetConflictKeyCodec
             topicName,
             configurationKey));
 
+    public static string AclBinding(
+        string physicalClusterId,
+        string bindingHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(bindingHash);
+        var normalized = bindingHash.Trim().ToLowerInvariant();
+        if (normalized.Length != 64 ||
+            normalized.Any(character => !char.IsAsciiHexDigit(character)))
+        {
+            throw new MutationStateException(
+                "ACL fleet conflict identity requires one full SHA-256 binding hash.");
+        }
+
+        return Encode(new FleetConflictTarget(
+            FleetConflictTargetKind.AclBinding,
+            physicalClusterId,
+            normalized));
+    }
+
     public static string Broker(
         string physicalClusterId,
         string brokerIdentity) =>
