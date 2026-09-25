@@ -2,6 +2,8 @@ using Confluent.Kafka;
 using Confluent.Kafka.Admin;
 using Kafdeck.Infrastructure.Kafka;
 using Kafdeck.Modules.Administration;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -154,6 +156,93 @@ public sealed class V06W43ScramContractsTests
         Assert.Equal(
             new[] { "DescribeUserAsync", "Dispose" },
             publicMethods);
+    }
+
+    [Fact]
+    public void Scram_material_binding_is_domain_bound_and_fixed_time_matchable()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            new string('k', 32));
+        var password = Encoding.UTF8.GetBytes("synthetic-w43-secret");
+        try
+        {
+            var descriptor = new ScramCredentialBindingDescriptor(
+                "prod",
+                "User:alice",
+                KafkaScramMechanism.ScramSha256,
+                4096);
+
+            var binding = ScramCredentialMaterialBinding.Compute(
+                digest,
+                descriptor,
+                password);
+
+            Assert.True(
+                ScramCredentialMaterialBinding.Matches(
+                    digest,
+                    descriptor,
+                    password,
+                    binding));
+            Assert.False(
+                ScramCredentialMaterialBinding.Matches(
+                    digest,
+                    descriptor with { User = "User:bob" },
+                    password,
+                    binding));
+            Assert.False(
+                ScramCredentialMaterialBinding.Matches(
+                    digest,
+                    descriptor with
+                    {
+                        Mechanism = KafkaScramMechanism.ScramSha512,
+                    },
+                    password,
+                    binding));
+            Assert.False(
+                ScramCredentialMaterialBinding.Matches(
+                    digest,
+                    descriptor with { Iterations = 8192 },
+                    password,
+                    binding));
+            Assert.False(
+                ScramCredentialMaterialBinding.Matches(
+                    digest,
+                    descriptor with { ClusterId = "prod-dr" },
+                    password,
+                    binding));
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                password);
+        }
+    }
+
+    [Fact]
+    public void Scram_execution_material_is_json_hidden_and_zeroed_on_dispose()
+    {
+        var source = Encoding.UTF8.GetBytes("synthetic-w43-secret");
+        try
+        {
+            var material = new ScramCredentialExecutionMaterial(source);
+            var borrowed = material.Password;
+
+            Assert.Equal("{}", JsonSerializer.Serialize(material));
+            Assert.Contains(borrowed.Span.ToArray(), value => value != 0);
+
+            material.Dispose();
+
+            Assert.All(borrowed.Span.ToArray(), value => Assert.Equal(0, value));
+            Assert.Throws<ObjectDisposedException>(() =>
+            {
+                _ = material.Password;
+            });
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                source);
+        }
     }
 
     [Fact]
