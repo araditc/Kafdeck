@@ -31,3 +31,27 @@ public interface IScramMutationPort
         KafkaOperationContext operation,
         CancellationToken cancellationToken = default);
 }
+
+
+public interface IScramEffectAuthorizationGuard
+{
+    Task<MutationPreDispatchGuardResult> ValidateCurrentRequesterAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class FailClosedScramEffectAuthorizationGuard :
+    IScramEffectAuthorizationGuard
+{
+    public Task<MutationPreDispatchGuardResult> ValidateCurrentRequesterAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(
+            new MutationPreDispatchGuardResult(
+                MutationPreDispatchGuardOutcome.AuthorizationDenied,
+                "current_scram_authorization_unavailable"));
+    }
+}
