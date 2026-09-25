@@ -43,3 +43,26 @@ public interface IAclMutationPort
         KafkaOperationContext operation,
         CancellationToken cancellationToken = default);
 }
+
+
+public interface IAclEffectAuthorizationGuard
+{
+    Task<MutationPreDispatchGuardResult> ValidateCurrentRequesterAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class FailClosedAclEffectAuthorizationGuard :
+    IAclEffectAuthorizationGuard
+{
+    public Task<MutationPreDispatchGuardResult> ValidateCurrentRequesterAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new MutationPreDispatchGuardResult(
+            MutationPreDispatchGuardOutcome.AuthorizationDenied,
+            "current_requester_authorization_unavailable"));
+    }
+}
