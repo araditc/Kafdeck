@@ -93,6 +93,59 @@ public sealed class V06W42AclExecutionTests
     }
 
     [Fact]
+    public async Task Create_only_replace_denied_before_create_is_definitive_not_partial_zero()
+    {
+        var desired = Binding(KafkaAclOperation.Read);
+        var state = new StatefulAclProvider(Array.Empty<KafkaAclBinding>());
+        var store = new InMemoryFleetStore();
+        var guard = new SequenceAuthorizationGuard(denyCall: 1);
+        var policy = Policy();
+        var planner = new AclMutationPlanner(state, policy);
+        var planned = await planner.PlanReplaceAsync(
+            "prod",
+            SourceFilter(),
+            new[] { desired });
+        Assert.True(planned.IsSuccess);
+        Assert.Empty(planned.Plan!.RemoveBindings);
+        Assert.Single(planned.Plan.CreateBindings);
+
+        using var material = new MutationExecutionMaterial();
+        var now = DateTimeOffset.UtcNow;
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Intent!,
+            planned.Risk!,
+            "v0.6-w42",
+            now.AddMinutes(5),
+            now,
+            $"w42-replace-create-only-{Guid.NewGuid():N}");
+        var context = new MutationExecutionContext(
+            operation.Snapshot,
+            material,
+            now.AddSeconds(20));
+        var service = Service(
+            state,
+            store,
+            guard,
+            new AclMutationPreconditionValidator(state, policy),
+            policy);
+
+        var result = await service.ExecuteAsync(context);
+
+        Assert.Equal(
+            MutationExecutionResultKind.FailedDefinitive,
+            result.ResultKind);
+        Assert.Equal(
+            "acl_create_current_authorization_denied",
+            result.ResultCode);
+        Assert.Equal(1, guard.Calls);
+        Assert.Equal(0, state.CreateCalls);
+        Assert.Equal(0, state.RemoveCalls);
+        Assert.Empty(store.Obligations);
+        Assert.Empty(state.Bindings);
+    }
+
+    [Fact]
     public async Task Ambiguous_provider_outcome_can_only_be_promoted_by_observed_terminal_state()
     {
         var state = new StatefulAclProvider(Array.Empty<KafkaAclBinding>())
