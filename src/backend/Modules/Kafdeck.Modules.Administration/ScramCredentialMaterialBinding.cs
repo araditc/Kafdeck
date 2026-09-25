@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -65,58 +64,22 @@ public sealed class ScramCredentialExecutionMaterial : IDisposable
 /// </summary>
 public static class ScramCredentialMaterialBinding
 {
-    private static readonly byte[] Domain =
-        Encoding.UTF8.GetBytes("kafdeck:v0.6:scram-material:v1");
-
     public static string Compute(
         IMutationMaterialDigestService digestService,
         ScramCredentialBindingDescriptor descriptor,
         ReadOnlySpan<byte> password)
     {
         ArgumentNullException.ThrowIfNull(digestService);
-        var normalized = Normalize(descriptor);
-
-        if (password.Length is < 1 or > ScramCredentialExecutionMaterial.HardMaxPasswordBytes)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(password),
-                $"SCRAM password material must contain between 1 and {ScramCredentialExecutionMaterial.HardMaxPasswordBytes} bytes.");
-        }
-
-        var cluster = Encoding.UTF8.GetBytes(normalized.ClusterId);
-        var user = Encoding.UTF8.GetBytes(normalized.User);
-        var totalLength = checked(
-            4 + Domain.Length +
-            4 + cluster.Length +
-            4 + user.Length +
-            4 +
-            4 +
-            4 + password.Length);
-        var envelope = new byte[totalLength];
-
+        var envelope = ScramCredentialMaterialCodec.Encode(
+            descriptor,
+            password);
         try
         {
-            var position = 0;
-            Write(envelope, ref position, Domain);
-            Write(envelope, ref position, cluster);
-            Write(envelope, ref position, user);
-            WriteInt32(envelope, ref position, (int)normalized.Mechanism);
-            WriteInt32(envelope, ref position, normalized.Iterations);
-            Write(envelope, ref position, password);
-
-            if (position != envelope.Length)
-            {
-                throw new InvalidOperationException(
-                    "SCRAM material binding envelope length is inconsistent.");
-            }
-
             return digestService.ComputeDigest(envelope);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(envelope);
-            CryptographicOperations.ZeroMemory(cluster);
-            CryptographicOperations.ZeroMemory(user);
         }
     }
 
@@ -189,24 +152,4 @@ public static class ScramCredentialMaterialBinding
         };
     }
 
-    private static void Write(
-        Span<byte> destination,
-        ref int position,
-        ReadOnlySpan<byte> value)
-    {
-        WriteInt32(destination, ref position, value.Length);
-        value.CopyTo(destination[position..]);
-        position += value.Length;
-    }
-
-    private static void WriteInt32(
-        Span<byte> destination,
-        ref int position,
-        int value)
-    {
-        BinaryPrimitives.WriteInt32BigEndian(
-            destination.Slice(position, sizeof(int)),
-            value);
-        position += sizeof(int);
-    }
 }
