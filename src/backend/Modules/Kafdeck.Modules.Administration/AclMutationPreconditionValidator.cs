@@ -180,15 +180,18 @@ public sealed class AclMutationPreconditionValidator
             return false;
         }
 
+        var rebuiltResources =
+            MutationPreviewHasher.NormalizeResources(rebuilt.ResourceKeys);
+
         return operation.ResourceKeys.SequenceEqual(
-                   rebuilt.ResourceKeys,
+                   rebuiltResources,
                    StringComparer.Ordinal) &&
                operation.AuthorizationTargets.SequenceEqual(
                    MutationAuthorizationRequirements.Normalize(
                        rebuilt.Kind,
                        rebuilt.ClusterId,
                        rebuilt.AuthorizationTargets,
-                       rebuilt.ResourceKeys));
+                       rebuiltResources));
     }
 
     private KafkaOperationContext Operation() =>
