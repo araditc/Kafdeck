@@ -1,3 +1,4 @@
+using System.Globalization;
 using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 using Xunit;
@@ -179,6 +180,70 @@ public sealed class V06W42AclPolicyTests
         };
 
         Assert.Equal(hashes.Length, hashes.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Authorization_resource_uses_the_full_exact_acl_binding_hash()
+    {
+        var baseline = Binding(
+            "payments",
+            "User:alice",
+            KafkaAclOperation.Read,
+            KafkaAclPermissionType.Allow);
+        var changedOperation = baseline with
+        {
+            Operation = KafkaAclOperation.Write,
+        };
+        var changedPermission = baseline with
+        {
+            PermissionType = KafkaAclPermissionType.Deny,
+        };
+
+        var baselineHash = AclBindingIdentity.Hash(baseline);
+        var baselineResource = AclBindingIdentity.AuthorizationResource(baseline);
+
+        Assert.EndsWith(
+            "/" + baselineHash,
+            baselineResource,
+            StringComparison.Ordinal);
+        Assert.Equal(64, baselineHash.Length);
+        Assert.NotEqual(
+            baselineResource,
+            AclBindingIdentity.AuthorizationResource(changedOperation));
+        Assert.NotEqual(
+            baselineResource,
+            AclBindingIdentity.AuthorizationResource(changedPermission));
+    }
+
+    [Fact]
+    public void Exact_acl_binding_hash_is_stable_across_current_cultures()
+    {
+        var binding = Binding(
+            "payments",
+            "User:alice",
+            KafkaAclOperation.AlterConfigs,
+            KafkaAclPermissionType.Deny,
+            KafkaAclPatternType.Prefixed);
+        var original = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            var invariant = AclBindingIdentity.Hash(binding);
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fa-IR");
+            var persian = AclBindingIdentity.Hash(binding);
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var arabic = AclBindingIdentity.Hash(binding);
+
+            Assert.Equal(invariant, persian);
+            Assert.Equal(invariant, arabic);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     [Fact]
