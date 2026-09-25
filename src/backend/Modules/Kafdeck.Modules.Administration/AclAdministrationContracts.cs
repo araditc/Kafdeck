@@ -958,6 +958,13 @@ public static class AclBindingIdentity
                $"{Uri.EscapeDataString(normalized.ResourceName)}/{Hash(normalized)[..20]}";
     }
 
+    public static string FleetConflictKey(
+        string clusterId,
+        KafkaAclBinding binding) =>
+        FleetConflictKeyCodec.AclBinding(
+            clusterId,
+            Hash(binding));
+
     public static string ResourceKey(
         string clusterId,
         KafkaAclBinding binding)
