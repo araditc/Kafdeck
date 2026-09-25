@@ -243,6 +243,34 @@ internal static class ConfluentKafkaAclMapper
         };
     }
 
+    public static ProviderAclBinding ToProviderBinding(
+        KafkaAclBinding binding)
+    {
+        var normalized = AclMutationPolicy.NormalizeBinding(binding);
+        return new ProviderAclBinding
+        {
+            Pattern = new ResourcePattern
+            {
+                Type = ToProviderResourceType(normalized.ResourceType),
+                Name = normalized.ResourceName,
+                ResourcePatternType = normalized.PatternType switch
+                {
+                    KafkaAclPatternType.Literal => ProviderResourcePatternType.Literal,
+                    KafkaAclPatternType.Prefixed => ProviderResourcePatternType.Prefixed,
+                    _ => throw new NotSupportedException(
+                        "ACL resource pattern type is not supported by the pinned provider."),
+                },
+            },
+            Entry = new AccessControlEntry
+            {
+                Principal = normalized.Principal,
+                Host = normalized.Host,
+                Operation = ToProviderOperation(normalized.Operation),
+                PermissionType = ToProviderPermission(normalized.PermissionType),
+            },
+        };
+    }
+
     public static bool TryFromProvider(
         ProviderAclBinding binding,
         out KafkaAclBinding? result)
