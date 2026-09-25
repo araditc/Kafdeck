@@ -77,6 +77,41 @@ public sealed class V06W42AclPlanningTests
     }
 
     [Fact]
+    public async Task Replace_enforces_binding_ceiling_across_combined_delta()
+    {
+        var observation = new StubAclObservationPort(
+            new[]
+            {
+                Binding("payments.orders", KafkaAclOperation.Read, KafkaAclPermissionType.Allow),
+                Binding("payments.orders", KafkaAclOperation.Write, KafkaAclPermissionType.Allow),
+                Binding("payments.orders", KafkaAclOperation.Create, KafkaAclPermissionType.Allow),
+            });
+        var planner = new AclMutationPlanner(
+            observation,
+            Policy(maxBindingsPerMutation: 4),
+            timeProvider: new FixedTimeProvider());
+
+        var result = await planner.PlanReplaceAsync(
+            "prod",
+            new KafkaAclBindingFilter(
+                KafkaAclResourceType.Topic,
+                "payments.orders",
+                KafkaAclFilterPatternMode.Literal,
+                "User:alice"),
+            new[]
+            {
+                Binding("payments.orders", KafkaAclOperation.Delete, KafkaAclPermissionType.Allow),
+                Binding("payments.orders", KafkaAclOperation.Alter, KafkaAclPermissionType.Allow),
+                Binding("payments.orders", KafkaAclOperation.Describe, KafkaAclPermissionType.Allow),
+            });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            AclMutationPlanningFailureCode.TooManyBindings,
+            result.Failure!.Code);
+    }
+
+    [Fact]
     public async Task Create_observes_each_exact_target_and_omits_existing_binding()
     {
         var existing = Binding(
@@ -310,7 +345,8 @@ public sealed class V06W42AclPlanningTests
             operation,
             permission);
 
-    private static AclServerPolicy Policy() =>
+    private static AclServerPolicy Policy(
+        int maxBindingsPerMutation = 64) =>
         new(
             Array.Empty<string>(),
             new[] { "User:alice" },
@@ -324,7 +360,7 @@ public sealed class V06W42AclPlanningTests
             allowPrefixedGrants: true,
             allowWildcardResourceGrants: false,
             allowAllOperationGrants: false,
-            maxBindingsPerMutation: 64);
+            maxBindingsPerMutation: maxBindingsPerMutation);
 
     private sealed class SelectivePrincipalObservationPort : IAclObservationPort
     {
