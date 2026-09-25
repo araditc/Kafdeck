@@ -435,6 +435,56 @@ public sealed class V06W41FleetPersistenceTests
     }
 
     [Fact]
+    public async Task Sqlite_atomic_conflict_obligation_batch_rolls_back_on_scope_conflict()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-v06-obligation-batch-{Guid.NewGuid():N}.db");
+        try
+        {
+            await ExerciseAtomicConflictObligationBatchAsync(
+                new SqliteMutationDbConnectionFactory(path));
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_atomic_conflict_obligation_batch_rolls_back_on_scope_conflict_when_available()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var adminFactory = new PostgreSqlMutationDbConnectionFactory(connectionString);
+        var schema = $"kafdeck_v06_obligation_batch_{Guid.NewGuid():N}";
+        await using (var connection = await adminFactory.OpenAsync())
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText = $"CREATE SCHEMA {schema}";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            await ExerciseAtomicConflictObligationBatchAsync(
+                new PostgreSqlMutationDbConnectionFactory(
+                    $"{connectionString.TrimEnd(';')};Search Path={schema}"));
+        }
+        finally
+        {
+            await using var connection = await adminFactory.OpenAsync();
+            await using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
     public async Task Fleet_state_refuses_orphan_parent_identity()
     {
         var path = Path.Combine(
@@ -475,6 +525,82 @@ public sealed class V06W41FleetPersistenceTests
         {
             DeleteSqliteFiles(path);
         }
+    }
+
+    private static async Task ExerciseAtomicConflictObligationBatchAsync(
+        IMutationDbConnectionFactory factory)
+    {
+        var repository = new AdoMutationOperationRepository(factory);
+        await repository.InitializeAsync();
+
+        var store = new AdoFleetMutationStateStore(factory);
+        await store.InitializeAsync();
+
+        var firstParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(firstParent.Snapshot)).Outcome);
+
+        var firstKey = FleetConflictKeyCodec.AclBinding("prod", new string('a', 64));
+        var secondKey = FleetConflictKeyCodec.AclBinding("prod", new string('b', 64));
+        var firstBatch = new[]
+        {
+            FleetConflictObligation.Create(
+                firstParent.Snapshot.OperationId,
+                "acl-create",
+                firstKey,
+                "sha256:acl-a",
+                Now).Snapshot,
+            FleetConflictObligation.Create(
+                firstParent.Snapshot.OperationId,
+                "acl-create",
+                secondKey,
+                "sha256:acl-b",
+                Now).Snapshot,
+        };
+
+        var created = await store.CreateConflictObligationsAsync(firstBatch);
+        Assert.Equal(FleetConflictObligationBatchCreateOutcome.Created, created.Outcome);
+        Assert.Equal(2, created.Obligations.Count);
+
+        var replay = await store.CreateConflictObligationsAsync(firstBatch);
+        Assert.Equal(
+            FleetConflictObligationBatchCreateOutcome.ExistingSameEffects,
+            replay.Outcome);
+        Assert.Equal(2, replay.Obligations.Count);
+
+        var secondParent = CreateParentOperation();
+        Assert.Equal(
+            MutationCreateOutcome.Created,
+            (await repository.CreateAsync(secondParent.Snapshot)).Outcome);
+
+        var freeKey = FleetConflictKeyCodec.AclBinding("prod", new string('c', 64));
+        var conflictingBatch = new[]
+        {
+            FleetConflictObligation.Create(
+                secondParent.Snapshot.OperationId,
+                "acl-create",
+                freeKey,
+                "sha256:acl-c",
+                Now.AddMinutes(1)).Snapshot,
+            FleetConflictObligation.Create(
+                secondParent.Snapshot.OperationId,
+                "acl-create",
+                secondKey,
+                "sha256:acl-b-competitor",
+                Now.AddMinutes(1)).Snapshot,
+        };
+
+        var conflict = await store.CreateConflictObligationsAsync(conflictingBatch);
+        Assert.Equal(
+            FleetConflictObligationBatchCreateOutcome.FleetConflictScopeConflict,
+            conflict.Outcome);
+        Assert.NotNull(conflict.ConflictingObligation);
+
+        // The free member must not survive when any other member of the same
+        // pre-dispatch batch conflicts. No provider I/O has happened yet.
+        Assert.Null(await store.FindBlockingConflictObligationAsync(freeKey));
+        Assert.NotNull(await store.FindBlockingConflictObligationAsync(secondKey));
     }
 
     private static async Task ExerciseDurableStoreAsync(
