@@ -168,6 +168,120 @@ public sealed class KafkaRecordReadAdapterTests
     }
 
     [Fact]
+    public async Task Setup_retries_retryable_unavailable_before_any_record_is_observed()
+    {
+        var session = new SequencedSetupSession(
+            ErrorCode.Local_AllBrokersDown,
+            failuresBeforeSuccess: 1);
+        var factory = new FixedRecordConsumerFactory(session);
+
+        using var adapter = new ConfluentKafkaRecordReadAdapter(
+            [PlaintextProfile("records")],
+            factory,
+            new KafkaRecordReadConcurrencyOptions(perClusterLimit: 1, globalLimit: 1));
+
+        var result = await adapter.ReadPageAsync(
+            Request("records"),
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(2, session.WatermarkCalls);
+    }
+
+    [Fact]
+    public async Task Setup_does_not_retry_authentication_failure()
+    {
+        var session = new SequencedSetupSession(
+            ErrorCode.SaslAuthenticationFailed,
+            failuresBeforeSuccess: 1);
+        var factory = new FixedRecordConsumerFactory(session);
+
+        using var adapter = new ConfluentKafkaRecordReadAdapter(
+            [PlaintextProfile("records")],
+            factory,
+            new KafkaRecordReadConcurrencyOptions(perClusterLimit: 1, globalLimit: 1));
+
+        var result = await adapter.ReadPageAsync(
+            Request("records"),
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
+            CancellationToken.None);
+
+        AssertFailure(
+            result,
+            KafkaFailureCategory.AuthenticationFailed,
+            "kafka_saslauthenticationfailed");
+        Assert.Equal(1, session.WatermarkCalls);
+    }
+
+    [Fact]
+    public async Task Setup_retries_retryable_unavailable_timestamp_lookup()
+    {
+        var session = new SequencedSetupSession(
+            ErrorCode.Local_Transport,
+            failuresBeforeSuccess: 1,
+            failTimestampLookup: true);
+        var factory = new FixedRecordConsumerFactory(session);
+
+        using var adapter = new ConfluentKafkaRecordReadAdapter(
+            [PlaintextProfile("records")],
+            factory,
+            new KafkaRecordReadConcurrencyOptions(perClusterLimit: 1, globalLimit: 1));
+
+        var request = new RecordReadRequest(
+            "records",
+            "topic",
+            0,
+            RecordAnchor.AtTimestamp(DateTimeOffset.UtcNow.AddMinutes(-1)),
+            RecordReadDirection.Forward,
+            RecordOperationBudget.Default);
+        var result = await adapter.ReadPageAsync(
+            request,
+            new KafkaOperationContext(DateTimeOffset.UtcNow.AddSeconds(5)),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(2, session.TimestampCalls);
+    }
+
+    [Fact]
+    public async Task Retryable_unavailable_does_not_wait_past_an_exhausted_record_budget()
+    {
+        var time = new AdvancingTimeProvider(
+            new DateTimeOffset(2026, 9, 25, 13, 0, 0, TimeSpan.Zero));
+        var session = new AdvancingUnavailableSetupSession(
+            () => time.Advance(TimeSpan.FromSeconds(2)));
+        var factory = new FixedRecordConsumerFactory(session);
+        var budget = new RecordOperationBudget(
+            maxRecords: 10,
+            maxRawBytes: 1024,
+            maxProjectedBytes: 1024,
+            maxDuration: TimeSpan.FromSeconds(1),
+            maxRecordsPerSecond: 10);
+
+        using var adapter = new ConfluentKafkaRecordReadAdapter(
+            [PlaintextProfile("records")],
+            factory,
+            new KafkaRecordReadConcurrencyOptions(perClusterLimit: 1, globalLimit: 1),
+            time);
+
+        var result = await adapter.ReadPageAsync(
+            new RecordReadRequest(
+                "records",
+                "topic",
+                0,
+                RecordAnchor.Earliest(),
+                RecordReadDirection.Forward,
+                budget),
+            new KafkaOperationContext(time.GetUtcNow().AddSeconds(10)),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.Equal(RecordBudgetOutcome.DurationLimit, result.Value!.BudgetOutcome);
+        Assert.Equal(1, session.WatermarkCalls);
+    }
+
+    [Fact]
     public async Task Budget_expiry_after_watermark_setup_does_not_replace_requested_anchor()
     {
         var time = new AdvancingTimeProvider(
@@ -315,6 +429,116 @@ public sealed class KafkaRecordReadAdapterTests
             TopicPartition topicPartition,
             TimeSpan timeout) =>
             new(new Offset(0), new Offset(0));
+
+        public Offset OffsetForTimestamp(
+            TopicPartition topicPartition,
+            DateTimeOffset timestampUtc,
+            TimeSpan timeout) => Offset.Unset;
+
+        public void Assign(TopicPartitionOffset offset)
+        {
+        }
+
+        public ConsumeResult<byte[], byte[]>? Consume(TimeSpan timeout) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class FixedRecordConsumerFactory : IKafkaRecordConsumerFactory
+    {
+        private readonly IKafkaRecordConsumerSession _session;
+
+        public FixedRecordConsumerFactory(IKafkaRecordConsumerSession session)
+        {
+            _session = session;
+        }
+
+        public IKafkaRecordConsumerSession Create(ClusterProfile profile) =>
+            _session;
+    }
+
+    private sealed class SequencedSetupSession : IKafkaRecordConsumerSession
+    {
+        private readonly ErrorCode _failureCode;
+        private readonly int _failuresBeforeSuccess;
+        private readonly bool _failTimestampLookup;
+
+        public SequencedSetupSession(
+            ErrorCode failureCode,
+            int failuresBeforeSuccess,
+            bool failTimestampLookup = false)
+        {
+            _failureCode = failureCode;
+            _failuresBeforeSuccess = failuresBeforeSuccess;
+            _failTimestampLookup = failTimestampLookup;
+        }
+
+        public int WatermarkCalls { get; private set; }
+
+        public int TimestampCalls { get; private set; }
+
+        public WatermarkOffsets QueryWatermarkOffsets(
+            TopicPartition topicPartition,
+            TimeSpan timeout)
+        {
+            WatermarkCalls++;
+            if (!_failTimestampLookup &&
+                WatermarkCalls <= _failuresBeforeSuccess)
+            {
+                throw new KafkaException(new Error(_failureCode));
+            }
+
+            return new WatermarkOffsets(new Offset(0), new Offset(0));
+        }
+
+        public Offset OffsetForTimestamp(
+            TopicPartition topicPartition,
+            DateTimeOffset timestampUtc,
+            TimeSpan timeout)
+        {
+            TimestampCalls++;
+            if (_failTimestampLookup &&
+                TimestampCalls <= _failuresBeforeSuccess)
+            {
+                throw new KafkaException(new Error(_failureCode));
+            }
+
+            return Offset.Unset;
+        }
+
+        public void Assign(TopicPartitionOffset offset)
+        {
+        }
+
+        public ConsumeResult<byte[], byte[]>? Consume(TimeSpan timeout) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class AdvancingUnavailableSetupSession :
+        IKafkaRecordConsumerSession
+    {
+        private readonly Action _advance;
+
+        public AdvancingUnavailableSetupSession(Action advance)
+        {
+            _advance = advance;
+        }
+
+        public int WatermarkCalls { get; private set; }
+
+        public WatermarkOffsets QueryWatermarkOffsets(
+            TopicPartition topicPartition,
+            TimeSpan timeout)
+        {
+            WatermarkCalls++;
+            _advance();
+            throw new KafkaException(new Error(ErrorCode.Local_AllBrokersDown));
+        }
 
         public Offset OffsetForTimestamp(
             TopicPartition topicPartition,

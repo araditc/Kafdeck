@@ -410,6 +410,15 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 // A short timeout is used as an interruption point so request
                 // cancellation is observed without waiting for the full operation deadline.
             }
+            catch (KafkaException exception) when (IsRetryableSetupUnavailable(exception.Error))
+            {
+                // Initial metadata can briefly report transport/all-brokers-down
+                // while the read-only consumer establishes a usable connection.
+                // No record has been observed and the operation is side-effect
+                // free, so retry only mapper-approved Unavailable failures inside
+                // the existing operation and budget bounds.
+                PauseSetupRetry(operation, budgetDeadlineUtc, cancellationToken);
+            }
         }
     }
 
@@ -444,6 +453,10 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                 // Retry only before any record has been observed. Each slice is
                 // bounded so cancellation/deadline/budget state is re-evaluated.
             }
+            catch (KafkaException exception) when (IsRetryableSetupUnavailable(exception.Error))
+            {
+                PauseSetupRetry(operation, budgetDeadlineUtc, cancellationToken);
+            }
         }
     }
 
@@ -452,6 +465,16 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         DateTimeOffset budgetDeadlineUtc)
     {
         var now = _timeProvider.GetUtcNow();
+
+        // Preserve the first exhausted bound when scheduler delay crosses both.
+        // A record budget that expires before the outer operation deadline must
+        // remain a budget outcome rather than being reclassified as deadline.
+        if (now >= budgetDeadlineUtc &&
+            budgetDeadlineUtc <= operation.DeadlineUtc)
+        {
+            return SetupResult<T>.BudgetExhausted();
+        }
+
         if (operation.IsExpired(now))
         {
             return SetupResult<T>.Failed(KafkaFailureMapper.DeadlineExceeded());
@@ -469,6 +492,36 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         error.Code is ErrorCode.Local_TimedOut or
             ErrorCode.Local_TimedOutQueue or
             ErrorCode.RequestTimedOut;
+
+    private static bool IsRetryableSetupUnavailable(Error error)
+    {
+        var failure = KafkaFailureMapper.FromKafka(error);
+        return failure.IsRetryable &&
+               failure.Category == KafkaFailureCategory.Unavailable;
+    }
+
+    private void PauseSetupRetry(
+        KafkaOperationContext operation,
+        DateTimeOffset budgetDeadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        // Recompute after the Kafka call: an immediate/unavailable error may
+        // arrive after consuming most of the previous setup slice.
+        var remaining = RemainingIoTime(operation, budgetDeadlineUtc);
+        if (remaining <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var delay = remaining < SetupPollInterval
+            ? remaining
+            : SetupPollInterval;
+
+        if (cancellationToken.WaitHandle.WaitOne(delay))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
 
     private static KafkaRawRecord ToCoreRecord(ConsumeResult<byte[], byte[]> consumed)
     {
