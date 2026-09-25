@@ -46,7 +46,7 @@ public sealed class V06W42AclProviderResultTests
                 new[]
                 {
                     KafkaFailureCategory.Unauthorized,
-                    KafkaFailureCategory.InvalidRequest,
+                    KafkaFailureCategory.ProtocolError,
                 });
 
         Assert.Equal(
