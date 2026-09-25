@@ -263,15 +263,49 @@ public sealed class V06W42AclPreconditionTests
     }
 
     [Fact]
-    public void Pinned_provider_does_not_invent_cluster_or_transactional_id_acl_resources()
+    public void Pinned_provider_maps_cluster_via_broker_but_does_not_invent_transactional_id()
     {
-        Assert.Throws<NotSupportedException>(() =>
+        var clusterFilter =
             Kafdeck.Infrastructure.Kafka.ConfluentKafkaAclMapper.ToProviderFilter(
                 new KafkaAclBindingFilter(
                     KafkaAclResourceType.Cluster,
                     "kafka-cluster",
                     KafkaAclFilterPatternMode.Literal,
-                    "User:alice")));
+                    "User:alice"));
+
+        Assert.Equal(
+            Confluent.Kafka.Admin.ResourceType.Broker,
+            clusterFilter.PatternFilter.Type);
+
+        var providerBinding = new Confluent.Kafka.Admin.AclBinding
+        {
+            Pattern = new Confluent.Kafka.Admin.ResourcePattern
+            {
+                Type = Confluent.Kafka.Admin.ResourceType.Broker,
+                Name = "kafka-cluster",
+                ResourcePatternType =
+                    Confluent.Kafka.Admin.ResourcePatternType.Literal,
+            },
+            Entry = new Confluent.Kafka.Admin.AccessControlEntry
+            {
+                Principal = "User:alice",
+                Host = "*",
+                Operation = Confluent.Kafka.Admin.AclOperation.Alter,
+                PermissionType =
+                    Confluent.Kafka.Admin.AclPermissionType.Allow,
+            },
+        };
+
+        Assert.True(
+            Kafdeck.Infrastructure.Kafka.ConfluentKafkaAclMapper.TryFromProvider(
+                providerBinding,
+                out var mapped));
+        Assert.NotNull(mapped);
+        Assert.Equal(KafkaAclResourceType.Cluster, mapped!.ResourceType);
+
+        Assert.DoesNotContain(
+            "TransactionalId",
+            Enum.GetNames<Confluent.Kafka.Admin.ResourceType>());
 
         Assert.Throws<NotSupportedException>(() =>
             Kafdeck.Infrastructure.Kafka.ConfluentKafkaAclMapper.ToProviderFilter(
