@@ -93,6 +93,63 @@ public sealed class V06W42AclExecutionTests
     }
 
     [Fact]
+    public async Task Removal_only_replace_reports_removed_effect_count()
+    {
+        var keep = Binding(KafkaAclOperation.Read);
+        var removeWrite = Binding(KafkaAclOperation.Write);
+        var removeDelete = Binding(KafkaAclOperation.Delete);
+        var state = new StatefulAclProvider(
+            new[] { keep, removeWrite, removeDelete });
+        var store = new InMemoryFleetStore();
+        var guard = new SequenceAuthorizationGuard();
+        var policy = Policy();
+        var planner = new AclMutationPlanner(state, policy);
+
+        var planned = await planner.PlanReplaceAsync(
+            "prod",
+            SourceFilter(),
+            new[] { keep });
+        Assert.True(planned.IsSuccess);
+        Assert.Empty(planned.Plan!.CreateBindings);
+        Assert.Equal(2, planned.Plan.RemoveBindings.Count);
+
+        using var material = new MutationExecutionMaterial();
+        var now = DateTimeOffset.UtcNow;
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|alice",
+            planned.Intent!,
+            planned.Risk!,
+            "v0.6-w42",
+            now.AddMinutes(5),
+            now,
+            $"w42-replace-remove-only-{Guid.NewGuid():N}");
+        var context = new MutationExecutionContext(
+            operation.Snapshot,
+            material,
+            now.AddSeconds(20));
+        var service = Service(
+            state,
+            store,
+            guard,
+            new AclMutationPreconditionValidator(state, policy),
+            policy);
+
+        var result = await service.ExecuteAsync(context);
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedVerified,
+            result.ResultKind);
+        Assert.Equal("acl_replace_verified", result.ResultCode);
+        Assert.Equal(
+            "2",
+            result.SafeEvidence!["acknowledged.count"]);
+        Assert.Single(state.Bindings);
+        Assert.Contains(keep, state.Bindings);
+        Assert.Equal(0, state.CreateCalls);
+        Assert.Equal(1, state.RemoveCalls);
+    }
+
+    [Fact]
     public async Task Create_only_replace_denied_before_create_is_definitive_not_partial_zero()
     {
         var desired = Binding(KafkaAclOperation.Read);
