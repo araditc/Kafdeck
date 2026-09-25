@@ -16,18 +16,29 @@ public sealed class ConfluentKafkaAclObservationAdapter :
     IAclObservationPort,
     IDisposable
 {
+    public const int DefaultMaxReturnedEntries = 250;
+    public const int HardMaxReturnedEntries = 1_024;
+
     private readonly KafkaAdminClientRegistry _clients;
     private readonly TimeProvider _timeProvider;
+    private readonly int _maxReturnedEntries;
 
     public ConfluentKafkaAclObservationAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        int maxReturnedEntries = DefaultMaxReturnedEntries)
     {
+        if (maxReturnedEntries is < 1 or > HardMaxReturnedEntries)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxReturnedEntries));
+        }
+
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
             secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _maxReturnedEntries = maxReturnedEntries;
     }
 
     public async Task<KafkaResult<IReadOnlyList<KafkaAclBinding>>> DescribeAsync(
@@ -100,6 +111,15 @@ public sealed class ConfluentKafkaAclObservationAdapter :
                 when (exception.Result.Error.IsError)
             {
                 throw new KafkaException(exception.Result.Error);
+            }
+
+            if (result.AclBindings.Count > _maxReturnedEntries)
+            {
+                return Failed(new KafkaFailure(
+                    KafkaFailureCategory.ProtocolError,
+                    "acl_response_entry_limit_exceeded",
+                    "Kafka returned more ACL entries than the configured W42 observation limit.",
+                    false));
             }
 
             var converted = new List<KafkaAclBinding>(result.AclBindings.Count);
@@ -262,10 +282,9 @@ internal static class ConfluentKafkaAclMapper
         {
             KafkaAclResourceType.Topic => ProviderResourceType.Topic,
             KafkaAclResourceType.Group => ProviderResourceType.Group,
-            // librdkafka / Confluent.Kafka names numeric Kafka ACL resource
-            // type 4 "Broker"; for ACL APIs this is the cluster-wide resource
-            // identity used by CLUSTER_ACTION and idempotent-write grants.
-            KafkaAclResourceType.Cluster => ProviderResourceType.Broker,
+            KafkaAclResourceType.Cluster =>
+                throw new NotSupportedException(
+                    "The pinned Confluent.Kafka ResourceType enum exposes Broker, not Kafka ACL Cluster; the cluster ACL subpath remains blocked."),
             KafkaAclResourceType.TransactionalId =>
                 throw new NotSupportedException(
                     "The pinned Confluent.Kafka ResourceType enum does not expose TransactionalId; that ACL subpath remains blocked."),
@@ -310,13 +329,11 @@ internal static class ConfluentKafkaAclMapper
         {
             ProviderResourceType.Topic => KafkaAclResourceType.Topic,
             ProviderResourceType.Group => KafkaAclResourceType.Group,
-            ProviderResourceType.Broker => KafkaAclResourceType.Cluster,
             _ => default,
         };
         return resourceType is
             ProviderResourceType.Topic or
-            ProviderResourceType.Group or
-            ProviderResourceType.Broker;
+            ProviderResourceType.Group;
     }
 
     private static bool TryFromProviderPattern(

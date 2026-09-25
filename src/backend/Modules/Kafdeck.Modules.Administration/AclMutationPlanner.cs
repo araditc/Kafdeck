@@ -115,7 +115,12 @@ public sealed class AclMutationPlanner
                 Array.AsReadOnly(creates),
                 Array.Empty<KafkaAclBinding>(),
                 null,
-                AclMutationPolicy.FingerprintBindings(observed.Value!));
+                // The operation contains only missing exact bindings. Its
+                // immutable precondition therefore binds their observed set,
+                // which is empty at planning time. Existing requested no-ops
+                // are intentionally outside this operation.
+                AclMutationPolicy.FingerprintBindings(
+                    Array.Empty<KafkaAclBinding>()));
             return Success(plan);
         }
         catch (AclPolicyException exception)
