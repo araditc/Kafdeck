@@ -86,7 +86,7 @@ public sealed class MutationAdmissionService
         try
         {
             _ = MutationIdempotency.HashKey(idempotencyKey);
-            targets = MutationAuthorization.NormalizeTargets(
+            targets = MutationAuthorizationRequirements.Normalize(
                 intent.Kind,
                 intent.ClusterId,
                 intent.AuthorizationTargets,
