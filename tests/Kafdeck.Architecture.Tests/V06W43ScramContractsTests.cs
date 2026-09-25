@@ -171,43 +171,56 @@ public sealed class V06W43ScramContractsTests
                 "User:alice",
                 KafkaScramMechanism.ScramSha256,
                 4096);
+            var context = BindingContext(descriptor);
 
             var binding = ScramCredentialMaterialBinding.Compute(
                 digest,
-                descriptor,
+                context,
                 password);
 
             Assert.True(
                 ScramCredentialMaterialBinding.Matches(
                     digest,
-                    descriptor,
+                    context,
                     password,
                     binding));
             Assert.False(
                 ScramCredentialMaterialBinding.Matches(
                     digest,
-                    descriptor with { User = "User:bob" },
-                    password,
-                    binding));
-            Assert.False(
-                ScramCredentialMaterialBinding.Matches(
-                    digest,
-                    descriptor with
+                    context with
                     {
-                        Mechanism = KafkaScramMechanism.ScramSha512,
+                        Credential = descriptor with { User = "User:bob" },
                     },
                     password,
                     binding));
             Assert.False(
                 ScramCredentialMaterialBinding.Matches(
                     digest,
-                    descriptor with { Iterations = 8192 },
+                    context with
+                    {
+                        Credential = descriptor with
+                        {
+                            Mechanism = KafkaScramMechanism.ScramSha512,
+                        },
+                    },
                     password,
                     binding));
             Assert.False(
                 ScramCredentialMaterialBinding.Matches(
                     digest,
-                    descriptor with { ClusterId = "prod-dr" },
+                    context with
+                    {
+                        Credential = descriptor with { Iterations = 8192 },
+                    },
+                    password,
+                    binding));
+            Assert.False(
+                ScramCredentialMaterialBinding.Matches(
+                    digest,
+                    context with
+                    {
+                        Credential = descriptor with { ClusterId = "prod-dr" },
+                    },
                     password,
                     binding));
         }
@@ -229,8 +242,9 @@ public sealed class V06W43ScramContractsTests
             "User:alice",
             KafkaScramMechanism.ScramSha512,
             8192);
+        var context = BindingContext(descriptor);
         var envelope = ScramCredentialMaterialCodec.Encode(
-            descriptor,
+            context,
             password);
 
         try
@@ -238,14 +252,14 @@ public sealed class V06W43ScramContractsTests
             var expected = digest.ComputeDigest(envelope);
             var w43Binding = ScramCredentialMaterialBinding.Compute(
                 digest,
-                descriptor,
+                context,
                 password);
 
             Assert.Equal(expected, w43Binding);
 
             using var decoded =
                 ScramCredentialMaterialCodec.Decode(envelope);
-            Assert.Equal(descriptor, decoded.Descriptor);
+            Assert.Equal(context, decoded.Context);
             Assert.True(
                 decoded.Password.Span.SequenceEqual(password));
         }
@@ -263,11 +277,12 @@ public sealed class V06W43ScramContractsTests
     {
         var password = Encoding.UTF8.GetBytes("synthetic-w43-secret");
         var envelope = ScramCredentialMaterialCodec.Encode(
-            new ScramCredentialBindingDescriptor(
-                "prod",
-                "User:alice",
-                KafkaScramMechanism.ScramSha256,
-                4096),
+            BindingContext(
+                new ScramCredentialBindingDescriptor(
+                    "prod",
+                    "User:alice",
+                    KafkaScramMechanism.ScramSha256,
+                    4096)),
             password);
 
         try
@@ -401,6 +416,15 @@ public sealed class V06W43ScramContractsTests
             MutationExecutionResultKind.ExecutionUnknown,
             unexpected.ResultKind);
     }
+
+    private static ScramCredentialMaterialBindingContext BindingContext(
+        ScramCredentialBindingDescriptor credential) =>
+        new(
+            Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            "principal:owner",
+            "policy-v1",
+            "digest-key-v1",
+            credential);
 
     [Fact]
     public void Scram_conflict_identity_binds_cluster_user_and_mechanism()
