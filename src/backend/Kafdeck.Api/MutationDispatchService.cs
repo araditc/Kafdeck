@@ -31,13 +31,15 @@ public sealed class MutationDispatchService
     private readonly MutationExecutionRequestContextAccessor _requestContext;
     private readonly IMutationMaterialDigestService _materialDigestService;
     private readonly MutationExecutor _executor;
+    private readonly TimeProvider _timeProvider;
 
     public MutationDispatchService(
         IMutationOperationRepository repository,
         MutationRequestAuthorizationService authorization,
         MutationExecutionRequestContextAccessor requestContext,
         IMutationMaterialDigestService materialDigestService,
-        MutationExecutor executor)
+        MutationExecutor executor,
+        TimeProvider? timeProvider = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -45,6 +47,7 @@ public sealed class MutationDispatchService
         _materialDigestService = materialDigestService ??
             throw new ArgumentNullException(nameof(materialDigestService));
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<MutationDispatchResult> ExecuteTopicAsync(
@@ -455,6 +458,17 @@ public sealed class MutationDispatchService
                 MutationDispatchOutcome.NotReady,
                 operation,
                 "mutation_not_ready"));
+        }
+
+        // Reject an already-expired Ready operation before any caller-supplied
+        // execution material is copied into an executor-owned envelope. The
+        // executor still rechecks expiry at claim time to close the race.
+        if (operation.PreviewExpiresAtUtc <= _timeProvider.GetUtcNow())
+        {
+            return (operation, new MutationDispatchResult(
+                MutationDispatchOutcome.NotReady,
+                operation,
+                "mutation_preview_expired"));
         }
 
         return (operation, null);
