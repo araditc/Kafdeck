@@ -267,13 +267,14 @@ public sealed class AclMutationPlanner
     {
         var observed = new HashSet<KafkaAclBinding>();
         ObservationMetadata? metadata = null;
+        var operation = Operation();
 
         foreach (var binding in bindings)
         {
             var result = await _observations.DescribeAsync(
                     clusterId,
                     AclMutationPolicy.ExactFilter(binding),
-                    Operation(),
+                    operation,
                     cancellationToken)
                 .ConfigureAwait(false);
             metadata = result.Observation;
@@ -403,14 +404,19 @@ public sealed class AclAccessAnalysisService
                 KafkaAclFilterPatternMode.Match,
                 query.Principal,
                 Host: null,
-                query.Operation,
+                Operation: null,
                 PermissionType: null));
 
+        // Observe all stored operations for the bounded resource/principal
+        // shape. Kafka operation implications are evaluated locally; applying
+        // the requested operation at the provider would discard relevant
+        // All/Describe/DescribeConfigs and implication evidence.
+        var operation = new KafkaOperationContext(
+            _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout));
         var observed = await _observations.DescribeAsync(
                 clusterId,
                 filter,
-                new KafkaOperationContext(
-                    _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout)),
+                operation,
                 cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess || observed.Value is null)
@@ -427,8 +433,7 @@ public sealed class AclAccessAnalysisService
         var wildcard = await _observations.DescribeAsync(
                 clusterId,
                 wildcardFilter,
-                new KafkaOperationContext(
-                    _timeProvider.GetUtcNow().Add(_policy.ObservationTimeout)),
+                operation,
                 cancellationToken)
             .ConfigureAwait(false);
         if (!wildcard.IsSuccess || wildcard.Value is null)
