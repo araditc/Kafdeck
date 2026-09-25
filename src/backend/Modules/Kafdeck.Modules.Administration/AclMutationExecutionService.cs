@@ -266,9 +266,11 @@ public sealed class AclMutationExecutionService
         if (stillIntermediate is null ||
             !SameBindings(stillIntermediate, current))
         {
-            return PartiallyAppliedResult(
-                "acl_replace_intermediate_state_changed",
-                plan.RemoveBindings.Count);
+            return plan.RemoveBindings.Count == 0
+                ? Failed("acl_replace_intermediate_state_changed")
+                : PartiallyAppliedResult(
+                    "acl_replace_intermediate_state_changed",
+                    plan.RemoveBindings.Count);
         }
 
         var create = await ExecuteEffectAsync(
@@ -296,6 +298,9 @@ public sealed class AclMutationExecutionService
                     "acl_replace_verified",
                     plan.RemoveBindings.Count + plan.CreateBindings.Count,
                     create),
+            MutationExecutionResultKind.FailedDefinitive
+                when plan.RemoveBindings.Count == 0 =>
+                create,
             MutationExecutionResultKind.FailedDefinitive =>
                 PartiallyAppliedResult(
                     "acl_replace_create_not_applied",
