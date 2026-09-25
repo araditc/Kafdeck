@@ -61,6 +61,15 @@ public static class SecurityAuditPrincipal
     public const string Anonymous = "anonymous";
     public const string LegacyDeployment = "legacy-deployment";
 
-    public static string FromOperator(OperatorIdentity identity) =>
-        $"oidc:{identity.Key.Issuer}|{identity.Key.Subject}";
+    public static string FromOperator(OperatorIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        return FromOperatorKey(identity.Key);
+    }
+
+    public static string FromOperatorKey(OperatorIdentityKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return $"oidc:{key.Issuer}|{key.Subject}";
+    }
 }
