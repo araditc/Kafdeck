@@ -112,6 +112,45 @@ public sealed class V06W42AclPlanningTests
     }
 
     [Fact]
+    public async Task Replace_allows_empty_desired_set_as_remove_all()
+    {
+        var existing = new[]
+        {
+            Binding(
+                "payments.orders",
+                KafkaAclOperation.Read,
+                KafkaAclPermissionType.Allow),
+            Binding(
+                "payments.orders",
+                KafkaAclOperation.Write,
+                KafkaAclPermissionType.Allow),
+        };
+        var observation = new StubAclObservationPort(existing);
+        var planner = new AclMutationPlanner(
+            observation,
+            Policy(),
+            timeProvider: new FixedTimeProvider());
+
+        var result = await planner.PlanReplaceAsync(
+            "prod",
+            new KafkaAclBindingFilter(
+                KafkaAclResourceType.Topic,
+                "payments.orders",
+                KafkaAclFilterPatternMode.Literal,
+                "User:alice"),
+            Array.Empty<KafkaAclBinding>());
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Plan);
+        Assert.Equal(AclMutationMode.Replace, result.Plan!.Mode);
+        Assert.Empty(result.Plan.CreateBindings);
+        Assert.Equal(2, result.Plan.RemoveBindings.Count);
+        Assert.Equal(
+            AclMutationPolicy.FingerprintBindings(existing),
+            result.Plan.ObservedBindingSetFingerprint);
+    }
+
+    [Fact]
     public async Task Create_observes_each_exact_target_and_omits_existing_binding()
     {
         var existing = Binding(
