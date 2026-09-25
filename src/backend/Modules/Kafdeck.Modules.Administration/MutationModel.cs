@@ -195,6 +195,38 @@ public static class MutationIdempotency
             .ToLowerInvariant();
     }
 
+    public static Guid DeriveOperationId(
+        string principalId,
+        string clusterId,
+        MutationOperationKind operationKind,
+        string idempotencyKey)
+    {
+        var scope = BuildScope(
+            principalId,
+            clusterId,
+            operationKind);
+        var keyHash = HashKey(idempotencyKey);
+
+        var builder = new StringBuilder(256);
+        Append(
+            builder,
+            "domain",
+            "kafdeck:mutation-operation-id:v1");
+        Append(builder, "scope", scope);
+        Append(builder, "idempotency-key-hash", keyHash);
+
+        var hash = SHA256.HashData(
+            Encoding.UTF8.GetBytes(builder.ToString()));
+        var operationId = new Guid(hash.AsSpan(0, 16));
+        if (operationId == Guid.Empty)
+        {
+            throw new MutationStateException(
+                "Derived mutation operation identity is invalid.");
+        }
+
+        return operationId;
+    }
+
     public static string HashKey(string idempotencyKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);

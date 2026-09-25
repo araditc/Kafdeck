@@ -43,6 +43,26 @@ public sealed class V05MutationAdmissionServiceTests
     }
 
     [Fact]
+    public async Task Admission_can_preserve_a_server_preallocated_operation_identity()
+    {
+        var repository = new AdmissionRepository();
+        var service = CreateService(repository, "payments.*");
+        var operationId = Guid.NewGuid();
+
+        var result = await service.AdmitAsync(
+            CreateOperatorPrincipal("alice"),
+            operationId,
+            Intent("payments.events"),
+            Risk(),
+            "idem-explicit-operation");
+
+        Assert.Equal(MutationAdmissionOutcome.Created, result.Outcome);
+        Assert.NotNull(result.Operation);
+        Assert.Equal(operationId, result.Operation!.OperationId);
+        Assert.Equal(operationId, repository.Current!.OperationId);
+    }
+
+    [Fact]
     public async Task Admission_persists_only_the_governed_preview_and_opens_confirmation()
     {
         var repository = new AdmissionRepository();

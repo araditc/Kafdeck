@@ -44,8 +44,23 @@ public sealed class MutationAdmissionService
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    public Task<MutationAdmissionResult> AdmitAsync(
+        ClaimsPrincipal? principal,
+        MutationIntentDescriptor intent,
+        MutationRiskDecision risk,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default) =>
+        AdmitAsync(
+            principal,
+            Guid.Empty,
+            intent,
+            risk,
+            idempotencyKey,
+            cancellationToken);
+
     public async Task<MutationAdmissionResult> AdmitAsync(
         ClaimsPrincipal? principal,
+        Guid operationId,
         MutationIntentDescriptor intent,
         MutationRiskDecision risk,
         string? idempotencyKey,
@@ -71,7 +86,7 @@ public sealed class MutationAdmissionService
         try
         {
             _ = MutationIdempotency.HashKey(idempotencyKey);
-            targets = MutationAuthorization.NormalizeTargets(
+            targets = MutationAuthorizationRequirements.Normalize(
                 intent.Kind,
                 intent.ClusterId,
                 intent.AuthorizationTargets,
@@ -79,6 +94,50 @@ public sealed class MutationAdmissionService
         }
         catch (Exception exception)
             when (exception is ArgumentException or MutationStateException)
+        {
+            return new MutationAdmissionResult(
+                MutationAdmissionOutcome.InvalidRequest,
+                Code: "mutation_admission_invalid");
+        }
+
+        var requesterPrincipalId =
+            SecurityAuditPrincipal.FromOperator(session.Identity);
+        var effectiveOperationId = operationId;
+        try
+        {
+            if (intent.Kind == MutationOperationKind.ScramAlter)
+            {
+                var derivedOperationId =
+                    MutationIdempotency.DeriveOperationId(
+                        requesterPrincipalId,
+                        intent.ClusterId,
+                        intent.Kind,
+                        idempotencyKey);
+                if (operationId != Guid.Empty &&
+                    operationId != derivedOperationId)
+                {
+                    return new MutationAdmissionResult(
+                        MutationAdmissionOutcome.InvalidRequest,
+                        Code: "mutation_operation_identity_mismatch");
+                }
+
+                effectiveOperationId = derivedOperationId;
+                _ = ScramMutationContract.ValidateAdmissionIntent(
+                    intent,
+                    effectiveOperationId,
+                    requesterPrincipalId,
+                    PolicyVersion);
+            }
+            else if (effectiveOperationId == Guid.Empty)
+            {
+                effectiveOperationId = Guid.NewGuid();
+            }
+        }
+        catch (Exception exception)
+            when (exception is
+                ArgumentException or
+                MutationStateException or
+                OverflowException)
         {
             return new MutationAdmissionResult(
                 MutationAdmissionOutcome.InvalidRequest,
@@ -103,7 +162,8 @@ public sealed class MutationAdmissionService
         try
         {
             operation = MutationOperation.CreatePreview(
-                SecurityAuditPrincipal.FromOperator(session.Identity),
+                effectiveOperationId,
+                requesterPrincipalId,
                 intent with { AuthorizationTargets = targets },
                 risk,
                 PolicyVersion,

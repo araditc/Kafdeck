@@ -31,13 +31,15 @@ public sealed class MutationDispatchService
     private readonly MutationExecutionRequestContextAccessor _requestContext;
     private readonly IMutationMaterialDigestService _materialDigestService;
     private readonly MutationExecutor _executor;
+    private readonly TimeProvider _timeProvider;
 
     public MutationDispatchService(
         IMutationOperationRepository repository,
         MutationRequestAuthorizationService authorization,
         MutationExecutionRequestContextAccessor requestContext,
         IMutationMaterialDigestService materialDigestService,
-        MutationExecutor executor)
+        MutationExecutor executor,
+        TimeProvider? timeProvider = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -45,6 +47,7 @@ public sealed class MutationDispatchService
         _materialDigestService = materialDigestService ??
             throw new ArgumentNullException(nameof(materialDigestService));
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<MutationDispatchResult> ExecuteTopicAsync(
@@ -249,6 +252,108 @@ public sealed class MutationDispatchService
         }
     }
 
+    public async Task<MutationDispatchResult> ExecuteScramUpsertAsync(
+        ClaimsPrincipal? principal,
+        Guid operationId,
+        ReadOnlyMemory<byte> password,
+        CancellationToken cancellationToken = default)
+    {
+        var admission = await AuthorizeReadyRequesterAsync(
+                principal,
+                operationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (admission.Result is not null)
+        {
+            return admission.Result;
+        }
+
+        var operation = admission.Operation!;
+        ScramMutationPlan plan;
+        try
+        {
+            plan = ScramMutationContract.ValidateBoundOperation(
+                operation,
+                requireReadyForFinalization: true);
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or MutationStateException)
+        {
+            return InvalidMaterial(operation);
+        }
+
+        if (plan.Mode != ScramMutationMode.Upsert)
+        {
+            return Unsupported(operation);
+        }
+
+        MutationExecutionMaterial material;
+        try
+        {
+            material = ScramMutationExecutionMaterialBuilder.BuildUpsert(
+                operation,
+                password);
+        }
+        catch (Exception exception)
+            when (exception is
+                ArgumentException or
+                MutationStateException or
+                OverflowException)
+        {
+            return InvalidMaterial(operation);
+        }
+
+        using (material)
+        {
+            return await ExecuteAdmittedAsync(
+                    principal!,
+                    operationId,
+                    ToMaterialDictionary(material),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    public async Task<MutationDispatchResult> ExecuteScramDeleteAsync(
+        ClaimsPrincipal? principal,
+        Guid operationId,
+        CancellationToken cancellationToken = default)
+    {
+        var admission = await AuthorizeReadyRequesterAsync(
+                principal,
+                operationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (admission.Result is not null)
+        {
+            return admission.Result;
+        }
+
+        var operation = admission.Operation!;
+        try
+        {
+            var plan = ScramMutationContract.ValidateBoundOperation(
+                operation,
+                requireReadyForFinalization: true);
+            if (plan.Mode != ScramMutationMode.Delete)
+            {
+                return Unsupported(operation);
+            }
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or MutationStateException)
+        {
+            return InvalidMaterial(operation);
+        }
+
+        return await ExecuteAdmittedAsync(
+                principal!,
+                operationId,
+                executionMaterial: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<MutationDispatchResult> ExecuteConnectWithoutMaterialAsync(
         ClaimsPrincipal? principal,
         Guid operationId,
@@ -353,6 +458,17 @@ public sealed class MutationDispatchService
                 MutationDispatchOutcome.NotReady,
                 operation,
                 "mutation_not_ready"));
+        }
+
+        // Reject an already-expired Ready operation before any caller-supplied
+        // execution material is copied into an executor-owned envelope. The
+        // executor still rechecks expiry at claim time to close the race.
+        if (operation.PreviewExpiresAtUtc <= _timeProvider.GetUtcNow())
+        {
+            return (operation, new MutationDispatchResult(
+                MutationDispatchOutcome.NotReady,
+                operation,
+                "mutation_preview_expired"));
         }
 
         return (operation, null);

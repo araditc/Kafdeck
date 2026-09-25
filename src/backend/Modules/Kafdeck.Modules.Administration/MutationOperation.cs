@@ -16,8 +16,39 @@ public sealed class MutationOperation
         string policyVersion,
         DateTimeOffset previewExpiresAtUtc,
         DateTimeOffset nowUtc,
+        string idempotencyKey) =>
+        CreatePreview(
+            Guid.NewGuid(),
+            requesterPrincipalId,
+            intent,
+            risk,
+            policyVersion,
+            previewExpiresAtUtc,
+            nowUtc,
+            idempotencyKey);
+
+    /// <summary>
+    /// Creates a preview using a server-generated operation identity allocated
+    /// before operation-bound material planning. The legacy overload above
+    /// retains the existing v0.5 identity allocation and hash behavior.
+    /// </summary>
+    public static MutationOperation CreatePreview(
+        Guid operationId,
+        string requesterPrincipalId,
+        MutationIntentDescriptor intent,
+        MutationRiskDecision risk,
+        string policyVersion,
+        DateTimeOffset previewExpiresAtUtc,
+        DateTimeOffset nowUtc,
         string idempotencyKey)
     {
+        if (operationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Mutation operation identity must be non-empty.",
+                nameof(operationId));
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(requesterPrincipalId);
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(risk);
@@ -80,7 +111,7 @@ public sealed class MutationOperation
 
         var snapshot = new MutationOperationSnapshot
         {
-            OperationId = Guid.NewGuid(),
+            OperationId = operationId,
             RequesterPrincipalId = requester,
             ClusterId = clusterId,
             OperationKind = intent.Kind,

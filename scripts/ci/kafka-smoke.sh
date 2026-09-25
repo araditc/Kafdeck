@@ -127,6 +127,13 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
   --filter FullyQualifiedName~KafkaAclMutationIntegrationTests
 
+# W43 SCRAM evidence uses a unique synthetic user and request-scoped random
+# credential bytes. It proves typed create/upsert, rotation, exact-user metadata
+# observation and delete without persisting or logging credential material.
+KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
+  dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
+  --filter FullyQualifiedName~KafkaScramMutationIntegrationTests
+
 # Explicitly retain metadata Describe while denying DescribeConfigs so the second
 # pass exercises genuine partial access rather than a total authorization failure.
 docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add --allow-principal User:kafdeck_restricted --operation Describe --topic kafdeck-ci-smoke --force >/dev/null
@@ -139,4 +146,4 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-w35-control
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke
 
-echo "Kafka ${KAFDECK_KAFKA_VERSION:-4.3.1} W38 compatibility, mutation, security and partial-access matrix passed."
+echo "Kafka ${KAFDECK_KAFKA_VERSION:-4.3.1} W43 compatibility, mutation, security and partial-access matrix passed."
