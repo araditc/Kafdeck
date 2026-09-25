@@ -44,8 +44,23 @@ public sealed class MutationAdmissionService
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    public Task<MutationAdmissionResult> AdmitAsync(
+        ClaimsPrincipal? principal,
+        MutationIntentDescriptor intent,
+        MutationRiskDecision risk,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default) =>
+        AdmitAsync(
+            principal,
+            Guid.NewGuid(),
+            intent,
+            risk,
+            idempotencyKey,
+            cancellationToken);
+
     public async Task<MutationAdmissionResult> AdmitAsync(
         ClaimsPrincipal? principal,
+        Guid operationId,
         MutationIntentDescriptor intent,
         MutationRiskDecision risk,
         string? idempotencyKey,
@@ -103,6 +118,7 @@ public sealed class MutationAdmissionService
         try
         {
             operation = MutationOperation.CreatePreview(
+                operationId,
                 SecurityAuditPrincipal.FromOperator(session.Identity),
                 intent with { AuthorizationTargets = targets },
                 risk,
