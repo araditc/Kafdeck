@@ -182,6 +182,28 @@ public sealed class V06W42AclPolicyTests
     }
 
     [Fact]
+    public void Fleet_conflict_identity_uses_the_full_exact_acl_binding_hash()
+    {
+        var allow = Binding(
+            "payments",
+            "User:alice",
+            KafkaAclOperation.Read,
+            KafkaAclPermissionType.Allow);
+        var deny = allow with { PermissionType = KafkaAclPermissionType.Deny };
+
+        var allowKey = AclBindingIdentity.FleetConflictKey("prod", allow);
+        var denyKey = AclBindingIdentity.FleetConflictKey("prod", deny);
+
+        Assert.NotEqual(allowKey, denyKey);
+
+        var target = FleetConflictKeyCodec.Decode(allowKey);
+        Assert.Equal(FleetConflictTargetKind.AclBinding, target.Kind);
+        Assert.Equal("prod", target.PhysicalClusterId);
+        Assert.Equal(AclBindingIdentity.Hash(allow), target.ResourceId);
+        Assert.Null(target.SubresourceId);
+    }
+
+    [Fact]
     public void Access_analysis_reports_observed_evidence_without_claiming_effective_access()
     {
         var bindings = new[]
