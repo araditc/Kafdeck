@@ -50,6 +50,101 @@ public sealed class V06W42AclAuthorizationIntegrationTests
     }
 
     [Fact]
+    public async Task Critical_phase_guard_revalidates_the_distinct_current_direct_subject_approver()
+    {
+        var operation = WithCriticalApproval(
+            CreateAclOperation(),
+            "oidc:https://idp.example|carol");
+        var (_, context, authorization, approvalAuthorizer) =
+            CreateAuthorization(
+                operation,
+                directSubjects: new[] { "alice", "carol" });
+        var guard = new W42AclEffectAuthorizationGuard(
+            context,
+            authorization,
+            approvalAuthorizer);
+
+        using var scope = context.Push(CreateOperatorPrincipal("alice"));
+        var result = await guard.ValidateCurrentRequesterAsync(operation);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.Allowed,
+            result.Outcome);
+    }
+
+    [Fact]
+    public async Task Critical_phase_guard_does_not_rehydrate_group_only_approver_context()
+    {
+        var operation = WithCriticalApproval(
+            CreateAclOperation(),
+            "oidc:https://idp.example|carol");
+        var (_, context, authorization, approvalAuthorizer) =
+            CreateAuthorization(
+                operation,
+                directSubjects: new[] { "alice" },
+                groupBindings: new[]
+                {
+                    new AuthorizationGroupBindingDefinition(
+                        "acl-admins",
+                        new[] { "acl-operator" }),
+                });
+        var guard = new W42AclEffectAuthorizationGuard(
+            context,
+            authorization,
+            approvalAuthorizer);
+
+        using var scope = context.Push(CreateOperatorPrincipal("alice"));
+        var result = await guard.ValidateCurrentRequesterAsync(operation);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.AuthorizationDenied,
+            result.Outcome);
+        Assert.Equal(
+            "current_required_approver_eligibility_unavailable_or_denied",
+            result.ResultCode);
+    }
+
+    [Theory]
+    [InlineData(null, "current_required_approver_missing")]
+    [InlineData(
+        "oidc:https://idp.example|alice",
+        "current_required_approver_not_distinct")]
+    public async Task Critical_phase_guard_requires_durable_distinct_approval(
+        string? approvedBy,
+        string expectedCode)
+    {
+        var operation = CreateAclOperation() with
+        {
+            Risk = CreateAclOperation().Risk with
+            {
+                RiskClass = MutationRiskClass.Critical,
+                RequiresIndependentApproval = true,
+            },
+            ApprovedByPrincipalId = approvedBy,
+            ApprovalAuthorizationEvidenceHash = approvedBy is null
+                ? null
+                : new string('a', 64),
+            ApprovedAtUtc = approvedBy is null
+                ? null
+                : DateTimeOffset.UtcNow,
+        };
+        var (_, context, authorization, approvalAuthorizer) =
+            CreateAuthorization(operation);
+        var guard = new W42AclEffectAuthorizationGuard(
+            context,
+            authorization,
+            approvalAuthorizer);
+
+        using var scope = context.Push(CreateOperatorPrincipal("alice"));
+        var result = await guard.ValidateCurrentRequesterAsync(operation);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.AuthorizationDenied,
+            result.Outcome);
+        Assert.Equal(expectedCode, result.ResultCode);
+    }
+
+    [Fact]
     public async Task W39_keeps_acl_dispatch_fail_closed_until_acl_validator_is_explicitly_injected()
     {
         var operation = CreateAclOperation();
@@ -140,7 +235,9 @@ public sealed class V06W42AclAuthorizationIntegrationTests
         MutationExecutionRequestContextAccessor Context,
         MutationRequestAuthorizationService Authorization,
         MutationApprovalAuthorizer ApprovalAuthorizer) CreateAuthorization(
-        MutationOperationSnapshot operation)
+        MutationOperationSnapshot operation,
+        IReadOnlyList<string>? directSubjects = null,
+        IReadOnlyList<AuthorizationGroupBindingDefinition>? groupBindings = null)
     {
         var resource = Assert.Single(
             operation.AuthorizationTargets,
@@ -164,14 +261,14 @@ public sealed class V06W42AclAuthorizationIntegrationTests
                             new[] { resource }),
                     }),
             },
-            new[] { "alice", "bob" }
+            (directSubjects ?? new[] { "alice", "bob" })
                 .Select(subject =>
                     new AuthorizationSubjectBindingDefinition(
                         "https://idp.example",
                         subject,
                         new[] { "acl-operator" }))
                 .ToArray(),
-            Array.Empty<AuthorizationGroupBindingDefinition>());
+            groupBindings ?? Array.Empty<AuthorizationGroupBindingDefinition>());
 
         var evaluator = new AuthorizationPolicyEvaluator(
             AuthorizationPolicyCompiler.Compile(definition));
@@ -210,6 +307,21 @@ public sealed class V06W42AclAuthorizationIntegrationTests
                 new ThrowingRecordsPurgeObservationPort()),
             acls: acls);
     }
+
+    private static MutationOperationSnapshot WithCriticalApproval(
+        MutationOperationSnapshot operation,
+        string approvedByPrincipalId) =>
+        operation with
+        {
+            Risk = operation.Risk with
+            {
+                RiskClass = MutationRiskClass.Critical,
+                RequiresIndependentApproval = true,
+            },
+            ApprovedByPrincipalId = approvedByPrincipalId,
+            ApprovalAuthorizationEvidenceHash = new string('a', 64),
+            ApprovedAtUtc = DateTimeOffset.UtcNow,
+        };
 
     private static ClaimsPrincipal CreateOperatorPrincipal(string subject)
     {
