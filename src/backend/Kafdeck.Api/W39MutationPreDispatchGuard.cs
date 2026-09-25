@@ -24,6 +24,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly RecordsPurgePreconditionValidator _recordsPurge;
     private readonly SchemaMutationPreconditionValidator? _schemas;
     private readonly ConnectMutationPreconditionValidator? _connect;
+    private readonly AclMutationPreconditionValidator? _acls;
 
     public W39MutationPreDispatchGuard(
         MutationExecutionRequestContextAccessor requestContext,
@@ -33,7 +34,8 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         ConsumerMutationPreconditionValidator consumers,
         RecordsPurgePreconditionValidator recordsPurge,
         SchemaMutationPreconditionValidator? schemas = null,
-        ConnectMutationPreconditionValidator? connect = null)
+        ConnectMutationPreconditionValidator? connect = null,
+        AclMutationPreconditionValidator? acls = null)
     {
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -43,6 +45,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _recordsPurge = recordsPurge ?? throw new ArgumentNullException(nameof(recordsPurge));
         _schemas = schemas;
         _connect = connect;
+        _acls = acls;
     }
 
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(
@@ -115,6 +118,17 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
                     .ConfigureAwait(false);
                 break;
 
+            case MutationOperationKind.AclAlter:
+                if (_acls is null)
+                {
+                    return Unsupported();
+                }
+
+                preconditions = await _acls
+                    .ValidateAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
             default:
                 return Unsupported();
         }
@@ -130,36 +144,11 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     }
 
     private MutationPreDispatchGuardResult AuthorizeCurrentRequester(
-        MutationOperationSnapshot operation)
-    {
-        var principal = _requestContext.CurrentPrincipal;
-        if (principal is null ||
-            !OperatorSessionContextFactory.TryCreate(principal, out var session) ||
-            session is null)
-        {
-            return Denied("current_requester_identity_missing");
-        }
-
-        var currentPrincipalId = SecurityAuditPrincipal.FromOperator(session.Identity);
-        if (!string.Equals(
-                currentPrincipalId,
-                operation.RequesterPrincipalId,
-                StringComparison.Ordinal))
-        {
-            return Denied("current_requester_identity_mismatch");
-        }
-
-        var authorization = _authorization.AuthorizeForDispatch(
-            principal,
+        MutationOperationSnapshot operation) =>
+        MutationCurrentRequesterAuthorization.Evaluate(
+            _requestContext,
+            _authorization,
             operation);
-
-        return authorization == KafdeckAuthorizationOutcome.Allowed
-            ? MutationPreDispatchGuardResult.Allowed
-            : Denied(
-                authorization == KafdeckAuthorizationOutcome.Unauthenticated
-                    ? "current_requester_identity_missing"
-                    : "current_requester_authorization_denied");
-    }
 
     private static MutationPreDispatchGuardResult Unsupported() =>
         new(
