@@ -71,10 +71,12 @@ public sealed class V06W42AclPolicyTests
 
         Assert.Equal(MutationOperationKind.AclAlter, operation.Snapshot.OperationKind);
         Assert.Equal(MutationRiskClass.High, operation.Snapshot.Risk.RiskClass);
-        Assert.True(operation.Snapshot.AuthorizationTargets.Any(
-            target => target.Action == AuthorizationAction.AclRead));
-        Assert.True(operation.Snapshot.AuthorizationTargets.Any(
-            target => target.Action == AuthorizationAction.AclAlter));
+        Assert.Contains(
+            operation.Snapshot.AuthorizationTargets,
+            target => target.Action == AuthorizationAction.AclRead);
+        Assert.Contains(
+            operation.Snapshot.AuthorizationTargets,
+            target => target.Action == AuthorizationAction.AclAlter);
         Assert.Equal(2, operation.Snapshot.AuthorizationTargets.Count);
     }
 
