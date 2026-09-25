@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -935,13 +936,13 @@ public static class AclBindingIdentity
     {
         var normalized = AclMutationPolicy.NormalizeBinding(binding);
         var builder = new StringBuilder(512);
-        Append(builder, "resource-type", ((int)normalized.ResourceType).ToString());
+        Append(builder, "resource-type", ((int)normalized.ResourceType).ToString(CultureInfo.InvariantCulture));
         Append(builder, "resource-name", normalized.ResourceName);
-        Append(builder, "pattern-type", ((int)normalized.PatternType).ToString());
+        Append(builder, "pattern-type", ((int)normalized.PatternType).ToString(CultureInfo.InvariantCulture));
         Append(builder, "principal", normalized.Principal);
         Append(builder, "host", normalized.Host);
-        Append(builder, "operation", ((int)normalized.Operation).ToString());
-        Append(builder, "permission", ((int)normalized.PermissionType).ToString());
+        Append(builder, "operation", ((int)normalized.Operation).ToString(CultureInfo.InvariantCulture));
+        Append(builder, "permission", ((int)normalized.PermissionType).ToString(CultureInfo.InvariantCulture));
         return builder.ToString();
     }
 
@@ -955,7 +956,7 @@ public static class AclBindingIdentity
     {
         var normalized = AclMutationPolicy.NormalizeBinding(binding);
         return $"acl/{normalized.ResourceType.ToString().ToLowerInvariant()}/" +
-               $"{Uri.EscapeDataString(normalized.ResourceName)}/{Hash(normalized)[..20]}";
+               $"{Uri.EscapeDataString(normalized.ResourceName)}/{Hash(normalized)}";
     }
 
     public static string FleetConflictKey(
