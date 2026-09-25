@@ -219,6 +219,73 @@ public sealed class V06W43ScramContractsTests
     }
 
     [Fact]
+    public void Common_executor_digest_matches_the_metadata_bound_scram_envelope()
+    {
+        using var digest = new HmacMutationMaterialDigestService(
+            new string('k', 32));
+        var password = Encoding.UTF8.GetBytes("synthetic-w43-secret");
+        var descriptor = new ScramCredentialBindingDescriptor(
+            "prod",
+            "User:alice",
+            KafkaScramMechanism.ScramSha512,
+            8192);
+        var envelope = ScramCredentialMaterialCodec.Encode(
+            descriptor,
+            password);
+
+        try
+        {
+            var expected = digest.ComputeDigest(envelope);
+            var w43Binding = ScramCredentialMaterialBinding.Compute(
+                digest,
+                descriptor,
+                password);
+
+            Assert.Equal(expected, w43Binding);
+
+            using var decoded =
+                ScramCredentialMaterialCodec.Decode(envelope);
+            Assert.Equal(descriptor, decoded.Descriptor);
+            Assert.True(
+                decoded.Password.Span.SequenceEqual(password));
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                envelope);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                password);
+        }
+    }
+
+    [Fact]
+    public void Scram_execution_envelope_rejects_metadata_or_shape_tampering()
+    {
+        var password = Encoding.UTF8.GetBytes("synthetic-w43-secret");
+        var envelope = ScramCredentialMaterialCodec.Encode(
+            new ScramCredentialBindingDescriptor(
+                "prod",
+                "User:alice",
+                KafkaScramMechanism.ScramSha256,
+                4096),
+            password);
+
+        try
+        {
+            envelope[0] ^= 0x01;
+            Assert.Throws<MutationStateException>(() =>
+                ScramCredentialMaterialCodec.Decode(envelope));
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                envelope);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                password);
+        }
+    }
+
+    [Fact]
     public void Scram_execution_material_is_json_hidden_and_zeroed_on_dispose()
     {
         var source = Encoding.UTF8.GetBytes("synthetic-w43-secret");
