@@ -174,6 +174,18 @@ public sealed class ConfluentKafkaScramObservationAdapter :
         }
         catch (DescribeUserScramCredentialsException exception)
         {
+            // The exact-user Describe API reports a user with no SCRAM
+            // credentials as ResourceNotFound on some supported Kafka/client
+            // combinations. For this one-user request only, absence is a
+            // successful empty observation rather than a provider failure.
+            if (exception.Error.Code == ErrorCode.ResourceNotFound)
+            {
+                return KafkaResult<
+                    IReadOnlyList<KafkaScramCredentialMetadata>>.Success(
+                        Array.Empty<KafkaScramCredentialMetadata>(),
+                        LiveObservation());
+            }
+
             return Failed(KafkaFailureMapper.FromKafka(exception.Error));
         }
         catch (KafkaException exception)

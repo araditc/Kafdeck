@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text;
+using Confluent.Kafka;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Kafka;
@@ -24,8 +26,10 @@ public sealed class KafkaScramMutationIntegrationTests
             KafkaSecurityProtocol.Plaintext,
             null,
             null);
-        var firstPassword = RandomNumberGenerator.GetBytes(32);
-        var rotatedPassword = RandomNumberGenerator.GetBytes(32);
+        var firstPassword = Encoding.UTF8.GetBytes(
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
+        var rotatedPassword = Encoding.UTF8.GetBytes(
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
 
         using var mutations = new ConfluentKafkaScramMutationAdapter(
             new[] { profile },
@@ -67,6 +71,10 @@ public sealed class KafkaScramMutationIntegrationTests
                 expectedIterations: 4096,
                 shouldExist: true,
                 cancellation.Token);
+            AssertScramAuthentication(
+                user,
+                firstPassword,
+                shouldSucceed: true);
 
             var rotated = await mutations.UpsertAsync(
                 new ScramUpsertMutation(
@@ -88,6 +96,14 @@ public sealed class KafkaScramMutationIntegrationTests
                 expectedIterations: 8192,
                 shouldExist: true,
                 cancellation.Token);
+            AssertScramAuthentication(
+                user,
+                firstPassword,
+                shouldSucceed: false);
+            AssertScramAuthentication(
+                user,
+                rotatedPassword,
+                shouldSucceed: true);
 
             var deleted = await mutations.DeleteAsync(
                 new ScramDeleteMutation(
@@ -107,6 +123,10 @@ public sealed class KafkaScramMutationIntegrationTests
                 expectedIterations: 8192,
                 shouldExist: false,
                 cancellation.Token);
+            AssertScramAuthentication(
+                user,
+                rotatedPassword,
+                shouldSucceed: false);
         }
         finally
         {
@@ -167,6 +187,33 @@ public sealed class KafkaScramMutationIntegrationTests
 
         Assert.Fail(
             "Kafka SCRAM post-condition was not observed before the bounded integration-test deadline.");
+    }
+
+    private static void AssertScramAuthentication(
+        string user,
+        ReadOnlySpan<byte> password,
+        bool shouldSucceed)
+    {
+        var config = new AdminClientConfig
+        {
+            BootstrapServers = "localhost:9094",
+            SecurityProtocol = SecurityProtocol.SaslPlaintext,
+            SaslMechanism = Confluent.Kafka.SaslMechanism.ScramSha256,
+            SaslUsername = user,
+            SaslPassword = Encoding.UTF8.GetString(password),
+        };
+
+        using var client = new AdminClientBuilder(config).Build();
+        if (shouldSucceed)
+        {
+            var metadata = client.GetMetadata(TimeSpan.FromSeconds(5));
+            Assert.NotNull(metadata);
+            Assert.NotEmpty(metadata.Brokers);
+            return;
+        }
+
+        Assert.ThrowsAny<KafkaException>(
+            () => client.GetMetadata(TimeSpan.FromSeconds(5)));
     }
 
     private static KafkaOperationContext Operation() =>

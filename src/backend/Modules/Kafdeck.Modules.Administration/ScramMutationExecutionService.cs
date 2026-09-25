@@ -700,9 +700,17 @@ public sealed class ScramMutationExecutionService
                     .ConfigureAwait(false);
                 if (observed.IsSuccess && observed.Value is not null)
                 {
-                    var matching = observed.Value.Any(item =>
-                        item.Mechanism == plan.Credential.Mechanism &&
-                        item.Iterations == plan.Credential.Iterations);
+                    // Upsert verification may match the admitted
+                    // mechanism+iterations metadata. Delete verification is
+                    // stricter: any remaining credential for the mechanism
+                    // means the delete is not proven, even if a concurrent
+                    // rotation changed its iteration count.
+                    var matching = shouldExist
+                        ? observed.Value.Any(item =>
+                            item.Mechanism == plan.Credential.Mechanism &&
+                            item.Iterations == plan.Credential.Iterations)
+                        : observed.Value.Any(item =>
+                            item.Mechanism == plan.Credential.Mechanism);
                     if (matching == shouldExist)
                     {
                         return true;
