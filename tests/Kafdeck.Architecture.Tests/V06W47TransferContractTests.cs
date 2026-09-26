@@ -168,6 +168,78 @@ public sealed class V06W47TransferContractTests
     }
 
     [Fact]
+    public void Mutation_preview_preserves_W47_specific_high_and_critical_thresholds()
+    {
+        var now = DateTimeOffset.Parse("2026-09-26T08:00:00Z");
+        var source = new ClusterTransferEndpoint(
+            "source",
+            "v1",
+            "physical-source");
+        var destination = new ClusterTransferEndpoint(
+            "destination",
+            "v1",
+            "physical-destination");
+        var policy = new ClusterTransferDataPolicy(
+            "none",
+            1,
+            new string('c', 64));
+        var budget = new ClusterTransferBudget();
+
+        ClusterTransferPlan BuildPlan(int count)
+        {
+            var mappings = Enumerable.Range(0, count)
+                .Select(index => new ClusterTransferMapping(
+                    $"source-{index}",
+                    0,
+                    $"destination-{index}",
+                    0,
+                    index,
+                    index + 1,
+                    new string('a', 64),
+                    new string('b', 64)))
+                .ToArray();
+            return new ClusterTransferPlan(
+                source,
+                destination,
+                mappings,
+                budget,
+                policy,
+                ClusterTransferPolicy.PlanFingerprint(
+                    source,
+                    destination,
+                    mappings,
+                    budget,
+                    policy));
+        }
+
+        var narrow = BuildPlan(1);
+        var narrowOperation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|transfer",
+            ClusterTransferPolicy.BuildIntent(narrow),
+            ClusterTransferPolicy.ClassifyRisk(narrow),
+            "v0.6-w47",
+            now.AddMinutes(5),
+            now,
+            "narrow-transfer");
+
+        Assert.Equal(MutationRiskClass.High, narrowOperation.Snapshot.Risk.RiskClass);
+        Assert.False(narrowOperation.Snapshot.Risk.RequiresIndependentApproval);
+
+        var broad = BuildPlan(26);
+        var broadOperation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|transfer",
+            ClusterTransferPolicy.BuildIntent(broad),
+            ClusterTransferPolicy.ClassifyRisk(broad),
+            "v0.6-w47",
+            now.AddMinutes(5),
+            now,
+            "broad-transfer");
+
+        Assert.Equal(MutationRiskClass.Critical, broadOperation.Snapshot.Risk.RiskClass);
+        Assert.True(broadOperation.Snapshot.Risk.RequiresIndependentApproval);
+    }
+
+    [Fact]
     public void Transfer_conflict_keys_are_bound_to_physical_clusters_not_profile_aliases()
     {
         var mapping = new ClusterTransferMapping(
