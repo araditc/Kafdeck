@@ -106,7 +106,8 @@ public sealed class SchemaDeveloperService
         string clusterId,
         string subject,
         int version,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, bool>? subjectAuthorization = null)
     {
         var normalizedSubject = NormalizeSubject(subject);
         if (normalizedSubject is null || version <= 0)
@@ -134,6 +135,16 @@ public sealed class SchemaDeveloperService
                 return Bound<SchemaReferenceGraph>(
                     "schema_reference_depth_exceeded",
                     "Schema reference graph exceeded the configured depth bound.");
+            }
+
+            if (subjectAuthorization is not null &&
+                !subjectAuthorization(current.Subject))
+            {
+                return Failed<SchemaReferenceGraph>(
+                    ReadViewFailureCategory.Unauthorized,
+                    "schema_reference_authorization_denied",
+                    "Schema reference traversal reached a subject that the current operator is not authorized to read.",
+                    false);
             }
 
             var result = await _schemas
