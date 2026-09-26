@@ -48,15 +48,16 @@ public sealed class V06W47TransferDispatchTests
 
         Assert.Equal(MutationExecutionResultKind.AppliedVerified, result.Result.ResultKind);
         Assert.Equal(1, producer.CallCount);
-        Assert.Equal("destination", producer.Last!.ClusterId);
-        Assert.Equal("orders-copy", producer.Last.TopicName);
-        Assert.Equal(3, producer.Last.Partition);
-        Assert.True(producer.Last.Key.HasValue);
-        Assert.Empty(producer.Last.Key.Value.ToArray());
-        Assert.False(producer.Last.Value.HasValue);
-        Assert.Equal(new[] { "x-dup", "x-dup" }, producer.Last.Headers.Select(item => item.Name));
-        Assert.Equal(new byte[] { 1 }, producer.Last.Headers[0].Value.ToArray());
-        Assert.Equal(new byte[] { 2 }, producer.Last.Headers[1].Value.ToArray());
+        var produced = Assert.IsType<ClusterTransferProduceMutation>(producer.Last);
+        Assert.Equal("destination", produced.ClusterId);
+        Assert.Equal("orders-copy", produced.TopicName);
+        Assert.Equal(3, produced.Partition);
+        Assert.True(produced.Key.HasValue);
+        Assert.Empty(produced.Key.Value.ToArray());
+        Assert.False(produced.Value.HasValue);
+        Assert.Equal(new[] { "x-dup", "x-dup" }, produced.Headers.Select(item => item.Name));
+        Assert.Equal(new byte[] { 1 }, produced.Headers[0].Value.ToArray());
+        Assert.Equal(new byte[] { 2 }, produced.Headers[1].Value.ToArray());
 
         Assert.NotNull(result.Progress.Transfer);
         Assert.Null(result.Progress.Transfer!.PendingBatch);
