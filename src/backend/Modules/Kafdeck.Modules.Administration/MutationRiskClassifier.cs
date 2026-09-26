@@ -128,6 +128,7 @@ public static class MutationRiskClassifier
         MutationOperationKind.ScramAlter => MutationRiskClass.Critical,
         MutationOperationKind.QuotaAlter => MutationRiskClass.High,
         MutationOperationKind.ClusterConfigAlter => MutationRiskClass.High,
+        MutationOperationKind.ClusterTransfer => MutationRiskClass.High,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported mutation operation kind."),
     };
 

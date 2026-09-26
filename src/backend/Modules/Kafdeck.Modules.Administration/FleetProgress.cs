@@ -48,6 +48,7 @@ public sealed record FleetOperationProgressSnapshot
     public int PostCapReconciliationReadCount { get; init; }
     public IReadOnlyList<FleetPostCapReadReservation> PostCapReadReservations { get; init; } =
         Array.Empty<FleetPostCapReadReservation>();
+    public FleetTransferProgressSnapshot? Transfer { get; init; }
     public long Version { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
 
@@ -328,9 +329,14 @@ public sealed class FleetOperationProgress
                 "Fleet post-cap reconciliation read counter does not match durable reservations.");
         }
 
+        var transfer = snapshot.Transfer is null
+            ? null
+            : FleetTransferProgress.Validate(snapshot.Transfer);
+
         return snapshot with
         {
             PostCapReadReservations = Array.AsReadOnly(reservations.ToArray()),
+            Transfer = transfer,
         };
     }
 }
