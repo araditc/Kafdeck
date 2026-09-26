@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 6 scope accepted; v0.1-v0.5 released; v0.5.1 corrective release published; v0.6 planning pending governed admission; v0.7+ inactive**  
+Status: **Gate 0–Gate 6 scope accepted; v0.1-v0.6 released; v0.6 is the active release line; v0.7 scope admission proposed in Issue #178; v0.7 implementation inactive**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -183,7 +183,7 @@ Capabilities:
 
 There is no fabricated generic Kafka "broker read-only mode"; maintenance actions are capability-gated to actual Kafka/provider primitives.
 
-Scope authority: **Issue #145 / Gate 6 — owner accepted 2026-09-23**. Tracker **#146** owns the [RFC-0006 planning package](docs/implementation/v0.6-planning-package.md). W41-W50 may start only after protected-main governed planning admission with fresh exact-head checks, required CODEOWNER approval and resolved substantive review threads. No v0.6 executable surface is activated by scope acceptance or this roadmap change. Release/tag/publication remains a separate owner gate; v0.7+ remains inactive.
+Scope authority: **Issue #145 / Gate 6 — owner accepted 2026-09-23**. Tracker **#146** and W41-W50 are complete. v0.6 was published from protected `main` as the active release line on 2026-09-26. Capability availability remains evidence-based: foundations that are present in the codebase are not advertised as active mutation surfaces when their production runtime path is Blocked or Unsupported. v0.7 scope admission is tracked separately in **Issue #178** and v0.7 implementation remains inactive until that gate is explicitly accepted.
 
 ## v0.7 — Developer & Streaming Ecosystem Platform
 
