@@ -317,6 +317,8 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 app.MapKafdeckV01(kafdeckOptions);
 app.MapKafdeckRecordEndpoints(kafdeckOptions);
 app.MapKafdeckV04ReadViews(kafdeckOptions);
+app.MapKafdeckFleetCapabilities();
+app.MapKafdeckV06OpenApi();
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();

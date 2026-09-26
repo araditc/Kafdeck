@@ -145,6 +145,20 @@ export interface TopicCatalogEntry {
   classification: string | null;
 }
 
+export type FleetCapabilityState = 'supported' | 'unsupported' | 'blocked' | 'unconfigured' | 'unknown';
+export interface FleetCapabilityStatus {
+  id: string;
+  displayName: string;
+  state: FleetCapabilityState;
+  reason: string;
+  workstream: string;
+  evidence: string[];
+}
+export interface FleetCapabilityResponse {
+  version: string;
+  capabilities: FleetCapabilityStatus[];
+}
+
 export interface RecordAnchorProjection { kind: string; offset: number | null; timestampUtc: string | null; }
 export interface RecordSafeHeader { name: string; value: string; isRedacted: boolean; }
 export interface RecordSafeProjection {
@@ -356,6 +370,9 @@ export const kafdeckApi = {
   },
   getTopicCatalog(clusterId: string, topicName: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<TopicCatalogEntry>>(`${clusterPath(clusterId)}/catalog/topics/${encodeURIComponent(topicName)}`, signal);
+  },
+  getFleetCapabilities(signal?: AbortSignal) {
+    return readJson<FleetCapabilityResponse>('/api/v1/fleet/capabilities', signal);
   },
   getRecords(clusterId: string, topicName: string, query: RecordQuery, signal?: AbortSignal) {
     return readJson<RecordSafePage>(`${recordPath(clusterId, topicName, query.partition)}?${recordParams(query)}`, signal);
