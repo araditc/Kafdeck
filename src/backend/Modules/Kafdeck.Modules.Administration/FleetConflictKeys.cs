@@ -193,6 +193,33 @@ public static class FleetConflictKeyCodec
             brokerIdentity,
             configurationKey));
 
+    public static string TransferPair(
+        string firstPhysicalClusterId,
+        string secondPhysicalClusterId)
+    {
+        var first = RequireBounded(
+            firstPhysicalClusterId,
+            nameof(firstPhysicalClusterId),
+            MaxClusterIdCharacters);
+        var second = RequireBounded(
+            secondPhysicalClusterId,
+            nameof(secondPhysicalClusterId),
+            MaxClusterIdCharacters);
+        if (string.Equals(first, second, StringComparison.Ordinal))
+        {
+            throw new MutationStateException(
+                "Transfer pair requires two distinct physical clusters.");
+        }
+
+        var ordered = new[] { first, second }
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        return Encode(new FleetConflictTarget(
+            FleetConflictTargetKind.TransferPair,
+            ordered[0],
+            ordered[1]));
+    }
+
     private static string EncodeField(string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
