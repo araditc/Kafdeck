@@ -9,6 +9,7 @@ using Kafdeck.Modules.Administration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -199,6 +200,39 @@ public sealed class V07SchemaLifecycleTests
         Assert.Equal(
             new[] { HttpMethods.Get },
             methods!.HttpMethods);
+    }
+
+    [Fact]
+    public void Configuration_loader_reads_explicit_schema_registry_provider_profile()
+    {
+        var configuration =
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(
+                    new Dictionary<string, string?>
+                    {
+                        ["Kafdeck:Deployment:ListenUrl"] =
+                            "http://127.0.0.1:8080",
+                        ["Kafdeck:Clusters:0:Id"] = "cluster-a",
+                        ["Kafdeck:Clusters:0:BootstrapServers:0"] =
+                            "localhost:9092",
+                        ["Kafdeck:Clusters:0:SecurityProtocol"] =
+                            "Plaintext",
+                        ["Kafdeck:Clusters:0:SchemaRegistry:Url"] =
+                            "https://registry.example",
+                        ["Kafdeck:Clusters:0:SchemaRegistry:ProviderProfile"] =
+                            "KarapaceCompatibleV1",
+                    })
+                .Build();
+
+        var options =
+            KafdeckConfigurationLoader.Load(
+                configuration);
+
+        Assert.Equal(
+            SchemaRegistryProviderProfile.KarapaceCompatibleV1,
+            Assert.Single(options.Clusters)
+                .SchemaRegistry!
+                .ProviderProfile);
     }
 
     [Fact]
