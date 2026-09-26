@@ -71,6 +71,27 @@ public sealed record SchemaMockResult(
 
 public sealed class SchemaDeveloperService
 {
+    public const int MaxReferenceNameLength = 512;
+
+    private static readonly string[] UnsupportedJsonSchemaConstraintKeywords =
+    [
+        "enum",
+        "const",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "minProperties",
+        "maxProperties",
+    ];
+
     private static readonly Regex ProtobufFieldPattern = new(
         @"(?m)^\s*(?:(optional|required|repeated)\s+)?(?<type>[A-Za-z_][A-Za-z0-9_.<>]*)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*\d+\s*(?:\[[^\]]*\])?\s*;",
         RegexOptions.CultureInvariant | RegexOptions.Compiled,
@@ -110,7 +131,7 @@ public sealed class SchemaDeveloperService
         string subject,
         int version,
         CancellationToken cancellationToken = default,
-        Func<string, bool>? subjectAuthorization = null)
+        Func<string, CancellationToken, Task<bool>>? subjectAuthorization = null)
     {
         var normalizedSubject = NormalizeSubject(subject);
         if (normalizedSubject is null || version <= 0)
@@ -141,7 +162,10 @@ public sealed class SchemaDeveloperService
             }
 
             if (subjectAuthorization is not null &&
-                !subjectAuthorization(current.Subject))
+                !await subjectAuthorization(
+                        current.Subject,
+                        cancellationToken)
+                    .ConfigureAwait(false))
             {
                 return Failed<SchemaReferenceGraph>(
                     ReadViewFailureCategory.Unauthorized,
@@ -198,7 +222,10 @@ public sealed class SchemaDeveloperService
                 }
 
                 var targetSubject = NormalizeSubject(reference.Subject);
-                if (targetSubject is null || reference.Version <= 0)
+                var referenceName = NormalizeReferenceName(reference.Name);
+                if (targetSubject is null ||
+                    referenceName is null ||
+                    reference.Version <= 0)
                 {
                     return Invalid<SchemaReferenceGraph>(
                         "invalid_schema_reference");
@@ -206,7 +233,7 @@ public sealed class SchemaDeveloperService
 
                 edges.Add(
                     new SchemaReferenceEdge(
-                        reference.Name,
+                        referenceName,
                         current.Subject,
                         current.Version,
                         targetSubject,
@@ -390,12 +417,20 @@ public sealed class SchemaDeveloperService
                 "Schema source exceeded the bounded parser budget.",
                 false);
         }
+        catch (SchemaMockUnsupportedException exception)
+        {
+            return Failed<SchemaMockResult>(
+                ReadViewFailureCategory.Unsupported,
+                exception.Code,
+                exception.SafeMessage,
+                false);
+        }
         catch (NotSupportedException)
         {
             return Failed<SchemaMockResult>(
                 ReadViewFailureCategory.Unsupported,
                 "schema_mock_format_unsupported",
-                "Schema format is not supported by bounded mock generation.",
+                "Schema format or construct is not supported by bounded mock generation.",
                 false);
         }
 
@@ -557,9 +592,10 @@ public sealed class SchemaDeveloperService
                     }
                     : throw new JsonException("Avro map values are invalid.");
             case "enum":
-                return "EXAMPLE";
             case "fixed":
-                return string.Empty;
+                throw new SchemaMockUnsupportedException(
+                    "schema_mock_avro_construct_unsupported",
+                    "Avro enum and fixed constructs are not supported by bounded mock generation.");
             default:
                 return PrimitiveValue(
                     typeName,
@@ -616,6 +652,8 @@ public sealed class SchemaDeveloperService
             throw new NotSupportedException(
                 "JSON Schema composition/reference constructs require a typed resolver.");
         }
+
+        RejectUnsupportedJsonSchemaConstraints(schema);
 
         var typeName = ReadJsonSchemaType(schema);
         switch (typeName)
@@ -955,4 +993,18 @@ public sealed class SchemaDeveloperService
                 code,
                 message,
                 retryable));
+
+    private sealed class SchemaMockUnsupportedException : Exception
+    {
+        public SchemaMockUnsupportedException(
+            string code,
+            string safeMessage)
+        {
+            Code = code;
+            SafeMessage = safeMessage;
+        }
+
+        public string Code { get; }
+        public string SafeMessage { get; }
+    }
 }
