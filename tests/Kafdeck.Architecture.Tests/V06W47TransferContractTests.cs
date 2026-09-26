@@ -168,6 +168,98 @@ public sealed class V06W47TransferContractTests
     }
 
     [Fact]
+    public void Transfer_conflict_keys_are_bound_to_physical_clusters_not_profile_aliases()
+    {
+        var mapping = new ClusterTransferMapping(
+            "orders",
+            0,
+            "orders-copy",
+            1,
+            10,
+            20,
+            new string('a', 64),
+            new string('b', 64));
+        var budget = new ClusterTransferBudget();
+        var policy = new ClusterTransferDataPolicy(
+            "none",
+            1,
+            new string('c', 64));
+
+        var firstSource = new ClusterTransferEndpoint(
+            "source-profile-a",
+            "v1",
+            "physical-source");
+        var firstDestination = new ClusterTransferEndpoint(
+            "destination-profile-a",
+            "v1",
+            "physical-destination");
+        var secondSource = new ClusterTransferEndpoint(
+            "source-profile-b",
+            "v2",
+            "physical-source");
+        var secondDestination = new ClusterTransferEndpoint(
+            "destination-profile-b",
+            "v3",
+            "physical-destination");
+
+        var first = new ClusterTransferPlan(
+            firstSource,
+            firstDestination,
+            new[] { mapping },
+            budget,
+            policy,
+            ClusterTransferPolicy.PlanFingerprint(
+                firstSource,
+                firstDestination,
+                new[] { mapping },
+                budget,
+                policy));
+        var second = new ClusterTransferPlan(
+            secondSource,
+            secondDestination,
+            new[] { mapping },
+            budget,
+            policy,
+            ClusterTransferPolicy.PlanFingerprint(
+                secondSource,
+                secondDestination,
+                new[] { mapping },
+                budget,
+                policy));
+
+        var firstIntent = ClusterTransferPolicy.BuildIntent(first);
+        var secondIntent = ClusterTransferPolicy.BuildIntent(second);
+
+        Assert.Equal(
+            firstIntent.ResourceKeys.OrderBy(value => value, StringComparer.Ordinal),
+            secondIntent.ResourceKeys.OrderBy(value => value, StringComparer.Ordinal));
+
+        var decoded = firstIntent.ResourceKeys
+            .Select(FleetConflictKeyCodec.Decode)
+            .ToArray();
+        Assert.Contains(decoded, target =>
+            target.Kind == FleetConflictTargetKind.TransferPair &&
+            target.PhysicalClusterId == "physical-destination" &&
+            target.ResourceId == "physical-source");
+        Assert.Contains(decoded, target =>
+            target.Kind == FleetConflictTargetKind.TopicPartition &&
+            target.PhysicalClusterId == "physical-source" &&
+            target.ResourceId == "orders");
+        Assert.Contains(decoded, target =>
+            target.Kind == FleetConflictTargetKind.TopicPartition &&
+            target.PhysicalClusterId == "physical-destination" &&
+            target.ResourceId == "orders-copy");
+
+        Assert.NotEqual(
+            firstIntent.AuthorizationTargets!
+                .Select(target => target.ClusterId)
+                .OrderBy(value => value, StringComparer.Ordinal),
+            secondIntent.AuthorizationTargets!
+                .Select(target => target.ClusterId)
+                .OrderBy(value => value, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Durable_progress_never_stores_payload_and_blocks_replay_after_dispatch_marker()
     {
         var progress = FleetTransferProgress.Create(
