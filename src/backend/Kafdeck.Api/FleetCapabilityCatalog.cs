@@ -28,24 +28,27 @@ public static class FleetCapabilityCatalog
     private static readonly IReadOnlyList<FleetCapabilityStatus> Items =
         Array.AsReadOnly(new[]
         {
-            Supported(
+            Blocked(
                 "acl-administration",
                 "ACL administration",
                 "W42",
-                "Typed ACL provider/runtime contracts are admitted; public mutation activation remains deployment-policy dependent.",
-                "Confluent.Kafka 2.15.1: DescribeAclsAsync/CreateAclsAsync/DeleteAclsAsync"),
-            Supported(
+                "Typed ACL provider/domain contracts are admitted, but the v0.6 production API/runtime does not register the W42 mutation handler surface; activation therefore remains fail-closed.",
+                "Confluent.Kafka 2.15.1: DescribeAclsAsync/CreateAclsAsync/DeleteAclsAsync",
+                "production Program.cs has no W42 handler registration"),
+            Blocked(
                 "scram-administration",
                 "SCRAM administration",
                 "W43",
-                "Typed SCRAM metadata and mutation contracts are admitted; secret material remains write-only and independently approved.",
-                "Confluent.Kafka 2.15.1: DescribeUserScramCredentialsAsync/AlterUserScramCredentialsAsync"),
-            Supported(
+                "Typed SCRAM provider/domain contracts are admitted, but the v0.6 production API/runtime does not register the W43 mutation handler surface; secret-changing activation remains fail-closed.",
+                "Confluent.Kafka 2.15.1: DescribeUserScramCredentialsAsync/AlterUserScramCredentialsAsync",
+                "production Program.cs has no W43 handler registration"),
+            Blocked(
                 "dynamic-configuration",
                 "Allowlisted dynamic configuration",
                 "W44",
-                "Typed broker/default dynamic configuration is admitted through the server-owned allowlist and exact read/alter conjunction.",
-                "Confluent.Kafka 2.15.1: DescribeConfigsAsync/IncrementalAlterConfigsAsync"),
+                "Typed dynamic-config provider/domain contracts are admitted, but the v0.6 production API/runtime does not register the W44 mutation handler surface; public mutation activation remains fail-closed.",
+                "Confluent.Kafka 2.15.1: DescribeConfigsAsync/IncrementalAlterConfigsAsync",
+                "production Program.cs has no W44 handler registration"),
             Unsupported(
                 "client-quotas",
                 "Client quotas",
