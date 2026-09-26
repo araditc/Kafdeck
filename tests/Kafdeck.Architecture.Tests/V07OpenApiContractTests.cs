@@ -109,6 +109,18 @@ public sealed class V07OpenApiContractTests
                 .GetProperty("edges")
                 .GetProperty("maxItems")
                 .GetInt32());
+
+        var edge = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("SchemaReferenceEdge");
+
+        Assert.Equal(
+            SchemaDeveloperService.MaxReferenceNameLength,
+            edge.GetProperty("properties")
+                .GetProperty("name")
+                .GetProperty("maxLength")
+                .GetInt32());
         Assert.Equal(
             2097152,
             graph.GetProperty("properties")
