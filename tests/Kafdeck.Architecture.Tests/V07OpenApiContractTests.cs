@@ -104,6 +104,12 @@ public sealed class V07OpenApiContractTests
                 .GetProperty("maxItems")
                 .GetInt32());
         Assert.Equal(
+            256,
+            graph.GetProperty("properties")
+                .GetProperty("edges")
+                .GetProperty("maxItems")
+                .GetInt32());
+        Assert.Equal(
             2097152,
             graph.GetProperty("properties")
                 .GetProperty("totalSchemaBytes")
