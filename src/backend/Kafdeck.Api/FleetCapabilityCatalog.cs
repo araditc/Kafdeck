@@ -66,7 +66,7 @@ public static class FleetCapabilityCatalog
                 "partition-reassignment",
                 "Partition reassignment",
                 "W45",
-                "Pinned Confluent.Kafka 2.15.1 exposes no typed reassignment submit/list API; no CLI/raw-protocol/sidecar bypass is permitted.",
+                "Pinned Confluent.Kafka 2.15.1 exposes no typed reassignment submit/list API; alternative CLI, raw-protocol, or sidecar execution paths are not permitted.",
                 "compile-probe: AlterPartitionReassignmentsAsync absent",
                 "compile-probe: ListPartitionReassignmentsAsync absent"),
             Unsupported(
