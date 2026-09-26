@@ -92,10 +92,11 @@ public sealed class V07SchemaDeveloperToolingTests
             "orders",
             1,
             subjectAuthorization:
-                candidate => !string.Equals(
-                    candidate,
-                    "common",
-                    StringComparison.Ordinal));
+                (candidate, _) => Task.FromResult(
+                    !string.Equals(
+                        candidate,
+                        "common",
+                        StringComparison.Ordinal)));
 
         Assert.False(result.IsSuccess);
         Assert.NotNull(result.Failure);
@@ -290,6 +291,40 @@ public sealed class V07SchemaDeveloperToolingTests
     }
 
     [Fact]
+    public async Task Reference_graph_rejects_oversized_reference_name()
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Orders","fields":[]}""",
+                    new RecordSchemaReference(
+                        new string('x', SchemaDeveloperService.MaxReferenceNameLength + 1),
+                        "common",
+                        1)),
+            });
+
+        var result = await new SchemaDeveloperService(catalog)
+            .BuildReferenceGraphAsync(
+                "cluster-a",
+                "orders",
+                1);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.InvalidRequest,
+            result.Failure!.Category);
+        Assert.Equal(
+            "invalid_schema_reference",
+            result.Failure.Code);
+    }
+
+    [Fact]
     public async Task Compatibility_explanation_preserves_inherited_scope()
     {
         var catalog = new FakeSchemaCatalog(
@@ -422,6 +457,107 @@ public sealed class V07SchemaDeveloperToolingTests
                         root.GetProperty(sensitiveProperty).GetString());
                 });
         }
+    }
+
+    [Theory]
+    [InlineData("""
+        {
+          "type": "record",
+          "name": "Event",
+          "fields": [
+            {
+              "name": "status",
+              "type": {
+                "type": "enum",
+                "name": "Status",
+                "symbols": ["OPEN", "CLOSED"]
+              }
+            }
+          ]
+        }
+        """)]
+    [InlineData("""
+        {
+          "type": "record",
+          "name": "Event",
+          "fields": [
+            {
+              "name": "digest",
+              "type": {
+                "type": "fixed",
+                "name": "Digest",
+                "size": 16
+              }
+            }
+          ]
+        }
+        """)]
+    public async Task Mock_generation_rejects_avro_constructs_not_guaranteed_schema_valid(
+        string schema)
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("event", 1)] = Detail(
+                    "event",
+                    1,
+                    1,
+                    RecordSchemaFormat.Avro,
+                    schema),
+            });
+
+        var result = await new SchemaDeveloperService(catalog)
+            .GenerateMockAsync(
+                "cluster-a",
+                "event",
+                1,
+                count: 1,
+                seed: 0);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.Unsupported,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_mock_avro_construct_unsupported",
+            result.Failure.Code);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"integer","minimum":20000}""")]
+    [InlineData("""{"type":"number","maximum":0.5}""")]
+    [InlineData("""{"type":"string","pattern":"^[A-Z]+$"}""")]
+    public async Task Mock_generation_rejects_json_schema_constraints_it_cannot_honor(
+        string schema)
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("event", 1)] = Detail(
+                    "event",
+                    1,
+                    1,
+                    RecordSchemaFormat.JsonSchema,
+                    schema),
+            });
+
+        var result = await new SchemaDeveloperService(catalog)
+            .GenerateMockAsync(
+                "cluster-a",
+                "event",
+                1,
+                count: 1,
+                seed: 0);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.Unsupported,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_mock_json_constraint_unsupported",
+            result.Failure.Code);
     }
 
     [Fact]
