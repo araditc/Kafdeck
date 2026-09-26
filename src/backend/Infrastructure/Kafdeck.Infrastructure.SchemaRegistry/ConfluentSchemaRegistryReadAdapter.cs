@@ -186,6 +186,16 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
                 false);
         }
 
+        if (!runtime.ProviderCapabilities.UsesConfluentCompatibleApi)
+        {
+            return Failed(
+                RecordSchemaFailureCategory.ProviderUnsupported,
+                runtime.ProviderCapabilities.LimitationCode ??
+                    "schema_registry_provider_unsupported",
+                "Configured Schema Registry provider profile is not supported by the admitted record-schema adapter.",
+                false);
+        }
+
         if (_cache.TryGetValue(cacheKey, out var cached) && cached.ExpiresAtUtc > now)
         {
             return RecordSchemaResult<RecordSchemaDocument>.Success(cached.Document);
@@ -453,7 +463,11 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
             authorization = new AuthenticationHeaderValue("Basic", encoded);
         }
 
-        return new RegistryRuntime(client, authorization);
+        return new RegistryRuntime(
+            client,
+            authorization,
+            SchemaRegistryProviderPolicy.Get(
+                registry.ProviderProfile));
     }
 
     private void AddCache(SchemaCacheKey key, RecordSchemaDocument document)
@@ -567,7 +581,8 @@ public sealed class ConfluentSchemaRegistryReadAdapter : IRecordSchemaReadPort, 
 
     private sealed record RegistryRuntime(
         HttpClient Client,
-        AuthenticationHeaderValue? BasicAuthorization);
+        AuthenticationHeaderValue? BasicAuthorization,
+        SchemaRegistryProviderCapabilities ProviderCapabilities);
 
     private readonly record struct SchemaCacheKey(string ClusterId, string Identity);
 
