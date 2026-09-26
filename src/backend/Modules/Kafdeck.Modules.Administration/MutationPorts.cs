@@ -59,6 +59,26 @@ public interface IRecordProduceMutationPort
         CancellationToken cancellationToken = default);
 }
 
+public sealed record ClusterTransferProduceMutation(
+    string ClusterId,
+    string TopicName,
+    int Partition,
+    ReadOnlyMemory<byte>? Key,
+    ReadOnlyMemory<byte>? Value,
+    IReadOnlyList<KafkaRecordHeader> Headers);
+
+/// <summary>
+/// Closed W47 destination-write port. Unlike ordinary record production, this
+/// contract requires an exact destination partition and preserves ordered,
+/// duplicate Kafka headers plus null-versus-empty key/value semantics.
+/// </summary>
+public interface IClusterTransferProducePort
+{
+    Task<MutationProviderResult> ProduceAsync(
+        ClusterTransferProduceMutation request,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed record ConsumerOffsetTarget(
     string TopicName,
     int Partition,

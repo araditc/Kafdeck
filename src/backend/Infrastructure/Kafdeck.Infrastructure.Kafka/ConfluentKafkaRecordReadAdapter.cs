@@ -539,11 +539,18 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
                         : ReadOnlyMemory<byte>.Empty))
                 .ToArray();
 
+        ReadOnlyMemory<byte>? key = consumed.Message.Key is null
+            ? (ReadOnlyMemory<byte>?)null
+            : new ReadOnlyMemory<byte>(consumed.Message.Key);
+        ReadOnlyMemory<byte>? value = consumed.Message.Value is null
+            ? (ReadOnlyMemory<byte>?)null
+            : new ReadOnlyMemory<byte>(consumed.Message.Value);
+
         return new KafkaRawRecord(
             consumed.Offset.Value,
             timestamp,
-            consumed.Message.Key is null ? null : new ReadOnlyMemory<byte>(consumed.Message.Key),
-            consumed.Message.Value is null ? null : new ReadOnlyMemory<byte>(consumed.Message.Value),
+            key,
+            value,
             headers);
     }
 
