@@ -1,4 +1,5 @@
 using System.Net;
+using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Configuration;
 
