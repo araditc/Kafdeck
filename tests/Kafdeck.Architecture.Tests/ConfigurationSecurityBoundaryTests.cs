@@ -46,6 +46,121 @@ public sealed class ConfigurationSecurityBoundaryTests
 
 
     [Fact]
+    public void Loader_prefers_listen_urls_and_preserves_legacy_primary_url()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Kafdeck:Deployment:ListenUrl"] = "http://127.0.0.1:9999",
+            ["Kafdeck:Deployment:ListenUrls:0"] = "http://127.0.0.1:8080",
+            ["Kafdeck:Deployment:ListenUrls:1"] = "http://192.168.10.20:8080",
+            ["Kafdeck:Deployment:AccessMode"] = "Token",
+            ["Kafdeck:Deployment:AccessToken"] = "env:KAFDECK_DEPLOYMENT_TOKEN",
+        };
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var options = KafdeckConfigurationLoader.Load(configuration);
+
+        Assert.Equal("http://127.0.0.1:8080", options.Deployment.ListenUrl);
+        Assert.Equal(
+            new[]
+            {
+                "http://127.0.0.1:8080",
+                "http://192.168.10.20:8080",
+            },
+            options.Deployment.ListenUrls);
+
+        KafdeckConfigurationValidator.ValidateAndThrow(options);
+    }
+
+    [Fact]
+    public void Local_mode_rejects_any_remote_endpoint_in_multi_binding()
+    {
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "http://127.0.0.1:8080",
+                null,
+                AccessMode.Local,
+                null,
+                new[] { "http://192.168.10.20:8080" }),
+            Array.Empty<ClusterProfile>());
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains(
+            "Non-loopback deployment binding requires",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Token_mode_accepts_wildcard_binding_and_uses_wildcard_host_policy()
+    {
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "http://0.0.0.0:8080",
+                SecretReference.Parse("env:KAFDECK_DEPLOYMENT_TOKEN"),
+                AccessMode.Token,
+                null),
+            Array.Empty<ClusterProfile>());
+
+        KafdeckConfigurationValidator.ValidateAndThrow(options);
+
+        Assert.Equal(new[] { "*" }, DeploymentHostPolicy.BuildAllowedHosts(options.Deployment));
+    }
+
+    [Fact]
+    public void Concrete_multi_binding_derives_exact_allowed_hosts()
+    {
+        var deployment = new DeploymentOptions(
+            "http://127.0.0.1:8080",
+            SecretReference.Parse("env:KAFDECK_DEPLOYMENT_TOKEN"),
+            AccessMode.Token,
+            null,
+            new[]
+            {
+                "http://192.168.10.20:8080",
+                "http://kafdeck.internal:8080",
+            });
+
+        var hosts = DeploymentHostPolicy.BuildAllowedHosts(deployment);
+
+        Assert.Contains("127.0.0.1", hosts);
+        Assert.Contains("192.168.10.20", hosts);
+        Assert.Contains("kafdeck.internal", hosts);
+        Assert.DoesNotContain("*", hosts);
+    }
+
+    [Fact]
+    public void Oidc_requires_https_for_every_remote_listen_url()
+    {
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "https://127.0.0.1:8443",
+                null,
+                AccessMode.Oidc,
+                new OidcProfile(
+                    "https://idp.example",
+                    "kafdeck",
+                    null,
+                    "groups",
+                    new[] { "openid", "profile" }),
+                new[] { "http://192.168.10.20:8080" }),
+            Array.Empty<ClusterProfile>());
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains(
+            "Every non-loopback OIDC deployment binding requires HTTPS",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Legacy_deployment_options_infer_local_or_token_mode()
     {
         var local = new DeploymentOptions("http://127.0.0.1:8080", null);
