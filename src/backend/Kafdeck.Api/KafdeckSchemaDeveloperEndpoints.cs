@@ -26,6 +26,8 @@ public static class KafdeckSchemaDeveloperEndpoints
                     string clusterId,
                     string subject,
                     int version,
+                    HttpContext context,
+                    KafdeckAuthorizationService authorization,
                     SchemaDeveloperService tooling,
                     CancellationToken cancellationToken) =>
                 {
@@ -40,7 +42,15 @@ public static class KafdeckSchemaDeveloperEndpoints
                             clusterId,
                             subject,
                             version,
-                            cancellationToken)
+                            cancellationToken,
+                            candidateSubject =>
+                                authorization.Authorize(
+                                    context.User,
+                                    new AuthorizationRequest(
+                                        AuthorizationAction.SchemaRead,
+                                        clusterId,
+                                        candidateSubject)) ==
+                                KafdeckAuthorizationOutcome.Allowed)
                         .ConfigureAwait(false);
 
                     return ToReadViewResult(result);
