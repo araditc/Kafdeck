@@ -37,7 +37,9 @@ var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
 
-builder.WebHost.UseUrls(kafdeckOptions.Deployment.ListenUrl);
+var allowedHosts = DeploymentHostPolicy.BuildAllowedHosts(kafdeckOptions.Deployment);
+builder.Configuration["AllowedHosts"] = string.Join(';', allowedHosts);
+builder.WebHost.UseUrls(kafdeckOptions.Deployment.ListenUrls.ToArray());
 
 var secretResolver = new SecretResolver();
 
