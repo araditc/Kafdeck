@@ -74,8 +74,12 @@ public sealed class ConfluentKafkaClusterTransferProduceAdapter :
                     target,
                     new Message<byte[], byte[]>
                     {
-                        Key = key,
-                        Value = value,
+                        // Confluent.Kafka models tombstone/null payloads at runtime even though
+                        // the generic Message annotations are non-nullable for byte[]. The
+                        // null-forgiving operators preserve the actual null value without
+                        // substituting an empty array.
+                        Key = key!,
+                        Value = value!,
                         Headers = headers,
                     },
                     CancellationToken.None)
