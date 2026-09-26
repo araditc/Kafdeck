@@ -279,6 +279,16 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
                 false);
         }
 
+        if (!runtime.ProviderCapabilities.UsesConfluentCompatibleApi)
+        {
+            return Failed<T>(
+                ReadViewFailureCategory.Unsupported,
+                runtime.ProviderCapabilities.LimitationCode ??
+                    "schema_registry_provider_unsupported",
+                "Configured Schema Registry provider profile is not supported by the admitted read adapter.",
+                false);
+        }
+
         try
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -544,7 +554,11 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
                 Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}")));
         }
 
-        return new RegistryRuntime(client, authorization);
+        return new RegistryRuntime(
+            client,
+            authorization,
+            SchemaRegistryProviderPolicy.Get(
+                registry.ProviderProfile));
     }
 
     private static async Task<byte[]> ReadBoundedAsync(
@@ -654,7 +668,8 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
 
     private sealed record RegistryRuntime(
         HttpClient Client,
-        AuthenticationHeaderValue? BasicAuthorization);
+        AuthenticationHeaderValue? BasicAuthorization,
+        SchemaRegistryProviderCapabilities ProviderCapabilities);
 
     private sealed class ResponseBoundExceededException : Exception;
 
