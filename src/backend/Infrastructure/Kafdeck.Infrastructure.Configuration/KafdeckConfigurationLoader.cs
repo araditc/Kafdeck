@@ -11,7 +11,19 @@ public static class KafdeckConfigurationLoader
         ArgumentNullException.ThrowIfNull(configuration);
 
         var deploymentSection = configuration.GetSection("Kafdeck:Deployment");
-        var listenUrl = deploymentSection["ListenUrl"] ?? "http://127.0.0.1:8080";
+        var configuredListenUrls = deploymentSection
+            .GetSection("ListenUrls")
+            .GetChildren()
+            .Select(child => child.Value ?? string.Empty)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToArray();
+        var listenUrl = configuredListenUrls.FirstOrDefault() ??
+                        deploymentSection["ListenUrl"] ??
+                        "http://127.0.0.1:8080";
+        var additionalListenUrls = configuredListenUrls.Length > 1
+            ? Array.AsReadOnly(configuredListenUrls.Skip(1).ToArray())
+            : null;
         var accessToken = ParseOptionalSecret(deploymentSection["AccessToken"]);
         var accessMode = ParseAccessMode(deploymentSection["AccessMode"], accessToken);
         var oidc = LoadOidcProfile(deploymentSection.GetSection("Oidc"));
@@ -26,7 +38,12 @@ public static class KafdeckConfigurationLoader
         var administration = LoadAdministration(configuration.GetSection("Kafdeck:Administration"));
 
         return new KafdeckOptions(
-            new DeploymentOptions(listenUrl, accessToken, accessMode, oidc),
+            new DeploymentOptions(
+                listenUrl,
+                accessToken,
+                accessMode,
+                oidc,
+                additionalListenUrls),
             Array.AsReadOnly(clusters),
             records,
             catalog,
