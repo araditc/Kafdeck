@@ -25,7 +25,7 @@ public static class KafdeckV07OpenApi
   "info": {
     "title": "Kafdeck v0.7 Developer & Streaming Ecosystem API",
     "version": "0.7.0",
-    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit and unsupported providers are not accessed through compatibility guesses or generic proxy routes."
+    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects."
   },
   "servers": [{ "url": "/" }],
   "paths": {
@@ -53,6 +53,122 @@ public static class KafdeckV07OpenApi
           "401": { "description": "Operator authentication required in OIDC mode" },
           "403": { "description": "Schema read authorization denied" },
           "404": { "description": "Cluster ID is not configured" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/references": {
+      "get": {
+        "operationId": "v07-schema-reference-graph",
+        "summary": "Build a bounded reference graph from an exact subject version",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "minimum": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded deterministic schema reference graph",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SchemaReferenceGraphEnvelope" }
+              }
+            }
+          },
+          "400": { "description": "Invalid subject or version" },
+          "401": { "description": "Operator authentication required in OIDC mode" },
+          "403": { "description": "schema.read denied" },
+          "404": { "description": "Cluster ID is not configured" },
+          "413": { "description": "Reference graph bound exceeded" },
+          "501": { "description": "Configured Schema Registry provider is unsupported" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/compatibility/explanation": {
+      "get": {
+        "operationId": "v07-schema-compatibility-explanation",
+        "summary": "Explain the currently observed compatibility policy",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deterministic explanation of observed subject or inherited compatibility semantics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SchemaCompatibilityExplanationEnvelope" }
+              }
+            }
+          },
+          "400": { "description": "Invalid subject" },
+          "401": { "description": "Operator authentication required in OIDC mode" },
+          "403": { "description": "schema.read denied" },
+          "404": { "description": "Cluster ID is not configured" },
+          "501": { "description": "Configured Schema Registry provider is unsupported" }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/schemas/mock": {
+      "post": {
+        "operationId": "v07-schema-mock",
+        "summary": "Generate bounded deterministic local examples from an authorized schema version",
+        "description": "This operation is local tooling only. It does not register schemas, produce Kafka records, persist generated payloads, or dispatch a provider mutation.",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SchemaMockRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded generated examples; sensitive-looking field names are replaced with safe placeholders",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SchemaMockResultEnvelope" }
+              }
+            }
+          },
+          "400": { "description": "Invalid subject, version, count, or schema source" },
+          "401": { "description": "Operator authentication required in OIDC mode" },
+          "403": { "description": "schema.read or antiforgery validation denied" },
+          "404": { "description": "Cluster ID is not configured" },
+          "413": { "description": "Schema or generated-output bound exceeded" },
+          "501": { "description": "Schema format or configured provider is unsupported" }
         }
       }
     }
@@ -95,6 +211,145 @@ public static class KafdeckV07OpenApi
             "additionalProperties": {
               "$ref": "#/components/schemas/SchemaRegistryCapabilityState"
             }
+          }
+        }
+      },
+      "ReadViewLimitation": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "maxLength": 128 },
+          "message": { "type": "string", "maxLength": 1024 }
+        }
+      },
+      "SchemaReferenceNode": {
+        "type": "object",
+        "required": ["subject", "version", "schemaId", "format", "depth"],
+        "properties": {
+          "subject": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 },
+          "schemaId": { "type": "integer", "minimum": 1 },
+          "format": { "type": "string", "enum": ["avro", "protobuf", "jsonSchema"] },
+          "depth": { "type": "integer", "minimum": 0, "maximum": 12 }
+        }
+      },
+      "SchemaReferenceEdge": {
+        "type": "object",
+        "required": ["name", "fromSubject", "fromVersion", "toSubject", "toVersion"],
+        "properties": {
+          "name": { "type": "string" },
+          "fromSubject": { "type": "string" },
+          "fromVersion": { "type": "integer", "minimum": 1 },
+          "toSubject": { "type": "string" },
+          "toVersion": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "SchemaReferenceGraph": {
+        "type": "object",
+        "required": ["rootSubject", "rootVersion", "nodes", "edges", "hasCycle", "totalSchemaBytes"],
+        "properties": {
+          "rootSubject": { "type": "string" },
+          "rootVersion": { "type": "integer", "minimum": 1 },
+          "nodes": {
+            "type": "array",
+            "maxItems": 64,
+            "items": { "$ref": "#/components/schemas/SchemaReferenceNode" }
+          },
+          "edges": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SchemaReferenceEdge" }
+          },
+          "hasCycle": { "type": "boolean" },
+          "totalSchemaBytes": { "type": "integer", "minimum": 0, "maximum": 2097152 }
+        }
+      },
+      "SchemaReferenceGraphEnvelope": {
+        "type": "object",
+        "required": ["data", "partial", "limitations"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/SchemaReferenceGraph" },
+          "partial": { "type": "boolean" },
+          "limitations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReadViewLimitation" }
+          }
+        }
+      },
+      "SchemaCompatibilityExplanation": {
+        "type": "object",
+        "required": ["subject", "mode", "isInherited", "scope", "summary", "rules"],
+        "properties": {
+          "subject": { "type": "string" },
+          "mode": {
+            "type": "string",
+            "enum": ["unknown", "none", "backward", "backwardTransitive", "forward", "forwardTransitive", "full", "fullTransitive"]
+          },
+          "isInherited": { "type": "boolean" },
+          "scope": { "type": "string", "enum": ["subject", "global-inherited"] },
+          "summary": { "type": "string" },
+          "rules": {
+            "type": "array",
+            "maxItems": 4,
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "SchemaCompatibilityExplanationEnvelope": {
+        "type": "object",
+        "required": ["data", "partial", "limitations"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/SchemaCompatibilityExplanation" },
+          "partial": { "type": "boolean" },
+          "limitations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReadViewLimitation" }
+          }
+        }
+      },
+      "SchemaMockRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subject", "version", "count"],
+        "properties": {
+          "subject": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "version": { "type": "integer", "minimum": 1 },
+          "count": { "type": "integer", "minimum": 1, "maximum": 10 },
+          "seed": { "type": ["integer", "null"] }
+        }
+      },
+      "SchemaMockExample": {
+        "type": "object",
+        "required": ["index", "json"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0, "maximum": 9 },
+          "json": { "type": "string", "maxLength": 262144 }
+        }
+      },
+      "SchemaMockResult": {
+        "type": "object",
+        "required": ["subject", "version", "format", "seed", "examples", "totalBytes"],
+        "properties": {
+          "subject": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 },
+          "format": { "type": "string", "enum": ["avro", "protobuf", "jsonSchema"] },
+          "seed": { "type": "integer" },
+          "examples": {
+            "type": "array",
+            "maxItems": 10,
+            "items": { "$ref": "#/components/schemas/SchemaMockExample" }
+          },
+          "totalBytes": { "type": "integer", "minimum": 0, "maximum": 262144 }
+        }
+      },
+      "SchemaMockResultEnvelope": {
+        "type": "object",
+        "required": ["data", "partial", "limitations"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/SchemaMockResult" },
+          "partial": { "type": "boolean" },
+          "limitations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReadViewLimitation" }
           }
         }
       }
