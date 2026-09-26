@@ -90,6 +90,7 @@ builder.Services.AddSingleton<ISchemaCatalogReadPort>(_ =>
     new ConfluentSchemaCatalogReadAdapter(kafdeckOptions.Clusters, secretResolver));
 builder.Services.AddSingleton<SchemaDiffService>();
 builder.Services.AddSingleton<SchemaExplorerService>();
+builder.Services.AddSingleton<SchemaDeveloperService>();
 builder.Services.AddSingleton<IRecordDecodePort>(services =>
     new ConfluentRecordDecoder(services.GetRequiredService<IRecordSchemaReadPort>()));
 builder.Services.AddSingleton<RecordFilterService>();
@@ -318,6 +319,7 @@ app.MapKafdeckV01(kafdeckOptions);
 app.MapKafdeckRecordEndpoints(kafdeckOptions);
 app.MapKafdeckV04ReadViews(kafdeckOptions);
 app.MapKafdeckV07SchemaCapabilities(kafdeckOptions);
+app.MapKafdeckV07SchemaDeveloperTools(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
