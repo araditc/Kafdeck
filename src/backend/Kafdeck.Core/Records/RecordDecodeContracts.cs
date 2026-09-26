@@ -21,6 +21,7 @@ public enum RecordSchemaFailureCategory
     InvalidResponse = 7,
     UnsupportedFormat = 8,
     DecodeFailed = 9,
+    ProviderUnsupported = 10,
 }
 
 public sealed record RecordSchemaFailure(

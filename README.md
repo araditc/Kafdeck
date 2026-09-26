@@ -494,6 +494,7 @@ TLS server-certificate verification cannot be silently disabled.
   "SecurityProtocol": "SaslSsl",
   "SchemaRegistry": {
     "Url": "https://schema-registry.example",
+    "ProviderProfile": "ConfluentCompatibleV1",
     "Username": "env:KAFDECK_SR_USER",
     "Password": "file:/run/secrets/schema-registry-password"
   }
@@ -501,6 +502,10 @@ TLS server-certificate verification cannot be silently disabled.
 ~~~
 
 Remote basic authentication requires HTTPS.
+
+`ProviderProfile` defaults to `ConfluentCompatibleV1` for backward compatibility. v0.7 also admits `KarapaceCompatibleV1` through the tested Confluent-compatible lifecycle contract. `ApicurioV3` is a distinct capability profile and is currently reported as unsupported for lifecycle/read operations until a typed Apicurio adapter has its own compatibility evidence; Kafdeck does not send Confluent-compatible paths to that profile.
+
+The read-only capability endpoint `GET /api/v1/clusters/{clusterId}/schemas/capabilities` reports provider support separately from mutation-mode activation. Disabling mutation mode blocks lifecycle writes without hiding read capability.
 
 ### Optional Kafka Connect
 

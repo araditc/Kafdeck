@@ -126,10 +126,19 @@ public sealed record ClusterProfile(
     KafkaConnectProfile? Connect = null,
     KsqlDbProfile? KsqlDb = null);
 
+public enum SchemaRegistryProviderProfile
+{
+    ConfluentCompatibleV1 = 1,
+    KarapaceCompatibleV1 = 2,
+    ApicurioV3 = 3,
+}
+
 public sealed record SchemaRegistryProfile(
     string Url,
     SecretReference? Username,
-    SecretReference? Password);
+    SecretReference? Password,
+    SchemaRegistryProviderProfile ProviderProfile =
+        SchemaRegistryProviderProfile.ConfluentCompatibleV1);
 
 public enum KafkaConnectMutationProviderProfile
 {

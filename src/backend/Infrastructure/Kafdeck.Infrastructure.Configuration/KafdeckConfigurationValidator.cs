@@ -480,6 +480,11 @@ public static class KafdeckConfigurationValidator
             return;
         }
 
+        if (!Enum.IsDefined(registry.ProviderProfile))
+        {
+            errors.Add($"Cluster '{cluster.Id}' Schema Registry provider profile is unsupported.");
+        }
+
         var hasUsername = registry.Username is not null;
         var hasPassword = registry.Password is not null;
         if (hasUsername != hasPassword)

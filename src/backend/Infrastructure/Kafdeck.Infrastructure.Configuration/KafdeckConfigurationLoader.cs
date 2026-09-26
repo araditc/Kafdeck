@@ -175,7 +175,11 @@ public static class KafdeckConfigurationLoader
             schemaRegistry = new SchemaRegistryProfile(
                 registrySection["Url"] ?? string.Empty,
                 ParseOptionalSecret(registrySection["Username"]),
-                ParseOptionalSecret(registrySection["Password"]));
+                ParseOptionalSecret(registrySection["Password"]),
+                ParseEnum(
+                    registrySection["ProviderProfile"],
+                    SchemaRegistryProviderProfile.ConfluentCompatibleV1,
+                    "Schema Registry provider profile"));
         }
 
         var connectSection = section.GetSection("Connect");

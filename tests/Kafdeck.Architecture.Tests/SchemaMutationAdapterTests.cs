@@ -12,8 +12,11 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class SchemaMutationAdapterTests
 {
-    [Fact]
-    public async Task Confluent_mutations_use_only_fixed_typed_routes()
+    [Theory]
+    [InlineData(SchemaRegistryProviderProfile.ConfluentCompatibleV1)]
+    [InlineData(SchemaRegistryProviderProfile.KarapaceCompatibleV1)]
+    public async Task Confluent_compatible_profiles_use_only_fixed_typed_routes(
+        SchemaRegistryProviderProfile providerProfile)
     {
         var handler = new StubHandler(request =>
         {
@@ -34,7 +37,9 @@ public sealed class SchemaMutationAdapterTests
             };
         });
 
-        using var adapter = CreateAdapter(handler);
+        using var adapter = CreateAdapter(
+            handler,
+            providerProfile);
 
         var compatibility = await adapter.TestCompatibilityAsync(
             "cluster-a",
@@ -126,6 +131,91 @@ public sealed class SchemaMutationAdapterTests
             "\"compatibility\":\"FULL\"",
             handler.Bodies[2],
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Karapace_profile_uses_the_admitted_confluent_compatible_lifecycle_contract()
+    {
+        var handler = new StubHandler(request =>
+            request.RequestUri!.PathAndQuery switch
+            {
+                "/subjects/orders-value/versions" =>
+                    Json(HttpStatusCode.OK, """{"id":42}"""),
+                _ => Json(HttpStatusCode.NotFound, "{}"),
+            });
+
+        using var adapter = CreateAdapter(
+            handler,
+            SchemaRegistryProviderProfile.KarapaceCompatibleV1);
+
+        var capabilities = await adapter.GetCapabilitiesAsync(
+            "cluster-a",
+            Operation(),
+            CancellationToken.None);
+
+        Assert.True(capabilities.IsSuccess);
+        Assert.Equal(
+            nameof(SchemaRegistryProviderProfile.KarapaceCompatibleV1),
+            capabilities.Value!.ProviderProfile);
+        Assert.True(capabilities.Value.SupportsRegistration);
+
+        var result = await adapter.CreateAsync(CreateMutation());
+
+        Assert.Equal(
+            MutationExecutionResultKind.AppliedUnverified,
+            result.ResultKind);
+        Assert.Equal(
+            new[] { "POST /subjects/orders-value/versions" },
+            handler.Requests);
+    }
+
+    [Fact]
+    public async Task Apicurio_profile_is_explicitly_unsupported_and_performs_no_provider_io()
+    {
+        var handler = new StubHandler(_ =>
+            throw new InvalidOperationException(
+                "Unsupported provider profile must not dispatch Confluent-compatible HTTP."));
+
+        using var adapter = CreateAdapter(
+            handler,
+            SchemaRegistryProviderProfile.ApicurioV3);
+
+        var capabilities = await adapter.GetCapabilitiesAsync(
+            "cluster-a",
+            Operation(),
+            CancellationToken.None);
+
+        Assert.True(capabilities.IsSuccess);
+        Assert.Equal(
+            nameof(SchemaRegistryProviderProfile.ApicurioV3),
+            capabilities.Value!.ProviderProfile);
+        Assert.False(capabilities.Value.SupportsRegistration);
+        Assert.False(capabilities.Value.SupportsCompatibilityMutation);
+        Assert.Equal(
+            "schema_registry_apicurio_adapter_not_admitted",
+            capabilities.Value.LimitationCode);
+
+        var compatibility = await adapter.TestCompatibilityAsync(
+            "cluster-a",
+            new SchemaCompatibilityCheckRequest(
+                "orders-value",
+                RecordSchemaFormat.JsonSchema,
+                """{"type":"object"}""",
+                Array.Empty<RecordSchemaReference>()),
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(compatibility.IsSuccess);
+        Assert.Equal(
+            SchemaMutationObservationFailureCategory.Unsupported,
+            compatibility.Failure!.Category);
+
+        var mutation = await adapter.CreateAsync(CreateMutation());
+
+        Assert.Equal(
+            MutationExecutionResultKind.FailedBeforeDispatch,
+            mutation.ResultKind);
+        Assert.Equal(0, handler.CallCount);
     }
 
     [Fact]
@@ -257,7 +347,9 @@ public sealed class SchemaMutationAdapterTests
             Array.Empty<SchemaMutationReference>());
 
     private static ConfluentSchemaMutationAdapter CreateAdapter(
-        HttpMessageHandler handler) =>
+        HttpMessageHandler handler,
+        SchemaRegistryProviderProfile providerProfile =
+            SchemaRegistryProviderProfile.ConfluentCompatibleV1) =>
         new(
             [
                 new ClusterProfile(
@@ -269,7 +361,8 @@ public sealed class SchemaMutationAdapterTests
                     new SchemaRegistryProfile(
                         "https://registry.example/",
                         null,
-                        null)),
+                        null,
+                        providerProfile)),
             ],
             new SecretResolver(),
             _ => handler);

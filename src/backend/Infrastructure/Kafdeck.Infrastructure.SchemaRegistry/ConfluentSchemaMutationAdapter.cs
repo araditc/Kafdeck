@@ -69,7 +69,7 @@ public sealed class ConfluentSchemaMutationAdapter :
             ReadViewOperationContext operation,
             CancellationToken cancellationToken)
     {
-        if (!_registries.ContainsKey(clusterId))
+        if (!_registries.TryGetValue(clusterId, out var runtime))
         {
             return Task.FromResult(
                 ObservationFailed<SchemaMutationCapabilities>(
@@ -79,14 +79,17 @@ public sealed class ConfluentSchemaMutationAdapter :
                     false));
         }
 
+        var capabilities = runtime.ProviderCapabilities;
         return Task.FromResult(
             SchemaMutationObservationResult<SchemaMutationCapabilities>.Success(
                 new SchemaMutationCapabilities(
-                    SupportsCompatibilityValidation: true,
-                    SupportsRegistration: true,
-                    SupportsCompatibilityMutation: true,
-                    SupportsSoftDelete: true,
-                    SupportsPermanentDelete: true)));
+                    capabilities.SupportsCompatibilityValidation,
+                    capabilities.SupportsRegistration,
+                    capabilities.SupportsCompatibilityMutation,
+                    capabilities.SupportsSoftDelete,
+                    capabilities.SupportsPermanentDelete,
+                    capabilities.ProviderProfile,
+                    capabilities.LimitationCode)));
     }
 
     public Task<SchemaMutationObservationResult<SchemaCompatibilityCheckObservation>>
@@ -491,6 +494,16 @@ public sealed class ConfluentSchemaMutationAdapter :
                 false);
         }
 
+        if (!runtime.ProviderCapabilities.UsesConfluentCompatibleApi)
+        {
+            return ObservationFailed<T>(
+                SchemaMutationObservationFailureCategory.Unsupported,
+                runtime.ProviderCapabilities.LimitationCode ??
+                    "schema_registry_provider_unsupported",
+                "Configured Schema Registry provider profile is not supported by the admitted lifecycle adapter.",
+                false);
+        }
+
         try
         {
             using var deadline =
@@ -589,6 +602,12 @@ public sealed class ConfluentSchemaMutationAdapter :
         {
             return FailedDefinitive(
                 $"{operationCode}_registry_not_configured");
+        }
+
+        if (!runtime.ProviderCapabilities.UsesConfluentCompatibleApi)
+        {
+            return FailedBeforeDispatch(
+                $"{operationCode}_provider_unsupported");
         }
 
         try
@@ -1003,7 +1022,9 @@ public sealed class ConfluentSchemaMutationAdapter :
 
         return new RegistryRuntime(
             client,
-            authorization);
+            authorization,
+            SchemaRegistryProviderPolicy.Get(
+                registry.ProviderProfile));
     }
 
     private static SchemaRequestBody BuildBody(
@@ -1136,6 +1157,12 @@ public sealed class ConfluentSchemaMutationAdapter :
             code,
             evidence);
 
+    private static MutationProviderResult FailedBeforeDispatch(
+        string code) =>
+        new(
+            MutationExecutionResultKind.FailedBeforeDispatch,
+            code);
+
     private static MutationProviderResult FailedDefinitive(
         string code) =>
         new(
@@ -1163,7 +1190,8 @@ public sealed class ConfluentSchemaMutationAdapter :
 
     private sealed record RegistryRuntime(
         HttpClient Client,
-        AuthenticationHeaderValue? BasicAuthorization);
+        AuthenticationHeaderValue? BasicAuthorization,
+        SchemaRegistryProviderCapabilities ProviderCapabilities);
 
     private sealed record DeletePathObservation(
         bool Exists,
