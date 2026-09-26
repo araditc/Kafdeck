@@ -2,6 +2,11 @@ using Kafdeck.Core.ReadViews;
 
 namespace Kafdeck.Core.Ecosystem;
 
+public sealed record ConnectProfileSummary(
+    string Id,
+    bool IsDefault,
+    string MutationProviderProfile);
+
 public sealed record ConnectClusterInfo(string? Version, string? Commit, string? KafkaClusterId);
 
 public sealed record ConnectTaskStatus(int Id, string State, string? WorkerId, string? SafeTrace);
@@ -17,21 +22,61 @@ public sealed record ConnectConnectorDetail(
 
 public interface IConnectReadPort
 {
+    Task<ReadViewResult<IReadOnlyList<ConnectProfileSummary>>> ListProfilesAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+
     Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
         string clusterId,
+        string connectProfileId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken);
 
     Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
         string clusterId,
+        string connectProfileId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken);
 
     Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
         string clusterId,
+        string connectProfileId,
         string connectorName,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken);
+
+    Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        GetClusterInfoAsync(
+            clusterId,
+            "default",
+            operation,
+            cancellationToken);
+
+    Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        ListConnectorsAsync(
+            clusterId,
+            "default",
+            operation,
+            cancellationToken);
+
+    Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
+        string clusterId,
+        string connectorName,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        GetConnectorAsync(
+            clusterId,
+            "default",
+            connectorName,
+            operation,
+            cancellationToken);
 }
 
 public sealed record KsqlServerInfo(string? Version, string? KafkaClusterId, string? State);
