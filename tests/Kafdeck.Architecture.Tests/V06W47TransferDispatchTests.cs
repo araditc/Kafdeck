@@ -264,6 +264,19 @@ public sealed class V06W47TransferDispatchTests
             operation.Snapshot.PreviewHash,
             now.AddSeconds(2),
             operation.Snapshot.ConfirmationChallenge);
+
+        if (operation.Snapshot.State == MutationOperationState.AwaitingApproval)
+        {
+            operation.Approve(
+                new MutationApprovalAuthorizationEvidence(
+                    operation.Snapshot.OperationId,
+                    "oidc:https://idp.example|transfer-approver",
+                    operation.Snapshot.PreviewHash,
+                    new string('d', 64)),
+                operation.Snapshot.PreviewHash,
+                now.AddMilliseconds(2500));
+        }
+
         _ = operation.ClaimExecution(
             now.AddSeconds(3),
             now.AddMinutes(5));
