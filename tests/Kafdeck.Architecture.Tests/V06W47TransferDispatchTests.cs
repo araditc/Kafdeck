@@ -345,8 +345,12 @@ public sealed class V06W47TransferDispatchTests
                 request.ClusterId,
                 request.TopicName,
                 request.Partition,
-                request.Key?.ToArray(),
-                request.Value?.ToArray(),
+                request.Key.HasValue
+                    ? new ReadOnlyMemory<byte>(request.Key.Value.ToArray())
+                    : null,
+                request.Value.HasValue
+                    ? new ReadOnlyMemory<byte>(request.Value.Value.ToArray())
+                    : null,
                 request.Headers
                     .Select(header => new KafkaRecordHeader(
                         header.Name,
