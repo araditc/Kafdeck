@@ -93,8 +93,9 @@ public static class KafdeckV07OpenApi
           "401": { "description": "Operator authentication required in OIDC mode" },
           "403": { "description": "schema.read denied" },
           "404": { "description": "Cluster ID is not configured" },
-          "413": { "description": "Reference graph bound exceeded" },
-          "501": { "description": "Configured Schema Registry provider is unsupported" }
+          "422": { "description": "Reference graph bound exceeded" },
+          "501": { "description": "Configured Schema Registry provider is unsupported" },
+          "502": { "description": "Schema Registry returned malformed reference data" }
         }
       }
     },
@@ -129,7 +130,8 @@ public static class KafdeckV07OpenApi
           "401": { "description": "Operator authentication required in OIDC mode" },
           "403": { "description": "schema.read denied" },
           "404": { "description": "Cluster ID is not configured" },
-          "501": { "description": "Configured Schema Registry provider is unsupported" }
+          "501": { "description": "Configured Schema Registry provider is unsupported" },
+          "502": { "description": "Schema Registry returned malformed compatibility data" }
         }
       }
     },
@@ -163,12 +165,13 @@ public static class KafdeckV07OpenApi
               }
             }
           },
-          "400": { "description": "Invalid subject, version, count, or schema source" },
+          "400": { "description": "Invalid subject, version, or count" },
           "401": { "description": "Operator authentication required in OIDC mode" },
           "403": { "description": "schema.read or antiforgery validation denied" },
           "404": { "description": "Cluster ID is not configured" },
-          "413": { "description": "Schema or generated-output bound exceeded" },
-          "501": { "description": "Schema format, external schema references, or configured provider are unsupported by bounded local generation" }
+          "422": { "description": "Schema or generated-output bound exceeded" },
+          "501": { "description": "Schema format, external schema references, or configured provider are unsupported by bounded local generation" },
+          "502": { "description": "Stored schema source is malformed or invalid" }
         }
       }
     }
