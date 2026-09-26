@@ -281,6 +281,124 @@ public static class KafdeckReadViewEndpoints
 
     private static void MapConnect(WebApplication app, KafdeckOptions options)
     {
+        app.MapGet("/api/v1/clusters/{clusterId}/connect/profiles", async (
+                string clusterId,
+                IConnectReadPort connect,
+                CancellationToken cancellationToken) =>
+            {
+                if (!IsConfiguredCluster(options, clusterId))
+                {
+                    return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+                }
+
+                var result = await connect.ListProfilesAsync(
+                        clusterId,
+                        EcosystemOperation(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return ToReadViewResult(result);
+            })
+            .WithName("v07-connect-profiles-list")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.ConnectRead,
+                "clusterId");
+
+        app.MapGet("/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}", async (
+                string clusterId,
+                string connectProfileId,
+                IConnectReadPort connect,
+                CancellationToken cancellationToken) =>
+            {
+                if (!IsConfiguredCluster(options, clusterId))
+                {
+                    return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+                }
+
+                var result = await connect.GetClusterInfoAsync(
+                        clusterId,
+                        connectProfileId,
+                        EcosystemOperation(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return ToReadViewResult(result);
+            })
+            .WithName("v07-connect-profile-info")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.ConnectRead,
+                "clusterId");
+
+        app.MapGet("/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors", async (
+                string clusterId,
+                string connectProfileId,
+                HttpContext context,
+                KafdeckAuthorizationService authorization,
+                IConnectReadPort connect,
+                CancellationToken cancellationToken) =>
+            {
+                if (!IsConfiguredCluster(options, clusterId))
+                {
+                    return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+                }
+
+                var result = await connect.ListConnectorsAsync(
+                        clusterId,
+                        connectProfileId,
+                        EcosystemOperation(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (!result.IsSuccess || result.Value is null)
+                {
+                    return ApiResults.Problem(ApiProblemMapper.FromReadView(result.Failure!));
+                }
+
+                var visible = result.Value
+                    .Where(connector => IsAllowed(
+                        authorization,
+                        context.User,
+                        AuthorizationAction.ConnectRead,
+                        clusterId,
+                        connector.Name))
+                    .ToArray();
+
+                return Results.Ok(ReadViewApiMapper.Envelope(
+                    visible,
+                    AddAuthorizationFilterLimitation(
+                        result.Limitations,
+                        result.Value.Count,
+                        visible.Length)));
+            })
+            .WithName("v07-connect-profile-connectors-list")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.ConnectRead,
+                "clusterId");
+
+        app.MapGet("/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}", async (
+                string clusterId,
+                string connectProfileId,
+                string connectorName,
+                IConnectReadPort connect,
+                CancellationToken cancellationToken) =>
+            {
+                if (!IsConfiguredCluster(options, clusterId))
+                {
+                    return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+                }
+
+                var result = await connect.GetConnectorAsync(
+                        clusterId,
+                        connectProfileId,
+                        connectorName,
+                        EcosystemOperation(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return ToReadViewResult(result);
+            })
+            .WithName("v07-connect-profile-connectors-detail")
+            .RequireKafdeckAuthorization(
+                AuthorizationAction.ConnectRead,
+                "clusterId",
+                "connectorName");
+
         app.MapGet("/api/v1/clusters/{clusterId}/connect", async (
                 string clusterId,
                 IConnectReadPort connect,
