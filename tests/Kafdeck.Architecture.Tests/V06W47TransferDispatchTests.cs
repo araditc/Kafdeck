@@ -343,16 +343,20 @@ public sealed class V06W47TransferDispatchTests
             CancellationToken cancellationToken = default)
         {
             CallCount++;
+
+            ReadOnlyMemory<byte>? copiedKey = request.Key.HasValue
+                ? new ReadOnlyMemory<byte>(request.Key.Value.ToArray())
+                : (ReadOnlyMemory<byte>?)null;
+            ReadOnlyMemory<byte>? copiedValue = request.Value.HasValue
+                ? new ReadOnlyMemory<byte>(request.Value.Value.ToArray())
+                : (ReadOnlyMemory<byte>?)null;
+
             Last = new ClusterTransferProduceMutation(
                 request.ClusterId,
                 request.TopicName,
                 request.Partition,
-                request.Key.HasValue
-                    ? new ReadOnlyMemory<byte>(request.Key.Value.ToArray())
-                    : null,
-                request.Value.HasValue
-                    ? new ReadOnlyMemory<byte>(request.Value.Value.ToArray())
-                    : null,
+                copiedKey,
+                copiedValue,
                 request.Headers
                     .Select(header => new KafkaRecordHeader(
                         header.Name,
