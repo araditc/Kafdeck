@@ -66,6 +66,51 @@ public sealed class V07SchemaDeveloperToolingTests
     }
 
     [Fact]
+    public async Task Reference_graph_fails_closed_before_reading_an_unauthorized_referenced_subject()
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Orders","fields":[]}""",
+                    new RecordSchemaReference("common.avsc", "common", 1)),
+                [("common", 1)] = Detail(
+                    "common",
+                    1,
+                    2,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Common","fields":[]}"""),
+            });
+        var service = new SchemaDeveloperService(catalog);
+
+        var result = await service.BuildReferenceGraphAsync(
+            "cluster-a",
+            "orders",
+            1,
+            subjectAuthorization:
+                candidate => !string.Equals(
+                    candidate,
+                    "common",
+                    StringComparison.Ordinal));
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.Unauthorized,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_reference_authorization_denied",
+            result.Failure.Code);
+        Assert.DoesNotContain(
+            ("common", 1),
+            catalog.Reads);
+    }
+
+    [Fact]
     public async Task Reference_graph_fails_closed_when_depth_bound_is_exceeded()
     {
         var catalog = new FakeSchemaCatalog(
@@ -307,6 +352,9 @@ public sealed class V07SchemaDeveloperToolingTests
             (string Subject, int Version),
             SchemaVersionDetail> _versions;
         private readonly SchemaCompatibilityObservation _compatibility;
+        private readonly List<(string Subject, int Version)> _reads = [];
+
+        public IReadOnlyList<(string Subject, int Version)> Reads => _reads;
 
         public FakeSchemaCatalog(
             IReadOnlyDictionary<
@@ -370,6 +418,8 @@ public sealed class V07SchemaDeveloperToolingTests
             ReadViewOperationContext operation,
             CancellationToken cancellationToken)
         {
+            _reads.Add((subject, version));
+
             if (_versions.TryGetValue(
                     (subject, version),
                     out var value))
