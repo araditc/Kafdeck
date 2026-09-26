@@ -240,10 +240,10 @@ public static class KafdeckV07OpenApi
         "type": "object",
         "required": ["name", "fromSubject", "fromVersion", "toSubject", "toVersion"],
         "properties": {
-          "name": { "type": "string" },
-          "fromSubject": { "type": "string" },
+          "name": { "type": "string", "maxLength": 512 },
+          "fromSubject": { "type": "string", "maxLength": 512 },
           "fromVersion": { "type": "integer", "minimum": 1 },
-          "toSubject": { "type": "string" },
+          "toSubject": { "type": "string", "maxLength": 512 },
           "toVersion": { "type": "integer", "minimum": 1 }
         }
       },
