@@ -240,7 +240,9 @@ Create <code>appsettings.Production.json</code>:
 {
   "Kafdeck": {
     "Deployment": {
-      "ListenUrl": "http://0.0.0.0:8080",
+      "ListenUrls": [
+        "http://0.0.0.0:8080"
+      ],
       "AccessMode": "Token",
       "AccessToken": "env:KAFDECK_DEPLOYMENT_TOKEN"
     },
@@ -253,10 +255,12 @@ Create <code>appsettings.Production.json</code>:
         "SecurityProtocol": "Plaintext"
       }
     ]
-  },
-  "AllowedHosts": "localhost;127.0.0.1"
+  }
 }
 ~~~
+
+`ListenUrls` is the preferred form and accepts multiple Kestrel endpoints. The legacy single `ListenUrl` key remains supported for existing deployments. When a wildcard bind such as `0.0.0.0` or `[::]` is used, Kafdeck derives a wildcard Host filter only after the deployment has passed the existing non-local Token/OIDC security checks. Concrete IP/hostname bindings derive exact allowed hosts automatically.
+
 
 ### 3. Run the released image
 
@@ -266,7 +270,7 @@ Replace <code>&lt;release-tag&gt;</code> with a published version from [Releases
 
 ~~~powershell
 $env:KAFDECK_DEPLOYMENT_TOKEN = "change-this-local-token"
-docker run --rm --name kafdeck --network kafdeck-demo -p 127.0.0.1:8080:8080 -e KAFDECK_DEPLOYMENT_TOKEN=$env:KAFDECK_DEPLOYMENT_TOKEN -v "$PWD\appsettings.Production.json:/app/appsettings.Production.json:ro" ghcr.io/araditc/kafdeck:<release-tag>
+docker run --rm --name kafdeck --network kafdeck-demo -p 8080:8080 -e KAFDECK_DEPLOYMENT_TOKEN=$env:KAFDECK_DEPLOYMENT_TOKEN -v "$PWD\appsettings.Production.json:/app/appsettings.Production.json:ro" ghcr.io/araditc/kafdeck:<release-tag>
 ~~~
 
 #### Linux / Docker Engine
@@ -277,17 +281,19 @@ export KAFDECK_DEPLOYMENT_TOKEN='change-this-local-token'
 docker run --rm \
   --name kafdeck \
   --network kafdeck-demo \
-  -p 127.0.0.1:8080:8080 \
+  -p 8080:8080 \
   -e KAFDECK_DEPLOYMENT_TOKEN \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro" \
   ghcr.io/araditc/kafdeck:<release-tag>
 ~~~
 
-Then open:
+Then open Kafdeck from another machine by using the server's reachable address, for example:
 
 ~~~text
-http://127.0.0.1:8080/#access_token=change-this-local-token
+http://192.168.10.20:8080/#access_token=change-this-local-token
 ~~~
+
+For local access on the server itself, `http://127.0.0.1:8080/` remains valid when loopback is also included in `ListenUrls`.
 
 The token is supplied through the URL **fragment**, not a query string. The UI removes it from the address bar, stores it in browser <code>sessionStorage</code>, and sends it as <code>X-Kafdeck-Access-Token</code> for API calls.
 
@@ -299,7 +305,7 @@ The token is supplied through the URL **fragment**, not a query string. The UI r
 ~~~bash
 podman run --rm \
   --name kafdeck \
-  -p 127.0.0.1:8080:8080 \
+  -p 8080:8080 \
   -e KAFDECK_DEPLOYMENT_TOKEN \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro,Z" \
   ghcr.io/araditc/kafdeck:<release-tag>
@@ -337,9 +343,13 @@ cp -R src/frontend/dist/. src/backend/Kafdeck.Api/wwwroot/
 dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
 ~~~
 
-The default application configuration binds to <code>http://127.0.0.1:8080</code> and contains no cluster profiles. For a useful source run, either add <code>src/backend/Kafdeck.Api/appsettings.Development.json</code> or set environment variables before starting the API:
+The default application configuration remains intentionally loopback-only at <code>http://127.0.0.1:8080</code> and contains no cluster profiles. To expose a source run to another machine, explicitly select Token or OIDC mode and configure one or more <code>ListenUrls</code>. For a useful source run, either add <code>src/backend/Kafdeck.Api/appsettings.Development.json</code> or set environment variables before starting the API:
 
 ~~~bash
+export Kafdeck__Deployment__ListenUrls__0=http://0.0.0.0:8080
+export Kafdeck__Deployment__AccessMode=Token
+export Kafdeck__Deployment__AccessToken=env:KAFDECK_DEPLOYMENT_TOKEN
+export KAFDECK_DEPLOYMENT_TOKEN='change-this-local-token'
 export Kafdeck__Clusters__0__Id=local
 export Kafdeck__Clusters__0__BootstrapServers__0=localhost:9092
 export Kafdeck__Clusters__0__SecurityProtocol=Plaintext
@@ -374,6 +384,10 @@ docker compose -f deploy/dev/docker-compose.kafka.yml up -d
 To point a native Windows source run at that broker:
 
 ~~~powershell
+$env:Kafdeck__Deployment__ListenUrls__0 = "http://0.0.0.0:8080"
+$env:Kafdeck__Deployment__AccessMode = "Token"
+$env:Kafdeck__Deployment__AccessToken = "env:KAFDECK_DEPLOYMENT_TOKEN"
+$env:KAFDECK_DEPLOYMENT_TOKEN = "change-this-local-token"
 $env:Kafdeck__Clusters__0__Id = "local"
 $env:Kafdeck__Clusters__0__BootstrapServers__0 = "localhost:9092"
 $env:Kafdeck__Clusters__0__SecurityProtocol = "Plaintext"
@@ -582,7 +596,7 @@ The corresponding Kafdeck/OIDC configuration can then use an HTTPS listen URL:
 {
   "Kafdeck": {
     "Deployment": {
-      "ListenUrl": "https://0.0.0.0:8443",
+      "ListenUrls": [ "https://0.0.0.0:8443" ],
       "AccessMode": "Oidc",
       "Oidc": {
         "Issuer": "https://idp.example",
@@ -655,7 +669,7 @@ Give Kafdeck only the Kafka permissions required for the views you intend to use
 - use OIDC/RBAC for multi-user production access;
 - keep Kafdeck on a management network;
 - configure an approved HTTPS boundary;
-- set AllowedHosts appropriately for the production hostname;
+- prefer concrete `ListenUrls` for production host filtering; wildcard binds require Token/OIDC and intentionally derive wildcard Host acceptance;
 - do not expose development PLAINTEXT listeners to untrusted networks;
 - monitor /healthz;
 - retain release provenance/SBOM/security evidence according to your environment policy.
