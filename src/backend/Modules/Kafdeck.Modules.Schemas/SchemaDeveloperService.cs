@@ -949,6 +949,34 @@ public sealed class SchemaDeveloperService
             _policy.MaxReferenceNodes,
             _policy.MaxSchemaBytes);
 
+    private static string? NormalizeReferenceName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        var normalized = name.Trim();
+        return normalized.Length <= MaxReferenceNameLength &&
+               !normalized.Any(char.IsControl)
+            ? normalized
+            : null;
+    }
+
+    private static void RejectUnsupportedJsonSchemaConstraints(
+        JsonElement schema)
+    {
+        foreach (var keyword in UnsupportedJsonSchemaConstraintKeywords)
+        {
+            if (schema.TryGetProperty(keyword, out _))
+            {
+                throw new SchemaMockUnsupportedException(
+                    "schema_mock_json_constraint_unsupported",
+                    $"JSON Schema keyword '{keyword}' is not supported by bounded mock generation.");
+            }
+        }
+    }
+
     private static string? NormalizeSubject(string? subject)
     {
         if (string.IsNullOrWhiteSpace(subject))
