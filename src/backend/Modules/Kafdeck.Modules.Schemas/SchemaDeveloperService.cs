@@ -10,6 +10,7 @@ namespace Kafdeck.Modules.Schemas;
 public sealed record SchemaDeveloperPolicy(
     TimeSpan OperationTimeout,
     int MaxReferenceNodes,
+    int MaxReferenceEdges,
     int MaxReferenceDepth,
     long MaxSchemaBytes,
     int MaxGeneratedExamples,
@@ -19,6 +20,7 @@ public sealed record SchemaDeveloperPolicy(
         new(
             TimeSpan.FromSeconds(10),
             MaxReferenceNodes: 64,
+            MaxReferenceEdges: 256,
             MaxReferenceDepth: 12,
             MaxSchemaBytes: 2 * 1024 * 1024,
             MaxGeneratedExamples: 10,
@@ -93,6 +95,7 @@ public sealed class SchemaDeveloperService
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         if (_policy.MaxReferenceNodes <= 0 ||
+            _policy.MaxReferenceEdges <= 0 ||
             _policy.MaxReferenceDepth <= 0 ||
             _policy.MaxSchemaBytes <= 0 ||
             _policy.MaxGeneratedExamples <= 0 ||
@@ -187,6 +190,13 @@ public sealed class SchemaDeveloperService
 
             foreach (var reference in detail.Schema.References)
             {
+                if (edges.Count >= _policy.MaxReferenceEdges)
+                {
+                    return Bound<SchemaReferenceGraph>(
+                        "schema_reference_edges_exceeded",
+                        "Schema reference graph exceeded the configured edge bound.");
+                }
+
                 var targetSubject = NormalizeSubject(reference.Subject);
                 if (targetSubject is null || reference.Version <= 0)
                 {
@@ -311,6 +321,15 @@ public sealed class SchemaDeveloperService
         }
 
         var detail = result.Value;
+        if (detail.Schema.References.Count > 0)
+        {
+            return Failed<SchemaMockResult>(
+                ReadViewFailureCategory.Unsupported,
+                "schema_mock_references_unsupported",
+                "Bounded mock generation does not yet resolve external schema references.",
+                false);
+        }
+
         var schemaBytes =
             Encoding.UTF8.GetByteCount(detail.Schema.SchemaText);
         if (schemaBytes > _policy.MaxSchemaBytes)
@@ -589,6 +608,15 @@ public sealed class SchemaDeveloperService
             throw new JsonException("JSON Schema node is invalid.");
         }
 
+        if (schema.TryGetProperty("$ref", out _) ||
+            schema.TryGetProperty("oneOf", out _) ||
+            schema.TryGetProperty("anyOf", out _) ||
+            schema.TryGetProperty("allOf", out _))
+        {
+            throw new NotSupportedException(
+                "JSON Schema composition/reference constructs require a typed resolver.");
+        }
+
         var typeName = ReadJsonSchemaType(schema);
         switch (typeName)
         {
@@ -757,10 +785,8 @@ public sealed class SchemaDeveloperService
                 sensitive
                     ? "[REDACTED]"
                     : $"example-{exampleIndex + 1}-{random.Next(1000, 9999)}",
-            _ =>
-                sensitive
-                    ? "[REDACTED]"
-                    : $"example-{exampleIndex + 1}",
+            _ => throw new NotSupportedException(
+                "Named or custom schema types require a typed resolver."),
         };
     }
 
