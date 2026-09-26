@@ -33,12 +33,14 @@ public sealed class V06W47TransferDispatchTests
             10,
             null,
             new ReadOnlyMemory<byte>(Array.Empty<byte>()),
-            null,
+            (ReadOnlyMemory<byte>?)null,
             new[]
             {
                 new KafkaRecordHeader("x-dup", new byte[] { 1 }),
                 new KafkaRecordHeader("x-dup", new byte[] { 2 }),
             });
+
+        Assert.False(record.Value.HasValue);
 
         var result = await coordinator.DispatchRecordAsync(
             operation,
