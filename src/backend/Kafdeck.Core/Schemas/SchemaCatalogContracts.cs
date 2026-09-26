@@ -42,7 +42,9 @@ public sealed record SchemaMutationCapabilities(
     bool SupportsRegistration,
     bool SupportsCompatibilityMutation,
     bool SupportsSoftDelete,
-    bool SupportsPermanentDelete);
+    bool SupportsPermanentDelete,
+    string ProviderProfile = "ConfluentCompatibleV1",
+    string? LimitationCode = null);
 
 public enum SchemaMutationObservationFailureCategory
 {
