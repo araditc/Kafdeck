@@ -102,6 +102,45 @@ export interface SchemaDiffHunk {
   addedLines: string[];
 }
 export interface SchemaDiff { isEqual: boolean; hunks: SchemaDiffHunk[]; }
+export interface SchemaReferenceNode {
+  subject: string;
+  version: number;
+  schemaId: number;
+  format: string;
+  depth: number;
+}
+export interface SchemaReferenceEdge {
+  name: string;
+  fromSubject: string;
+  fromVersion: number;
+  toSubject: string;
+  toVersion: number;
+}
+export interface SchemaReferenceGraph {
+  rootSubject: string;
+  rootVersion: number;
+  nodes: SchemaReferenceNode[];
+  edges: SchemaReferenceEdge[];
+  hasCycle: boolean;
+  totalSchemaBytes: number;
+}
+export interface SchemaCompatibilityExplanation {
+  subject: string;
+  mode: string;
+  isInherited: boolean;
+  scope: 'subject' | 'global-inherited';
+  summary: string;
+  rules: string[];
+}
+export interface SchemaMockExample { index: number; json: string; }
+export interface SchemaMockResult {
+  subject: string;
+  version: number;
+  format: string;
+  seed: number;
+  examples: SchemaMockExample[];
+  totalBytes: number;
+}
 
 export interface ConnectClusterInfo {
   version: string | null;
@@ -258,6 +297,73 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
+interface ToolingCsrfToken { requestToken: string; headerName: string; }
+let toolingCsrfToken: ToolingCsrfToken | null = null;
+
+async function toolingCsrf(signal?: AbortSignal): Promise<ToolingCsrfToken | null> {
+  if (toolingCsrfToken !== null) return toolingCsrfToken;
+
+  const init: RequestInit = {
+    method: 'GET',
+    headers: requestHeaders('application/json'),
+    credentials: 'same-origin',
+  };
+  if (signal !== undefined) init.signal = signal;
+
+  const response = await fetch('/api/v1/auth/csrf', init);
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw await parseProblem(response);
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return null;
+  }
+
+  const token = (await response.json()) as Partial<ToolingCsrfToken>;
+  if (!token.requestToken || !token.headerName) {
+    throw new ApiProblem(
+      500,
+      'The antiforgery token response was incomplete.',
+      'urn:kafdeck:problem:antiforgery-token-invalid',
+    );
+  }
+
+  toolingCsrfToken = {
+    requestToken: token.requestToken,
+    headerName: token.headerName,
+  };
+  return toolingCsrfToken;
+}
+
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const headers = requestHeaders('application/json');
+  headers['Content-Type'] = 'application/json';
+
+  const csrf = await toolingCsrf(signal);
+  if (csrf !== null) headers[csrf.headerName] = csrf.requestToken;
+
+  const init: RequestInit = {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    credentials: 'same-origin',
+  };
+  if (signal !== undefined) init.signal = signal;
+
+  const response = await fetch(path, init);
+  if (!response.ok) {
+    const problem = await parseProblem(response);
+    if (problem.code === 'urn:kafdeck:problem:antiforgery-validation-failed') {
+      toolingCsrfToken = null;
+    }
+    throw problem;
+  }
+
+  return (await response.json()) as T;
+}
+
 function clusterPath(clusterId: string) { return `/api/v1/clusters/${encodeURIComponent(clusterId)}`; }
 function topicPath(clusterId: string, topicName: string) { return `${clusterPath(clusterId)}/topics/${encodeURIComponent(topicName)}`; }
 function recordPath(clusterId: string, topicName: string, partition: number) { return `${topicPath(clusterId, topicName)}/partitions/${partition}/records`; }
@@ -352,6 +458,33 @@ export const kafdeckApi = {
   diffSchemaVersions(clusterId: string, subject: string, leftVersion: number, rightVersion: number, signal?: AbortSignal) {
     const params = new URLSearchParams({ leftVersion: String(leftVersion), rightVersion: String(rightVersion) });
     return readJson<ReadViewEnvelope<SchemaDiff>>(`${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/diff?${params}`, signal);
+  },
+  getSchemaReferenceGraph(clusterId: string, subject: string, version: number, signal?: AbortSignal) {
+    const params = new URLSearchParams({ version: String(version) });
+    return readJson<ReadViewEnvelope<SchemaReferenceGraph>>(
+      `${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/references?${params}`,
+      signal,
+    );
+  },
+  getSchemaCompatibilityExplanation(clusterId: string, subject: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<SchemaCompatibilityExplanation>>(
+      `${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/compatibility/explanation`,
+      signal,
+    );
+  },
+  generateSchemaMock(
+    clusterId: string,
+    subject: string,
+    version: number,
+    count = 1,
+    seed = 0,
+    signal?: AbortSignal,
+  ) {
+    return postJson<ReadViewEnvelope<SchemaMockResult>>(
+      `${clusterPath(clusterId)}/schemas/mock`,
+      { subject, version, count, seed },
+      signal,
+    );
   },
   getConnectInfo(clusterId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<ConnectClusterInfo>>(`${clusterPath(clusterId)}/connect`, signal);
