@@ -1,5 +1,5 @@
 {
-  "version": "v0.5.1",
-  "title": "Kafdeck v0.5.1 — Release Integrity Corrections",
-  "notes": "docs/releases/v0.5.1.md"
+  "version": "v0.6",
+  "title": "Kafdeck v0.6 — Fleet Operations and Secure Remote UI",
+  "notes": "docs/releases/v0.6.md"
 }

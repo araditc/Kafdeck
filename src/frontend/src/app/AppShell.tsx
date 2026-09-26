@@ -10,6 +10,7 @@ import {
   type OperatorSession,
   type ReadViewEnvelope,
   type TopicCatalogEntry,
+  type FleetCapabilityStatus,
 } from '../shared/api.js';
 import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
@@ -34,6 +35,16 @@ function ConfigurationView({ entries }: { entries: ConfigurationEntryData[] }) {
   return <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Name</th><th scope="col">Value</th><th scope="col">Source</th></tr></thead><tbody>{entries.map(entry => <tr key={entry.name}><th scope="row">{entry.name}</th><td>{entry.isSensitive ? <span className="badge bg-orange-lt">Sensitive value redacted</span> : (entry.value ?? 'Not set')}</td><td>{entry.source ?? 'Unknown'}</td></tr>)}</tbody></table></div>;
 }
 
+function fleetStateBadge(state: FleetCapabilityStatus['state']) {
+  switch (state) {
+    case 'supported': return 'bg-green-lt';
+    case 'unsupported': return 'bg-secondary-lt';
+    case 'blocked': return 'bg-orange-lt';
+    case 'unconfigured': return 'bg-yellow-lt';
+    default: return 'bg-blue-lt';
+  }
+}
+
 export function AppShell() {
   const [operator, setOperator] = useState<OperatorSession | null>(null);
   const [authenticationRequired, setAuthenticationRequired] = useState(false);
@@ -53,6 +64,8 @@ export function AppShell() {
   const [topicConfiguration, setTopicConfiguration] = useState<ConfigurationEntryData[] | null>(null);
   const [topicDetailError, setTopicDetailError] = useState<string | null>(null);
   const [topicCatalog, setTopicCatalog] = useState<ReadViewEnvelope<TopicCatalogEntry> | null>(null);
+  const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
+  const [fleetError, setFleetError] = useState<string | null>(null);
 
   const loadClusters = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -100,6 +113,15 @@ export function AppShell() {
         if (reason instanceof ApiProblem && reason.status === 401) setAuthenticationRequired(true);
       });
     void loadClusters(controller.signal);
+    void kafdeckApi.getFleetCapabilities(controller.signal)
+      .then(response => {
+        setFleetCapabilities(response.capabilities);
+        setFleetError(null);
+      })
+      .catch(reason => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        setFleetError(problemText(reason));
+      });
     return () => controller.abort();
   }, [loadClusters]);
 
@@ -213,6 +235,7 @@ export function AppShell() {
           <li className="nav-item"><a className="nav-link" href="#consumers">Consumers</a></li>
           <li className="nav-item"><a className="nav-link" href="#schemas">Schemas</a></li>
           <li className="nav-item"><a className="nav-link" href="#ecosystem">Ecosystem</a></li>
+          <li className="nav-item"><a className="nav-link" href="#fleet">Fleet</a></li>
         </ul>
       </div>
     </nav>
@@ -230,6 +253,13 @@ export function AppShell() {
           {loading && <div className="alert alert-info kafdeck-status" role="status">Loading cluster observations…</div>}
           {error && <div className="alert alert-danger kafdeck-status" role="alert">{error}</div>}
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">No authorized clusters are available.</div>}
+          <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
+            <h2 id="fleet-title" className="card-title">Fleet Operations — v0.6</h2>
+            <p className="text-secondary">Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.</p>
+            {fleetError && <div className="alert alert-danger" role="alert">{fleetError}</div>}
+            {!fleetError && fleetCapabilities.length === 0 && <p role="status">Loading fleet capability status…</p>}
+            {fleetCapabilities.length > 0 && <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Capability</th><th scope="col">State</th><th scope="col">Workstream</th><th scope="col">Reason</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row">{capability.displayName}</th><td><span className={`badge ${fleetStateBadge(capability.state)}`}>{capability.state}</span></td><td>{capability.workstream}</td><td>{capability.reason}</td></tr>)}</tbody></table></div>}
+          </section>
           {selected && <>
             <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">
               <h2 id="overview-title" className="card-title">Cluster overview</h2>

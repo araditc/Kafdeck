@@ -18,6 +18,9 @@ test('AppShell exposes product identity and accessible operator landmarks', () =
   assert.match(markup, /href="#consumers"/);
   assert.match(markup, /href="#schemas"/);
   assert.match(markup, /href="#ecosystem"/);
+  assert.match(markup, /href="#fleet"/);
+  assert.match(markup, /Fleet Operations — v0\.6/);
+  assert.match(markup, /Loading fleet capability status/);
 });
 
 test('cluster switching clears cluster-scoped state', () => {

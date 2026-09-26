@@ -30,7 +30,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **v0.5.1 is the current release.** Read-only remains the default operating posture. Governed mutation workflows are opt-in and activate only when `Kafdeck:Administration:Mutations:Enabled=true` and the required durable persistence, digest material, authorization, and provider prerequisites validate successfully. ksqlDB statement execution and generic provider/CLI command surfaces remain unavailable.
+> **v0.6 is the current release line.** Read-only remains the default operating posture. v0.6 adds safe remote/multi-address deployment, a Tabler-based branded operator dashboard, and capability-driven Fleet Operations status. Governed mutations remain opt-in, and any fleet capability whose typed provider/runtime boundary is incomplete is reported `Blocked` or `Unsupported` rather than exposed through a generic provider/CLI escape path.
 
 ## Why Kafdeck?
 
@@ -45,7 +45,7 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.5.1 is the current published release.** The main branch can also contain capabilities that have passed implementation gates but are not yet part of a published release.
+Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.6 is the active/current release identity selected by the governed release manifest.** Until the protected-main publication workflow completes, the latest already-published GitHub Release remains the fallback artifact. The main branch can also contain capabilities that have passed implementation gates but are not part of a published release.
 
 | Capability | Status |
 | --- | --- |
@@ -54,6 +54,7 @@ Stable releases are published through [GitHub Releases](https://github.com/aradi
 | Safe Data Explorer + Server-Side Masking | Released in v0.3 |
 | Consumers / Schemas / Ecosystem Read Views | Released in v0.4 |
 | Controlled Kafka mutations | Released in v0.5 — governed and opt-in; read-only remains the default posture |
+| Fleet Operations capability boundary, secure remote UI and Tabler dashboard | v0.6 — capability-driven; unavailable fleet mutations remain explicitly Blocked/Unsupported |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
 
