@@ -10,9 +10,10 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 {
     private const int MaxConnectorNameLength = 512;
     private const int MaxTraceCharacters = 8_192;
-    private const int DefaultMaxConcurrencyPerCluster = 4;
-    private readonly IReadOnlyDictionary<string, HttpReadRuntime> _runtimes;
-    private readonly IReadOnlyDictionary<string, SemaphoreSlim> _gates;
+    private const int DefaultMaxConcurrencyPerProfile = 4;
+    private readonly IReadOnlyDictionary<ConnectRuntimeKey, HttpReadRuntime> _runtimes;
+    private readonly IReadOnlyDictionary<ConnectRuntimeKey, SemaphoreSlim> _gates;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<ConnectProfileSummary>> _profilesByCluster;
     private readonly TimeProvider _timeProvider;
 
     public KafkaConnectReadAdapter(
@@ -22,8 +23,9 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         : this(
             clusterProfiles,
             secretResolver,
-            static _ => new HttpClientHandler { AllowAutoRedirect = false },
-            timeProvider)
+            static (_, _) => new HttpClientHandler { AllowAutoRedirect = false },
+            timeProvider,
+            DefaultMaxConcurrencyPerProfile)
     {
     }
 
@@ -32,46 +34,150 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         SecretResolver secretResolver,
         Func<ClusterProfile, HttpMessageHandler> handlerFactory,
         TimeProvider? timeProvider = null,
-        int maxConcurrencyPerCluster = DefaultMaxConcurrencyPerCluster)
+        int maxConcurrencyPerCluster = DefaultMaxConcurrencyPerProfile)
+        : this(
+            clusterProfiles,
+            secretResolver,
+            (cluster, _) => handlerFactory(cluster),
+            timeProvider,
+            maxConcurrencyPerCluster)
+    {
+    }
+
+    internal KafkaConnectReadAdapter(
+        IReadOnlyList<ClusterProfile> clusterProfiles,
+        SecretResolver secretResolver,
+        Func<ClusterProfile, KafkaConnectProfile, HttpMessageHandler> handlerFactory,
+        TimeProvider? timeProvider = null,
+        int maxConcurrencyPerProfile = DefaultMaxConcurrencyPerProfile)
     {
         ArgumentNullException.ThrowIfNull(clusterProfiles);
         ArgumentNullException.ThrowIfNull(secretResolver);
         ArgumentNullException.ThrowIfNull(handlerFactory);
 
-        if (maxConcurrencyPerCluster is < 1 or > 64)
+        if (maxConcurrencyPerProfile is < 1 or > 64)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxConcurrencyPerCluster));
+            throw new ArgumentOutOfRangeException(nameof(maxConcurrencyPerProfile));
         }
 
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _runtimes = clusterProfiles
-            .Where(profile => profile.Connect is not null)
-            .ToDictionary(
-                profile => profile.Id,
-                profile =>
-                {
-                    var connect = profile.Connect!;
-                    return ReadOnlyHttpSupport.CreateRuntime(
-                        connect.Url,
-                        connect.Username,
-                        connect.Password,
-                        secretResolver,
-                        handlerFactory(profile));
-                },
-                StringComparer.Ordinal);
+
+        var bindings = clusterProfiles
+            .SelectMany(cluster =>
+                KafkaConnectProfileSet.Effective(cluster)
+                    .Select(profile => new ConnectProfileBinding(cluster, profile)))
+            .ToArray();
+
+        _runtimes = bindings.ToDictionary(
+            binding => new ConnectRuntimeKey(
+                binding.Cluster.Id,
+                binding.Profile.Id),
+            binding => ReadOnlyHttpSupport.CreateRuntime(
+                binding.Profile.Url,
+                binding.Profile.Username,
+                binding.Profile.Password,
+                secretResolver,
+                handlerFactory(binding.Cluster, binding.Profile)));
 
         _gates = _runtimes.Keys.ToDictionary(
-            clusterId => clusterId,
-            _ => new SemaphoreSlim(maxConcurrencyPerCluster, maxConcurrencyPerCluster),
-            StringComparer.Ordinal);
+            key => key,
+            _ => new SemaphoreSlim(
+                maxConcurrencyPerProfile,
+                maxConcurrencyPerProfile));
+
+        _profilesByCluster = bindings
+            .GroupBy(
+                binding => binding.Cluster.Id,
+                StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ConnectProfileSummary>)group
+                    .Select(binding => new ConnectProfileSummary(
+                        binding.Profile.Id,
+                        string.Equals(
+                            binding.Profile.Id,
+                            KafkaConnectProfileSet.DefaultProfileId,
+                            StringComparison.Ordinal),
+                        binding.Profile.MutationProviderProfile.ToString()))
+                    .OrderBy(profile => profile.Id, StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
+    }
+
+    public Task<ReadViewResult<IReadOnlyList<ConnectProfileSummary>>> ListProfilesAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        var normalizedProfileId = NormalizeProfileId(connectProfileId);
+        if (normalizedProfileId is null)
+        {
+            return Invalid<T>(
+                "invalid_connect_profile_id",
+                "Kafka Connect profile ID is invalid.");
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.Cancelled,
+                "operation_cancelled",
+                "Kafka Connect profile read was cancelled.",
+                false));
+        }
+
+        if (operation.DeadlineUtc <= _timeProvider.GetUtcNow())
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.Timeout,
+                "deadline_exceeded",
+                "Kafka Connect profile read exceeded its deadline.",
+                true));
+        }
+
+        if (!_profilesByCluster.TryGetValue(clusterId, out var profiles))
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.NotConfigured,
+                "connect_not_configured",
+                "Kafka Connect is not configured for the requested cluster.",
+                false));
+        }
+
+        if (profiles.Count > operation.MaxItems)
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.ResponseTooLarge,
+                "connect_profiles_response_too_large",
+                "Kafka Connect profile list exceeded the configured bound.",
+                false));
+        }
+
+        return Task.FromResult(
+            ReadViewResult<IReadOnlyList<ConnectProfileSummary>>
+                .Success(profiles));
     }
 
     public Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
         string clusterId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken) =>
+        GetClusterInfoAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            operation,
+            cancellationToken);
+
+    public Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
         ExecuteAsync(
             clusterId,
+            connectProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -98,8 +204,20 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         string clusterId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken) =>
+        ListConnectorsAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            operation,
+            cancellationToken);
+
+    public Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
         ExecuteAsync<IReadOnlyList<ConnectConnectorSummary>>(
             clusterId,
+            connectProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -132,11 +250,26 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     throw new ResponseBoundExceededException();
                 }
 
-                return names.Select(name => new ConnectConnectorSummary(name)).ToArray();
+                return names
+                    .Select(name => new ConnectConnectorSummary(name))
+                    .ToArray();
             });
 
     public Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
         string clusterId,
+        string connectorName,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        GetConnectorAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            connectorName,
+            operation,
+            cancellationToken);
+
+    public Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
+        string clusterId,
+        string connectProfileId,
         string connectorName,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken)
@@ -151,6 +284,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 
         return ExecuteAsync(
             clusterId,
+            connectProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -170,7 +304,11 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                         token)
                     .ConfigureAwait(false);
 
-                return ProjectConnector(normalized, status, config, operation.MaxItems);
+                return ProjectConnector(
+                    normalized,
+                    status,
+                    config,
+                    operation.MaxItems);
             });
     }
 
@@ -300,6 +438,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 
     private async Task<ReadViewResult<T>> ExecuteAsync<T>(
         string clusterId,
+        string connectProfileId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken,
         Func<HttpReadRuntime, CancellationToken, Task<T>> action)
@@ -316,13 +455,24 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             return Failed<T>(ReadViewFailureCategory.Timeout, "deadline_exceeded", "Kafka Connect read operation exceeded its deadline.", true);
         }
 
-        if (!_runtimes.TryGetValue(clusterId, out var runtime) ||
-            !_gates.TryGetValue(clusterId, out var gate))
+        var key = new ConnectRuntimeKey(
+            clusterId,
+            normalizedProfileId);
+        if (!_runtimes.TryGetValue(key, out var runtime) ||
+            !_gates.TryGetValue(key, out var gate))
         {
+            var isDefault = string.Equals(
+                normalizedProfileId,
+                KafkaConnectProfileSet.DefaultProfileId,
+                StringComparison.Ordinal);
             return Failed<T>(
                 ReadViewFailureCategory.NotConfigured,
-                "connect_not_configured",
-                "Kafka Connect is not configured for the requested cluster.",
+                isDefault
+                    ? "connect_not_configured"
+                    : "connect_profile_not_configured",
+                isDefault
+                    ? "Kafka Connect is not configured for the requested cluster."
+                    : "Kafka Connect profile is not configured for the requested cluster.",
                 false);
         }
 
@@ -376,6 +526,23 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         }
     }
 
+    private static string? NormalizeProfileId(string? profileId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return null;
+        }
+
+        var normalized = profileId.Trim();
+        return normalized.Length <= KafkaConnectProfileSet.MaxProfileIdLength &&
+               !normalized.Any(char.IsControl) &&
+               normalized.All(character =>
+                   char.IsLetterOrDigit(character) ||
+                   character is '-' or '_' or '.')
+            ? normalized
+            : null;
+    }
+
     private static string? NormalizeConnectorName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -417,4 +584,12 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         string message,
         bool retryable) =>
         ReadViewResult<T>.Failed(new ReadViewFailure(category, code, message, retryable));
+
+    private readonly record struct ConnectRuntimeKey(
+        string ClusterId,
+        string ProfileId);
+
+    private sealed record ConnectProfileBinding(
+        ClusterProfile Cluster,
+        KafkaConnectProfile Profile);
 }
