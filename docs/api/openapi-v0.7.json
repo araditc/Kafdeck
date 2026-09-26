@@ -146,7 +146,7 @@
           "403": { "description": "schema.read or antiforgery validation denied" },
           "404": { "description": "Cluster ID is not configured" },
           "413": { "description": "Schema or generated-output bound exceeded" },
-          "501": { "description": "Schema format or configured provider is unsupported" }
+          "501": { "description": "Schema format, external schema references, or configured provider are unsupported by bounded local generation" }
         }
       }
     }
@@ -235,6 +235,7 @@
           },
           "edges": {
             "type": "array",
+            "maxItems": 256,
             "items": { "$ref": "#/components/schemas/SchemaReferenceEdge" }
           },
           "hasCycle": { "type": "boolean" },
