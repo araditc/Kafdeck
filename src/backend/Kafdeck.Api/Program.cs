@@ -320,6 +320,7 @@ app.MapKafdeckV04ReadViews(kafdeckOptions);
 app.MapKafdeckV07SchemaCapabilities(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
+app.MapKafdeckV07OpenApi();
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();
