@@ -12,7 +12,10 @@ import {
   type KsqlServerInfo,
   type ReadViewEnvelope,
   type SchemaCompatibility,
+  type SchemaCompatibilityExplanation,
   type SchemaDiff,
+  type SchemaMockResult,
+  type SchemaReferenceGraph,
   type SchemaSubjectSummary,
   type SchemaVersionSummary,
 } from '../../shared/api.js';
@@ -46,6 +49,11 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [leftVersion, setLeftVersion] = useState<number | null>(null);
   const [rightVersion, setRightVersion] = useState<number | null>(null);
   const [schemaDiff, setSchemaDiff] = useState<ReadViewEnvelope<SchemaDiff> | null>(null);
+  const [referenceGraph, setReferenceGraph] = useState<ReadViewEnvelope<SchemaReferenceGraph> | null>(null);
+  const [compatibilityExplanation, setCompatibilityExplanation] = useState<ReadViewEnvelope<SchemaCompatibilityExplanation> | null>(null);
+  const [schemaMock, setSchemaMock] = useState<ReadViewEnvelope<SchemaMockResult> | null>(null);
+  const [mockCount, setMockCount] = useState(1);
+  const [mockSeed, setMockSeed] = useState(0);
 
   const [connectInfo, setConnectInfo] = useState<ReadViewEnvelope<ConnectClusterInfo> | null>(null);
   const [connectors, setConnectors] = useState<ReadViewEnvelope<ConnectConnectorSummary[]> | null>(null);
@@ -58,7 +66,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   useEffect(() => {
     const controller = new AbortController();
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
-    setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null);
+    setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectError(null);
     setKsqlInfo(null); setKsqlError(null);
 
@@ -99,14 +107,16 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   };
 
   const openSubject = async (subject: string) => {
-    setSchemaError(null); setSelectedSubject(subject); setVersions(null); setCompatibility(null); setSchemaDiff(null);
+    setSchemaError(null); setSelectedSubject(subject); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     try {
-      const [versionResult, compatibilityResult] = await Promise.all([
+      const [versionResult, compatibilityResult, explanationResult] = await Promise.all([
         kafdeckApi.listSchemaVersions(clusterId, subject),
         kafdeckApi.getSchemaCompatibility(clusterId, subject),
+        kafdeckApi.getSchemaCompatibilityExplanation(clusterId, subject),
       ]);
       setVersions(versionResult);
       setCompatibility(compatibilityResult);
+      setCompatibilityExplanation(explanationResult);
       const values = versionResult.data.map(item => item.version);
       setRightVersion(values.at(-1) ?? null);
       setLeftVersion(values.length > 1 ? values.at(-2) ?? null : values[0] ?? null);
@@ -120,6 +130,28 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     setSchemaError(null); setSchemaDiff(null);
     try {
       setSchemaDiff(await kafdeckApi.diffSchemaVersions(clusterId, selectedSubject, leftVersion, rightVersion));
+    } catch (reason) {
+      setSchemaError(readViewError(reason));
+    }
+  };
+
+  const inspectSchemaReferences = async () => {
+    if (!selectedSubject || rightVersion === null) return;
+    setSchemaError(null); setReferenceGraph(null);
+    try {
+      setReferenceGraph(await kafdeckApi.getSchemaReferenceGraph(clusterId, selectedSubject, rightVersion));
+    } catch (reason) {
+      setSchemaError(readViewError(reason));
+    }
+  };
+
+  const generateSchemaMock = async () => {
+    if (!selectedSubject || rightVersion === null) return;
+    setSchemaError(null); setSchemaMock(null);
+    try {
+      const count = Math.max(1, Math.min(10, Math.trunc(mockCount)));
+      const seed = Math.trunc(mockSeed);
+      setSchemaMock(await kafdeckApi.generateSchemaMock(clusterId, selectedSubject, rightVersion, count, seed));
     } catch (reason) {
       setSchemaError(readViewError(reason));
     }
@@ -170,15 +202,42 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       {selectedSubject && versions && <article aria-labelledby="schema-detail-title">
         <h3 id="schema-detail-title">{selectedSubject}</h3>
         <p>Compatibility: {compatibility?.data.mode ?? 'Unknown'}{compatibility?.data.isInherited ? ' (inherited)' : ''}</p>
+        {compatibilityExplanation && <aside aria-labelledby="schema-compatibility-explanation-title">
+          <h4 id="schema-compatibility-explanation-title">Compatibility explanation</h4>
+          <p>{compatibilityExplanation.data.summary}</p>
+          <p>Scope: {compatibilityExplanation.data.scope}</p>
+          <ul>{compatibilityExplanation.data.rules.map(rule => <li key={rule}>{rule}</li>)}</ul>
+        </aside>}
         <table><thead><tr><th>Version</th><th>Schema ID</th><th>Format</th><th>References</th></tr></thead><tbody>{versions.data.map(item => <tr key={item.version}><td>{item.version}</td><td>{item.schemaId}</td><td>{item.format}</td><td>{item.references.length}</td></tr>)}</tbody></table>
         {versions.data.length > 0 && <div>
           <label htmlFor="schema-left-version">Left version</label>{' '}
           <select id="schema-left-version" value={leftVersion ?? ''} onChange={event => setLeftVersion(Number(event.target.value))}>{versions.data.map(item => <option key={item.version} value={item.version}>{item.version}</option>)}</select>{' '}
-          <label htmlFor="schema-right-version">Right version</label>{' '}
-          <select id="schema-right-version" value={rightVersion ?? ''} onChange={event => setRightVersion(Number(event.target.value))}>{versions.data.map(item => <option key={item.version} value={item.version}>{item.version}</option>)}</select>{' '}
-          <button type="button" onClick={() => void compareSchemas()}>Compare versions</button>
+          <label htmlFor="schema-right-version">Right/tooling version</label>{' '}
+          <select id="schema-right-version" value={rightVersion ?? ''} onChange={event => { setRightVersion(Number(event.target.value)); setReferenceGraph(null); setSchemaMock(null); }}>{versions.data.map(item => <option key={item.version} value={item.version}>{item.version}</option>)}</select>{' '}
+          <button type="button" onClick={() => void compareSchemas()}>Compare versions</button>{' '}
+          <button type="button" onClick={() => void inspectSchemaReferences()}>Inspect references</button>
         </div>}
         {schemaDiff && <div><h4>Schema diff</h4>{schemaDiff.data.isEqual ? <p>Selected versions are textually equivalent after normalization.</p> : <ul>{schemaDiff.data.hunks.map((hunk, index) => <li key={index}>Left {hunk.leftStartLine} ({hunk.leftLineCount} line(s)) → right {hunk.rightStartLine} ({hunk.rightLineCount} line(s)); removed {hunk.removedLines.length}, added {hunk.addedLines.length}.</li>)}</ul>}</div>}
+        {referenceGraph && <div>
+          <h4>Reference graph</h4>
+          <p>{referenceGraph.data.nodes.length} node(s), {referenceGraph.data.edges.length} edge(s), {referenceGraph.data.totalSchemaBytes} schema byte(s). Cycle: {referenceGraph.data.hasCycle ? 'detected' : 'not detected'}.</p>
+          {referenceGraph.data.nodes.length > 0 && <table><thead><tr><th>Subject</th><th>Version</th><th>Depth</th><th>Format</th></tr></thead><tbody>{referenceGraph.data.nodes.map(node => <tr key={`${node.subject}-${node.version}`}><th scope="row">{node.subject}</th><td>{node.version}</td><td>{node.depth}</td><td>{node.format}</td></tr>)}</tbody></table>}
+          {referenceGraph.data.edges.length > 0 && <ul>{referenceGraph.data.edges.map((edge, index) => <li key={`${edge.fromSubject}-${edge.fromVersion}-${edge.name}-${index}`}>{edge.fromSubject} v{edge.fromVersion} → {edge.toSubject} v{edge.toVersion} ({edge.name})</li>)}</ul>}
+        </div>}
+        {rightVersion !== null && <div aria-labelledby="schema-mock-title">
+          <h4 id="schema-mock-title">Bounded local mock</h4>
+          <p>Examples are generated in memory only. This action does not register a schema or produce Kafka records.</p>
+          <label htmlFor="schema-mock-count">Examples</label>{' '}
+          <input id="schema-mock-count" type="number" min={1} max={10} value={mockCount} onChange={event => setMockCount(Number(event.target.value))} />{' '}
+          <label htmlFor="schema-mock-seed">Seed</label>{' '}
+          <input id="schema-mock-seed" type="number" value={mockSeed} onChange={event => setMockSeed(Number(event.target.value))} />{' '}
+          <button type="button" onClick={() => void generateSchemaMock()}>Generate examples</button>
+        </div>}
+        {schemaMock && <div>
+          <h4>Generated examples</h4>
+          <p>Format: {schemaMock.data.format} · Seed: {schemaMock.data.seed} · Total bytes: {schemaMock.data.totalBytes}</p>
+          {schemaMock.data.examples.map(example => <pre key={example.index} aria-label={`Generated schema example ${example.index + 1}`}><code>{example.json}</code></pre>)}
+        </div>}
       </article>}
     </section>
 
