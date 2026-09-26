@@ -174,7 +174,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   const previousQuery = page?.previousAnchor ? { ...pageQuery, ...anchorQuery(page.previousAnchor), direction: 'previous' as const } : null;
   const nextQuery = page?.nextAnchor ? { ...pageQuery, ...anchorQuery(page.nextAnchor), direction: 'forward' as const } : null;
 
-  return <section aria-labelledby="record-explorer-title">
+  return <section className="kafdeck-data-explorer" aria-labelledby="record-explorer-title">
     <h4 id="record-explorer-title">Safe Data Explorer</h4>
     <p>Payload access is separately authorized, bounded and server-side masked before it reaches this browser.</p>
     <div>

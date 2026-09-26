@@ -8,11 +8,13 @@ import { describeObservation, selectCluster, shouldAutoRefresh, visibleRefreshIn
 test('AppShell exposes product identity and accessible operator landmarks', () => {
   const markup = renderToStaticMarkup(React.createElement(AppShell));
 
-  assert.match(markup, /<main[^>]+aria-labelledby="kafdeck-title"/);
-  assert.match(markup, /<h1 id="kafdeck-title"><img src="\/kafdeck-logo\.webp" alt="Kafdeck" width="240" height="240"\/><\/h1>/);
+  assert.match(markup, /<main[^>]+class="page-wrapper"[^>]+aria-labelledby="kafdeck-title"/);
+  assert.match(markup, /class="navbar[^"]*kafdeck-topbar/);
+  assert.match(markup, /class="kafdeck-brand-logo" src="\/kafdeck-logo\.webp" alt="Kafdeck" width="42" height="42"/);
   assert.match(markup, /Open Source Kafka Control Plane/);
-  assert.match(markup, /<label for="cluster-selector">Cluster<\/label>/);
+  assert.match(markup, /class="form-label" for="cluster-selector">Cluster<\/label>/);
   assert.match(markup, /aria-label="Kafdeck sections"/);
+  assert.match(markup, /class="nav nav-pills py-2"/);
   assert.match(markup, /href="#consumers"/);
   assert.match(markup, /href="#schemas"/);
   assert.match(markup, /href="#ecosystem"/);
