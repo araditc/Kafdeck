@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Kafdeck.Api;
+using Kafdeck.Modules.Schemas;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -52,6 +53,81 @@ public sealed class V07OpenApiContractTests
                 "ApicurioV3",
             },
             providerProfiles);
+    }
+
+
+    [Fact]
+    public void Schema_developer_tooling_openapi_declares_bounded_methods_and_mock_count()
+    {
+        using var document = JsonDocument.Parse(KafdeckV07OpenApi.Document);
+        var paths = document.RootElement.GetProperty("paths");
+
+        var references = paths.GetProperty(
+            "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/references");
+        Assert.True(references.TryGetProperty("get", out var referenceGet));
+        Assert.False(references.TryGetProperty("post", out _));
+        Assert.Contains(
+            referenceGet.GetProperty("parameters").EnumerateArray(),
+            parameter =>
+                parameter.GetProperty("name").GetString() == "version" &&
+                parameter.GetProperty("in").GetString() == "query" &&
+                parameter.GetProperty("required").GetBoolean());
+
+        var explanation = paths.GetProperty(
+            "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/compatibility/explanation");
+        Assert.True(explanation.TryGetProperty("get", out _));
+        Assert.False(explanation.TryGetProperty("post", out _));
+
+        var mock = paths.GetProperty(
+            "/api/v1/clusters/{clusterId}/schemas/mock");
+        Assert.True(mock.TryGetProperty("post", out _));
+        Assert.False(mock.TryGetProperty("get", out _));
+
+        var count = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("SchemaMockRequest")
+            .GetProperty("properties")
+            .GetProperty("count");
+
+        Assert.Equal(1, count.GetProperty("minimum").GetInt32());
+        Assert.Equal(10, count.GetProperty("maximum").GetInt32());
+
+        var graph = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("SchemaReferenceGraph");
+
+        Assert.Equal(
+            64,
+            graph.GetProperty("properties")
+                .GetProperty("nodes")
+                .GetProperty("maxItems")
+                .GetInt32());
+        Assert.Equal(
+            256,
+            graph.GetProperty("properties")
+                .GetProperty("edges")
+                .GetProperty("maxItems")
+                .GetInt32());
+
+        var edge = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("SchemaReferenceEdge");
+
+        Assert.Equal(
+            SchemaDeveloperService.MaxReferenceNameLength,
+            edge.GetProperty("properties")
+                .GetProperty("name")
+                .GetProperty("maxLength")
+                .GetInt32());
+        Assert.Equal(
+            2097152,
+            graph.GetProperty("properties")
+                .GetProperty("totalSchemaBytes")
+                .GetProperty("maximum")
+                .GetInt32());
     }
 
     [Fact]
