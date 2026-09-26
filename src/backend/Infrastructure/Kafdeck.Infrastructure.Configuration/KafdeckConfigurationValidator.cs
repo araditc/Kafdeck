@@ -330,22 +330,7 @@ public static class KafdeckConfigurationValidator
                 ValidateSchemaRegistry(cluster, errors);
             }
 
-            if (cluster.Connect is not null)
-            {
-                ValidateReadOnlyHttpProfile(
-                    cluster.Id,
-                    "Kafka Connect",
-                    cluster.Connect.Url,
-                    cluster.Connect.Username,
-                    cluster.Connect.Password,
-                    errors);
-
-                if (!Enum.IsDefined(cluster.Connect.MutationProviderProfile))
-                {
-                    errors.Add(
-                        $"Cluster '{cluster.Id}' Kafka Connect mutation provider profile is unsupported.");
-                }
-            }
+            ValidateKafkaConnectProfiles(cluster, errors);
 
             if (cluster.KsqlDb is not null)
             {
@@ -358,6 +343,89 @@ public static class KafdeckConfigurationValidator
                     errors);
             }
         }
+    }
+
+    private static void ValidateKafkaConnectProfiles(
+        ClusterProfile cluster,
+        ICollection<string> errors)
+    {
+        var configuredProfiles = cluster.ConnectProfiles ?? Array.Empty<KafkaConnectProfile>();
+        if (cluster.Connect is not null && configuredProfiles.Count > 0)
+        {
+            errors.Add(
+                $"Cluster '{cluster.Id}' must not configure both legacy Connect and ConnectProfiles.");
+            return;
+        }
+
+        var profiles = KafkaConnectProfileSet.Effective(cluster);
+        if (profiles.Count > KafkaConnectProfileSet.MaxProfilesPerCluster)
+        {
+            errors.Add(
+                $"Cluster '{cluster.Id}' must not configure more than {KafkaConnectProfileSet.MaxProfilesPerCluster} Kafka Connect profiles.");
+            return;
+        }
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var origins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var profile in profiles)
+        {
+            var id = profile.Id?.Trim() ?? string.Empty;
+            if (id.Length == 0 ||
+                id.Length > KafkaConnectProfileSet.MaxProfileIdLength ||
+                id.Any(char.IsControl) ||
+                id.Any(character =>
+                    !(char.IsLetterOrDigit(character) ||
+                      character is '-' or '_' or '.')))
+            {
+                errors.Add(
+                    $"Cluster '{cluster.Id}' Kafka Connect profile ID is required, must not exceed {KafkaConnectProfileSet.MaxProfileIdLength} characters, and may contain only letters, digits, '.', '_' or '-'.");
+            }
+            else if (!ids.Add(id))
+            {
+                errors.Add(
+                    $"Cluster '{cluster.Id}' Kafka Connect profile IDs must be unique.");
+            }
+
+            ValidateReadOnlyHttpProfile(
+                cluster.Id,
+                $"Kafka Connect profile '{id}'",
+                profile.Url,
+                profile.Username,
+                profile.Password,
+                errors);
+
+            if (!Enum.IsDefined(profile.MutationProviderProfile))
+            {
+                errors.Add(
+                    $"Cluster '{cluster.Id}' Kafka Connect profile '{id}' mutation provider profile is unsupported.");
+            }
+
+            if (TryNormalizeHttpOrigin(profile.Url, out var origin) &&
+                !origins.Add(origin))
+            {
+                errors.Add(
+                    $"Cluster '{cluster.Id}' Kafka Connect profiles must not target the same HTTP origin more than once.");
+            }
+        }
+    }
+
+    private static bool TryNormalizeHttpOrigin(
+        string url,
+        out string origin)
+    {
+        origin = string.Empty;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            !(string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        origin = uri.GetLeftPart(UriPartial.Authority)
+            .TrimEnd('/')
+            .ToLowerInvariant();
+        return true;
     }
 
     private static void ValidateCatalog(
