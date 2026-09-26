@@ -267,7 +267,28 @@ public static class ClusterTransferPolicy
         if (plan.Mappings.Count is < 1 or > MaxMappings)
             throw new MutationStateException("Transfer mapping count is outside the admitted bound.");
 
-        var transferPair = FleetConflictKeyCodec.TransferPair(sourceCluster, destinationCluster);
+        var sourcePhysicalCluster = RequireIdentifier(
+            plan.Source.KafkaClusterId,
+            "Source physical Kafka cluster",
+            256);
+        var destinationPhysicalCluster = RequireIdentifier(
+            plan.Destination.KafkaClusterId,
+            "Destination physical Kafka cluster",
+            256);
+        if (string.Equals(
+                sourcePhysicalCluster,
+                destinationPhysicalCluster,
+                StringComparison.Ordinal))
+        {
+            throw new MutationStateException(
+                "Transfer source and destination physical Kafka clusters must be distinct.");
+        }
+
+        // Conflict identity is physical, not profile-alias based. Authorization
+        // targets below intentionally continue to use deployment profile IDs.
+        var transferPair = FleetConflictKeyCodec.TransferPair(
+            sourcePhysicalCluster,
+            destinationPhysicalCluster);
         var resources = new HashSet<string>(StringComparer.Ordinal)
         {
             transferPair,
@@ -291,11 +312,11 @@ public static class ClusterTransferPolicy
         {
             var mapping = plan.Mappings[index];
             resources.Add(FleetConflictKeyCodec.TopicPartition(
-                sourceCluster,
+                sourcePhysicalCluster,
                 mapping.SourceTopic,
                 mapping.SourcePartition));
             resources.Add(FleetConflictKeyCodec.TopicPartition(
-                destinationCluster,
+                destinationPhysicalCluster,
                 mapping.DestinationTopic,
                 mapping.DestinationPartition));
 
