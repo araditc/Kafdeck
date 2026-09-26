@@ -32,24 +32,40 @@ public sealed class V06FleetCapabilityTests
     }
 
     [Fact]
-    public void Admitted_provider_contracts_are_distinguished_from_blocked_activation_paths()
+    public void Admitted_provider_contracts_are_not_confused_with_unregistered_runtime_activation()
     {
-        Assert.Equal(
-            FleetCapabilityState.Supported,
-            FleetCapabilityCatalog.Require("acl-administration").State);
-        Assert.Equal(
-            FleetCapabilityState.Supported,
-            FleetCapabilityCatalog.Require("scram-administration").State);
-        Assert.Equal(
-            FleetCapabilityState.Supported,
-            FleetCapabilityCatalog.Require("dynamic-configuration").State);
+        foreach (var id in new[]
+                 {
+                     "acl-administration",
+                     "scram-administration",
+                     "dynamic-configuration",
+                     "finite-cluster-transfer",
+                     "preferred-leader-election",
+                 })
+        {
+            Assert.Equal(
+                FleetCapabilityState.Blocked,
+                FleetCapabilityCatalog.Require(id).State);
+        }
 
-        Assert.Equal(
-            FleetCapabilityState.Blocked,
-            FleetCapabilityCatalog.Require("finite-cluster-transfer").State);
-        Assert.Equal(
-            FleetCapabilityState.Blocked,
-            FleetCapabilityCatalog.Require("preferred-leader-election").State);
+        Assert.Contains(
+            "no W42 handler registration",
+            string.Join(
+                ' ',
+                FleetCapabilityCatalog.Require("acl-administration").Evidence),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "no W43 handler registration",
+            string.Join(
+                ' ',
+                FleetCapabilityCatalog.Require("scram-administration").Evidence),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "no W44 handler registration",
+            string.Join(
+                ' ',
+                FleetCapabilityCatalog.Require("dynamic-configuration").Evidence),
+            StringComparison.Ordinal);
     }
 
     [Fact]
