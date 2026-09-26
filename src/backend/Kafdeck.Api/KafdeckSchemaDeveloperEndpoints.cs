@@ -197,6 +197,52 @@ public static class KafdeckSchemaDeveloperEndpoints
         return app;
     }
 
+    private static async Task<bool> AuthorizeReferencedSubjectAsync(
+        HttpContext context,
+        KafdeckAuthorizationService authorization,
+        ISecurityAuditSink audit,
+        string clusterId,
+        string subject,
+        CancellationToken cancellationToken)
+    {
+        var outcome = authorization.Authorize(
+            context.User,
+            new AuthorizationRequest(
+                AuthorizationAction.SchemaRead,
+                clusterId,
+                subject));
+
+        if (outcome != KafdeckAuthorizationOutcome.Forbidden)
+        {
+            return outcome == KafdeckAuthorizationOutcome.Allowed;
+        }
+
+        var principal =
+            OperatorSessionContextFactory.TryCreate(
+                context.User,
+                out var session) &&
+            session is not null
+                ? SecurityAuditPrincipal.FromOperator(
+                    session.Identity)
+                : SecurityAuditPrincipal.Anonymous;
+
+        await audit
+            .WriteAsync(
+                new SecurityAuditEvent(
+                    DateTimeOffset.UtcNow,
+                    SecurityAuditEventType.AuthorizationDenied,
+                    principal,
+                    session?.SessionId.Value.ToString("N"),
+                    clusterId,
+                    subject,
+                    SecurityAuditOutcome.Denied,
+                    "rbac_denied_schema_reference"),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return false;
+    }
+
     private static IResult ToReadViewResult<T>(
         ReadViewResult<T> result)
     {
