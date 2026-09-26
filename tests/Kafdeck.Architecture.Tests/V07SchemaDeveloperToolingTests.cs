@@ -143,6 +143,7 @@ public sealed class V07SchemaDeveloperToolingTests
             new SchemaDeveloperPolicy(
                 TimeSpan.FromSeconds(1),
                 MaxReferenceNodes: 8,
+                MaxReferenceEdges: 16,
                 MaxReferenceDepth: 1,
                 MaxSchemaBytes: 16 * 1024,
                 MaxGeneratedExamples: 2,
@@ -161,6 +162,55 @@ public sealed class V07SchemaDeveloperToolingTests
         Assert.Equal(
             "schema_reference_depth_exceeded",
             result.Failure.Code);
+    }
+
+    [Fact]
+    public async Task Reference_graph_rejects_edge_fanout_above_hard_bound()
+    {
+        var references = Enumerable
+            .Range(0, 257)
+            .Select(index =>
+                new RecordSchemaReference(
+                    $"reference-{index}",
+                    "common",
+                    1))
+            .ToArray();
+
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Orders","fields":[]}""",
+                    references),
+                [("common", 1)] = Detail(
+                    "common",
+                    1,
+                    2,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Common","fields":[]}"""),
+            });
+
+        var result = await new SchemaDeveloperService(catalog)
+            .BuildReferenceGraphAsync(
+                "cluster-a",
+                "orders",
+                1);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.ResponseTooLarge,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_reference_edges_exceeded",
+            result.Failure.Code);
+        Assert.Equal(
+            new[] { ("orders", 1) },
+            catalog.Reads);
     }
 
     [Fact]
@@ -296,6 +346,90 @@ public sealed class V07SchemaDeveloperToolingTests
                         root.GetProperty(sensitiveProperty).GetString());
                 });
         }
+    }
+
+    [Fact]
+    public async Task Mock_generation_rejects_external_references_until_typed_resolution_exists()
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Orders","fields":[]}""",
+                    new RecordSchemaReference(
+                        "common.avsc",
+                        "common",
+                        1)),
+            });
+        var service = new SchemaDeveloperService(catalog);
+
+        var result = await service.GenerateMockAsync(
+            "cluster-a",
+            "orders",
+            1,
+            count: 1,
+            seed: 0);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.Unsupported,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_mock_references_unsupported",
+            result.Failure.Code);
+    }
+
+    [Fact]
+    public async Task Mock_generation_rejects_output_above_byte_bound()
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.JsonSchema,
+                    """
+                    {
+                      "type": "object",
+                      "properties": {
+                        "customerName": { "type": "string" }
+                      }
+                    }
+                    """),
+            });
+        var service = new SchemaDeveloperService(
+            catalog,
+            new SchemaDeveloperPolicy(
+                TimeSpan.FromSeconds(1),
+                MaxReferenceNodes: 8,
+                MaxReferenceEdges: 16,
+                MaxReferenceDepth: 2,
+                MaxSchemaBytes: 16 * 1024,
+                MaxGeneratedExamples: 2,
+                MaxGeneratedBytes: 8));
+
+        var result = await service.GenerateMockAsync(
+            "cluster-a",
+            "orders",
+            1,
+            count: 1,
+            seed: 0);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.ResponseTooLarge,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_mock_output_bytes_exceeded",
+            result.Failure.Code);
     }
 
     [Fact]
