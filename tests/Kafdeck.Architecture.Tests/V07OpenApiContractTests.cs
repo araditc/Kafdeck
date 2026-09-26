@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Kafdeck.Api;
+using Kafdeck.Modules.Schemas;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
