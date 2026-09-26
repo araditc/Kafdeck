@@ -148,7 +148,7 @@
           "403": { "description": "schema.read or antiforgery validation denied" },
           "404": { "description": "Cluster ID is not configured" },
           "422": { "description": "Schema or generated-output bound exceeded" },
-          "501": { "description": "Schema format, external schema references, or configured provider are unsupported by bounded local generation" },
+          "501": { "description": "Schema format/construct/constraint, external schema references, or configured provider are unsupported by bounded local generation" },
           "502": { "description": "Stored schema source is malformed or invalid" }
         }
       }
