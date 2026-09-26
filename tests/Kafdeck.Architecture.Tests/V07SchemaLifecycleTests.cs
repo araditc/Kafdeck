@@ -6,6 +6,9 @@ using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.SchemaRegistry;
 using Kafdeck.Modules.Administration;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -166,6 +169,36 @@ public sealed class V07SchemaLifecycleTests
             AuthorizationAction.SchemaDelete,
             MutationAuthorization.ExpectedAction(
                 MutationOperationKind.SchemaDelete));
+    }
+
+    [Fact]
+    public async Task Schema_capability_endpoint_is_versioned_and_get_only()
+    {
+        var builder = WebApplication.CreateBuilder();
+        await using var app = builder.Build();
+
+        app.MapKafdeckV07SchemaCapabilities(
+            Options(
+                SchemaRegistryProviderProfile.ConfluentCompatibleV1,
+                mutationsEnabled: false));
+
+        var endpoint =
+            ((IEndpointRouteBuilder)app).DataSources
+                .SelectMany(source => source.Endpoints)
+                .OfType<RouteEndpoint>()
+                .Single(item =>
+                    string.Equals(
+                        item.RoutePattern.RawText,
+                        "/api/v1/clusters/{clusterId}/schemas/capabilities",
+                        StringComparison.Ordinal));
+
+        var methods =
+            endpoint.Metadata.GetMetadata<HttpMethodMetadata>();
+
+        Assert.NotNull(methods);
+        Assert.Equal(
+            new[] { HttpMethods.Get },
+            methods!.HttpMethods);
     }
 
     [Fact]
