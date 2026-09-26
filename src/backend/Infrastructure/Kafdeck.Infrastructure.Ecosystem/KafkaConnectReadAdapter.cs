@@ -111,14 +111,6 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
 
-        var normalizedProfileId = NormalizeProfileId(connectProfileId);
-        if (normalizedProfileId is null)
-        {
-            return Invalid<T>(
-                "invalid_connect_profile_id",
-                "Kafka Connect profile ID is invalid.");
-        }
-
         if (cancellationToken.IsCancellationRequested)
         {
             return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
@@ -444,6 +436,14 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         Func<HttpReadRuntime, CancellationToken, Task<T>> action)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        var normalizedProfileId = NormalizeProfileId(connectProfileId);
+        if (normalizedProfileId is null)
+        {
+            return Invalid<T>(
+                "invalid_connect_profile_id",
+                "Kafka Connect profile ID is invalid.");
+        }
 
         if (cancellationToken.IsCancellationRequested)
         {
