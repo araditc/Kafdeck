@@ -227,7 +227,7 @@ export function MutationOperationsPanel({ clusterId, enabled }: MutationOperatio
 
   if (mutationAvailable !== true) return null;
 
-  return <section id="mutations" aria-labelledby="mutations-title">
+  return <section className="card kafdeck-card" id="mutations" aria-labelledby="mutations-title">
     <h2 id="mutations-title">Governed mutations</h2>
     <p>Mutation actions use frozen previews, explicit confirmation, current-request authorization rechecks and durable execution state. Unknown or partial outcomes are never presented as safe retries.</p>
 

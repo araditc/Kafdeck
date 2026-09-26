@@ -1,0 +1,364 @@
+:root {
+  --kafdeck-brand-blue: #206bc4;
+  --kafdeck-brand-orange: #f76707;
+  --kafdeck-sidebar-width: 17rem;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--tblr-body-bg);
+}
+
+.kafdeck-shell {
+  min-height: 100vh;
+}
+
+.kafdeck-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  border-bottom: 1px solid var(--tblr-border-color);
+  backdrop-filter: blur(10px);
+}
+
+.kafdeck-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--tblr-body-color);
+  text-decoration: none;
+}
+
+.kafdeck-brand:hover {
+  color: var(--tblr-body-color);
+  text-decoration: none;
+}
+
+.kafdeck-brand-logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.kafdeck-brand-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.kafdeck-brand-name {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.kafdeck-brand-subtitle {
+  margin-top: 0.2rem;
+  color: var(--tblr-secondary-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.kafdeck-accent {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    var(--kafdeck-brand-blue),
+    var(--kafdeck-brand-orange)
+  );
+}
+
+.kafdeck-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.kafdeck-toolbar .form-label {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.kafdeck-section-nav {
+  border-bottom: 1px solid var(--tblr-border-color);
+  background: var(--tblr-bg-surface);
+}
+
+.kafdeck-section-nav .nav {
+  gap: 0.25rem;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: thin;
+}
+
+.kafdeck-section-nav .nav-link {
+  white-space: nowrap;
+  border-radius: var(--tblr-border-radius);
+}
+
+.kafdeck-main {
+  padding-block: 1.5rem 2.5rem;
+}
+
+.kafdeck-page-header {
+  margin-bottom: 1rem;
+}
+
+.kafdeck-status {
+  margin-bottom: 1rem;
+}
+
+.kafdeck-card {
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.kafdeck-card > h2,
+.kafdeck-card > h3,
+.kafdeck-card > h4,
+.kafdeck-card > p,
+.kafdeck-card > dl,
+.kafdeck-card > label,
+.kafdeck-card > input,
+.kafdeck-card > button,
+.kafdeck-card > aside,
+.kafdeck-card > article,
+.kafdeck-card > .kafdeck-card-body {
+  margin-left: 1.25rem;
+  margin-right: 1.25rem;
+}
+
+.kafdeck-card > h2:first-child,
+.kafdeck-card > h3:first-child {
+  margin-top: 1.25rem;
+}
+
+.kafdeck-card > :last-child {
+  margin-bottom: 1.25rem;
+}
+
+.kafdeck-card table {
+  margin-bottom: 0;
+}
+
+.kafdeck-card article {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-surface-secondary);
+}
+
+.kafdeck-card aside {
+  padding: 0.875rem 1rem;
+  border-inline-start: 3px solid var(--kafdeck-brand-orange);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-surface-secondary);
+}
+
+.kafdeck-card dl {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.45fr) minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+}
+
+.kafdeck-card dt {
+  color: var(--tblr-secondary-color);
+  font-weight: 600;
+}
+
+.kafdeck-card dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kafdeck-card .table-responsive {
+  margin-top: 0.75rem;
+}
+
+.kafdeck-table-button {
+  padding-inline: 0;
+  text-align: start;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.kafdeck-observation {
+  color: var(--tblr-secondary-color);
+}
+
+.kafdeck-auth {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.kafdeck-logo-watermark {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+@media (max-width: 767.98px) {
+  .kafdeck-topbar .container-xl {
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .kafdeck-toolbar {
+    width: 100%;
+  }
+
+  .kafdeck-toolbar > div {
+    flex: 1 1 12rem;
+  }
+
+  .kafdeck-toolbar .form-select,
+  .kafdeck-toolbar .btn {
+    width: 100%;
+  }
+
+  .kafdeck-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .kafdeck-card dt {
+    margin-top: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+
+/* Normalize legacy feature markup inside the Tabler shell without changing
+   authorization/state behavior. These selectors intentionally stay scoped to
+   Kafdeck cards/data explorer. */
+.kafdeck-card table:not(.table),
+.kafdeck-data-explorer table:not(.table) {
+  width: 100%;
+  margin-block: 0.75rem 1rem;
+  border-collapse: collapse;
+  vertical-align: middle;
+}
+
+.kafdeck-card table:not(.table) th,
+.kafdeck-card table:not(.table) td,
+.kafdeck-data-explorer table:not(.table) th,
+.kafdeck-data-explorer table:not(.table) td {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--tblr-border-color);
+  text-align: start;
+}
+
+.kafdeck-card input:not([type="checkbox"]):not([type="radio"]),
+.kafdeck-card select,
+.kafdeck-card textarea,
+.kafdeck-data-explorer input:not([type="checkbox"]):not([type="radio"]),
+.kafdeck-data-explorer select,
+.kafdeck-data-explorer textarea {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.65rem;
+  border: var(--tblr-border-width) solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-forms);
+  color: var(--tblr-body-color);
+  font: inherit;
+}
+
+.kafdeck-card textarea,
+.kafdeck-data-explorer textarea {
+  display: block;
+  width: min(100%, 48rem);
+  min-height: 6rem;
+}
+
+.kafdeck-card button:not(.btn),
+.kafdeck-data-explorer button:not(.btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  margin: 0.15rem 0.15rem 0.15rem 0;
+  padding: 0.4rem 0.75rem;
+  border: var(--tblr-border-width) solid var(--tblr-primary);
+  border-radius: var(--tblr-border-radius);
+  background: transparent;
+  color: var(--tblr-primary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.kafdeck-card button:not(.btn):hover,
+.kafdeck-data-explorer button:not(.btn):hover {
+  background: var(--tblr-primary);
+  color: var(--tblr-primary-fg);
+}
+
+.kafdeck-card button:disabled,
+.kafdeck-data-explorer button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kafdeck-card fieldset,
+.kafdeck-data-explorer fieldset {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+}
+
+.kafdeck-card pre,
+.kafdeck-data-explorer pre {
+  max-width: 100%;
+  padding: 0.875rem;
+  overflow: auto;
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-surface-secondary);
+}
+
+.kafdeck-data-explorer {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--tblr-border-color);
+}
+
+.kafdeck-data-explorer > div {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  align-items: end;
+  margin-block: 0.65rem;
+}
+
+.kafdeck-data-explorer label {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}

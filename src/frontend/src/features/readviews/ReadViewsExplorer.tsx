@@ -135,7 +135,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   };
 
   return <>
-    <section id="consumers" aria-labelledby="consumers-title">
+    <section className="card kafdeck-card" id="consumers" aria-labelledby="consumers-title">
       <h2 id="consumers-title">Consumer groups</h2>
       {consumerError && <p role="status">{consumerError}</p>}
       {!consumerGroups && !consumerError && <p role="status">Loading authorized consumer groups…</p>}
@@ -158,7 +158,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </article>}
     </section>
 
-    <section id="schemas" aria-labelledby="schemas-title">
+    <section className="card kafdeck-card" id="schemas" aria-labelledby="schemas-title">
       <h2 id="schemas-title">Schema Registry</h2>
       {schemaError && <p role="status">{schemaError}</p>}
       {!subjects && !schemaError && <p role="status">Loading authorized schema subjects…</p>}
@@ -182,7 +182,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </article>}
     </section>
 
-    <section id="ecosystem" aria-labelledby="ecosystem-title">
+    <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">
       <h2 id="ecosystem-title">Ecosystem read views</h2>
       <h3>Kafka Connect</h3>
       {connectError && <p role="status">{connectError}</p>}

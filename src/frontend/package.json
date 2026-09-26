@@ -16,6 +16,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tabler/core": "1.5.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
