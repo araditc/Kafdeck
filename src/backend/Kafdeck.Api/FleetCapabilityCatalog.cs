@@ -154,7 +154,7 @@ public static class FleetCapabilityCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(workstream);
 
         if (id.Length > 96 ||
-            id.Any(character => !(char.IsAsciiLower(character) || char.IsAsciiDigit(character) || character == '-')) ||
+            id.Any(character => !((character is >= 'a' and <= 'z') || char.IsAsciiDigit(character) || character == '-')) ||
             reason.Length > 1024 ||
             workstream.Length > 16 ||
             evidence.Count > 8 ||
