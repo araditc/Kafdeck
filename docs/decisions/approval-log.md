@@ -261,3 +261,49 @@ All inherited v0.5 invariants remain mandatory. CRITICAL requires a distinct eli
 Planning is authorized under #146. The [complete planning package](../implementation/v0.6-planning-package.md) must receive fresh exact-head applicable checks, substantive architecture/security review, fresh required CODEOWNER approval, zero unresolved required threads and an expected-head guarded protected-main merge. Only after that admission and post-merge verification may W41-W50 proceed dependency-valid under the tracker.
 
 This scope approval does not approve a release/tag/OCI promotion/publication, v0.7+, or a material departure from Issue #145. Published v0.5/v0.5.1 identities remain untouched. Earlier gate records above remain historical evidence, not substitutes for live implementation/admission status.
+
+## Gate 7 — v0.7 Developer & Streaming Ecosystem Platform
+
+- **Date:** 2026-09-26
+- **Status:** SCOPE ACCEPTED; PLANNING ADMISSION PENDING
+- **Authority:** Project Owner, Ammar Heidari
+- **Scope issue:** #178
+- **Tracker:** #180
+- **Planning workstream:** #181 / W51
+- **RFC:** RFC-0007 planning package
+- **Gate record:** [Gate 7](gate-7-v0.7-developer-streaming.md)
+
+### Accepted decision
+
+Kafdeck v0.7 is **Developer & Streaming Ecosystem Platform**.
+
+The accepted scope covers governed Schema Registry lifecycle administration, schema developer tooling, multi-Connect administration, bounded Connect auto-restart, controlled CBOR/XML/MessagePack tooling, finite governed replay/reprocess/forwarding jobs, bounded mock/data generation, read-oriented ksqlDB query/editor integration, evidence-based Streams/state-store/lineage views, and the corresponding operator/developer UX and release-readiness work.
+
+### Accepted invariants
+
+- existing OIDC/RBAC, explicit mutation actions, risk, preview, confirmation/approval, durable operations, fencing, ambiguity and audit remain authoritative;
+- no generic Schema Registry/Connect/ksqlDB proxy;
+- no CLI/raw-protocol/reflection/sidecar bypass for missing provider primitives;
+- provider/connector secrets remain server-side/write-only;
+- v0.6 MM2/replication guards apply to all new Connect effect-capable routes;
+- replay, forwarding, generation and auto-restart remain finite and hard-bounded;
+- automated effects revalidate current authorization/policy before every new dispatch;
+- no raw record/generated/query payload persistence by default;
+- server-side masking/export boundaries remain non-bypassable;
+- ksqlDB persistent-query/DDL/DML mutation is not admitted in v0.7;
+- inferred lineage is labelled and cannot grant authority;
+- public runtime plugin loading remains excluded;
+- release/publication remains separately approval-bound.
+
+### Owner approval
+
+> **v0.7 scope در Issue #178 طبق متن فعلی تأیید است. آماده‌سازی W51 governed planning package مجاز است؛ implementation فقط پس از protected-main planning admission شروع شود.**
+
+### Implementation gate
+
+W51 planning is authorized. W52–W60 implementation remains blocked until the complete RFC-0007 planning package receives fresh exact-head applicable CI, substantive architecture/security review, fresh required CODEOWNER approval, zero unresolved required threads and expected-head guarded protected-main merge, followed by post-merge verification and tracker activation.
+
+### Release gate
+
+Planning admission and implementation completion do not authorize publication. v0.7 tag/GHCR/GitHub Release promotion requires a separate explicit owner decision.
+
