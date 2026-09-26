@@ -12,8 +12,11 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class SchemaMutationAdapterTests
 {
-    [Fact]
-    public async Task Confluent_mutations_use_only_fixed_typed_routes()
+    [Theory]
+    [InlineData(SchemaRegistryProviderProfile.ConfluentCompatibleV1)]
+    [InlineData(SchemaRegistryProviderProfile.KarapaceCompatibleV1)]
+    public async Task Confluent_compatible_profiles_use_only_fixed_typed_routes(
+        SchemaRegistryProviderProfile providerProfile)
     {
         var handler = new StubHandler(request =>
         {
@@ -34,7 +37,9 @@ public sealed class SchemaMutationAdapterTests
             };
         });
 
-        using var adapter = CreateAdapter(handler);
+        using var adapter = CreateAdapter(
+            handler,
+            providerProfile);
 
         var compatibility = await adapter.TestCompatibilityAsync(
             "cluster-a",
