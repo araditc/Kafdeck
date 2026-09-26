@@ -26,8 +26,8 @@ public sealed class V07SchemaDeveloperToolingTests
                     "common",
                     1,
                     10,
-                    RecordSchemaFormat.Avro,
-                    """{"type":"record","name":"Common","fields":[]}""",
+                    RecordSchemaFormat.Protobuf,
+                    """message Common {}""",
                     new RecordSchemaReference("orders.avsc", "orders", 2)),
             });
 
@@ -211,6 +211,82 @@ public sealed class V07SchemaDeveloperToolingTests
         Assert.Equal(
             new[] { ("orders", 1) },
             catalog.Reads);
+    }
+
+    [Fact]
+    public async Task Reference_graph_rejects_malformed_reference_without_followup_read()
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.Avro,
+                    """{"type":"record","name":"Orders","fields":[]}""",
+                    new RecordSchemaReference(
+                        "invalid",
+                        "",
+                        0)),
+            });
+
+        var result = await new SchemaDeveloperService(catalog)
+            .BuildReferenceGraphAsync(
+                "cluster-a",
+                "orders",
+                1);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.InvalidRequest,
+            result.Failure!.Category);
+        Assert.Equal(
+            "invalid_schema_reference",
+            result.Failure.Code);
+        Assert.Equal(
+            new[] { ("orders", 1) },
+            catalog.Reads);
+    }
+
+    [Fact]
+    public async Task Reference_graph_rejects_aggregate_schema_bytes_above_bound()
+    {
+        var catalog = new FakeSchemaCatalog(
+            new Dictionary<(string Subject, int Version), SchemaVersionDetail>
+            {
+                [("orders", 1)] = Detail(
+                    "orders",
+                    1,
+                    1,
+                    RecordSchemaFormat.JsonSchema,
+                    """{"type":"object","properties":{"value":{"type":"string"}}}"""),
+            });
+        var service = new SchemaDeveloperService(
+            catalog,
+            new SchemaDeveloperPolicy(
+                TimeSpan.FromSeconds(1),
+                MaxReferenceNodes: 8,
+                MaxReferenceEdges: 16,
+                MaxReferenceDepth: 2,
+                MaxSchemaBytes: 8,
+                MaxGeneratedExamples: 2,
+                MaxGeneratedBytes: 16 * 1024));
+
+        var result = await service.BuildReferenceGraphAsync(
+            "cluster-a",
+            "orders",
+            1);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(
+            ReadViewFailureCategory.ResponseTooLarge,
+            result.Failure!.Category);
+        Assert.Equal(
+            "schema_reference_bytes_exceeded",
+            result.Failure.Code);
     }
 
     [Fact]
