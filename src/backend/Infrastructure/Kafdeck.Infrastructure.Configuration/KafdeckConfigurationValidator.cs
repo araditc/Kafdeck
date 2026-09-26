@@ -52,18 +52,35 @@ public static class KafdeckConfigurationValidator
 
     private static void ValidateDeployment(DeploymentOptions deployment, ICollection<string> errors)
     {
-        if (!Uri.TryCreate(deployment.ListenUrl, UriKind.Absolute, out var uri) ||
-            !(string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-              string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        if (deployment.ListenUrls.Count == 0)
         {
-            errors.Add("Deployment listen URL must be an absolute HTTP or HTTPS URL.");
+            errors.Add("At least one deployment listen URL is required.");
+            return;
+        }
+
+        var parsed = new List<(string Value, Uri Uri)>(deployment.ListenUrls.Count);
+        foreach (var listenUrl in deployment.ListenUrls)
+        {
+            if (!Uri.TryCreate(listenUrl, UriKind.Absolute, out var uri) ||
+                !(string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add($"Deployment listen URL '{listenUrl}' must be an absolute HTTP or HTTPS URL.");
+                continue;
+            }
+
+            parsed.Add((listenUrl, uri));
+        }
+
+        if (parsed.Count != deployment.ListenUrls.Count)
+        {
             return;
         }
 
         switch (deployment.Mode)
         {
             case AccessMode.Local:
-                if (!IsLoopbackBinding(deployment.ListenUrl))
+                if (deployment.ListenUrls.Any(url => !IsLoopbackBinding(url)))
                 {
                     errors.Add("Non-loopback deployment binding requires an access-token secret reference in Token mode or an enabled OIDC mode.");
                 }
@@ -99,10 +116,14 @@ public static class KafdeckConfigurationValidator
                     errors.Add("OIDC access mode must not configure a deployment access token.");
                 }
 
-                if (!IsLoopbackBinding(deployment.ListenUrl) &&
-                    !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                if (parsed.Any(item =>
+                        !IsLoopbackBinding(item.Value) &&
+                        !string.Equals(
+                            item.Uri.Scheme,
+                            Uri.UriSchemeHttps,
+                            StringComparison.OrdinalIgnoreCase)))
                 {
-                    errors.Add("Non-loopback OIDC deployment binding requires HTTPS.");
+                    errors.Add("Every non-loopback OIDC deployment binding requires HTTPS.");
                 }
 
                 if (deployment.Oidc is null)
