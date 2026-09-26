@@ -4,6 +4,7 @@ namespace Kafdeck.Infrastructure.Configuration;
 
 public sealed record SafeConfigurationDiagnostic(
     string ListenHost,
+    int ListenEndpointCount,
     bool IsRemoteBinding,
     AccessMode AccessMode,
     bool DeploymentTokenConfigured,
@@ -48,7 +49,9 @@ public static class SafeConfigurationDiagnostics
 
         return new SafeConfigurationDiagnostic(
             listenHost,
-            !KafdeckConfigurationValidator.IsLoopbackBinding(options.Deployment.ListenUrl),
+            options.Deployment.ListenUrls.Count,
+            options.Deployment.ListenUrls.Any(
+                url => !KafdeckConfigurationValidator.IsLoopbackBinding(url)),
             options.Deployment.Mode,
             options.Deployment.AccessToken is not null,
             options.Deployment.Oidc is not null,

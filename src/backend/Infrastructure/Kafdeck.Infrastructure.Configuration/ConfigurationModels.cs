@@ -72,8 +72,12 @@ public sealed record DeploymentOptions(
     string ListenUrl,
     SecretReference? AccessToken,
     AccessMode Mode,
-    OidcProfile? Oidc)
+    OidcProfile? Oidc,
+    IReadOnlyList<string>? AdditionalListenUrls = null)
 {
+    public IReadOnlyList<string> ListenUrls { get; } =
+        BuildListenUrls(ListenUrl, AdditionalListenUrls);
+
     public DeploymentOptions(string listenUrl, SecretReference? accessToken)
         : this(
             listenUrl,
@@ -81,6 +85,27 @@ public sealed record DeploymentOptions(
             accessToken is null ? AccessMode.Local : AccessMode.Token,
             null)
     {
+    }
+
+    private static IReadOnlyList<string> BuildListenUrls(
+        string listenUrl,
+        IReadOnlyList<string>? additionalListenUrls)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(listenUrl);
+
+        var items = new List<string> { listenUrl.Trim() };
+        if (additionalListenUrls is not null)
+        {
+            items.AddRange(
+                additionalListenUrls
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Select(value => value.Trim()));
+        }
+
+        return Array.AsReadOnly(
+            items
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray());
     }
 }
 
