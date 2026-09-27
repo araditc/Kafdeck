@@ -90,3 +90,57 @@ const presentations: Record<UiStatusKind, UiStatusPresentation> = {
 export function uiStatusPresentation(kind: UiStatusKind): UiStatusPresentation {
   return presentations[kind];
 }
+
+
+export function fleetCapabilityStatusKind(state: string): UiStatusKind {
+  switch (state) {
+    case 'supported': return 'supported';
+    case 'unsupported': return 'unsupported';
+    case 'blocked': return 'blocked';
+    case 'unconfigured': return 'unconfigured';
+    default: return 'unknown';
+  }
+}
+
+export function readViewHttpStatusKind(status: number): UiStatusKind {
+  switch (status) {
+    case 401:
+    case 403:
+      return 'denied';
+    case 404:
+      return 'unconfigured';
+    case 501:
+      return 'unsupported';
+    case 502:
+    case 503:
+    case 504:
+      return 'unavailable';
+    default:
+      return 'unknown';
+  }
+}
+
+export function mutationStateStatusKind(state: string): UiStatusKind {
+  switch (state) {
+    case 'awaitingConfirmation':
+      return 'awaitingConfirmation';
+    case 'awaitingApproval':
+      return 'awaitingApproval';
+    case 'executionUnknown':
+    case 'partiallyApplied':
+    case 'appliedUnverified':
+      return 'externalAction';
+    case 'stalePreview':
+      return 'stale';
+    case 'failedBeforeDispatch':
+    case 'failedDefinitive':
+    case 'rejected':
+    case 'cancelled':
+    case 'expired':
+      return 'blocked';
+    case 'appliedVerified':
+      return 'current';
+    default:
+      return 'unknown';
+  }
+}
