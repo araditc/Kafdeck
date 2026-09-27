@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
+using Kafdeck.Modules.Records;
 using Kafdeck.Infrastructure.SerDe;
 using Xunit;
 
@@ -385,6 +387,125 @@ public sealed class V07W56ControlledSerdeTests
         Assert.Equal(
             ControlledSerdeFailureCategory.Timeout,
             expired.Failure!.Category);
+    }
+
+    [Fact]
+    public async Task Record_inspection_routes_controlled_decode_through_filter_and_masking()
+    {
+        using var source = JsonDocument.Parse(
+            """{"secret":"4111111111111111","visible":"ok"}""");
+        var serde = new ControlledSerdeService();
+        var encoded = await serde.EncodeAsync(
+            new ControlledSerdeEncodeRequest(
+                ControlledSerdeFormat.Cbor,
+                source.RootElement.Clone()),
+            ControlledSerdeLimits.Default,
+            Deadline);
+        Assert.True(encoded.IsSuccess, encoded.Failure?.SafeMessage);
+
+        var now = DateTimeOffset.UtcNow;
+        var reader = new SingleRecordReader(
+            new KafkaRawRecord(
+                7,
+                now,
+                null,
+                encoded.Value!.Payload,
+                Array.Empty<KafkaRecordHeader>()));
+
+        var filter = new RecordFilterService(
+            reader,
+            decoder: null,
+            evaluator: null,
+            timeProvider: null,
+            controlledSerde: serde);
+        var plan = RecordFilterCompiler.Compile(
+            new RecordFilterRequest(
+                structuredFilter: new RecordStructuredFilter(
+                    RecordFilterLanguage.Cel,
+                    """value.visible == "ok"""")));
+
+        var read = new RecordReadRequest(
+            "cluster-a",
+            "orders",
+            0,
+            RecordAnchor.Earliest(),
+            RecordReadDirection.Forward,
+            RecordOperationBudget.Default);
+        var filtered = await filter.FilterPageAsync(
+            read,
+            plan,
+            new KafkaOperationContext(
+                DateTimeOffset.UtcNow.AddSeconds(10)),
+            requireDecodedValue: true,
+            controlledSerdeFormat: ControlledSerdeFormat.Cbor,
+            CancellationToken.None);
+
+        Assert.True(filtered.IsSuccess, filtered.Failure?.SafeMessage);
+        var item = Assert.Single(filtered.Value!.Records);
+        Assert.NotNull(item.StructuredValue);
+        Assert.Equal(
+            "ok",
+            item.StructuredValue!.Value
+                .GetProperty("visible")
+                .GetString());
+
+        var policy = RecordMaskingPolicyCompiler.Compile(
+            new RecordMaskingPolicyDefinition(
+                "serde-record",
+                1,
+                [new RecordStructuredMaskRule("/secret")]));
+        var safe = new RecordMaskingService().Apply(
+            0,
+            item,
+            policy);
+
+        Assert.Equal(
+            RecordPayloadProjectionKind.Structured,
+            safe.ValueKind);
+        Assert.Null(safe.RawValue);
+        Assert.Equal(
+            "[REDACTED]",
+            safe.StructuredValue!.Value
+                .GetProperty("secret")
+                .GetString());
+        Assert.DoesNotContain(
+            "4111111111111111",
+            JsonSerializer.Serialize(safe),
+            StringComparison.Ordinal);
+    }
+
+    private sealed class SingleRecordReader : IKafkaRecordReadPort
+    {
+        private readonly KafkaRawRecord _record;
+
+        public SingleRecordReader(KafkaRawRecord record)
+        {
+            _record = record;
+        }
+
+        public Task<KafkaResult<RecordReadBatch>> ReadPageAsync(
+            RecordReadRequest request,
+            KafkaOperationContext operation,
+            CancellationToken cancellationToken)
+        {
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(
+                KafkaResult<RecordReadBatch>.Success(
+                    new RecordReadBatch(
+                        [_record],
+                        0,
+                        8,
+                        _record.Offset,
+                        _record.Offset,
+                        null,
+                        null,
+                        RecordBudgetOutcome.Complete),
+                    new ObservationMetadata(
+                        now,
+                        now,
+                        now,
+                        ObservationSource.Live)));
+        }
     }
 
     private static ControlledSerdeLimits Limits(
