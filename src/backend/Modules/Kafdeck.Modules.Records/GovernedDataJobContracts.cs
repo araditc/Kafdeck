@@ -460,7 +460,7 @@ public static class GovernedDataJobPolicy
                 plan.DataPolicy));
     }
 
-    private static void ValidateTransform(
+    public static void ValidateTransform(
         GovernedDataTransform transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
