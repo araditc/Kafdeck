@@ -327,6 +327,76 @@ public static class KafdeckReadViewEndpoints
                 AuthorizationAction.ConnectRead,
                 "clusterId");
 
+        app.MapGet("/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/plugins", async (
+                string clusterId,
+                string connectProfileId,
+                IConnectReadPort connect,
+                CancellationToken cancellationToken) =>
+            {
+                if (!IsConfiguredCluster(options, clusterId))
+                {
+                    return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+                }
+
+                var result = await connect.ListPluginsAsync(
+                        clusterId,
+                        connectProfileId,
+                        EcosystemOperation(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return ToReadViewResult(result);
+            })
+            .WithName("v07-connect-profile-plugins-list")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.ConnectRead,
+                "clusterId");
+
+        var validatePlugin = app.MapPost(
+                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/plugins/{connectorClass}/validate",
+                async (
+                    string clusterId,
+                    string connectProfileId,
+                    string connectorClass,
+                    ConnectPluginValidationRequest request,
+                    IConnectReadPort connect,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!IsConfiguredCluster(options, clusterId))
+                    {
+                        return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+                    }
+
+                    if (request.Configuration is null)
+                    {
+                        return ApiResults.Problem(
+                            new ApiProblemDefinition(
+                                StatusCodes.Status400BadRequest,
+                                "urn:kafdeck:problem:invalid-connect-plugin-validation",
+                                "Invalid Kafka Connect plugin validation request",
+                                "A bounded connector configuration is required.",
+                                "invalid_connect_plugin_validation_request"));
+                    }
+
+                    var result = await connect.ValidateConfigurationAsync(
+                            clusterId,
+                            connectProfileId,
+                            connectorClass,
+                            request.Configuration,
+                            EcosystemOperation(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    return ToReadViewResult(result);
+                })
+            .WithName("v07-connect-profile-plugin-validate")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.ConnectRead,
+                "clusterId");
+
+        if (options.Deployment.Mode == AccessMode.Oidc)
+        {
+            validatePlugin.RequireKafdeckAntiforgery();
+        }
+
         app.MapGet("/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors", async (
                 string clusterId,
                 string connectProfileId,
@@ -557,6 +627,9 @@ public static class KafdeckReadViewEndpoints
                 "clusterId",
                 "topicName");
     }
+
+    public sealed record ConnectPluginValidationRequest(
+        IReadOnlyDictionary<string, string>? Configuration);
 
     private static IResult ToReadViewResult<T>(ReadViewResult<T> result)
     {
