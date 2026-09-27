@@ -665,6 +665,27 @@ public interface IConnectAutoRestartRuntimePolicyProvider
 
 public static class ConnectAutoRestartPolicyFingerprint
 {
+    public static string ComputeEffective(
+        ConnectAutoRestartRuntimePolicySnapshot runtime,
+        ConnectAutoRestartPolicy persistedPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(persistedPolicy);
+
+        var canonical = string.Join(
+            "\n",
+            runtime.Fingerprint,
+            Compute(
+                persistedPolicy.Enabled,
+                "persisted",
+                persistedPolicy));
+
+        return Convert.ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(canonical)))
+            .ToLowerInvariant();
+    }
+
     public static string Compute(
         bool enabled,
         string policyVersion,
