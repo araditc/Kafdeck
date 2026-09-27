@@ -207,6 +207,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     setConnectPlugins(null);
     setSelectedPluginClass(null);
     setPluginConfiguration('');
+    setPluginFieldValues({});
     setPluginValidation(null);
     try {
       const [info, list, plugins] = await Promise.all([
