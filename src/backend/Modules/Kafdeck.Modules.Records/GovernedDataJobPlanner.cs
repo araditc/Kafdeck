@@ -148,8 +148,7 @@ public sealed class GovernedDataJobPlanner
                 MutationRiskClassifier.EnforceBuiltInFloor(
                     new MutationRiskInput(
                         MutationOperationKind.DataJob,
-                        TargetCount:
-                            plan.Ranges.Count + 1),
+                        TargetCount: 1),
                     GovernedDataJobPolicy
                         .ClassifyRisk(plan));
 
