@@ -377,6 +377,7 @@ if (mutationOptions?.Enabled == true)
     app.MapKafdeckMutationEndpoints();
     app.MapKafdeckTopicMutationEndpoints();
     app.MapKafdeckRecordProductionEndpoints();
+    app.MapKafdeckDataJobEndpoints();
     app.MapKafdeckConsumerMutationEndpoints();
     app.MapKafdeckSchemaMutationEndpoints();
     app.MapKafdeckConnectMutationEndpoints();
