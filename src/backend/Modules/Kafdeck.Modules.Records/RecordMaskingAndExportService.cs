@@ -80,20 +80,24 @@ public sealed class RecordMaskingService
             return new RecordSafeHeader(header.Name, Encoding.UTF8.GetBytes(rule.Replacement), true);
         }).ToArray();
 
+        var structuredValue = item.StructuredValue;
+
         if (!policy.RequiresStructuredValue)
         {
             return new RecordSafeProjection(
                 partition, item.RawRecord.Offset, item.RawRecord.TimestampUtc, key, keyRedacted,
-                item.DecodedValue is null ? RecordPayloadProjectionKind.Raw : RecordPayloadProjectionKind.Structured,
-                item.RawRecord.Value, item.DecodedValue?.StructuredValue.Clone(), Array.AsReadOnly(headers),
+                structuredValue.HasValue ? RecordPayloadProjectionKind.Structured : RecordPayloadProjectionKind.Raw,
+                structuredValue.HasValue ? null : item.RawRecord.Value,
+                structuredValue?.Clone(),
+                Array.AsReadOnly(headers),
                 policy.PolicyId, policy.Version, Array.Empty<string>());
         }
 
-        if (item.DecodedValue is null) return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
+        if (!structuredValue.HasValue) return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
 
         try
         {
-            var root = JsonNode.Parse(item.DecodedValue.StructuredValue.GetRawText());
+            var root = JsonNode.Parse(structuredValue.Value.GetRawText());
             if (root is null) return FullyRedacted(partition, item, key, keyRedacted, headers, policy);
 
             var traversalStepsRemaining = _maxTraversalSteps;
