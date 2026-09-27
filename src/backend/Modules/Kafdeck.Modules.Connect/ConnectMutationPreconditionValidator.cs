@@ -402,6 +402,7 @@ public sealed class ConnectMutationPreconditionValidator
         ConnectUpdateCanonicalIntent canonical) =>
         ValidateCanonicalIdentity(
             canonical.ClusterId,
+            canonical.ConnectProfileId,
             canonical.ConnectorName,
             canonical.StateFingerprint) &&
         ValidateFingerprint(
