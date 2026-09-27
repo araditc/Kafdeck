@@ -106,6 +106,8 @@ builder.Services.AddSingleton<IConnectReadPort>(_ =>
     new KafkaConnectReadAdapter(kafdeckOptions.Clusters, secretResolver));
 builder.Services.AddSingleton<IKsqlMetadataReadPort>(_ =>
     new KsqlDbMetadataReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IKsqlQueryPort>(_ =>
+    new KsqlDbQueryAdapter(kafdeckOptions.Clusters, secretResolver));
 builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
     new ConfigurationTopicCatalogProvider(kafdeckOptions));
 builder.Services.AddSingleton<ApiTelemetry>();
@@ -395,6 +397,7 @@ app.MapKafdeckRecordEndpoints(kafdeckOptions);
 app.MapKafdeckV04ReadViews(kafdeckOptions);
 app.MapKafdeckV07SchemaCapabilities(kafdeckOptions);
 app.MapKafdeckV07SchemaDeveloperTools(kafdeckOptions);
+app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
