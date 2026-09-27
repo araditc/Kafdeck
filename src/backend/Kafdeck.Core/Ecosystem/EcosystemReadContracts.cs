@@ -189,15 +189,11 @@ public sealed record KsqlQueryLimits(
             MaxBytes: 2 * 1024 * 1024,
             MaxDuration: TimeSpan.FromSeconds(30));
 
-    public KsqlQueryLimits ClampToHardCaps() =>
-        new(
-            Math.Clamp(MaxRows, 1, HardMaxRows),
-            Math.Clamp(MaxBytes, 1, HardMaxBytes),
-            MaxDuration <= TimeSpan.Zero
-                ? TimeSpan.FromSeconds(1)
-                : MaxDuration > HardMaxDuration
-                    ? HardMaxDuration
-                    : MaxDuration);
+    public bool IsWithinHardCaps =>
+        MaxRows is >= 1 and <= HardMaxRows &&
+        MaxBytes is >= 1 and <= HardMaxBytes &&
+        MaxDuration > TimeSpan.Zero &&
+        MaxDuration <= HardMaxDuration;
 }
 
 public sealed record KsqlQueryHeader(
