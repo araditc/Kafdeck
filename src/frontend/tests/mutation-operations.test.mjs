@@ -104,3 +104,16 @@ test('v0.7 Connect mutations preserve default compatibility and use profile-scop
   assert.match(readViewsSource, /setPluginConfiguration\(''\)/);
   assert.match(readViewsSource, /Values are sent only to the selected configured Connect profile/);
 });
+
+test('v0.7 Connect smart form is evidence-driven and clears in-memory values after validation', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Smart configuration form/);
+  assert.match(source, /field\.type\.toUpperCase\(\) === 'PASSWORD' \? 'password' : 'text'/);
+  assert.match(source, /field\.recommendedValues\.length > 0/);
+  assert.match(source, /setPluginFieldValues\(\{\}\)/);
+  assert.match(source, /Smart-form values remain in browser memory only and are cleared/);
+});
