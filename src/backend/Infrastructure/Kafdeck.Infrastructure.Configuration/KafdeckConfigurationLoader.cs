@@ -36,6 +36,7 @@ public static class KafdeckConfigurationLoader
         var records = LoadRecordData(configuration.GetSection("Kafdeck:Records"));
         var catalog = LoadTopicCatalog(configuration.GetSection("Kafdeck:Catalog"));
         var administration = LoadAdministration(configuration.GetSection("Kafdeck:Administration"));
+        var generator = LoadDataGenerator(configuration.GetSection("Kafdeck:Generator"));
 
         return new KafdeckOptions(
             new DeploymentOptions(
@@ -47,7 +48,26 @@ public static class KafdeckConfigurationLoader
             Array.AsReadOnly(clusters),
             records,
             catalog,
-            administration);
+            administration,
+            generator);
+    }
+
+    private static DataGeneratorOptions? LoadDataGenerator(
+        IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        var clusters = section
+            .GetSection("EnabledClusterIds")
+            .GetChildren()
+            .Select(child => child.Value ?? string.Empty)
+            .ToArray();
+
+        return new DataGeneratorOptions(
+            Array.AsReadOnly(clusters));
     }
 
     private static RecordDataOptions LoadRecordData(IConfigurationSection section)
