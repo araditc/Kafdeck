@@ -175,6 +175,13 @@ public sealed record ConnectAutoRestartActivation(
             ConnectAutoRestartCircuitState.Blocked or
             ConnectAutoRestartCircuitState.Ambiguous;
 
+    public bool ReleasesActiveClaim =>
+        CircuitState is
+            ConnectAutoRestartCircuitState.Disabled or
+            ConnectAutoRestartCircuitState.Recovered or
+            ConnectAutoRestartCircuitState.Exhausted or
+            ConnectAutoRestartCircuitState.Blocked;
+
     public static ConnectAutoRestartActivation Create(
         ConnectAutoRestartTarget target,
         ConnectAutoRestartPolicy policy,
