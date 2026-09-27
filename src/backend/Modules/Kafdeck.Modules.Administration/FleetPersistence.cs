@@ -88,6 +88,14 @@ public interface IFleetMutationStateStore
         Task.FromException<IReadOnlyList<FleetOperationProgressSnapshot>>(
             new NotSupportedException(
                 "Active data-job progress discovery is not implemented by this store."));
+    Task<IReadOnlyList<FleetOperationProgressSnapshot>>
+        ListActiveDataGeneratorProgressAsync(
+            int limit,
+            CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<FleetOperationProgressSnapshot>>(
+            new NotSupportedException(
+                "Active data-generator progress discovery is not implemented by this store."));
+
 
     Task<FleetProgressSaveResult> TrySaveProgressAsync(
         FleetOperationProgressSnapshot progress,
