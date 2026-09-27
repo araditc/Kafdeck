@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 7 scope accepted; v0.1-v0.7 released; v0.7 is the active release line**  
+Status: **Gate 0–Gate 8 scope accepted; v0.1-v0.7 released; v0.7 is the active release line; v0.8 planning active**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**

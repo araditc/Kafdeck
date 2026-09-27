@@ -49,7 +49,13 @@ Each declarative resource family defines one ownership mode:
 
 Import/adoption requires exact current-state identity and does not silently seize ownership.
 
-### 5. Desired state excludes plaintext secrets
+### 5. Declarative plans are immutable server objects
+
+A declarative plan has a server-issued `planId`, immutable plan fingerprint, finite expiry and exact current-state/precondition fingerprints.
+
+Apply binds to that exact plan. Expired, drifted or mismatched plans fail closed and require a newly generated plan; clients cannot submit a plan ID while changing desired state/effects out of band.
+
+### 6. Desired state excludes plaintext secrets
 
 Desired state contains:
 
@@ -59,11 +65,11 @@ Desired state contains:
 
 Readback never returns secret bytes.
 
-### 6. MCP parity
+### 7. MCP parity
 
 MCP tools are typed projections of versioned Kafdeck APIs. Tool metadata/prompt content cannot strengthen authority.
 
-### 7. Compensation is independently governed
+### 8. Compensation is independently governed
 
 Compensation is represented as a new immutable operation, not a mutation-history rewind.
 
