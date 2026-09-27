@@ -304,9 +304,10 @@ public sealed class V07W59StreamsTelemetryTests
                 LineageEvidenceKind.Observed)
             .ToArray();
         var inferred = Assert.Single(
-            result.Value.Edges.Where(edge =>
+            result.Value.Edges,
+            edge =>
                 edge.EvidenceKind ==
-                LineageEvidenceKind.Inferred));
+                LineageEvidenceKind.Inferred);
 
         Assert.Equal(2, observed.Length);
         Assert.Equal(
