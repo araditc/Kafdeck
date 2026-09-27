@@ -289,6 +289,56 @@ public static class GovernedDataJobProgress
         };
     }
 
+    public static FleetOperationProgressSnapshot MarkPausedAuthorization(
+        FleetOperationProgressSnapshot snapshot,
+        DateTimeOffset nowUtc)
+    {
+        var progress = FleetOperationProgress.Restore(snapshot);
+        if (progress.Snapshot.Transfer?.PendingBatch is not null)
+        {
+            throw new MutationStateException(
+                "Data-job with an unresolved batch cannot pause authorization.");
+        }
+
+        return FleetOperationProgress.Restore(
+                progress.Snapshot with
+                {
+                    Phase = FleetProgressPhase.PausedAuthorization,
+                    Version = checked(progress.Snapshot.Version + 1),
+                    UpdatedAtUtc = nowUtc,
+                })
+            .Snapshot;
+    }
+
+    public static FleetOperationProgressSnapshot MarkObserving(
+        FleetOperationProgressSnapshot snapshot,
+        DateTimeOffset nowUtc)
+    {
+        var progress = FleetOperationProgress.Restore(snapshot);
+        if (progress.Snapshot.Transfer?.PendingBatch is not null)
+        {
+            throw new MutationStateException(
+                "Data-job with an unresolved batch cannot resume observation.");
+        }
+
+        if (progress.Snapshot.Phase is not (
+                FleetProgressPhase.PausedAuthorization or
+                FleetProgressPhase.Observing))
+        {
+            throw new MutationStateException(
+                "Data-job phase is not eligible to resume observation.");
+        }
+
+        return FleetOperationProgress.Restore(
+                progress.Snapshot with
+                {
+                    Phase = FleetProgressPhase.Observing,
+                    Version = checked(progress.Snapshot.Version + 1),
+                    UpdatedAtUtc = nowUtc,
+                })
+            .Snapshot;
+    }
+
     public static FleetOperationProgressSnapshot MarkStopped(
         FleetOperationProgressSnapshot snapshot,
         DateTimeOffset nowUtc)
