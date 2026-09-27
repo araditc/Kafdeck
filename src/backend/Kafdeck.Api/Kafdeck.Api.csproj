@@ -19,6 +19,7 @@
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Kafka/Kafdeck.Infrastructure.Kafka.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Ecosystem/Kafdeck.Infrastructure.Ecosystem.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.SerDe/Kafdeck.Infrastructure.SerDe.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj" />
     <ProjectReference Include="../Infrastructure/Kafdeck.Infrastructure.Persistence/Kafdeck.Infrastructure.Persistence.csproj" />
   </ItemGroup>
