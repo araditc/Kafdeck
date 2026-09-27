@@ -93,7 +93,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    connectLoadGeneration.current += 1;
+    const initialConnectGeneration = ++connectLoadGeneration.current;
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null);
@@ -109,6 +109,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
     void kafdeckApi.listConnectProfiles(clusterId, controller.signal)
       .then(async profileResult => {
+        if (initialConnectGeneration !== connectLoadGeneration.current) return;
         setConnectProfiles(profileResult);
         const selectedProfile =
           profileResult.data.find(profile => profile.isDefault) ??
@@ -117,13 +118,12 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         if (!selectedProfile) return;
 
         setSelectedConnectProfileId(selectedProfile.id);
-        const generation = ++connectLoadGeneration.current;
         const [info, list, plugins] = await Promise.all([
           kafdeckApi.getConnectProfileInfo(clusterId, selectedProfile.id, controller.signal),
           kafdeckApi.listConnectProfileConnectors(clusterId, selectedProfile.id, controller.signal),
           kafdeckApi.listConnectPlugins(clusterId, selectedProfile.id, controller.signal),
         ]);
-        if (generation !== connectLoadGeneration.current) return;
+        if (initialConnectGeneration !== connectLoadGeneration.current) return;
         setConnectInfo(info);
         setConnectors(list);
         setConnectPlugins(plugins);
