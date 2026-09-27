@@ -422,7 +422,7 @@ public sealed class V07W56ControlledSerdeTests
             new RecordFilterRequest(
                 structuredFilter: new RecordStructuredFilter(
                     RecordFilterLanguage.Cel,
-                    """value.visible == "ok"""")));
+                    "value.visible == \"ok\"")));
 
         var read = new RecordReadRequest(
             "cluster-a",
