@@ -114,5 +114,6 @@ test('v0.7 W56 controlled SerDe UI is bounded, local-only and clears request mat
   assert.match(source, /setSerdePayloadBase64\(''\)/);
   assert.match(source, /setSerdeStructuredJson\(''\)/);
   assert.doesNotMatch(source, /provider URL/i);
-  assert.doesNotMatch(source, /runtime plugin loading/i);
+  assert.doesNotMatch(source, /import\([^)]*plugin/i);
+  assert.doesNotMatch(source, /script engine/i);
 });
