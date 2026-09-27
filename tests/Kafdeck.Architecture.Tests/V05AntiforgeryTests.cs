@@ -1,6 +1,8 @@
 using Kafdeck.Api;
 using Kafdeck.Core.Security;
+using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Configuration;
+using Kafdeck.Infrastructure.SerDe;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -53,6 +55,7 @@ public sealed class V05AntiforgeryTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+        builder.Services.AddSingleton<IControlledSerdePort, ControlledSerdeService>();
 
         using var app = builder.Build();
         app.MapPost("/mutation", () => Results.Ok())
