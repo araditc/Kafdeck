@@ -66,3 +66,15 @@ test('v0.7 Connect profile switch clears request-scoped plugin material', () => 
   assert.match(profileSwitch, /setPluginFieldValues\(\{\}\)/);
   assert.match(profileSwitch, /setPluginValidation\(null\)/);
 });
+
+test('v0.7 Connect profile loads ignore stale responses after profile switches', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const connectLoadGeneration = useRef\(0\)/);
+  assert.match(source, /const generation = \+\+connectLoadGeneration\.current/);
+  assert.match(source, /if \(generation !== connectLoadGeneration\.current\) return/);
+  assert.match(source, /if \(generation === connectLoadGeneration\.current\)/);
+});
