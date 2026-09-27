@@ -22,6 +22,7 @@ using Kafdeck.Modules.Clusters;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Connect;
 using Kafdeck.Modules.Consumers;
+using Kafdeck.Modules.Generator;
 using Kafdeck.Modules.Records;
 using Kafdeck.Modules.Schemas;
 using Kafdeck.Modules.Topics;
@@ -193,6 +194,25 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IMutationExecutionHandler,
         GovernedDataJobActivationHandler>();
 
+    builder.Services.AddSingleton(
+        new DataGeneratorDeploymentPolicy(
+            (kafdeckOptions.Generator?.EnabledClusterIds ??
+             Array.Empty<string>())
+            .ToHashSet(StringComparer.Ordinal)));
+    builder.Services.AddSingleton<DataGeneratorPlanner>();
+    builder.Services.AddSingleton<DataGeneratorPreconditionValidator>();
+    builder.Services.AddSingleton<DataGeneratorStateCoordinator>();
+    builder.Services.AddSingleton<DataGeneratorMaterializer>();
+    builder.Services.AddSingleton<ConfiguredDataGeneratorEffectGuard>();
+    builder.Services.AddSingleton<IDataGeneratorEffectGuard>(services =>
+        services.GetRequiredService<ConfiguredDataGeneratorEffectGuard>());
+    builder.Services.AddSingleton<DataGeneratorDispatchCoordinator>();
+    builder.Services.AddSingleton(
+        DataGeneratorWorkerPolicy.Default);
+    builder.Services.AddSingleton<DataGeneratorWorker>();
+    builder.Services.AddSingleton<IMutationExecutionHandler,
+        DataGeneratorActivationHandler>();
+
     builder.Services.AddSingleton<IConsumerMutationObservationPort>(_ =>
         new ConfluentKafkaConsumerMutationObservationAdapter(
             kafdeckOptions.Clusters,
@@ -280,6 +300,7 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<MutationRecoveryCoordinator>();
     builder.Services.AddHostedService<MutationRecoveryHostedService>();
     builder.Services.AddHostedService<GovernedDataJobHostedService>();
+    builder.Services.AddHostedService<DataGeneratorHostedService>();
 }
 
 var app = builder.Build();
@@ -384,6 +405,7 @@ if (mutationOptions?.Enabled == true)
     app.MapKafdeckTopicMutationEndpoints();
     app.MapKafdeckRecordProductionEndpoints();
     app.MapKafdeckDataJobEndpoints();
+    app.MapKafdeckDataGeneratorEndpoints();
     app.MapKafdeckConsumerMutationEndpoints();
     app.MapKafdeckSchemaMutationEndpoints();
     app.MapKafdeckConnectMutationEndpoints();
