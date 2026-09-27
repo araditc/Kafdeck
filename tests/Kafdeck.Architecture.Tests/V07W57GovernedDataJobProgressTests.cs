@@ -348,6 +348,130 @@ public sealed class V07W57GovernedDataJobProgressTests
     }
 
     [Fact]
+    public void Record_rate_budget_fails_closed_at_cap_plus_one_and_uses_durable_elapsed()
+    {
+        var plan = Plan(
+            maxTotalRecords: 10,
+            maxTotalBytes: 4096,
+            maxRecordsPerSecond: 1,
+            maxBytesPerSecond: 4096);
+        var snapshot = GovernedDataJobProgress.CreateInitial(
+            Guid.NewGuid(),
+            1,
+            plan,
+            Now);
+
+        snapshot = GovernedDataJobProgress.ReserveBeforeDispatch(
+            snapshot,
+            plan,
+            0,
+            plan.Ranges[0].StartInclusive,
+            0,
+            64,
+            Now);
+        var batchId = snapshot.Transfer!.PendingBatch!.BatchId;
+        snapshot = GovernedDataJobProgress.MarkDispatchStarted(
+            snapshot,
+            batchId,
+            Now);
+        snapshot = GovernedDataJobProgress.CompleteAcknowledged(
+            snapshot,
+            plan,
+            batchId,
+            plan.Ranges[0].StartInclusive + 1,
+            Now);
+
+        Assert.Throws<MutationStateException>(
+            () => GovernedDataJobProgress.ReserveBeforeDispatch(
+                snapshot,
+                plan,
+                0,
+                plan.Ranges[0].StartInclusive + 1,
+                0,
+                64,
+                Now));
+
+        snapshot = GovernedDataJobProgress.ChargeRuntime(
+            snapshot,
+            plan,
+            TimeSpan.FromSeconds(2),
+            Now.AddSeconds(2));
+
+        var allowed = GovernedDataJobProgress.ReserveBeforeDispatch(
+            snapshot,
+            plan,
+            0,
+            plan.Ranges[0].StartInclusive + 1,
+            0,
+            64,
+            Now.AddSeconds(2));
+
+        Assert.NotNull(allowed.Transfer!.PendingBatch);
+    }
+
+    [Fact]
+    public void Byte_rate_budget_fails_closed_at_cap_plus_one_and_uses_durable_elapsed()
+    {
+        var plan = Plan(
+            maxTotalRecords: 10,
+            maxTotalBytes: 4096,
+            maxRecordsPerSecond: 10,
+            maxBytesPerSecond: 100);
+        var snapshot = GovernedDataJobProgress.CreateInitial(
+            Guid.NewGuid(),
+            1,
+            plan,
+            Now);
+
+        snapshot = GovernedDataJobProgress.ReserveBeforeDispatch(
+            snapshot,
+            plan,
+            0,
+            plan.Ranges[0].StartInclusive,
+            0,
+            60,
+            Now);
+        var batchId = snapshot.Transfer!.PendingBatch!.BatchId;
+        snapshot = GovernedDataJobProgress.MarkDispatchStarted(
+            snapshot,
+            batchId,
+            Now);
+        snapshot = GovernedDataJobProgress.CompleteAcknowledged(
+            snapshot,
+            plan,
+            batchId,
+            plan.Ranges[0].StartInclusive + 1,
+            Now);
+
+        Assert.Throws<MutationStateException>(
+            () => GovernedDataJobProgress.ReserveBeforeDispatch(
+                snapshot,
+                plan,
+                0,
+                plan.Ranges[0].StartInclusive + 1,
+                0,
+                41,
+                Now));
+
+        snapshot = GovernedDataJobProgress.ChargeRuntime(
+            snapshot,
+            plan,
+            TimeSpan.FromSeconds(2),
+            Now.AddSeconds(2));
+
+        var allowed = GovernedDataJobProgress.ReserveBeforeDispatch(
+            snapshot,
+            plan,
+            0,
+            plan.Ranges[0].StartInclusive + 1,
+            0,
+            41,
+            Now.AddSeconds(2));
+
+        Assert.NotNull(allowed.Transfer!.PendingBatch);
+    }
+
+    [Fact]
     public void Failover_requires_monotonic_worker_generation()
     {
         var plan = Plan();
@@ -414,7 +538,9 @@ public sealed class V07W57GovernedDataJobProgressTests
     private static GovernedDataJobPlan Plan(
         long maxTotalRecords = 10,
         long maxTotalBytes = 1024,
-        TimeSpan? maxDuration = null)
+        TimeSpan? maxDuration = null,
+        int maxRecordsPerSecond = 10,
+        long maxBytesPerSecond = 1024)
     {
         var source =
             new ClusterTransferEndpoint(
@@ -448,8 +574,8 @@ public sealed class V07W57GovernedDataJobProgressTests
                 maxDuration:
                     maxDuration ??
                     TimeSpan.FromMinutes(5),
-                maxRecordsPerSecond: 10,
-                maxBytesPerSecond: 1024);
+                maxRecordsPerSecond: maxRecordsPerSecond,
+                maxBytesPerSecond: maxBytesPerSecond);
         var policy =
             new ClusterTransferDataPolicy(
                 "default",
