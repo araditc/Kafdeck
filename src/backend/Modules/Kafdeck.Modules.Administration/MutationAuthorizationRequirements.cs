@@ -141,6 +141,7 @@ public static class MutationAuthorizationRequirements
         MutationOperationKind kind) =>
         kind is not (
             MutationOperationKind.ClusterTransfer or
+            MutationOperationKind.DataJob or
             MutationOperationKind.ReplicationIntegration or
             MutationOperationKind.FleetUncertaintyDisposition);
 
