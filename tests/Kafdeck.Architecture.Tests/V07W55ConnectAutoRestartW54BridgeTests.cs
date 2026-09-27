@@ -72,6 +72,72 @@ public sealed class V07W55ConnectAutoRestartW54BridgeTests
     }
 
     [Fact]
+    public async Task Revalidator_stops_on_provider_profile_identity_drift_before_provider_observation()
+    {
+        var observations = new FakeObservationPort(
+            Existing(
+                "sink-a",
+                "FAILED",
+                Configuration(
+                    ("connector.class", "org.example.SinkConnector"))));
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(observations, digest);
+        var activation = Activation(
+            "analytics",
+            "sink-a",
+            Fingerprint("config"));
+
+        var revalidator = new ConnectAutoRestartAttemptRevalidator(
+            planner,
+            new ConnectMutationPreconditionValidator(planner),
+            new FakeGovernance(
+                authorizationAllowed: true,
+                Fingerprint("different-provider-profile"),
+                activation.PolicyFingerprint));
+
+        var result = await revalidator.RevalidateAsync(activation);
+
+        Assert.Equal(
+            ConnectAutoRestartRevalidationOutcome.ProviderIdentityDrift,
+            result.Outcome);
+        Assert.Equal("auto_restart_provider_identity_drift", result.Code);
+        Assert.Empty(observations.ObservedProfiles);
+    }
+
+    [Fact]
+    public async Task Revalidator_stops_on_effective_policy_drift_before_provider_observation()
+    {
+        var observations = new FakeObservationPort(
+            Existing(
+                "sink-a",
+                "FAILED",
+                Configuration(
+                    ("connector.class", "org.example.SinkConnector"))));
+        using var digest = Digest();
+        var planner = new ConnectMutationPlanner(observations, digest);
+        var activation = Activation(
+            "default",
+            "sink-a",
+            Fingerprint("config"));
+
+        var revalidator = new ConnectAutoRestartAttemptRevalidator(
+            planner,
+            new ConnectMutationPreconditionValidator(planner),
+            new FakeGovernance(
+                authorizationAllowed: true,
+                activation.ProviderIdentityFingerprint,
+                Fingerprint("different-effective-policy")));
+
+        var result = await revalidator.RevalidateAsync(activation);
+
+        Assert.Equal(
+            ConnectAutoRestartRevalidationOutcome.PolicyDrift,
+            result.Outcome);
+        Assert.Equal("auto_restart_policy_drift", result.Code);
+        Assert.Empty(observations.ObservedProfiles);
+    }
+
+    [Fact]
     public async Task Revalidator_stops_on_configuration_drift_before_restart_planning()
     {
         var observations = new FakeObservationPort(
