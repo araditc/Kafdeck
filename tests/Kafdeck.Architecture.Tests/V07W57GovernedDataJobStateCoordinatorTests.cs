@@ -38,8 +38,19 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
 
         var other = plan with
         {
+            Kind = GovernedDataJobKind.Replay,
+        };
+        other = other with
+        {
             PlanFingerprint =
-                new string('f', 64),
+                GovernedDataJobPolicy.PlanFingerprint(
+                    other.Kind,
+                    other.Source,
+                    other.Destination,
+                    other.Ranges,
+                    other.Budget,
+                    other.DataPolicy,
+                    other.Transform),
         };
 
         var conflict = await coordinator.InitializeAsync(
@@ -222,11 +233,15 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
             GovernedDataJobStateOutcome.Applied,
             acquired.Outcome);
 
+        var activeGeneration =
+            acquired.Progress!.WorkerGeneration;
+
         var stale = await coordinator.RenewLeaseAsync(
             operationId,
             plan,
             "worker-a",
-            workerGeneration: 2,
+            workerGeneration:
+                activeGeneration - 1,
             Now.AddSeconds(2),
             TimeSpan.FromSeconds(30));
 
@@ -238,7 +253,7 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
             operationId,
             plan,
             "worker-b",
-            workerGeneration: 1,
+            workerGeneration: activeGeneration,
             Now.AddSeconds(2));
 
         Assert.Equal(
@@ -249,7 +264,7 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
             operationId,
             plan,
             "worker-a",
-            workerGeneration: 1,
+            workerGeneration: activeGeneration,
             Now.AddSeconds(2),
             TimeSpan.FromSeconds(45));
 
@@ -267,7 +282,7 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
             operationId,
             plan,
             "worker-a",
-            workerGeneration: 1,
+            workerGeneration: activeGeneration,
             Now.AddSeconds(3));
 
         Assert.Equal(
@@ -292,7 +307,7 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
             plan,
             Now);
 
-        _ = await coordinator.AcquireLeaseAsync(
+        var acquired = await coordinator.AcquireLeaseAsync(
             operationId,
             plan,
             "worker-a",
@@ -303,7 +318,8 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
             operationId,
             plan,
             "worker-a",
-            workerGeneration: 1,
+            workerGeneration:
+                acquired.Progress!.WorkerGeneration,
             Now.AddSeconds(6),
             TimeSpan.FromSeconds(30));
 
