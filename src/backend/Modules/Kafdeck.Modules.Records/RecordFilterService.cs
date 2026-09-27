@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Runtime.CompilerServices;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
