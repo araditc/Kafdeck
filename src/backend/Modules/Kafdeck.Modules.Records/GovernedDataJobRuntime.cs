@@ -120,8 +120,7 @@ public sealed class GovernedDataJobDispatchCoordinator
         ValidateOperationBinding(
             operation,
             plan,
-            rangeIndex,
-            record.Offset);
+            rangeIndex);
 
         var range = plan.Ranges[rangeIndex];
         if (record.Offset < range.StartInclusive ||
@@ -378,9 +377,9 @@ public sealed class GovernedDataJobDispatchCoordinator
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        if (initialized.Outcome is
-                GovernedDataJobStateOutcome.Applied or
-                GovernedDataJobStateOutcome.Existing &&
+        if ((initialized.Outcome is
+                 GovernedDataJobStateOutcome.Applied or
+                 GovernedDataJobStateOutcome.Existing) &&
             initialized.Progress is not null)
         {
             return initialized.Progress;
@@ -404,8 +403,7 @@ public sealed class GovernedDataJobDispatchCoordinator
     private static void ValidateOperationBinding(
         MutationOperationSnapshot operation,
         GovernedDataJobPlan plan,
-        int rangeIndex,
-        long sourceOffset)
+        int rangeIndex)
     {
         if (operation.OperationKind !=
                 MutationOperationKind.DataJob ||
@@ -476,15 +474,7 @@ public sealed class GovernedDataJobDispatchCoordinator
             plan.Destination.ClusterId,
             range.DestinationTopic);
 
-        if (sourceOffset != recordOffsetPlaceholder(sourceOffset))
-        {
-            throw new MutationStateException(
-                "Invalid source offset binding.");
-        }
     }
-
-    private static long recordOffsetPlaceholder(
-        long value) => value;
 
     private static void RequireAuthorization(
         MutationOperationSnapshot operation,
