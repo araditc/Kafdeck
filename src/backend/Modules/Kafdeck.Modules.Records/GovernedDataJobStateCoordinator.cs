@@ -321,6 +321,42 @@ public sealed class GovernedDataJobStateCoordinator
             cancellationToken);
 
     public Task<GovernedDataJobStateResult>
+        PauseAuthorizationAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            long workerGeneration,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            operationId,
+            plan,
+            workerGeneration,
+            snapshot =>
+                GovernedDataJobProgress.MarkPausedAuthorization(
+                    snapshot,
+                    nowUtc),
+            "data_job_authorization_paused",
+            cancellationToken);
+
+    public Task<GovernedDataJobStateResult>
+        ResumeObservingAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            long workerGeneration,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            operationId,
+            plan,
+            workerGeneration,
+            snapshot =>
+                GovernedDataJobProgress.MarkObserving(
+                    snapshot,
+                    nowUtc),
+            "data_job_observing_resumed",
+            cancellationToken);
+
+    public Task<GovernedDataJobStateResult>
         StopAsync(
             Guid operationId,
             GovernedDataJobPlan plan,
