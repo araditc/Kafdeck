@@ -1229,6 +1229,344 @@
           }
         }
       }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records": {
+      "get": {
+        "operationId": "v03-records-browse",
+        "description": "Retains the published v0.3 record contract. W56 optionally decodes record values through the closed controlled SerDe family before structured filtering/masking when serdeFormat is supplied.",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "partition",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "anchor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "earliest",
+                "latest"
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "timestampUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "forward",
+                "previous"
+              ]
+            }
+          },
+          {
+            "name": "maxRecords",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "name": "maxBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16777216
+            }
+          },
+          {
+            "name": "decode",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "filterLanguage",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cel",
+                "jq"
+              ]
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "serdeFormat",
+            "in": "query",
+            "required": false,
+            "description": "Optional controlled decoder. Mutually exclusive with decode=true.",
+            "schema": {
+              "$ref": "#/components/schemas/ControlledSerdeFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Masked bounded record page with explicit budget and limitation metadata"
+          },
+          "400": {
+            "description": "Invalid or over-budget query"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Denied by Kafdeck record.read policy or downstream Kafka ACL"
+          },
+          "501": {
+            "description": "Record capability unsupported"
+          }
+        },
+        "summary": "v03-records-browse with optional W56 controlled SerDe decode"
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records/tail": {
+      "get": {
+        "operationId": "v03-records-tail",
+        "description": "Retains the published v0.3 record contract. W56 optionally decodes record values through the closed controlled SerDe family before structured filtering/masking when serdeFormat is supplied.",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "partition",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "maxRecords",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "name": "maxBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16777216
+            }
+          },
+          {
+            "name": "decode",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "filterLanguage",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cel",
+                "jq"
+              ]
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "serdeFormat",
+            "in": "query",
+            "required": false,
+            "description": "Optional controlled decoder. Mutually exclusive with decode=true.",
+            "schema": {
+              "$ref": "#/components/schemas/ControlledSerdeFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "text/event-stream containing only masked safe projections"
+          },
+          "400": {
+            "description": "Invalid or over-budget query"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Denied by Kafdeck record.read policy or downstream Kafka ACL"
+          }
+        },
+        "summary": "v03-records-tail with optional W56 controlled SerDe decode"
+      }
+    },
+    "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records/export": {
+      "get": {
+        "operationId": "v03-records-export",
+        "description": "Retains the published v0.3 record contract. W56 optionally decodes record values through the closed controlled SerDe family before structured filtering/masking when serdeFormat is supplied.",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "partition",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "ndjson",
+                "csv"
+              ]
+            }
+          },
+          {
+            "name": "maxRecords",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "name": "maxBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16777216
+            }
+          },
+          {
+            "name": "decode",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "serdeFormat",
+            "in": "query",
+            "required": false,
+            "description": "Optional controlled decoder. Mutually exclusive with decode=true.",
+            "schema": {
+              "$ref": "#/components/schemas/ControlledSerdeFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded masked JSON, NDJSON, or CSV stream"
+          },
+          "400": {
+            "description": "Invalid or over-budget query"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Denied by Kafdeck record.read/record.export policy or downstream Kafka ACL"
+          }
+        },
+        "summary": "v03-records-export with optional W56 controlled SerDe decode"
+      }
     }
   },
   "components": {
