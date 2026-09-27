@@ -165,6 +165,7 @@ public sealed record ConnectAutoRestartActivation(
     string ProviderIdentityFingerprint,
     string ConnectorConfigurationFingerprint,
     string PolicyFingerprint,
+    string AutomationPrincipalId,
     long Version)
 {
     public bool IsTerminal =>
@@ -189,6 +190,7 @@ public sealed record ConnectAutoRestartActivation(
         string providerIdentityFingerprint,
         string connectorConfigurationFingerprint,
         string policyFingerprint,
+        string automationPrincipalId,
         Guid? activationId = null)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -204,6 +206,11 @@ public sealed record ConnectAutoRestartActivation(
         ValidateFingerprint(
             policyFingerprint,
             nameof(policyFingerprint));
+        var normalizedAutomationPrincipal =
+            RequireIdentifier(
+                automationPrincipalId,
+                nameof(automationPrincipalId),
+                1024);
 
         var state = policy.Enabled
             ? ConnectAutoRestartCircuitState.Armed
@@ -227,6 +234,7 @@ public sealed record ConnectAutoRestartActivation(
             providerIdentityFingerprint,
             connectorConfigurationFingerprint,
             policyFingerprint,
+            normalizedAutomationPrincipal,
             Version: 1);
     }
 
@@ -300,6 +308,24 @@ public sealed record ConnectAutoRestartActivation(
                 ConnectAutoRestartCircuitState.Dispatching,
             HasUnresolvedDispatch = true,
             UnresolvedDispatchId = dispatchId,
+            Version = checked(Version + 1),
+        };
+    }
+
+    public ConnectAutoRestartActivation RecordAccepted(
+        Guid dispatchId,
+        string resultCode)
+    {
+        RequireMatchingDispatch(dispatchId);
+
+        return this with
+        {
+            ConsecutiveFailures = 0,
+            CircuitState =
+                ConnectAutoRestartCircuitState.Waiting,
+            HasUnresolvedDispatch = false,
+            UnresolvedDispatchId = null,
+            TerminalReason = RequireReason(resultCode),
             Version = checked(Version + 1),
         };
     }
@@ -546,6 +572,61 @@ public sealed record ConnectAutoRestartLease(
     string OwnerId,
     long Generation,
     DateTimeOffset ExpiresAtUtc);
+
+public enum ConnectAutoRestartRevalidationOutcome
+{
+    Allowed = 1,
+    Recovered = 2,
+    AuthorizationDenied = 3,
+    ProviderIdentityDrift = 4,
+    ConfigurationDrift = 5,
+    PolicyDrift = 6,
+    CapabilityBlocked = 7,
+    ReplicationGuardBlocked = 8,
+    TargetUnavailable = 9,
+}
+
+public sealed record ConnectAutoRestartRevalidationResult(
+    ConnectAutoRestartRevalidationOutcome Outcome,
+    string Code)
+{
+    public bool IsAllowed =>
+        Outcome == ConnectAutoRestartRevalidationOutcome.Allowed;
+
+    public bool IsRecovered =>
+        Outcome == ConnectAutoRestartRevalidationOutcome.Recovered;
+}
+
+public interface IConnectAutoRestartAttemptRevalidator
+{
+    Task<ConnectAutoRestartRevalidationResult> RevalidateAsync(
+        ConnectAutoRestartActivation activation,
+        CancellationToken cancellationToken = default);
+}
+
+public enum ConnectAutoRestartDispatchOutcome
+{
+    Accepted = 1,
+    FailedDefinitive = 2,
+    Ambiguous = 3,
+}
+
+public sealed record ConnectAutoRestartDispatchResult(
+    ConnectAutoRestartDispatchOutcome Outcome,
+    string Code);
+
+public sealed record ConnectAutoRestartDispatchRequest(
+    Guid ActivationId,
+    Guid DispatchId,
+    ConnectAutoRestartTarget Target,
+    string AutomationPrincipalId);
+
+public interface IConnectAutoRestartDispatchPort
+{
+    Task<ConnectAutoRestartDispatchResult> RestartAsync(
+        ConnectAutoRestartDispatchRequest request,
+        CancellationToken cancellationToken = default);
+}
 
 public interface IConnectAutoRestartStateStore
 {
