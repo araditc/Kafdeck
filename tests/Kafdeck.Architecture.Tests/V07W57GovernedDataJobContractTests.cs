@@ -18,7 +18,18 @@ public sealed class V07W57GovernedDataJobContractTests
             GovernedDataJobKind.Forward,
             transfer);
 
-        Assert.Equal(first, second);
+        Assert.Equal(
+            first.PlanFingerprint,
+            second.PlanFingerprint);
+        Assert.Equal(first.Kind, second.Kind);
+        Assert.Equal(first.Source, second.Source);
+        Assert.Equal(first.Destination, second.Destination);
+        Assert.Equal(first.Budget, second.Budget);
+        Assert.Equal(first.DataPolicy, second.DataPolicy);
+        Assert.Equal(first.Transform, second.Transform);
+        Assert.Equal(
+            first.Ranges,
+            second.Ranges);
         Assert.Equal(
             GovernedDataTransformKind.BytePreserving,
             first.Transform.Kind);
