@@ -3,6 +3,8 @@ using Kafdeck.Core.Security;
 using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.SerDe;
+using Kafdeck.Modules.Administration;
+using Kafdeck.Modules.Records;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -129,6 +131,14 @@ public sealed class V05AntiforgeryTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+        builder.Services.AddSingleton<GovernedDataJobPlanner>(_ => null!);
+        builder.Services.AddSingleton<MutationAdmissionService>(_ => null!);
+        builder.Services.AddSingleton<MutationDispatchService>(_ => null!);
+        builder.Services.AddSingleton<IMutationOperationRepository>(_ => null!);
+        builder.Services.AddSingleton<IFleetMutationStateStore>(_ => null!);
+        builder.Services.AddSingleton<MutationRequestAuthorizationService>(_ => null!);
+        builder.Services.AddSingleton<GovernedDataJobStateCoordinator>(_ => null!);
+        builder.Services.AddSingleton<IMutationAuditSink>(_ => null!);
 
         using var app = builder.Build();
         app.MapKafdeckDataJobEndpoints();
