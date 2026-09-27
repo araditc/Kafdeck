@@ -148,6 +148,82 @@ export interface ConnectAutoRestartPolicyPreviewInput {
   jitterBasisPoints?: number | null;
 }
 
+export type DataJobKindInput = 'replay' | 'forward' | 'reprocess' | 'dlq-forward';
+
+export interface DataJobRangeInput {
+  sourceTopic: string;
+  sourcePartition: number;
+  destinationTopic: string;
+  destinationPartition: number;
+  startInclusive: number;
+  endExclusive: number;
+}
+
+export interface DataJobBudgetInput {
+  maxBatchRecords?: number | null;
+  maxBatchBytes?: number | null;
+  maxTotalRecords?: number | null;
+  maxTotalBytes?: number | null;
+  maxDurationSeconds?: number | null;
+  maxRecordsPerSecond?: number | null;
+  maxBytesPerSecond?: number | null;
+}
+
+export interface DataJobTransformInput {
+  kind: 'BytePreserving' | 'MaskedStructuredProjection';
+  serdeFormat?: 'json' | 'cbor' | 'xml' | 'messagepack' | null;
+  projectedFields?: string[] | null;
+}
+
+export interface DataJobPreviewInput {
+  sourceClusterId: string;
+  sourceProfileVersion: string;
+  destinationClusterId: string;
+  destinationProfileVersion: string;
+  ranges: DataJobRangeInput[];
+  budget?: DataJobBudgetInput | null;
+  transform?: DataJobTransformInput | null;
+}
+
+export interface DataJobRangeStatus {
+  rangeIndex: number;
+  sourceTopic: string;
+  sourcePartition: number;
+  destinationTopic: string;
+  destinationPartition: number;
+  startInclusive: number;
+  endExclusive: number;
+  nextSourceOffset: number | null;
+}
+
+export interface DataJobPendingBatchStatus {
+  batchId: string;
+  rangeIndex: number;
+  sourceOffset: number;
+  destinationPartition: number;
+  rawBytes: number;
+  state: string;
+  reservedAtUtc: string;
+  dispatchStartedAtUtc: string | null;
+}
+
+export interface DataJobStatus {
+  operationId: string;
+  kind: string;
+  mutationState: string;
+  resultCode: string | null;
+  planFingerprint: string;
+  sourceClusterId: string;
+  destinationClusterId: string;
+  progressPhase: string;
+  workerGeneration: number;
+  acknowledgedRecords: number;
+  acknowledgedBytes: number;
+  activeRuntimeMilliseconds: number;
+  ranges: DataJobRangeStatus[];
+  pendingBatch: DataJobPendingBatchStatus | null;
+}
+
 export type RecordsPurgeSelectorKind = 'absolute' | 'timestamp';
 
 export interface RecordsPurgeTargetInput {
@@ -703,6 +779,54 @@ export const mutationApi = {
     return putJson<MutationStatus>(
       connectAutoRestartPolicyPath(clusterId, connectProfileId, connectorName),
       { operationId, taskId: taskId ?? null },
+      { signal },
+    );
+  },
+
+  previewDataJob(
+    kind: DataJobKindInput,
+    request: DataJobPreviewInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<MutationStatus>(
+      `/api/v1/data-jobs/${encodeURIComponent(kind)}/preview`,
+      request,
+      { idempotencyKey, signal },
+    );
+  },
+
+  startDataJob(operationId: string, signal?: AbortSignal) {
+    return postJson<MutationStatus>(
+      `/api/v1/data-jobs/${encodeURIComponent(operationId)}/start`,
+      {},
+      { signal },
+    );
+  },
+
+  getDataJobStatus(operationId: string, signal?: AbortSignal) {
+    return readJson<DataJobStatus>(
+      `/api/v1/data-jobs/${encodeURIComponent(operationId)}`,
+      signal,
+    );
+  },
+
+  cancelDataJob(operationId: string, signal?: AbortSignal) {
+    return postJson<DataJobStatus>(
+      `/api/v1/data-jobs/${encodeURIComponent(operationId)}/cancel`,
+      {},
+      { signal },
+    );
+  },
+
+  reconcileDataJob(
+    operationId: string,
+    batchId: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<DataJobStatus>(
+      `/api/v1/data-jobs/${encodeURIComponent(operationId)}/reconcile`,
+      { batchId, disposition: 'provenNonApplication' },
       { signal },
     );
   },

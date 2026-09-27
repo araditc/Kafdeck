@@ -48,6 +48,7 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
                 operation_id TEXT PRIMARY KEY,
                 schema_version INTEGER NOT NULL,
                 version BIGINT NOT NULL,
+                phase INTEGER NOT NULL DEFAULT 1,
                 snapshot_json TEXT NOT NULL,
                 updated_at_utc TEXT NOT NULL,
                 FOREIGN KEY (operation_id)
@@ -109,6 +110,11 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             throw new InvalidOperationException(
                 "Fleet mutation persistence schema version is unsupported. Refusing to activate fleet mutation state.");
         }
+
+        await FleetProgressPhaseIndexSchema.EnsureInstalledAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         await EnsureConflictScopePersistenceAsync(
                 connection,
@@ -343,12 +349,14 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
                 operation_id,
                 schema_version,
                 version,
+                phase,
                 snapshot_json,
                 updated_at_utc)
             VALUES (
                 @operation_id,
                 @schema_version,
                 @version,
+                @phase,
                 @snapshot_json,
                 @updated_at_utc)
             ON CONFLICT (operation_id) DO NOTHING
@@ -356,6 +364,7 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         AddParameter(insert, "@operation_id", normalized.OperationId.ToString("D"));
         AddParameter(insert, "@schema_version", normalized.SchemaVersion);
         AddParameter(insert, "@version", normalized.Version);
+        AddParameter(insert, "@phase", (int)normalized.Phase);
         AddParameter(insert, "@snapshot_json", Serialize(normalized));
         AddParameter(insert, "@updated_at_utc", FormatTimestamp(normalized.UpdatedAtUtc));
 
@@ -392,6 +401,68 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<FleetOperationProgressSnapshot>>
+        ListActiveDataJobProgressAsync(
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 1_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        await using var connection =
+            await _connectionFactory.OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT progress.snapshot_json, parent.snapshot_json
+            FROM kafdeck_fleet_progress AS progress
+            INNER JOIN kafdeck_mutation_operations AS parent
+              ON parent.operation_id = progress.operation_id
+            WHERE progress.phase IN (1, 2, 3, 4, 5)
+              AND parent.state = @parent_state
+            ORDER BY progress.updated_at_utc, progress.operation_id
+            """;
+        AddParameter(
+            command,
+            "@parent_state",
+            (int)MutationOperationState.AppliedVerified);
+
+        var items =
+            new List<FleetOperationProgressSnapshot>(limit);
+        await using var reader =
+            await command.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        while (items.Count < limit &&
+               await reader.ReadAsync(cancellationToken)
+                   .ConfigureAwait(false))
+        {
+            var progress = ValidateProgress(
+                Deserialize<FleetOperationProgressSnapshot>(
+                    reader.GetString(0)));
+            var parent =
+                Deserialize<MutationOperationSnapshot>(
+                    reader.GetString(1));
+
+            if (parent.OperationKind !=
+                    MutationOperationKind.DataJob ||
+                !string.Equals(
+                    parent.ResultCode,
+                    "data_job_activated",
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            items.Add(progress);
+        }
+
+        return Array.AsReadOnly(items.ToArray());
+    }
+
     public async Task<FleetProgressSaveResult> TrySaveProgressAsync(
         FleetOperationProgressSnapshot progress,
         long expectedVersion,
@@ -413,6 +484,7 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             """
             UPDATE kafdeck_fleet_progress
             SET version = @new_version,
+                phase = @phase,
                 snapshot_json = @snapshot_json,
                 updated_at_utc = @updated_at_utc
             WHERE operation_id = @operation_id
@@ -420,6 +492,7 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
               AND version = @expected_version
             """;
         AddParameter(command, "@new_version", normalized.Version);
+        AddParameter(command, "@phase", (int)normalized.Phase);
         AddParameter(
             command,
             "@writer_fence_version",
@@ -878,6 +951,59 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             """;
         AddParameter(command, "@obligation_id", obligationId.ToString("D"));
         return await ReadConflictObligationAsync(command, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<FleetConflictObligationSnapshot>>
+        ListConflictObligationsByOperationAsync(
+            Guid operationId,
+            CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Operation ID is required.",
+                nameof(operationId));
+        }
+
+        await using var connection =
+            await _connectionFactory.OpenAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_fleet_conflict_obligations
+            WHERE operation_id = @operation_id
+            ORDER BY step_id, conflict_key
+            """;
+        AddParameter(
+            command,
+            "@operation_id",
+            operationId.ToString("D"));
+
+        var items =
+            new List<FleetConflictObligationSnapshot>();
+        await using var reader =
+            await command.ExecuteReaderAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        while (await reader.ReadAsync(
+                   cancellationToken)
+                   .ConfigureAwait(false))
+        {
+            items.Add(
+                FleetConflictObligation.Restore(
+                        Deserialize<
+                            FleetConflictObligationSnapshot>(
+                            reader.GetString(0)))
+                    .Snapshot);
+        }
+
+        return Array.AsReadOnly(
+            items.ToArray());
     }
 
     public async Task<FleetConflictObligationSnapshot?> FindBlockingConflictObligationAsync(

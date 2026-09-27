@@ -25,6 +25,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly SchemaMutationPreconditionValidator? _schemas;
     private readonly ConnectMutationPreconditionValidator? _connect;
     private readonly ConnectAutoRestartPolicyPreconditionValidator? _connectAutoRestart;
+    private readonly GovernedDataJobPreconditionValidator? _dataJobs;
     private readonly AclMutationPreconditionValidator? _acls;
     private readonly IAclEffectAuthorizationGuard? _aclAuthorization;
     private readonly ScramMutationPreconditionValidator? _scram;
@@ -40,6 +41,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         SchemaMutationPreconditionValidator? schemas = null,
         ConnectMutationPreconditionValidator? connect = null,
         ConnectAutoRestartPolicyPreconditionValidator? connectAutoRestart = null,
+        GovernedDataJobPreconditionValidator? dataJobs = null,
         AclMutationPreconditionValidator? acls = null,
         IAclEffectAuthorizationGuard? aclAuthorization = null,
         ScramMutationPreconditionValidator? scram = null,
@@ -54,6 +56,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _schemas = schemas;
         _connect = connect;
         _connectAutoRestart = connectAutoRestart;
+        _dataJobs = dataJobs;
         _acls = acls;
         _aclAuthorization = aclAuthorization;
         _scram = scram;
@@ -137,6 +140,17 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
 
             case MutationOperationKind.RecordsPurge:
                 preconditions = await _recordsPurge
+                    .ValidateAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
+            case MutationOperationKind.DataJob:
+                if (_dataJobs is null)
+                {
+                    return Unsupported();
+                }
+
+                preconditions = await _dataJobs
                     .ValidateAsync(operation, cancellationToken)
                     .ConfigureAwait(false);
                 break;

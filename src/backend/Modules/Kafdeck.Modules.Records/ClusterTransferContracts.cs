@@ -216,12 +216,57 @@ public static class ClusterTransferPolicy
                 "Byte-preserving transfer is unavailable while the current masking policy changes key, value or header bytes.");
         }
 
+        return FingerprintMaskingPolicy(compiled);
+    }
+
+    public static ClusterTransferDataPolicy RequireStructuredPolicy(
+        IRecordMaskingPolicySnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot is not CompiledRecordMaskingPolicy compiled)
+        {
+            throw new MutationStateException(
+                "Structured data-job planning requires one compiled masking policy snapshot.");
+        }
+
+        return FingerprintMaskingPolicy(compiled);
+    }
+
+    public static ClusterTransferDataPolicy FingerprintMaskingPolicy(
+        CompiledRecordMaskingPolicy compiled)
+    {
+        ArgumentNullException.ThrowIfNull(compiled);
+
         var builder = new StringBuilder();
         Append(builder, "policy-id", compiled.PolicyId);
-        Append(builder, "version", compiled.Version.ToString(CultureInfo.InvariantCulture));
-        Append(builder, "mask-key", "0");
-        Append(builder, "structured-rule-count", "0");
-        Append(builder, "header-rule-count", "0");
+        Append(
+            builder,
+            "version",
+            compiled.Version.ToString(CultureInfo.InvariantCulture));
+        Append(
+            builder,
+            "mask-key",
+            compiled.MaskKey ? "1" : "0");
+        Append(builder, "key-replacement", compiled.KeyReplacement);
+
+        foreach (var rule in compiled.StructuredRules
+                     .OrderBy(item => item.JsonPointer, StringComparer.Ordinal))
+        {
+            Append(
+                builder,
+                "structured-rule",
+                $"{rule.JsonPointer}\u001f{rule.Replacement}");
+        }
+
+        foreach (var rule in compiled.HeaderRules
+                     .OrderBy(item => item.HeaderName, StringComparer.Ordinal))
+        {
+            Append(
+                builder,
+                "header-rule",
+                $"{rule.HeaderName}\u001f{rule.Replacement}");
+        }
+
         return new ClusterTransferDataPolicy(
             compiled.PolicyId,
             compiled.Version,

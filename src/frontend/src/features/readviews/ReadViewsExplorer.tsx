@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ApiProblem,
   kafdeckApi,
@@ -105,6 +105,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [pluginFieldValues, setPluginFieldValues] = useState<Record<string, string>>({});
   const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const connectLoadGeneration = useRef(0);
   const [autoRestartStatus, setAutoRestartStatus] = useState<ConnectAutoRestartPolicyStatus | null>(null);
   const [autoRestartOperation, setAutoRestartOperation] = useState<MutationStatus | null>(null);
   const [autoRestartError, setAutoRestartError] = useState<string | null>(null);
@@ -115,6 +116,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    const initialConnectGeneration = ++connectLoadGeneration.current;
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setSerdeCapabilities(null); setSerdeFormat('cbor'); setSerdePayloadBase64(''); setSerdeStructuredJson(''); setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null); setSerdeBusy(false);
@@ -135,6 +137,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
     void kafdeckApi.listConnectProfiles(clusterId, controller.signal)
       .then(async profileResult => {
+        if (initialConnectGeneration !== connectLoadGeneration.current) return;
         setConnectProfiles(profileResult);
         const selectedProfile =
           profileResult.data.find(profile => profile.isDefault) ??
@@ -148,11 +151,19 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
           kafdeckApi.listConnectProfileConnectors(clusterId, selectedProfile.id, controller.signal),
           kafdeckApi.listConnectPlugins(clusterId, selectedProfile.id, controller.signal),
         ]);
+        if (initialConnectGeneration !== connectLoadGeneration.current) return;
         setConnectInfo(info);
         setConnectors(list);
         setConnectPlugins(plugins);
       })
-      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setConnectError(readViewError(reason)); });
+      .catch(reason => {
+        if (
+          initialConnectGeneration === connectLoadGeneration.current &&
+          !(reason instanceof DOMException && reason.name === 'AbortError')
+        ) {
+          setConnectError(readViewError(reason));
+        }
+      });
 
     void kafdeckApi.getKsqlInfo(clusterId, controller.signal)
       .then(setKsqlInfo)
@@ -254,6 +265,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   };
 
   const openConnectProfile = async (profileId: string) => {
+    const generation = ++connectLoadGeneration.current;
     setConnectError(null);
     setSelectedConnectProfileId(profileId);
     setConnectInfo(null);
@@ -273,11 +285,14 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         kafdeckApi.listConnectProfileConnectors(clusterId, profileId),
         kafdeckApi.listConnectPlugins(clusterId, profileId),
       ]);
+      if (generation !== connectLoadGeneration.current) return;
       setConnectInfo(info);
       setConnectors(list);
       setConnectPlugins(plugins);
     } catch (reason) {
-      setConnectError(readViewError(reason));
+      if (generation === connectLoadGeneration.current) {
+        setConnectError(readViewError(reason));
+      }
     }
   };
 

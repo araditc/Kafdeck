@@ -49,6 +49,8 @@ public sealed record FleetOperationProgressSnapshot
     public IReadOnlyList<FleetPostCapReadReservation> PostCapReadReservations { get; init; } =
         Array.Empty<FleetPostCapReadReservation>();
     public FleetTransferProgressSnapshot? Transfer { get; init; }
+    public string? WorkerLeaseOwner { get; init; }
+    public DateTimeOffset? WorkerLeaseExpiresAtUtc { get; init; }
     public long Version { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
 
@@ -329,6 +331,28 @@ public sealed class FleetOperationProgress
                 "Fleet post-cap reconciliation read counter does not match durable reservations.");
         }
 
+        var hasLeaseOwner =
+            !string.IsNullOrWhiteSpace(snapshot.WorkerLeaseOwner);
+        var hasLeaseExpiry =
+            snapshot.WorkerLeaseExpiresAtUtc.HasValue;
+        if (hasLeaseOwner != hasLeaseExpiry)
+        {
+            throw new MutationStateException(
+                "Fleet worker lease owner and expiry must be present together.");
+        }
+
+        string? leaseOwner = null;
+        if (hasLeaseOwner)
+        {
+            leaseOwner = snapshot.WorkerLeaseOwner!.Trim();
+            if (leaseOwner.Length > 256 ||
+                leaseOwner.Any(char.IsControl))
+            {
+                throw new MutationStateException(
+                    "Fleet worker lease owner is invalid.");
+            }
+        }
+
         var transfer = snapshot.Transfer is null
             ? null
             : FleetTransferProgress.Validate(snapshot.Transfer);
@@ -337,6 +361,7 @@ public sealed class FleetOperationProgress
         {
             PostCapReadReservations = Array.AsReadOnly(reservations.ToArray()),
             Transfer = transfer,
+            WorkerLeaseOwner = leaseOwner,
         };
     }
 }

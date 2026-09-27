@@ -51,6 +51,8 @@ public enum AuthorizationAction
     MutationReconcile = 45,
     ConnectRestart = 46,
     ConnectAutoRestartManage = 47,
+    DataJobPlan = 48,
+    DataJobExecute = 49,
 }
 
 public enum AuthorizationDecisionReason

@@ -3,6 +3,8 @@ using Kafdeck.Core.Security;
 using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.SerDe;
+using Kafdeck.Modules.Administration;
+using Kafdeck.Modules.Records;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -113,6 +115,43 @@ public sealed class V05AntiforgeryTests
         {
             "/api/v1/tools/serde/decode",
             "/api/v1/tools/serde/encode",
+        })
+        {
+            var endpoint = FindEndpoint(app, pattern);
+            var metadata =
+                endpoint.Metadata.GetMetadata<IAntiforgeryMetadata>();
+
+            Assert.NotNull(metadata);
+            Assert.True(metadata.RequiresValidation);
+        }
+    }
+
+    [Fact]
+    public void W57_data_job_posts_carry_antiforgery_metadata()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+        builder.Services.AddSingleton<GovernedDataJobPlanner>(_ => null!);
+        builder.Services.AddSingleton<MutationAdmissionService>(_ => null!);
+        builder.Services.AddSingleton<MutationDispatchService>(_ => null!);
+        builder.Services.AddSingleton<IMutationOperationRepository>(_ => null!);
+        builder.Services.AddSingleton<IFleetMutationStateStore>(_ => null!);
+        builder.Services.AddSingleton<MutationRequestAuthorizationService>(_ => null!);
+        builder.Services.AddSingleton<GovernedDataJobStateCoordinator>(_ => null!);
+        builder.Services.AddSingleton<IMutationAuditSink>(_ => null!);
+
+        using var app = builder.Build();
+        app.MapKafdeckDataJobEndpoints();
+
+        foreach (var pattern in new[]
+        {
+            "/api/v1/data-jobs/replay/preview",
+            "/api/v1/data-jobs/forward/preview",
+            "/api/v1/data-jobs/reprocess/preview",
+            "/api/v1/data-jobs/dlq-forward/preview",
+            "/api/v1/data-jobs/{operationId:guid}/start",
+            "/api/v1/data-jobs/{operationId:guid}/cancel",
+            "/api/v1/data-jobs/{operationId:guid}/reconcile",
         })
         {
             var endpoint = FindEndpoint(app, pattern);

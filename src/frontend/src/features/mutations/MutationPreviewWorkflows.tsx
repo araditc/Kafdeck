@@ -3,12 +3,13 @@ import {
   MutationApiProblem,
   mutationApi,
   type ConsumerOffsetSelectorKind,
+  type DataJobKindInput,
   type MutationStatus,
   type RecordsPurgeSelectorKind,
   type SchemaFormatInput,
 } from './mutationApi.js';
 
-type WorkflowKind = 'topic' | 'record' | 'consumer' | 'schema' | 'connect' | 'purge';
+type WorkflowKind = 'topic' | 'record' | 'consumer' | 'schema' | 'connect' | 'dataJob' | 'purge';
 
 function newIdempotencyKey(): string {
   if (
@@ -104,6 +105,7 @@ export function MutationPreviewWorkflows({
       <option value="consumer">Consumer administration</option>
       <option value="schema">Schema Registry</option>
       <option value="connect">Kafka Connect</option>
+      <option value="dataJob">Replay / forward data job</option>
       <option value="purge">Controlled purge</option>
     </select>
     <p><label htmlFor="mutation-idempotency-key">Idempotency-Key</label>{' '}<input id="mutation-idempotency-key" value={idempotencyKey} onChange={event => setIdempotencyKey(event.target.value)} autoComplete="off" />{' '}<button type="button" onClick={() => setIdempotencyKey(newIdempotencyKey())}>Generate new key</button></p>
@@ -112,7 +114,8 @@ export function MutationPreviewWorkflows({
     {workflow === 'record' && <RecordWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'consumer' && <ConsumerWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'schema' && <SchemaWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
-    {workflow === 'connect' && <ConnectWorkflow clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'connect' && <ConnectWorkflow key={`${clusterId}:${connectProfileId ?? 'default'}`} clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'dataJob' && <DataJobWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'purge' && <PurgeWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
   </article>;
 }
@@ -278,6 +281,128 @@ function ConnectWorkflow({ clusterId, connectProfileId, idempotencyKey, busy, su
       {(action === 'create' || action === 'update') && <><label htmlFor="connect-config">Configuration, one key=value per line</label><br /><textarea id="connect-config" required value={configuration} onChange={event => setConfiguration(event.target.value)} rows={8} autoComplete="off" /><p>Configuration values can contain secrets. They remain request-scoped/browser-memory material and are never rendered in mutation status or provider evidence.</p></>}
       {action === 'control' && <><label htmlFor="connect-control">Control</label>{' '}<select id="connect-control" value={control} onChange={event => setControl(event.target.value as typeof control)}><option value="pause">Pause</option><option value="resume">Resume</option><option value="restart">Restart</option></select>{' '}<label htmlFor="connect-task">Task ID (optional for restart)</label>{' '}<input id="connect-task" type="number" min="0" value={taskId} onChange={event => setTaskId(event.target.value)} /></>}
       <button type="submit" disabled={!connectorName.trim() || !idempotencyKey.trim() || ((action === 'create' || action === 'update') && !configuration.trim())}>Create preview</button>
+    </fieldset>
+  </form>;
+}
+
+function DataJobWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
+  const [kind, setKind] = useState<DataJobKindInput>('forward');
+  const [sourceClusterId, setSourceClusterId] = useState(clusterId);
+  const [sourceProfileVersion, setSourceProfileVersion] = useState('current');
+  const [destinationClusterId, setDestinationClusterId] = useState('');
+  const [destinationProfileVersion, setDestinationProfileVersion] = useState('current');
+  const [sourceTopic, setSourceTopic] = useState('');
+  const [destinationTopic, setDestinationTopic] = useState('');
+  const [sourcePartition, setSourcePartition] = useState(0);
+  const [destinationPartition, setDestinationPartition] = useState(0);
+  const [startInclusive, setStartInclusive] = useState(0);
+  const [endExclusive, setEndExclusive] = useState(1);
+  const [maxTotalRecords, setMaxTotalRecords] = useState(1000);
+  const [maxTotalBytes, setMaxTotalBytes] = useState(10 * 1024 * 1024);
+  const [maxDurationSeconds, setMaxDurationSeconds] = useState(600);
+  const [serdeFormat, setSerdeFormat] = useState<'json' | 'cbor' | 'xml' | 'messagepack'>('json');
+  const [projectedFields, setProjectedFields] = useState('');
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (endExclusive <= startInclusive) return;
+
+    const transform = kind === 'reprocess'
+      ? {
+          kind: 'MaskedStructuredProjection' as const,
+          serdeFormat,
+          projectedFields: projectedFields
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean),
+        }
+      : null;
+
+    void submit(() => mutationApi.previewDataJob(
+      kind,
+      {
+        sourceClusterId,
+        sourceProfileVersion,
+        destinationClusterId,
+        destinationProfileVersion,
+        ranges: [{
+          sourceTopic,
+          sourcePartition,
+          destinationTopic,
+          destinationPartition,
+          startInclusive,
+          endExclusive,
+        }],
+        budget: {
+          maxTotalRecords,
+          maxTotalBytes,
+          maxDurationSeconds,
+        },
+        transform,
+      },
+      idempotencyKey,
+    ));
+  };
+
+  const invalid =
+    !idempotencyKey.trim() ||
+    !sourceClusterId.trim() ||
+    !sourceProfileVersion.trim() ||
+    !destinationClusterId.trim() ||
+    !destinationProfileVersion.trim() ||
+    !sourceTopic.trim() ||
+    !destinationTopic.trim() ||
+    endExclusive <= startInclusive ||
+    maxTotalRecords < 1 ||
+    maxTotalBytes < 1 ||
+    maxDurationSeconds < 1 ||
+    (kind === 'reprocess' && !projectedFields.trim());
+
+  return <form onSubmit={onSubmit} aria-label="Governed data-job preview">
+    <fieldset disabled={busy}><legend>Finite replay / forwarding job</legend>
+      <p>Ranges are frozen at preview. Limits are finite. This workflow never creates destination topics and never accepts arbitrary scripts or provider commands.</p>
+      <label htmlFor="data-job-kind">Kind</label>{' '}
+      <select id="data-job-kind" value={kind} onChange={event => setKind(event.target.value as DataJobKindInput)}>
+        <option value="replay">Replay</option>
+        <option value="forward">Forward</option>
+        <option value="dlq-forward">DLQ forward</option>
+        <option value="reprocess">Reprocess with masked projection</option>
+      </select><br />
+      <label htmlFor="data-job-source-cluster">Source cluster</label>{' '}
+      <input id="data-job-source-cluster" required value={sourceClusterId} onChange={event => setSourceClusterId(event.target.value)} />{' '}
+      <label htmlFor="data-job-source-profile">Source profile version</label>{' '}
+      <input id="data-job-source-profile" required value={sourceProfileVersion} onChange={event => setSourceProfileVersion(event.target.value)} /><br />
+      <label htmlFor="data-job-destination-cluster">Destination cluster</label>{' '}
+      <input id="data-job-destination-cluster" required value={destinationClusterId} onChange={event => setDestinationClusterId(event.target.value)} />{' '}
+      <label htmlFor="data-job-destination-profile">Destination profile version</label>{' '}
+      <input id="data-job-destination-profile" required value={destinationProfileVersion} onChange={event => setDestinationProfileVersion(event.target.value)} /><br />
+      <label htmlFor="data-job-source-topic">Source topic</label>{' '}
+      <input id="data-job-source-topic" required value={sourceTopic} onChange={event => setSourceTopic(event.target.value)} />{' '}
+      <label htmlFor="data-job-source-partition">Partition</label>{' '}
+      <input id="data-job-source-partition" type="number" min="0" value={sourcePartition} onChange={event => setSourcePartition(Number(event.target.value))} /><br />
+      <label htmlFor="data-job-destination-topic">Destination topic</label>{' '}
+      <input id="data-job-destination-topic" required value={destinationTopic} onChange={event => setDestinationTopic(event.target.value)} />{' '}
+      <label htmlFor="data-job-destination-partition">Partition</label>{' '}
+      <input id="data-job-destination-partition" type="number" min="0" value={destinationPartition} onChange={event => setDestinationPartition(Number(event.target.value))} /><br />
+      <label htmlFor="data-job-start-offset">Start inclusive</label>{' '}
+      <input id="data-job-start-offset" type="number" min="0" value={startInclusive} onChange={event => setStartInclusive(Number(event.target.value))} />{' '}
+      <label htmlFor="data-job-end-offset">End exclusive</label>{' '}
+      <input id="data-job-end-offset" type="number" min="1" value={endExclusive} onChange={event => setEndExclusive(Number(event.target.value))} /><br />
+      <label htmlFor="data-job-max-records">Max total records</label>{' '}
+      <input id="data-job-max-records" type="number" min="1" max="1000000" value={maxTotalRecords} onChange={event => setMaxTotalRecords(Number(event.target.value))} />{' '}
+      <label htmlFor="data-job-max-bytes">Max total bytes</label>{' '}
+      <input id="data-job-max-bytes" type="number" min="1" max="1073741824" value={maxTotalBytes} onChange={event => setMaxTotalBytes(Number(event.target.value))} />{' '}
+      <label htmlFor="data-job-max-duration">Max duration seconds</label>{' '}
+      <input id="data-job-max-duration" type="number" min="1" max="86400" value={maxDurationSeconds} onChange={event => setMaxDurationSeconds(Number(event.target.value))} /><br />
+      {kind === 'reprocess' && <>
+        <label htmlFor="data-job-serde">SerDe</label>{' '}
+        <select id="data-job-serde" value={serdeFormat} onChange={event => setSerdeFormat(event.target.value as typeof serdeFormat)}>
+          <option value="json">JSON</option><option value="cbor">CBOR</option><option value="xml">XML</option><option value="messagepack">MessagePack</option>
+        </select>{' '}
+        <label htmlFor="data-job-fields">Projected fields (comma-separated)</label>{' '}
+        <input id="data-job-fields" required value={projectedFields} onChange={event => setProjectedFields(event.target.value)} />
+      </>}
+      <br /><button type="submit" disabled={invalid}>Create finite preview</button>
     </fieldset>
   </form>;
 }

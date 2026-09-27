@@ -25,7 +25,7 @@ public static class KafdeckV07OpenApi
   "info": {
     "title": "Kafdeck v0.7 Developer & Streaming Ecosystem API",
     "version": "0.7.0",
-    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile. W55 adds disabled-by-default, finite, durable Kafka Connect auto-restart policy controls that reuse governed W54 restart paths and never blindly retry ambiguous dispatch. W56 adds closed, bounded CBOR/XML/MessagePack local SerDe tooling with no runtime plugin loading or external XML resource resolution."
+    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile. W55 adds disabled-by-default, finite, durable Kafka Connect auto-restart policy controls that reuse governed W54 restart paths and never blindly retry ambiguous dispatch. W56 adds closed, bounded CBOR/XML/MessagePack local SerDe tooling with no runtime plugin loading or external XML resource resolution. W57 adds finite governed replay/reprocess/DLQ/forwarding jobs with immutable ranges, bounded budgets, durable checkpoints, fenced cancellation and explicit proven-non-application reconciliation; ambiguous destination writes are never blindly retried."
   },
   "servers": [
     {
@@ -1589,6 +1589,365 @@ public static class KafdeckV07OpenApi
         },
         "summary": "v03-records-export with optional W56 controlled SerDe decode"
       }
+    },
+    "/api/v1/data-jobs/replay/preview": {
+      "post": {
+        "operationId": "v07-data-job-replay-preview",
+        "summary": "Create a governed finite replay data-job preview",
+        "description": "Creates a durable governed mutation preview only. Source ranges and destination identity are frozen during planning; omitted limits never mean unlimited.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataJobPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing idempotent governed preview"
+          },
+          "201": {
+            "description": "Governed preview created"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/forward/preview": {
+      "post": {
+        "operationId": "v07-data-job-forward-preview",
+        "summary": "Create a governed finite forward data-job preview",
+        "description": "Creates a durable governed mutation preview only. Source ranges and destination identity are frozen during planning; omitted limits never mean unlimited.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataJobPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing idempotent governed preview"
+          },
+          "201": {
+            "description": "Governed preview created"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/reprocess/preview": {
+      "post": {
+        "operationId": "v07-data-job-reprocess-preview",
+        "summary": "Create a governed finite reprocess data-job preview",
+        "description": "Creates a durable governed mutation preview only. Source ranges and destination identity are frozen during planning; omitted limits never mean unlimited.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataJobPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing idempotent governed preview"
+          },
+          "201": {
+            "description": "Governed preview created"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/dlq-forward/preview": {
+      "post": {
+        "operationId": "v07-data-job-dlq-forward-preview",
+        "summary": "Create a governed finite dlq-forward data-job preview",
+        "description": "Creates a durable governed mutation preview only. Source ranges and destination identity are frozen during planning; omitted limits never mean unlimited.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataJobPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing idempotent governed preview"
+          },
+          "201": {
+            "description": "Governed preview created"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/{operationId}/start": {
+      "post": {
+        "operationId": "v07-data-job-start",
+        "summary": "Start an approved governed data job",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activation result"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/{operationId}": {
+      "get": {
+        "operationId": "v07-data-job-status",
+        "summary": "Read governed data-job state and durable checkpoint evidence",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Data-job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataJobStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Data job not found"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/{operationId}/cancel": {
+      "post": {
+        "operationId": "v07-data-job-cancel",
+        "summary": "Fence workers and stop future effects for a data job",
+        "description": "Cancellation never clears an unresolved destination-write batch. A job with ambiguous external effect remains reconciliation-bound.",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled/fenced data-job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataJobStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/{operationId}/reconcile": {
+      "post": {
+        "operationId": "v07-data-job-reconcile",
+        "summary": "Reconcile a specific unresolved data-job batch",
+        "description": "Only explicit proven-non-application disposition is admitted in W57; no assume-success or blind-replay path exists.",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataJobReconcileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reconciled/fenced data-job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataJobStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Requested transform/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2607,6 +2966,381 @@ public static class KafdeckV07OpenApi
             "type": "integer",
             "minimum": 0,
             "maximum": 16777216
+          }
+        }
+      },
+      "DataJobRangeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceTopic",
+          "sourcePartition",
+          "destinationTopic",
+          "destinationPartition",
+          "startInclusive",
+          "endExclusive"
+        ],
+        "properties": {
+          "sourceTopic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 249
+          },
+          "sourcePartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "destinationTopic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 249
+          },
+          "destinationPartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "startInclusive": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endExclusive": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "DataJobBudgetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxBatchRecords": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "maxBatchBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 4194304
+          },
+          "maxTotalRecords": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "maxTotalBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1073741824
+          },
+          "maxDurationSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "maxRecordsPerSecond": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "maxBytesPerSecond": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10485760
+          }
+        }
+      },
+      "DataJobTransformRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "BytePreserving",
+              "MaskedStructuredProjection"
+            ]
+          },
+          "serdeFormat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "json",
+              "cbor",
+              "xml",
+              "messagepack",
+              null
+            ]
+          },
+          "projectedFields": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      },
+      "DataJobPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceClusterId",
+          "sourceProfileVersion",
+          "destinationClusterId",
+          "destinationProfileVersion",
+          "ranges"
+        ],
+        "properties": {
+          "sourceClusterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "sourceProfileVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "destinationClusterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "destinationProfileVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "ranges": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 48,
+            "items": {
+              "$ref": "#/components/schemas/DataJobRangeRequest"
+            }
+          },
+          "budget": {
+            "$ref": "#/components/schemas/DataJobBudgetRequest"
+          },
+          "transform": {
+            "$ref": "#/components/schemas/DataJobTransformRequest"
+          }
+        }
+      },
+      "DataJobReconcileRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchId",
+          "disposition"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "provenNonApplication"
+            ]
+          }
+        }
+      },
+      "DataJobRangeStatus": {
+        "type": "object",
+        "required": [
+          "rangeIndex",
+          "sourceTopic",
+          "sourcePartition",
+          "destinationTopic",
+          "destinationPartition",
+          "startInclusive",
+          "endExclusive"
+        ],
+        "properties": {
+          "rangeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 47
+          },
+          "sourceTopic": {
+            "type": "string"
+          },
+          "sourcePartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "destinationTopic": {
+            "type": "string"
+          },
+          "destinationPartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "startInclusive": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endExclusive": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nextSourceOffset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "DataJobPendingBatchStatus": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rangeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 47
+          },
+          "sourceOffset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "destinationPartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rawBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string"
+          },
+          "reservedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatchStartedAtUtc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "DataJobStatus": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "kind",
+          "mutationState",
+          "planFingerprint",
+          "sourceClusterId",
+          "destinationClusterId",
+          "progressPhase",
+          "workerGeneration",
+          "acknowledgedRecords",
+          "acknowledgedBytes",
+          "activeRuntimeMilliseconds",
+          "ranges"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "mutationState": {
+            "type": "string"
+          },
+          "resultCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "planFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sourceClusterId": {
+            "type": "string"
+          },
+          "destinationClusterId": {
+            "type": "string"
+          },
+          "progressPhase": {
+            "type": "string"
+          },
+          "workerGeneration": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "acknowledgedRecords": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "acknowledgedBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeRuntimeMilliseconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ranges": {
+            "type": "array",
+            "maxItems": 48,
+            "items": {
+              "$ref": "#/components/schemas/DataJobRangeStatus"
+            }
+          },
+          "pendingBatch": {
+            "$ref": "#/components/schemas/DataJobPendingBatchStatus"
           }
         }
       }

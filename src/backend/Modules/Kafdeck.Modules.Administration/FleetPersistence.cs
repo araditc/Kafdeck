@@ -81,6 +81,14 @@ public interface IFleetMutationStateStore
         Guid operationId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<FleetOperationProgressSnapshot>>
+        ListActiveDataJobProgressAsync(
+            int limit,
+            CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<FleetOperationProgressSnapshot>>(
+            new NotSupportedException(
+                "Active data-job progress discovery is not implemented by this store."));
+
     Task<FleetProgressSaveResult> TrySaveProgressAsync(
         FleetOperationProgressSnapshot progress,
         long expectedVersion,
@@ -97,6 +105,15 @@ public interface IFleetMutationStateStore
     Task<FleetConflictObligationSnapshot?> GetConflictObligationAsync(
         Guid obligationId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<FleetConflictObligationSnapshot>>
+        ListConflictObligationsByOperationAsync(
+            Guid operationId,
+            CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<FleetConflictObligationSnapshot>>(
+            new NotSupportedException(
+                "Conflict-obligation listing is not implemented by this store."));
+
 
     Task<FleetConflictObligationSnapshot?> FindBlockingConflictObligationAsync(
         string conflictKey,
