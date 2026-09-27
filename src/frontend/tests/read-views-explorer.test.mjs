@@ -81,3 +81,21 @@ test('v0.7 W55 Connect auto-restart UI remains governed and bounded', () => {
   assert.match(source, /autoRestartOperation\.state !== 'ready'/);
   assert.doesNotMatch(source, /fetch\([^\n]*restart/i);
 });
+
+
+test('v0.7 W55 policy lookup cannot break read-only Connect detail when mutation mode is absent', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+  const start = source.indexOf('const openConnector = async');
+  const end = source.indexOf('const previewAutoRestart = async', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const openConnector = source.slice(start, end);
+  assert.match(openConnector, /getConnectProfileConnector/);
+  assert.match(openConnector, /getConnectAutoRestartPolicy/);
+  assert.match(openConnector, /reason instanceof MutationApiProblem && reason\.status === 404/);
+  assert.doesNotMatch(openConnector, /Promise\.all/);
+});
