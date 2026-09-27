@@ -342,13 +342,13 @@ public sealed class ApiTelemetry : IDisposable
         StringBuilder builder,
         ApiTelemetrySeriesSnapshot item)
     {
-        builder.Append("{route="")
+        builder.Append("{route=\"")
             .Append(EscapeLabel(item.Route))
-            .Append("",method="")
+            .Append("\",method=\"")
             .Append(EscapeLabel(item.Method))
-            .Append("",status_class="")
+            .Append("\",status_class=\"")
             .Append(EscapeLabel(item.StatusClass))
-            .Append(""}");
+            .Append("\"}");
     }
 
     private static string EscapeLabel(
@@ -359,8 +359,8 @@ public sealed class ApiTelemetry : IDisposable
                 "\\\\",
                 StringComparison.Ordinal)
             .Replace(
-                """,
-                "\\"",
+                "\"",
+                "\\\"",
                 StringComparison.Ordinal)
             .Replace(
                 "\n",
