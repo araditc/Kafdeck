@@ -9,6 +9,13 @@ namespace Kafdeck.Infrastructure.Ecosystem;
 public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 {
     private const int MaxConnectorNameLength = 512;
+    private const int MaxConnectorClassLength = 1024;
+    private const int MaxPluginTextLength = 512;
+    private const int MaxValidationConfigurationItems = 256;
+    private const int MaxValidationConfigurationKeyLength = 512;
+    private const int MaxValidationConfigurationValueBytes = 64 * 1024;
+    private const int MaxValidationRequestBytes = 1024 * 1024;
+    private const int MaxValidationMessagesPerField = 32;
     private const int MaxTraceCharacters = 8_192;
     private const int DefaultMaxConcurrencyPerProfile = 4;
     private readonly IReadOnlyDictionary<ConnectRuntimeKey, HttpReadRuntime> _runtimes;
@@ -150,6 +157,107 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         return Task.FromResult(
             ReadViewResult<IReadOnlyList<ConnectProfileSummary>>
                 .Success(profiles));
+    }
+
+    public Task<ReadViewResult<IReadOnlyList<ConnectPluginSummary>>> ListPluginsAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync<IReadOnlyList<ConnectPluginSummary>>(
+            clusterId,
+            connectProfileId,
+            operation,
+            cancellationToken,
+            async (runtime, token) =>
+            {
+                var root = await ReadOnlyHttpSupport.GetJsonAsync(
+                        runtime,
+                        "connector-plugins",
+                        operation.MaxResponseBytes,
+                        token)
+                    .ConfigureAwait(false);
+
+                if (root.ValueKind != JsonValueKind.Array)
+                {
+                    throw new JsonException(
+                        "Kafka Connect plugin list must be an array.");
+                }
+
+                var plugins = new List<ConnectPluginSummary>();
+                foreach (var item in root.EnumerateArray())
+                {
+                    if (plugins.Count >= operation.MaxItems)
+                    {
+                        throw new ResponseBoundExceededException();
+                    }
+
+                    if (item.ValueKind != JsonValueKind.Object)
+                    {
+                        throw new JsonException(
+                            "Kafka Connect plugin entry is invalid.");
+                    }
+
+                    var className = GetRequiredBoundedString(
+                        item,
+                        "class",
+                        MaxConnectorClassLength);
+                    var type = GetRequiredBoundedString(
+                        item,
+                        "type",
+                        MaxPluginTextLength);
+                    var version = GetOptionalBoundedString(
+                        item,
+                        "version",
+                        MaxPluginTextLength);
+
+                    plugins.Add(
+                        new ConnectPluginSummary(
+                            className,
+                            type,
+                            version));
+                }
+
+                return plugins
+                    .OrderBy(plugin => plugin.Class, StringComparer.Ordinal)
+                    .ToArray();
+            });
+
+    public Task<ReadViewResult<ConnectPluginValidationResult>> ValidateConfigurationAsync(
+        string clusterId,
+        string connectProfileId,
+        string connectorClass,
+        IReadOnlyDictionary<string, string> configuration,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken)
+    {
+        string normalizedClass;
+        IReadOnlyDictionary<string, string> normalizedConfiguration;
+        try
+        {
+            normalizedClass = NormalizeConnectorClass(connectorClass);
+            normalizedConfiguration = NormalizeValidationConfiguration(
+                configuration);
+        }
+        catch (ArgumentException)
+        {
+            return Task.FromResult(
+                Invalid<ConnectPluginValidationResult>(
+                    "invalid_connect_plugin_validation_request",
+                    "Kafka Connect plugin validation request is invalid."));
+        }
+
+        return ExecuteAsync(
+            clusterId,
+            connectProfileId,
+            operation,
+            cancellationToken,
+            (runtime, token) => ValidatePluginConfigurationAsync(
+                runtime,
+                normalizedClass,
+                normalizedConfiguration,
+                operation,
+                token));
     }
 
     public Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
@@ -524,6 +632,385 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 gate.Release();
             }
         }
+    }
+
+    private static async Task<ConnectPluginValidationResult>
+        ValidatePluginConfigurationAsync(
+            HttpReadRuntime runtime,
+            string connectorClass,
+            IReadOnlyDictionary<string, string> configuration,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken)
+    {
+        var body = JsonSerializer.SerializeToUtf8Bytes(configuration);
+        if (body.Length > MaxValidationRequestBytes)
+        {
+            throw new ResponseBoundExceededException();
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"connector-plugins/{Uri.EscapeDataString(connectorClass)}/config/validate");
+        request.Headers.Accept.ParseAdd("application/json");
+        if (runtime.Authorization is not null)
+        {
+            request.Headers.Authorization = runtime.Authorization;
+        }
+
+        request.Content = new ByteArrayContent(body);
+        request.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+        using var response = await runtime.Client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((int)response.StatusCode is >= 300 and < 400)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.InvalidResponse,
+                "connect_plugin_validation_redirect_rejected",
+                "Kafka Connect plugin validation redirect was rejected.",
+                false);
+        }
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.Unsupported,
+                "connect_plugin_validation_unsupported",
+                "Kafka Connect plugin validation is unsupported for the requested plugin.",
+                false);
+        }
+
+        if (response.StatusCode is
+            System.Net.HttpStatusCode.Unauthorized or
+            System.Net.HttpStatusCode.Forbidden)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.Unauthorized,
+                "connect_plugin_validation_authorization_denied",
+                "Kafka Connect denied plugin validation.",
+                false);
+        }
+
+        if ((int)response.StatusCode >= 500)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.Unavailable,
+                "connect_plugin_validation_unavailable",
+                "Kafka Connect plugin validation is temporarily unavailable.",
+                true);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.InvalidResponse,
+                "connect_plugin_validation_rejected",
+                "Kafka Connect rejected the plugin validation request.",
+                false);
+        }
+
+        var bytes = await ReadBoundedContentAsync(
+                response.Content,
+                operation.MaxResponseBytes,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        using var document = JsonDocument.Parse(bytes);
+        return ProjectPluginValidation(
+            connectorClass,
+            document.RootElement,
+            operation.MaxItems);
+    }
+
+    internal static ConnectPluginValidationResult ProjectPluginValidation(
+        string connectorClass,
+        JsonElement root,
+        int maxItems)
+    {
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("error_count", out var errorCountElement) ||
+            !errorCountElement.TryGetInt32(out var errorCount) ||
+            errorCount < 0 ||
+            !root.TryGetProperty("configs", out var configs) ||
+            configs.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException(
+                "Kafka Connect plugin validation response is invalid.");
+        }
+
+        var fields = new List<ConnectPluginValidationField>();
+        foreach (var config in configs.EnumerateArray())
+        {
+            if (fields.Count >= maxItems)
+            {
+                throw new ResponseBoundExceededException();
+            }
+
+            if (config.ValueKind != JsonValueKind.Object ||
+                !config.TryGetProperty("definition", out var definition) ||
+                definition.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException(
+                    "Kafka Connect plugin validation field is invalid.");
+            }
+
+            var name = GetRequiredBoundedString(
+                definition,
+                "name",
+                MaxValidationConfigurationKeyLength);
+            var type = GetRequiredBoundedString(
+                definition,
+                "type",
+                MaxPluginTextLength);
+            var required = definition.TryGetProperty(
+                    "required",
+                    out var requiredElement) &&
+                requiredElement.ValueKind == JsonValueKind.True;
+
+            var errors = Array.Empty<string>();
+            var recommended = Array.Empty<string>();
+            if (config.TryGetProperty("value", out var value) &&
+                value.ValueKind == JsonValueKind.Object)
+            {
+                errors = ReadBoundedStringArray(
+                    value,
+                    "errors",
+                    MaxValidationMessagesPerField,
+                    MaxPluginTextLength);
+                recommended = ReadBoundedStringArray(
+                    value,
+                    "recommended_values",
+                    MaxValidationMessagesPerField,
+                    MaxPluginTextLength);
+            }
+
+            fields.Add(
+                new ConnectPluginValidationField(
+                    name,
+                    type,
+                    required,
+                    errors,
+                    recommended));
+        }
+
+        return new ConnectPluginValidationResult(
+            connectorClass,
+            errorCount,
+            fields);
+    }
+
+    private static IReadOnlyDictionary<string, string>
+        NormalizeValidationConfiguration(
+            IReadOnlyDictionary<string, string> configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        if (configuration.Count is < 1 or > MaxValidationConfigurationItems)
+        {
+            throw new ArgumentOutOfRangeException(nameof(configuration));
+        }
+
+        long totalBytes = 0;
+        var normalized = new SortedDictionary<string, string>(
+            StringComparer.Ordinal);
+
+        foreach (var pair in configuration)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+            {
+                throw new ArgumentException(
+                    "Kafka Connect configuration key is invalid.",
+                    nameof(configuration));
+            }
+
+            var key = pair.Key.Trim();
+            if (!string.Equals(key, pair.Key, StringComparison.Ordinal) ||
+                key.Length > MaxValidationConfigurationKeyLength ||
+                key.Any(char.IsControl))
+            {
+                throw new ArgumentException(
+                    "Kafka Connect configuration key is invalid.",
+                    nameof(configuration));
+            }
+
+            ArgumentNullException.ThrowIfNull(pair.Value);
+            var valueBytes = Encoding.UTF8.GetByteCount(pair.Value);
+            if (valueBytes > MaxValidationConfigurationValueBytes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(configuration));
+            }
+
+            totalBytes = checked(
+                totalBytes +
+                Encoding.UTF8.GetByteCount(key) +
+                valueBytes);
+            if (totalBytes > MaxValidationRequestBytes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(configuration));
+            }
+
+            normalized.Add(key, pair.Value);
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeConnectorClass(string connectorClass)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectorClass);
+        var normalized = connectorClass.Trim();
+        if (!string.Equals(
+                normalized,
+                connectorClass,
+                StringComparison.Ordinal) ||
+            normalized.Length > MaxConnectorClassLength ||
+            normalized.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "Kafka Connect connector class is invalid.",
+                nameof(connectorClass));
+        }
+
+        return normalized;
+    }
+
+    private static string GetRequiredBoundedString(
+        JsonElement root,
+        string propertyName,
+        int maxLength)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.String)
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        var text = value.GetString();
+        if (string.IsNullOrWhiteSpace(text) ||
+            text.Length > maxLength ||
+            text.Any(char.IsControl))
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        return text;
+    }
+
+    private static string? GetOptionalBoundedString(
+        JsonElement root,
+        string propertyName,
+        int maxLength)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        var text = value.GetString();
+        if (text is null ||
+            text.Length > maxLength ||
+            text.Any(char.IsControl))
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        return text;
+    }
+
+    private static string[] ReadBoundedStringArray(
+        JsonElement root,
+        string propertyName,
+        int maxItems,
+        int maxLength)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return Array.Empty<string>();
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException(
+                "Kafka Connect validation list is invalid.");
+        }
+
+        var result = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (result.Count >= maxItems ||
+                item.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException(
+                    "Kafka Connect validation list exceeded its bound.");
+            }
+
+            var text = item.GetString();
+            if (text is null ||
+                text.Length > maxLength ||
+                text.Any(char.IsControl))
+            {
+                throw new JsonException(
+                    "Kafka Connect validation list item is invalid.");
+            }
+
+            result.Add(text);
+        }
+
+        return result.ToArray();
+    }
+
+    private static async Task<byte[]> ReadBoundedContentAsync(
+        HttpContent content,
+        long maxBytes,
+        CancellationToken cancellationToken)
+    {
+        if (content.Headers.ContentLength is long declared &&
+            declared > maxBytes)
+        {
+            throw new ResponseBoundExceededException();
+        }
+
+        await using var stream = await content.ReadAsStreamAsync(
+                cancellationToken)
+            .ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[16 * 1024];
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(
+                    chunk.AsMemory(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > maxBytes)
+            {
+                throw new ResponseBoundExceededException();
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.ToArray();
     }
 
     private static string? NormalizeProfileId(string? profileId)
