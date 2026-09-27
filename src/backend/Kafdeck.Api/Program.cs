@@ -386,10 +386,10 @@ if (deploymentAccessToken is not null)
 if (prometheusScrapeToken is not null)
 {
     app.UseWhen(
-        context => string.Equals(
-            context.Request.Path.Value,
-            PrometheusObservabilityOptions.Path,
-            StringComparison.Ordinal),
+        context =>
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    context.Request.Path),
         branch => branch.UseMiddleware<PrometheusScrapeTokenMiddleware>(
             prometheusScrapeToken));
 }
