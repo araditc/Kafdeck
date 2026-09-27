@@ -8,6 +8,10 @@ import {
   type ConnectPluginSummary,
   type ConnectPluginValidationResult,
   type ConnectProfileSummary,
+  type ControlledSerdeCapabilitiesData,
+  type ControlledSerdeDecodedValue,
+  type ControlledSerdeEncodedData,
+  type ControlledSerdeFormat,
   type ConsumerDiagnostics,
   type ConsumerGroupDetail,
   type ConsumerGroupSummary,
@@ -81,6 +85,15 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [mockCount, setMockCount] = useState(1);
   const [mockSeed, setMockSeed] = useState(0);
 
+  const [serdeCapabilities, setSerdeCapabilities] = useState<ControlledSerdeCapabilitiesData | null>(null);
+  const [serdeFormat, setSerdeFormat] = useState<ControlledSerdeFormat>('cbor');
+  const [serdePayloadBase64, setSerdePayloadBase64] = useState('');
+  const [serdeStructuredJson, setSerdeStructuredJson] = useState('');
+  const [serdeDecoded, setSerdeDecoded] = useState<ControlledSerdeDecodedValue | null>(null);
+  const [serdeEncoded, setSerdeEncoded] = useState<ControlledSerdeEncodedData | null>(null);
+  const [serdeError, setSerdeError] = useState<string | null>(null);
+  const [serdeBusy, setSerdeBusy] = useState(false);
+
   const [connectProfiles, setConnectProfiles] = useState<ReadViewEnvelope<ConnectProfileSummary[]> | null>(null);
   const [selectedConnectProfileId, setSelectedConnectProfileId] = useState<string | null>(null);
   const [connectInfo, setConnectInfo] = useState<ReadViewEnvelope<ConnectClusterInfo> | null>(null);
@@ -104,6 +117,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     const controller = new AbortController();
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
+    setSerdeCapabilities(null); setSerdeFormat('cbor'); setSerdePayloadBase64(''); setSerdeStructuredJson(''); setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null); setSerdeBusy(false);
     setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null); setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null); setAutoRestartBusy(false);
     setKsqlInfo(null); setKsqlError(null);
 
@@ -114,6 +128,10 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     void kafdeckApi.listSchemaSubjects(clusterId, controller.signal)
       .then(setSubjects)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setSchemaError(readViewError(reason)); });
+
+    void kafdeckApi.getControlledSerdeCapabilities(controller.signal)
+      .then(setSerdeCapabilities)
+      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setSerdeError(readViewError(reason)); });
 
     void kafdeckApi.listConnectProfiles(clusterId, controller.signal)
       .then(async profileResult => {
@@ -205,6 +223,33 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       setSchemaMock(await kafdeckApi.generateSchemaMock(clusterId, selectedSubject, rightVersion, count, seed));
     } catch (reason) {
       setSchemaError(readViewError(reason));
+    }
+  };
+
+  const decodeSerde = async () => {
+    if (!serdePayloadBase64.trim()) return;
+    setSerdeBusy(true); setSerdeError(null); setSerdeDecoded(null); setSerdeEncoded(null);
+    try {
+      setSerdeDecoded(await kafdeckApi.decodeControlledSerde(serdeFormat, serdePayloadBase64.trim()));
+    } catch (reason) {
+      setSerdeError(readViewError(reason));
+    } finally {
+      setSerdePayloadBase64('');
+      setSerdeBusy(false);
+    }
+  };
+
+  const encodeSerde = async () => {
+    if (!serdeStructuredJson.trim()) return;
+    setSerdeBusy(true); setSerdeError(null); setSerdeDecoded(null); setSerdeEncoded(null);
+    try {
+      const structuredValue = JSON.parse(serdeStructuredJson) as unknown;
+      setSerdeEncoded(await kafdeckApi.encodeControlledSerde(serdeFormat, structuredValue));
+    } catch (reason) {
+      setSerdeError(readViewError(reason));
+    } finally {
+      setSerdeStructuredJson('');
+      setSerdeBusy(false);
     }
   };
 
@@ -464,6 +509,48 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
           {schemaMock.data.examples.map(example => <pre key={example.index} aria-label={`Generated schema example ${example.index + 1}`}><code>{example.json}</code></pre>)}
         </div>}
       </article>}
+    </section>
+
+    <section className="card kafdeck-card" id="serde" aria-labelledby="serde-title">
+      <h2 id="serde-title">Controlled SerDe tooling</h2>
+      <p>Local bounded tooling for CBOR, XML and MessagePack. No provider proxy, runtime plugin loading, file/network resolution or durable payload storage is used.</p>
+      {serdeError && <p role="alert">{serdeError}</p>}
+      {!serdeCapabilities && !serdeError && <p role="status">Loading controlled SerDe capabilities…</p>}
+      {serdeCapabilities && <>
+        <p>Server bounds: input {serdeCapabilities.limits.maxInputBytes} bytes · output {serdeCapabilities.limits.maxOutputBytes} bytes · depth {serdeCapabilities.limits.maxDepth} · nodes {serdeCapabilities.limits.maxNodes}.</p>
+        <table><thead><tr><th>Format</th><th>Decode</th><th>Encode</th><th>Limitations</th></tr></thead><tbody>
+          {serdeCapabilities.formats.map(capability => <tr key={capability.format}>
+            <th scope="row">{capability.format}</th>
+            <td>{capability.decodeSupported ? 'Supported' : 'Unsupported'}</td>
+            <td>{capability.encodeSupported ? 'Supported' : 'Unsupported'}</td>
+            <td>{capability.limitations.join('; ')}</td>
+          </tr>)}
+        </tbody></table>
+        <label htmlFor="serde-format">Format</label>{' '}
+        <select id="serde-format" value={serdeFormat} onChange={event => {
+          setSerdeFormat(event.target.value as ControlledSerdeFormat);
+          setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null);
+          setSerdePayloadBase64(''); setSerdeStructuredJson('');
+        }}>
+          {serdeCapabilities.formats.map(capability => <option key={capability.format} value={capability.format}>{capability.format}</option>)}
+        </select>
+
+        <div>
+          <h3>Decode</h3>
+          <label htmlFor="serde-payload-base64">Base64 payload</label>
+          <textarea id="serde-payload-base64" rows={4} value={serdePayloadBase64} onChange={event => setSerdePayloadBase64(event.target.value)} autoComplete="off" />
+          <button type="button" disabled={serdeBusy || serdePayloadBase64.trim().length === 0} onClick={() => void decodeSerde()}>Decode locally</button>
+        </div>
+
+        <div>
+          <h3>Encode</h3>
+          <label htmlFor="serde-structured-json">Structured JSON</label>
+          <textarea id="serde-structured-json" rows={6} value={serdeStructuredJson} onChange={event => setSerdeStructuredJson(event.target.value)} autoComplete="off" />
+          <button type="button" disabled={serdeBusy || serdeStructuredJson.trim().length === 0} onClick={() => void encodeSerde()}>Encode locally</button>
+        </div>
+      </>}
+      {serdeDecoded && <article aria-labelledby="serde-decoded-title"><h3 id="serde-decoded-title">Decoded value</h3><pre><code>{JSON.stringify(serdeDecoded.structuredValue, null, 2)}</code></pre></article>}
+      {serdeEncoded && <article aria-labelledby="serde-encoded-title"><h3 id="serde-encoded-title">Encoded payload</h3><p>{serdeEncoded.byteCount} bytes</p><pre><code>{serdeEncoded.payloadBase64}</code></pre></article>}
     </section>
 
     <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">
