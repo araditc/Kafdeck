@@ -398,7 +398,7 @@ public sealed class RecordLiveTailService
     public IAsyncEnumerable<RecordTailFrame> TailAsync(
         RecordTailRequest request,
         bool requireDecodedValue,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default) =>
         TailAsync(
             request,
             requireDecodedValue,
