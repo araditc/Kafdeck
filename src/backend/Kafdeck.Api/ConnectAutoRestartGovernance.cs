@@ -89,7 +89,7 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
             _authorization.EvaluateCanonicalDirectSubject(
                 activation.AutomationPrincipalId,
                 new AuthorizationRequest(
-                    AuthorizationAction.ConnectAlter,
+                    AuthorizationAction.ConnectRestart,
                     activation.Target.ClusterId,
                     activation.Target.AuthorizationResource));
 
