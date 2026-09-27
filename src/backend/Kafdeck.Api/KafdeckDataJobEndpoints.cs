@@ -1,3 +1,4 @@
+using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Records;
 
@@ -147,6 +148,109 @@ public static class KafdeckDataJobEndpoints
                             progress));
                 })
             .WithName("v07-data-job-status");
+
+        app.MapPost(
+                "/api/v1/data-jobs/{operationId:guid}/cancel",
+                async (
+                    Guid operationId,
+                    HttpContext context,
+                    IMutationOperationRepository repository,
+                    MutationRequestAuthorizationService authorization,
+                    GovernedDataJobStateCoordinator state,
+                    CancellationToken cancellationToken) =>
+                {
+                    var access =
+                        await GetAuthorizedDataJobAsync(
+                                operationId,
+                                context,
+                                repository,
+                                authorization,
+                                requireReconcilePermission: false,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                    if (access.Error is not null)
+                    {
+                        return access.Error;
+                    }
+
+                    var result =
+                        await state.CancelAndFenceAsync(
+                                operationId,
+                                access.Plan!,
+                                DateTimeOffset.UtcNow,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                    return MapStateResult(
+                        access.Operation!,
+                        access.Plan!,
+                        result,
+                        "cancel");
+                })
+            .WithName("v07-data-job-cancel")
+            .RequireKafdeckAntiforgery();
+
+        app.MapPost(
+                "/api/v1/data-jobs/{operationId:guid}/reconcile",
+                async (
+                    Guid operationId,
+                    DataJobReconcileRequest request,
+                    HttpContext context,
+                    IMutationOperationRepository repository,
+                    MutationRequestAuthorizationService authorization,
+                    GovernedDataJobStateCoordinator state,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (request.BatchId == Guid.Empty ||
+                        !string.Equals(
+                            request.Disposition,
+                            "provenNonApplication",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Results.Problem(
+                            statusCode:
+                                StatusCodes.Status400BadRequest,
+                            type:
+                                "urn:kafdeck:problem:data-job-reconcile-request-invalid",
+                            title:
+                                "Data-job reconciliation request is invalid",
+                            detail:
+                                "Only an exact batchId with disposition 'provenNonApplication' is admitted.");
+                    }
+
+                    var access =
+                        await GetAuthorizedDataJobAsync(
+                                operationId,
+                                context,
+                                repository,
+                                authorization,
+                                requireReconcilePermission: true,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                    if (access.Error is not null)
+                    {
+                        return access.Error;
+                    }
+
+                    var result =
+                        await state.ReconcileProvenNonApplicationAsync(
+                                operationId,
+                                access.Plan!,
+                                request.BatchId,
+                                DateTimeOffset.UtcNow,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                    return MapStateResult(
+                        access.Operation!,
+                        access.Plan!,
+                        result,
+                        "reconcile");
+                })
+            .WithName("v07-data-job-reconcile")
+            .RequireKafdeckAntiforgery();
 
         return app;
     }
@@ -674,6 +778,10 @@ public sealed record DataJobStatusData(
             pendingData);
     }
 }
+
+public sealed record DataJobReconcileRequest(
+    Guid BatchId,
+    string Disposition);
 
 public sealed record DataJobTransformRequest(
     string Kind,
