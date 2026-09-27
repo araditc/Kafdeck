@@ -8,6 +8,8 @@ import {
 } from './mutationApi.js';
 import { mutationExecutionSurface } from './mutationExecutionSurface.js';
 import { MutationPreviewWorkflows } from './MutationPreviewWorkflows.js';
+import { StatusBadge } from '../../app/StatusBadge.js';
+import { mutationStateStatusKind } from '../../app/statusPresentation.js';
 
 const preDispatchStates = new Set([
   'previewed',
@@ -58,14 +60,14 @@ function MutationSummary({ operation }: { operation: MutationStatus }) {
       <dt>Operation ID</dt><dd><code>{operation.operationId}</code></dd>
       <dt>Cluster</dt><dd>{operation.clusterId}</dd>
       <dt>Risk</dt><dd>{operation.riskClass}</dd>
-      <dt>State</dt><dd>{operation.state}</dd>
+      <dt>State</dt><dd><StatusBadge kind={mutationStateStatusKind(operation.state)} label={operation.state} /></dd>
       <dt>Execution material</dt><dd>{operation.requiresExecutionMaterial ? 'Re-submission required' : 'No re-submission required'}</dd>
       <dt>Preview expires</dt><dd>{new Date(operation.previewExpiresAtUtc).toLocaleString()}</dd>
       <dt>Independent approval</dt><dd>{operation.requiresIndependentApproval ? 'Required' : 'Not required'}</dd>
       {operation.resultCode && <><dt>Result code</dt><dd>{operation.resultCode}</dd></>}
     </dl>
     {operation.riskClass === 'critical' && <p role="alert"><strong>Critical mutation.</strong> Independent approval by a distinct eligible operator is mandatory.</p>}
-    {warning && <p role="alert"><strong>Outcome guidance:</strong> {warning}</p>}
+    {warning && <p role="alert"><StatusBadge kind={mutationStateStatusKind(operation.state)} />{' '}<strong>Outcome guidance:</strong> {warning}</p>}
     {evidence.length > 0 && <details><summary>Safe provider evidence</summary><dl>{evidence.map(([key, value]) => <span key={key}><dt>{key}</dt><dd>{value}</dd></span>)}</dl></details>}
   </article>;
 }
