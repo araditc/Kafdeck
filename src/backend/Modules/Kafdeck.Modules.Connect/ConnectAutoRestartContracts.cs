@@ -417,12 +417,39 @@ public sealed record ConnectAutoRestartActivation(
         };
     }
 
+    public ConnectAutoRestartActivation MarkRecovered(
+        string reason = "auto_restart_target_recovered") =>
+        this with
+        {
+            ConsecutiveFailures = 0,
+            CircuitState =
+                ConnectAutoRestartCircuitState.Recovered,
+            HasUnresolvedDispatch = false,
+            UnresolvedDispatchId = null,
+            TerminalReason = RequireReason(reason),
+            Version = checked(Version + 1),
+        };
+
+    public ConnectAutoRestartActivation Exhaust(
+        string reason) =>
+        this with
+        {
+            CircuitState =
+                ConnectAutoRestartCircuitState.Exhausted,
+            HasUnresolvedDispatch = false,
+            UnresolvedDispatchId = null,
+            TerminalReason = RequireReason(reason),
+            Version = checked(Version + 1),
+        };
+
     public ConnectAutoRestartActivation Block(
         string reason) =>
         this with
         {
             CircuitState =
                 ConnectAutoRestartCircuitState.Blocked,
+            HasUnresolvedDispatch = false,
+            UnresolvedDispatchId = null,
             TerminalReason = RequireReason(reason),
             Version = checked(Version + 1),
         };
@@ -646,6 +673,7 @@ public interface IConnectAutoRestartStateStore
         ConnectAutoRestartActivation activation,
         long expectedVersion,
         ConnectAutoRestartLease lease,
+        DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
     Task<ConnectAutoRestartLease?> TryAcquireLeaseAsync(
