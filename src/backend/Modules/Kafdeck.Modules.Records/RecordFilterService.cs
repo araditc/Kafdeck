@@ -395,9 +395,20 @@ public sealed class RecordLiveTailService
         CancellationToken cancellationToken = default) =>
         TailAsync(request, requireDecodedValue: false, cancellationToken);
 
+    public IAsyncEnumerable<RecordTailFrame> TailAsync(
+        RecordTailRequest request,
+        bool requireDecodedValue,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default) =>
+        TailAsync(
+            request,
+            requireDecodedValue,
+            controlledSerdeFormat: null,
+            cancellationToken);
+
     public async IAsyncEnumerable<RecordTailFrame> TailAsync(
         RecordTailRequest request,
         bool requireDecodedValue,
+        ControlledSerdeFormat? controlledSerdeFormat,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -484,6 +495,7 @@ public sealed class RecordLiveTailService
                         plan,
                         operation,
                         requireDecodedValue,
+                        controlledSerdeFormat,
                         cancellationToken)
                     .ConfigureAwait(false);
 
