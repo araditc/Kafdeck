@@ -64,6 +64,79 @@ public static class MutationAuthorizationRequirements
         return normalized;
     }
 
+    private static IReadOnlyList<MutationAuthorizationTarget>
+        NormalizeConnectAutoRestartRequirements(
+            string operationClusterId,
+            IReadOnlyList<MutationAuthorizationTarget>? requirements)
+    {
+        if (requirements is not { Count: >= 1 and <= 2 })
+        {
+            throw new ArgumentException(
+                "Connect auto-restart policy mutations require one or two explicit authorization requirements.",
+                nameof(requirements));
+        }
+
+        var normalized = requirements
+            .Select(requirement =>
+            {
+                ArgumentNullException.ThrowIfNull(requirement);
+                if (requirement.Action is not (
+                        Kafdeck.Core.Security.AuthorizationAction.ConnectAutoRestartManage or
+                        Kafdeck.Core.Security.AuthorizationAction.ConnectRead))
+                {
+                    throw new ArgumentException(
+                        "Connect auto-restart policy authorization permits only manage and read actions.",
+                        nameof(requirements));
+                }
+
+                var clusterId = RequireBounded(
+                    requirement.ClusterId,
+                    "Connect auto-restart authorization cluster",
+                    256);
+                if (!string.Equals(
+                        clusterId,
+                        operationClusterId,
+                        StringComparison.Ordinal))
+                {
+                    throw new ArgumentException(
+                        "Connect auto-restart authorization must bind the operation cluster.",
+                        nameof(requirements));
+                }
+
+                return new MutationAuthorizationTarget(
+                    requirement.Action,
+                    clusterId,
+                    RequireBounded(
+                        requirement.ResourceName,
+                        "Connect auto-restart authorization resource",
+                        512));
+            })
+            .Distinct()
+            .OrderBy(item => item.Action)
+            .ToArray();
+
+        if (!normalized.Any(item =>
+                item.Action ==
+                Kafdeck.Core.Security.AuthorizationAction.ConnectAutoRestartManage))
+        {
+            throw new ArgumentException(
+                "Connect auto-restart policy mutation requires manage authorization.",
+                nameof(requirements));
+        }
+
+        if (normalized
+            .Select(item => item.ResourceName)
+            .Distinct(StringComparer.Ordinal)
+            .Count() != 1)
+        {
+            throw new ArgumentException(
+                "Connect auto-restart authorization requirements must bind one exact resource.",
+                nameof(requirements));
+        }
+
+        return Array.AsReadOnly(normalized);
+    }
+
     private static bool RequiresSingleOperationClusterAnchor(
         MutationOperationKind kind) =>
         kind is not (
