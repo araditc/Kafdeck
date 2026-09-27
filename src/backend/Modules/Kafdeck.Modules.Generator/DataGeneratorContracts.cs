@@ -243,29 +243,40 @@ public static class DataGeneratorPolicy
             $"data-generator/{plan.PlanFingerprint}";
 
         var authorization =
-            new[]
+            new List<MutationAuthorizationTarget>
             {
-                new MutationAuthorizationTarget(
+                new(
                     AuthorizationAction.DataGeneratorPlan,
                     destination.ClusterId,
                     generatorResource),
-                new MutationAuthorizationTarget(
+                new(
                     AuthorizationAction.DataGeneratorExecute,
                     destination.ClusterId,
                     generatorResource),
-                new MutationAuthorizationTarget(
+                new(
                     AuthorizationAction.ClusterRead,
                     destination.ClusterId,
                     destination.ClusterId),
-                new MutationAuthorizationTarget(
+                new(
                     AuthorizationAction.TopicRead,
                     destination.ClusterId,
                     destination.TopicName),
-                new MutationAuthorizationTarget(
+                new(
                     AuthorizationAction.RecordProduce,
                     destination.ClusterId,
                     destination.TopicName),
             };
+
+        if (plan.Source.Kind ==
+                DataGeneratorSourceKind.Schema &&
+            plan.Source.Schema is not null)
+        {
+            authorization.Add(
+                new MutationAuthorizationTarget(
+                    AuthorizationAction.SchemaRead,
+                    destination.ClusterId,
+                    plan.Source.Schema.Subject));
+        }
 
         var preconditions =
             new[]
@@ -294,7 +305,12 @@ public static class DataGeneratorPolicy
                 generatorResource,
             },
             preconditions,
-            AuthorizationTargets: authorization);
+            AuthorizationTargets: authorization
+                .Distinct()
+                .OrderBy(item => item.Action)
+                .ThenBy(item => item.ClusterId, StringComparer.Ordinal)
+                .ThenBy(item => item.ResourceName, StringComparer.Ordinal)
+                .ToArray());
     }
 
     public static MutationRiskDecision ClassifyRisk(
