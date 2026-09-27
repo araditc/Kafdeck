@@ -338,6 +338,16 @@ public sealed class V07W55ConnectAutoRestartControllerTests
                     ? Snapshot
                     : null);
 
+        public Task<ConnectAutoRestartActivation?> GetActiveByTargetAsync(
+            ConnectAutoRestartTarget target,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<ConnectAutoRestartActivation?>(
+                Snapshot.ReleasesActiveClaim
+                    ? null
+                    : Snapshot.Target == target
+                        ? Snapshot
+                        : null);
+
         public Task<bool> TryCreateAsync(
             ConnectAutoRestartActivation activation,
             int aggregateProfileLimit,
