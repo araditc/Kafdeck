@@ -174,6 +174,56 @@ public interface IKsqlMetadataReadPort
         CancellationToken cancellationToken);
 }
 
+public sealed record KsqlQueryLimits(
+    int MaxRows,
+    long MaxBytes,
+    TimeSpan MaxDuration)
+{
+    public const int HardMaxRows = 10_000;
+    public const long HardMaxBytes = 16 * 1024 * 1024;
+    public static readonly TimeSpan HardMaxDuration = TimeSpan.FromMinutes(2);
+
+    public static KsqlQueryLimits Default { get; } =
+        new(
+            MaxRows: 1_000,
+            MaxBytes: 2 * 1024 * 1024,
+            MaxDuration: TimeSpan.FromSeconds(30));
+
+    public KsqlQueryLimits ClampToHardCaps() =>
+        new(
+            Math.Clamp(MaxRows, 1, HardMaxRows),
+            Math.Clamp(MaxBytes, 1, HardMaxBytes),
+            MaxDuration <= TimeSpan.Zero
+                ? TimeSpan.FromSeconds(1)
+                : MaxDuration > HardMaxDuration
+                    ? HardMaxDuration
+                    : MaxDuration);
+}
+
+public sealed record KsqlQueryHeader(
+    string? QueryId,
+    IReadOnlyList<string> ColumnNames,
+    IReadOnlyList<string> ColumnTypes);
+
+public sealed record KsqlQueryRow(
+    IReadOnlyList<System.Text.Json.JsonElement> Columns);
+
+public sealed record KsqlQueryResult(
+    KsqlQueryHeader Header,
+    IReadOnlyList<KsqlQueryRow> Rows,
+    bool Truncated,
+    string? LimitReason,
+    long ResponseBytes);
+
+public interface IKsqlQueryPort
+{
+    Task<ReadViewResult<KsqlQueryResult>> ExecuteQueryAsync(
+        string clusterId,
+        string statement,
+        KsqlQueryLimits limits,
+        CancellationToken cancellationToken);
+}
+
 public interface IMetricsObservationPort
 {
     Task<ReadViewResult<ConsumerRateObservation>> GetConsumerRateAsync(
