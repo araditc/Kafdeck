@@ -197,6 +197,125 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
     }
 
     [Fact]
+    public async Task Lease_renew_and_release_require_exact_active_owner_and_generation()
+    {
+        var store = new FakeFleetStore();
+        var coordinator =
+            new GovernedDataJobStateCoordinator(store);
+        var plan = Plan();
+        var operationId = Guid.NewGuid();
+
+        _ = await coordinator.InitializeAsync(
+            operationId,
+            1,
+            plan,
+            Now);
+
+        var acquired = await coordinator.AcquireLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            Now.AddSeconds(1),
+            TimeSpan.FromSeconds(30));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.Applied,
+            acquired.Outcome);
+
+        var stale = await coordinator.RenewLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            workerGeneration: 2,
+            Now.AddSeconds(2),
+            TimeSpan.FromSeconds(30));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.StaleWorker,
+            stale.Outcome);
+
+        var wrongOwner = await coordinator.ReleaseLeaseAsync(
+            operationId,
+            plan,
+            "worker-b",
+            workerGeneration: 1,
+            Now.AddSeconds(2));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.LeaseUnavailable,
+            wrongOwner.Outcome);
+
+        var renewed = await coordinator.RenewLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            workerGeneration: 1,
+            Now.AddSeconds(2),
+            TimeSpan.FromSeconds(45));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.Applied,
+            renewed.Outcome);
+        Assert.Equal(
+            "worker-a",
+            renewed.Progress!.WorkerLeaseOwner);
+        Assert.Equal(
+            Now.AddSeconds(47),
+            renewed.Progress.WorkerLeaseExpiresAtUtc);
+
+        var released = await coordinator.ReleaseLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            workerGeneration: 1,
+            Now.AddSeconds(3));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.Applied,
+            released.Outcome);
+        Assert.Null(released.Progress!.WorkerLeaseOwner);
+        Assert.Null(released.Progress.WorkerLeaseExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task Expired_lease_cannot_be_renewed_without_reacquisition()
+    {
+        var store = new FakeFleetStore();
+        var coordinator =
+            new GovernedDataJobStateCoordinator(store);
+        var plan = Plan();
+        var operationId = Guid.NewGuid();
+
+        _ = await coordinator.InitializeAsync(
+            operationId,
+            1,
+            plan,
+            Now);
+
+        _ = await coordinator.AcquireLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            Now,
+            TimeSpan.FromSeconds(5));
+
+        var expired = await coordinator.RenewLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            workerGeneration: 1,
+            Now.AddSeconds(6),
+            TimeSpan.FromSeconds(30));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.LeaseUnavailable,
+            expired.Outcome);
+        Assert.Equal(
+            "data_job_lease_expired",
+            expired.Code);
+    }
+
+    [Fact]
     public async Task Fence_advances_generation_without_resetting_counters()
     {
         var store = new FakeFleetStore();
