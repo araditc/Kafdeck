@@ -739,8 +739,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 return ProjectPluginValidation(
                     connectorClass,
                     document.RootElement,
-                    operation.MaxItems,
-                    configuration);
+                    operation.MaxItems);
             }
             finally
             {
@@ -752,8 +751,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
     internal static ConnectPluginValidationResult ProjectPluginValidation(
         string connectorClass,
         JsonElement root,
-        int maxItems,
-        IReadOnlyDictionary<string, string>? submittedConfiguration = null)
+        int maxItems)
     {
         if (root.ValueKind != JsonValueKind.Object ||
             !root.TryGetProperty("error_count", out var errorCountElement) ||
@@ -765,8 +763,6 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             throw new JsonException(
                 "Kafka Connect plugin validation response is invalid.");
         }
-
-        _ = submittedConfiguration;
 
         var fields = new List<ConnectPluginValidationField>();
         foreach (var config in configs.EnumerateArray())
@@ -966,48 +962,6 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         }
 
         return text;
-    }
-
-    private static string[] ReadBoundedStringArray(
-        JsonElement root,
-        string propertyName,
-        int maxItems,
-        int maxLength)
-    {
-        if (!root.TryGetProperty(propertyName, out var value))
-        {
-            return Array.Empty<string>();
-        }
-
-        if (value.ValueKind != JsonValueKind.Array)
-        {
-            throw new JsonException(
-                "Kafka Connect validation list is invalid.");
-        }
-
-        var result = new List<string>();
-        foreach (var item in value.EnumerateArray())
-        {
-            if (result.Count >= maxItems ||
-                item.ValueKind != JsonValueKind.String)
-            {
-                throw new JsonException(
-                    "Kafka Connect validation list exceeded its bound.");
-            }
-
-            var text = item.GetString();
-            if (text is null ||
-                text.Length > maxLength ||
-                text.Any(char.IsControl))
-            {
-                throw new JsonException(
-                    "Kafka Connect validation list item is invalid.");
-            }
-
-            result.Add(text);
-        }
-
-        return result.ToArray();
     }
 
     private static async Task<byte[]> ReadBoundedContentAsync(
