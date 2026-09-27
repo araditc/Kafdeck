@@ -150,16 +150,20 @@ public sealed class V07W56SerdeBenchmarkEvidenceTests
 
     private static string BuildPayload()
     {
-        var values = Enumerable.Range(0, 64)
-            .ToDictionary(
-                index => $"field_{index:D2}",
-                index => (object?)new
+        var values = new SortedDictionary<string, object?>(
+            StringComparer.Ordinal);
+
+        for (var index = 0; index < 64; index++)
+        {
+            values[$"field_{index:D2}"] =
+                new SortedDictionary<string, object?>(
+                    StringComparer.Ordinal)
                 {
-                    index,
-                    active = index % 2 == 0,
-                    label = $"value-{index:D2}",
-                },
-                StringComparer.Ordinal);
+                    ["active"] = index % 2 == 0,
+                    ["index"] = index,
+                    ["label"] = $"value-{index:D2}",
+                };
+        }
 
         return JsonSerializer.Serialize(values);
     }
