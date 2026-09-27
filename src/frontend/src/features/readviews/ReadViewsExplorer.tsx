@@ -24,6 +24,7 @@ import {
 } from '../../shared/api.js';
 import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
 import {
+  MutationApiProblem,
   mutationApi,
   type ConnectAutoRestartPolicyStatus,
   type MutationStatus,
@@ -240,22 +241,35 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     setConnectError(null); setConnectorDetail(null);
     setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null);
     try {
-      const [detail, restartPolicy] = await Promise.all([
-        kafdeckApi.getConnectProfileConnector(
-          clusterId,
-          selectedConnectProfileId,
-          name,
-        ),
-        mutationApi.getConnectAutoRestartPolicy(
-          clusterId,
-          selectedConnectProfileId,
-          name,
-        ),
-      ]);
-      setConnectorDetail(detail);
-      setAutoRestartStatus(restartPolicy);
+      setConnectorDetail(await kafdeckApi.getConnectProfileConnector(
+        clusterId,
+        selectedConnectProfileId,
+        name,
+      ));
     } catch (reason) {
       setConnectError(readViewError(reason));
+      return;
+    }
+
+    try {
+      setAutoRestartStatus(await mutationApi.getConnectAutoRestartPolicy(
+        clusterId,
+        selectedConnectProfileId,
+        name,
+      ));
+    } catch (reason) {
+      if (reason instanceof MutationApiProblem && reason.status === 404) {
+        // Mutation/auto-restart endpoints are intentionally absent when
+        // governed mutation mode is disabled. Read-only Connect remains usable.
+        setAutoRestartStatus(null);
+        return;
+      }
+
+      setAutoRestartError(
+        reason instanceof Error
+          ? reason.message
+          : 'Auto-restart policy status could not be loaded.',
+      );
     }
   };
 
