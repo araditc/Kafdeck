@@ -342,6 +342,7 @@ public static class FleetMutationAuthorization
                 AuthorizationAction.TopicRead,
                 AuthorizationAction.RecordProduce,
             },
+            AuthorizationAction.SchemaRead,
             AuthorizationAction.TopicConfigRead,
             AuthorizationAction.BrokerConfigRead),
 
