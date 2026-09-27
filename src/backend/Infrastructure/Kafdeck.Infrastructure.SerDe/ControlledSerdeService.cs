@@ -171,7 +171,6 @@ public sealed class ControlledSerdeService : IControlledSerdePort
         try
         {
             var budget = new StructureBudget(limits, deadlineUtc, cancellationToken);
-            budget.ValidateJson(request.StructuredValue, depth: 0);
 
             var bytes = request.Format switch
             {
