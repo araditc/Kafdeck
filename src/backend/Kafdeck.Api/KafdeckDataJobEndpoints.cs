@@ -255,6 +255,180 @@ public static class KafdeckDataJobEndpoints
         return app;
     }
 
+    private sealed record DataJobAuthorizedAccess(
+        MutationOperationSnapshot? Operation,
+        GovernedDataJobPlan? Plan,
+        IResult? Error);
+
+    private static async Task<DataJobAuthorizedAccess>
+        GetAuthorizedDataJobAsync(
+            Guid operationId,
+            HttpContext context,
+            IMutationOperationRepository repository,
+            MutationRequestAuthorizationService authorization,
+            bool requireReconcilePermission,
+            CancellationToken cancellationToken)
+    {
+        var operation =
+            await repository.GetAsync(
+                    operationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        if (operation is null ||
+            operation.OperationKind !=
+                MutationOperationKind.DataJob)
+        {
+            return new(
+                null,
+                null,
+                Results.Problem(
+                    statusCode:
+                        StatusCodes.Status404NotFound,
+                    type:
+                        "urn:kafdeck:problem:data-job-not-found",
+                    title:
+                        "Data job not found"));
+        }
+
+        var authorized =
+            authorization.AuthorizeForDispatch(
+                context.User,
+                operation);
+
+        if (authorized ==
+            KafdeckAuthorizationOutcome.Unauthenticated)
+        {
+            return new(
+                null,
+                null,
+                Results.Problem(
+                    statusCode:
+                        StatusCodes.Status401Unauthorized,
+                    type:
+                        "urn:kafdeck:problem:operator-authentication-required",
+                    title:
+                        "Operator authentication required"));
+        }
+
+        if (authorized !=
+            KafdeckAuthorizationOutcome.Allowed)
+        {
+            return new(
+                null,
+                null,
+                Results.Problem(
+                    statusCode:
+                        StatusCodes.Status403Forbidden,
+                    type:
+                        "urn:kafdeck:problem:mutation-authorization-denied",
+                    title:
+                        "Data-job access denied"));
+        }
+
+        GovernedDataJobPlan plan;
+        try
+        {
+            plan =
+                GovernedDataJobPolicy.DeserializePlan(
+                    operation.CanonicalIntent);
+        }
+        catch
+        {
+            return new(
+                null,
+                null,
+                Results.Problem(
+                    statusCode:
+                        StatusCodes.Status409Conflict,
+                    type:
+                        "urn:kafdeck:problem:data-job-state-invalid",
+                    title:
+                        "Data-job state is invalid"));
+        }
+
+        if (requireReconcilePermission)
+        {
+            var reconcile =
+                authorization.AuthorizeTargets(
+                    context.User,
+                    new[]
+                    {
+                        new MutationAuthorizationTarget(
+                            AuthorizationAction.MutationReconcile,
+                            plan.Source.ClusterId,
+                            $"data-job/{plan.PlanFingerprint}"),
+                    });
+
+            if (reconcile ==
+                KafdeckAuthorizationOutcome.Unauthenticated)
+            {
+                return new(
+                    null,
+                    null,
+                    Results.Problem(
+                        statusCode:
+                            StatusCodes.Status401Unauthorized,
+                        type:
+                            "urn:kafdeck:problem:operator-authentication-required",
+                        title:
+                            "Operator authentication required"));
+            }
+
+            if (reconcile !=
+                KafdeckAuthorizationOutcome.Allowed)
+            {
+                return new(
+                    null,
+                    null,
+                    Results.Problem(
+                        statusCode:
+                            StatusCodes.Status403Forbidden,
+                        type:
+                            "urn:kafdeck:problem:data-job-reconcile-authorization-denied",
+                        title:
+                            "Data-job reconciliation denied"));
+            }
+        }
+
+        return new(
+            operation,
+            plan,
+            null);
+    }
+
+    private static IResult MapStateResult(
+        MutationOperationSnapshot operation,
+        GovernedDataJobPlan plan,
+        GovernedDataJobStateResult result,
+        string action)
+    {
+        if (result.Outcome ==
+                GovernedDataJobStateOutcome.Applied &&
+            result.Progress is not null)
+        {
+            return Results.Ok(
+                DataJobStatusData.From(
+                    operation,
+                    plan,
+                    result.Progress));
+        }
+
+        return Results.Problem(
+            statusCode:
+                StatusCodes.Status409Conflict,
+            type:
+                $"urn:kafdeck:problem:data-job-{action}-blocked",
+            title:
+                $"Data-job {action} could not be applied",
+            detail: result.Code,
+            extensions:
+                new Dictionary<string, object?>
+                {
+                    ["code"] = result.Code,
+                });
+    }
+
     private static void MapPreview(
         WebApplication app,
         string pattern,
