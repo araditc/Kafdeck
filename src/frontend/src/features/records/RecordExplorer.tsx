@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ApiProblem, kafdeckApi, type RecordAnchorProjection, type RecordQuery, type RecordSafePage, type RecordSafeProjection } from '../../shared/api.js';
+import { ApiProblem, kafdeckApi, type ControlledSerdeFormat, type RecordAnchorProjection, type RecordQuery, type RecordSafePage, type RecordSafeProjection } from '../../shared/api.js';
 
 interface Props { clusterId: string; topicName: string; partitions: number[]; }
 export type ViewMode = 'structured' | 'text' | 'hex';
 
-export function withRecordProjectionPreference(query: RecordQuery, mode: ViewMode): RecordQuery {
-  return { ...query, decode: mode === 'structured' };
+export function withRecordProjectionPreference(
+  query: RecordQuery,
+  mode: ViewMode,
+  serdeFormat: ControlledSerdeFormat | null = null,
+): RecordQuery {
+  if (mode !== 'structured') return { ...query, decode: false, serdeFormat: undefined };
+  if (serdeFormat) return { ...query, decode: false, serdeFormat };
+  return { ...query, decode: true, serdeFormat: undefined };
 }
 
 export function activeRecordPageQuery(displayedQuery: RecordQuery | null, baseQuery: RecordQuery): RecordQuery {
@@ -66,6 +72,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   const [filter, setFilter] = useState('');
   const [filterLanguage, setFilterLanguage] = useState<'cel' | 'jq'>('cel');
   const [viewMode, setViewMode] = useState<ViewMode>('structured');
+  const [structuredDecoder, setStructuredDecoder] = useState<'schema' | ControlledSerdeFormat>('schema');
   const [page, setPage] = useState<RecordSafePage | null>(null);
   const [displayedQuery, setDisplayedQuery] = useState<RecordQuery | null>(null);
   const [loading, setLoading] = useState(false);
@@ -110,8 +117,8 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
       maxRecords,
       ...(keyPrefix ? { keyPrefix } : {}),
       ...(filter ? { filter, filterLanguage } : {}),
-    }, viewMode);
-  }, [anchorKind, anchorValue, filter, filterLanguage, keyPrefix, maxRecords, partition, viewMode]);
+    }, viewMode, structuredDecoder === 'schema' ? null : structuredDecoder);
+  }, [anchorKind, anchorValue, filter, filterLanguage, keyPrefix, maxRecords, partition, structuredDecoder, viewMode]);
 
   async function load(query: RecordQuery) {
     stopBrowse();
@@ -197,7 +204,15 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
       <button type="button" onClick={() => void exportPage('ndjson')}>Export NDJSON</button>{' '}
       <button type="button" onClick={() => void exportPage('csv')}>Export CSV</button>
     </div>
-    <div><label>View <select value={viewMode} onChange={event => setViewMode(event.target.value as ViewMode)}><option value="structured">Structured</option><option value="text">Text</option><option value="hex">Hex</option></select></label></div>
+    <div>
+      <label>View <select value={viewMode} onChange={event => setViewMode(event.target.value as ViewMode)}><option value="structured">Structured</option><option value="text">Text</option><option value="hex">Hex</option></select></label>{' '}
+      {viewMode === 'structured' && <label>Decoder <select value={structuredDecoder} onChange={event => setStructuredDecoder(event.target.value as 'schema' | ControlledSerdeFormat)}>
+        <option value="schema">Schema Registry</option>
+        <option value="cbor">CBOR</option>
+        <option value="xml">XML</option>
+        <option value="messagePack">MessagePack</option>
+      </select></label>}
+    </div>
     {error && <p role="alert">{error}</p>}
     {page && <>
       <p role="status">Offsets {page.lowWatermark}–{page.highWatermark} · read budget: {page.readBudgetOutcome} · filter budget: {page.filterBudgetOutcome} · masking policy: {page.policyId} v{page.policyVersion}</p>
