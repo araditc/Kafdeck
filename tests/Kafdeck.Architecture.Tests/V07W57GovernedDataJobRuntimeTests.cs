@@ -11,7 +11,7 @@ public sealed class V07W57GovernedDataJobRuntimeTests
     public async Task Acknowledged_record_advances_checkpoint_and_preserves_exact_bytes()
     {
         var plan = Plan();
-        var operation = ExecutingOperation(plan);
+        var operation = ActivatedOperation(plan);
         var store = new InMemoryFleetStateStore();
         var producer = new CapturingProducer(
             new MutationProviderResult(
@@ -28,6 +28,11 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             store,
             producer,
             guard);
+        var generation =
+            await ActivateProgressAsync(
+                store,
+                plan,
+                operation);
 
         var record = new KafkaRawRecord(
             10,
@@ -47,6 +52,8 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             await coordinator.DispatchRecordAsync(
                 operation,
                 plan,
+                "worker-a",
+                generation,
                 0,
                 record);
 
@@ -90,7 +97,7 @@ public sealed class V07W57GovernedDataJobRuntimeTests
     public async Task Ambiguous_destination_outcome_is_durable_and_never_replayed()
     {
         var plan = Plan();
-        var operation = ExecutingOperation(plan);
+        var operation = ActivatedOperation(plan);
         var store = new InMemoryFleetStateStore();
         var producer = new CapturingProducer(
             new MutationProviderResult(
@@ -101,11 +108,18 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             store,
             producer,
             new AllowGuard());
+        var generation =
+            await ActivateProgressAsync(
+                store,
+                plan,
+                operation);
 
         var first =
             await coordinator.DispatchRecordAsync(
                 operation,
                 plan,
+                "worker-a",
+                generation,
                 0,
                 Record(10));
 
@@ -113,6 +127,8 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             await coordinator.DispatchRecordAsync(
                 operation,
                 plan,
+                "worker-a",
+                generation,
                 0,
                 Record(10));
 
@@ -144,7 +160,7 @@ public sealed class V07W57GovernedDataJobRuntimeTests
     public async Task Definitive_non_application_releases_pending_marker_without_advancing_checkpoint()
     {
         var plan = Plan();
-        var operation = ExecutingOperation(plan);
+        var operation = ActivatedOperation(plan);
         var store = new InMemoryFleetStateStore();
         var producer = new CapturingProducer(
             new MutationProviderResult(
@@ -155,11 +171,18 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             store,
             producer,
             new AllowGuard());
+        var generation =
+            await ActivateProgressAsync(
+                store,
+                plan,
+                operation);
 
         var result =
             await coordinator.DispatchRecordAsync(
                 operation,
                 plan,
+                "worker-a",
+                generation,
                 0,
                 Record(10));
 
@@ -183,7 +206,7 @@ public sealed class V07W57GovernedDataJobRuntimeTests
     public async Task Current_effect_guard_denial_prevents_provider_dispatch()
     {
         var plan = Plan();
-        var operation = ExecutingOperation(plan);
+        var operation = ActivatedOperation(plan);
         var store = new InMemoryFleetStateStore();
         var producer = new CapturingProducer(
             new MutationProviderResult(
@@ -194,11 +217,18 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             store,
             producer,
             new DenyGuard());
+        var generation =
+            await ActivateProgressAsync(
+                store,
+                plan,
+                operation);
 
         var result =
             await coordinator.DispatchRecordAsync(
                 operation,
                 plan,
+                "worker-a",
+                generation,
                 0,
                 Record(10));
 
@@ -216,7 +246,7 @@ public sealed class V07W57GovernedDataJobRuntimeTests
     {
         var plan = Plan(
             maxBatchBytes: 4);
-        var operation = ExecutingOperation(plan);
+        var operation = ActivatedOperation(plan);
         var store = new InMemoryFleetStateStore();
         var producer = new CapturingProducer(
             new MutationProviderResult(
@@ -227,11 +257,18 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             store,
             producer,
             new AllowGuard());
+        var generation =
+            await ActivateProgressAsync(
+                store,
+                plan,
+                operation);
 
         var result =
             await coordinator.DispatchRecordAsync(
                 operation,
                 plan,
+                "worker-a",
+                generation,
                 0,
                 new KafkaRawRecord(
                     10,
@@ -247,6 +284,44 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             "data_job_record_exceeds_batch_byte_budget",
             result.Result.ResultCode);
         Assert.Equal(0, producer.CallCount);
+    }
+
+    private static async Task<long> ActivateProgressAsync(
+        InMemoryFleetStateStore store,
+        GovernedDataJobPlan plan,
+        MutationOperationSnapshot operation)
+    {
+        var state =
+            new GovernedDataJobStateCoordinator(store);
+
+        var initialized =
+            await state.InitializeAsync(
+                operation.OperationId,
+                workerGeneration: 1,
+                plan,
+                DateTimeOffset.Parse(
+                    "2026-09-27T08:00:00Z"));
+
+        Assert.True(
+            initialized.Outcome is
+                GovernedDataJobStateOutcome.Applied or
+                GovernedDataJobStateOutcome.Existing);
+
+        var leased =
+            await state.AcquireLeaseAsync(
+                operation.OperationId,
+                plan,
+                "worker-a",
+                DateTimeOffset.Parse(
+                    "2026-09-27T08:00:00Z"),
+                TimeSpan.FromSeconds(30));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.Applied,
+            leased.Outcome);
+        Assert.NotNull(leased.Progress);
+
+        return leased.Progress!.WorkerGeneration;
     }
 
     private static GovernedDataJobDispatchCoordinator Coordinator(
@@ -313,7 +388,7 @@ public sealed class V07W57GovernedDataJobRuntimeTests
             transfer);
     }
 
-    private static MutationOperationSnapshot ExecutingOperation(
+    private static MutationOperationSnapshot ActivatedOperation(
         GovernedDataJobPlan plan)
     {
         var now =
@@ -356,6 +431,12 @@ public sealed class V07W57GovernedDataJobRuntimeTests
         _ = operation.ClaimExecution(
             now.AddSeconds(3),
             now.AddMinutes(5));
+        operation.MarkDispatchStarted(
+            now.AddSeconds(4));
+        operation.Complete(
+            MutationExecutionResultKind.AppliedVerified,
+            "data_job_activated",
+            now.AddSeconds(5));
 
         return operation.Snapshot;
     }
