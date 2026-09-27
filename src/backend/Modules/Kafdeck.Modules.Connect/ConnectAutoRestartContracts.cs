@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Kafdeck.Modules.Connect;
 
@@ -86,6 +87,26 @@ public sealed record ConnectAutoRestartPolicy
 
     public static ConnectAutoRestartPolicy Disabled { get; } =
         new(enabled: false);
+
+    [JsonConstructor]
+    public ConnectAutoRestartPolicy(
+        bool enabled,
+        int maxAttempts,
+        TimeSpan initialBackoff,
+        TimeSpan maxBackoff,
+        TimeSpan activationLifetime,
+        int maxActivePoliciesPerProfile,
+        int jitterBasisPoints)
+        : this(
+            enabled,
+            maxAttempts,
+            (TimeSpan?)initialBackoff,
+            (TimeSpan?)maxBackoff,
+            (TimeSpan?)activationLifetime,
+            maxActivePoliciesPerProfile,
+            jitterBasisPoints)
+    {
+    }
 
     public ConnectAutoRestartPolicy(
         bool enabled,
