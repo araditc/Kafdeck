@@ -338,6 +338,28 @@ public sealed class V07W56ControlledSerdeTests
             result.Failure!.Code);
     }
 
+    [Theory]
+    [InlineData("""<x xmlns="urn:test"><value>1</value></x>""")]
+    [InlineData("""<p:x xmlns:p="urn:test"><p:value>1</p:value></p:x>""")]
+    public async Task Xml_namespaces_are_explicitly_unsupported(
+        string xml)
+    {
+        var result = await new ControlledSerdeService().DecodeAsync(
+            new ControlledSerdeDecodeRequest(
+                ControlledSerdeFormat.Xml,
+                Encoding.UTF8.GetBytes(xml)),
+            ControlledSerdeLimits.Default,
+            Deadline);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ControlledSerdeFailureCategory.Unsupported,
+            result.Failure!.Category);
+        Assert.Equal(
+            "serde_xml_namespace_unsupported",
+            result.Failure.Code);
+    }
+
     [Fact]
     public async Task Xml_projection_rejects_unknown_properties()
     {
