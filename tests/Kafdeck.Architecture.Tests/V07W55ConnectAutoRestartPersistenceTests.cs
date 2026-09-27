@@ -390,6 +390,7 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
             Fingerprint($"provider:{profile}"),
             Fingerprint($"config:{connector}"),
             Fingerprint("policy"),
+            "oidc:https://idp.example|kafdeck-auto-restart",
             Guid.NewGuid());
 
     private static string Fingerprint(string value) =>
