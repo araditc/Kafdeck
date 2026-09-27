@@ -48,7 +48,14 @@ public interface IConnectReadPort
         string clusterId,
         string connectProfileId,
         ReadViewOperationContext operation,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken) =>
+        Task.FromResult(
+            ReadViewResult<IReadOnlyList<ConnectPluginSummary>>.Failed(
+                new ReadViewFailure(
+                    ReadViewFailureCategory.Unsupported,
+                    "connect_plugin_discovery_unsupported",
+                    "Kafka Connect plugin discovery is unsupported by the configured provider.",
+                    false)));
 
     Task<ReadViewResult<ConnectPluginValidationResult>> ValidateConfigurationAsync(
         string clusterId,
@@ -56,7 +63,14 @@ public interface IConnectReadPort
         string connectorClass,
         IReadOnlyDictionary<string, string> configuration,
         ReadViewOperationContext operation,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken) =>
+        Task.FromResult(
+            ReadViewResult<ConnectPluginValidationResult>.Failed(
+                new ReadViewFailure(
+                    ReadViewFailureCategory.Unsupported,
+                    "connect_plugin_validation_unsupported",
+                    "Kafka Connect plugin validation is unsupported by the configured provider.",
+                    false)));
 
     Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
         string clusterId,
