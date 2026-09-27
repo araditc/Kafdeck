@@ -10,7 +10,7 @@ public sealed record DataGeneratorMaterializedRecord(
     long RecordIndex,
     ReadOnlyMemory<byte>? Key,
     ReadOnlyMemory<byte> Value,
-    IReadOnlyDictionary<string, ReadOnlyMemory<byte>> Headers);
+    IReadOnlyList<KafkaRecordHeader> Headers);
 
 public sealed class DataGeneratorMaterializer
 {
@@ -73,10 +73,7 @@ public sealed class DataGeneratorMaterializer
             Key: null,
             Value: value,
             Headers:
-                new Dictionary<
-                    string,
-                    ReadOnlyMemory<byte>>(
-                    StringComparer.Ordinal));
+                Array.Empty<KafkaRecordHeader>());
     }
 
     public static int SeedForRecord(
