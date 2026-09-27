@@ -83,6 +83,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [connectPlugins, setConnectPlugins] = useState<ReadViewEnvelope<ConnectPluginSummary[]> | null>(null);
   const [selectedPluginClass, setSelectedPluginClass] = useState<string | null>(null);
   const [pluginConfiguration, setPluginConfiguration] = useState('');
+  const [pluginFieldValues, setPluginFieldValues] = useState<Record<string, string>>({});
   const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -93,7 +94,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     const controller = new AbortController();
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
-    setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginValidation(null); setConnectError(null);
+    setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null);
     setKsqlInfo(null); setKsqlError(null);
 
     void kafdeckApi.listConsumerGroups(clusterId, controller.signal)
@@ -235,6 +236,47 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     }
   };
 
+  const selectPluginForValidation = async (connectorClass: string) => {
+    if (!selectedConnectProfileId) return;
+    setConnectError(null);
+    setSelectedPluginClass(connectorClass);
+    setPluginConfiguration('');
+    setPluginFieldValues({});
+    setPluginValidation(null);
+    try {
+      setPluginValidation(await kafdeckApi.validateConnectPlugin(
+        clusterId,
+        selectedConnectProfileId,
+        connectorClass,
+        { 'connector.class': connectorClass },
+      ));
+    } catch (reason) {
+      setConnectError(readViewError(reason));
+    }
+  };
+
+  const validateSmartPlugin = async () => {
+    if (!selectedConnectProfileId || !selectedPluginClass) return;
+    setConnectError(null);
+    setPluginValidation(null);
+    try {
+      const configuration: Record<string, string> = {
+        'connector.class': selectedPluginClass,
+        ...pluginFieldValues,
+      };
+      setPluginValidation(await kafdeckApi.validateConnectPlugin(
+        clusterId,
+        selectedConnectProfileId,
+        selectedPluginClass,
+        configuration,
+      ));
+    } catch (reason) {
+      setConnectError(readViewError(reason));
+    } finally {
+      setPluginFieldValues({});
+    }
+  };
+
   const validatePlugin = async () => {
     if (!selectedConnectProfileId || !selectedPluginClass) return;
     setConnectError(null);
@@ -251,6 +293,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       setConnectError(readViewError(reason));
     } finally {
       setPluginConfiguration('');
+      setPluginFieldValues({});
     }
   };
 
@@ -354,11 +397,44 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       {connectPlugins && <article aria-labelledby="connect-plugins-title">
         <h4 id="connect-plugins-title">Connector plugins</h4>
         {connectPlugins.data.length === 0 ? <p>No connector plugins were reported.</p> :
-          <table><thead><tr><th>Class</th><th>Type</th><th>Version</th><th>Validate</th></tr></thead><tbody>{connectPlugins.data.map(plugin => <tr key={plugin.class}><th scope="row">{plugin.class}</th><td>{plugin.type}</td><td>{plugin.version ?? 'Unknown'}</td><td><button type="button" onClick={() => { setSelectedPluginClass(plugin.class); setPluginValidation(null); setPluginConfiguration(''); }}>Use</button></td></tr>)}</tbody></table>}
+          <table><thead><tr><th>Class</th><th>Type</th><th>Version</th><th>Validate</th></tr></thead><tbody>{connectPlugins.data.map(plugin => <tr key={plugin.class}><th scope="row">{plugin.class}</th><td>{plugin.type}</td><td>{plugin.version ?? 'Unknown'}</td><td><button type="button" onClick={() => void selectPluginForValidation(plugin.class)}>Use</button></td></tr>)}</tbody></table>}
       </article>}
       {selectedPluginClass && <article aria-labelledby="connect-plugin-validation-title">
         <h4 id="connect-plugin-validation-title">Validate configuration</h4>
         <p>Plugin: <code>{selectedPluginClass}</code>. Values are sent only to the selected configured Connect profile and are cleared from this form after validation.</p>
+        {pluginValidation && pluginValidation.data.fields.some(field => field.name !== 'connector.class') && <fieldset>
+          <legend>Smart configuration form</legend>
+          {pluginValidation.data.fields.filter(field => field.name !== 'connector.class').map(field => <div key={field.name}>
+            <label htmlFor={`connect-plugin-field-${field.name}`}>{field.name}{field.required ? ' *' : ''}</label>{' '}
+            {field.recommendedValues.length > 0
+              ? <select
+                  id={`connect-plugin-field-${field.name}`}
+                  value={pluginFieldValues[field.name] ?? ''}
+                  onChange={event => setPluginFieldValues(values => ({ ...values, [field.name]: event.target.value }))}
+                >
+                  <option value="">Select…</option>
+                  {field.recommendedValues.map(value => <option key={value} value={value}>{value}</option>)}
+                </select>
+              : <input
+                  id={`connect-plugin-field-${field.name}`}
+                  type={field.type.toUpperCase() === 'PASSWORD' ? 'password' : 'text'}
+                  value={pluginFieldValues[field.name] ?? ''}
+                  onChange={event => setPluginFieldValues(values => ({ ...values, [field.name]: event.target.value }))}
+                  autoComplete="off"
+                />}
+            {field.errors.length > 0 && <small role="status">{field.errors.join('; ')}</small>}
+          </div>)}
+          <button
+            type="button"
+            onClick={() => void validateSmartPlugin()}
+            disabled={Object.keys(pluginFieldValues).length === 0}
+          >
+            Validate smart form
+          </button>
+          <p>Smart-form values remain in browser memory only and are cleared after each validation attempt.</p>
+        </fieldset>}
+        <details>
+          <summary>Raw key=value validation</summary>
         <label htmlFor="connect-plugin-configuration">Configuration (one key=value per line)</label>
         <textarea
           id="connect-plugin-configuration"
