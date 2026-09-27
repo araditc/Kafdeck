@@ -113,7 +113,16 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
                 false);
         }
 
-        var bounded = limits.ClampToHardCaps();
+        if (!limits.IsWithinHardCaps)
+        {
+            return Failed<KsqlQueryResult>(
+                ReadViewFailureCategory.InvalidRequest,
+                "ksql_query_limits_invalid",
+                "ksqlDB query limits are outside the admitted hard bounds.",
+                false);
+        }
+
+        var bounded = limits;
         using var duration = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken);
         duration.CancelAfter(bounded.MaxDuration);
