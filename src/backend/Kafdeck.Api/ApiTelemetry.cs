@@ -22,6 +22,8 @@ public sealed record ApiTelemetrySnapshot(
 public sealed class ApiTelemetry : IDisposable
 {
     public const string InstrumentationName = "Kafdeck.Api";
+    private const int FixedPrometheusSeriesCount = 2;
+    private const int PrometheusSeriesPerApiKey = 3;
 
     private readonly record struct SeriesKey(
         string Route,
@@ -73,7 +75,8 @@ public sealed class ApiTelemetry : IDisposable
 
     public ApiTelemetry(int maxActiveSeries)
     {
-        if (maxActiveSeries is < 1 or > ObservabilityOptions.HardMaxActiveSeries)
+        if (maxActiveSeries < ObservabilityOptions.MinimumMaxActiveSeries ||
+            maxActiveSeries > ObservabilityOptions.HardMaxActiveSeries)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(maxActiveSeries));
@@ -169,7 +172,8 @@ public sealed class ApiTelemetry : IDisposable
             .ToArray();
 
         return new ApiTelemetrySnapshot(
-            snapshots.Length,
+            FixedPrometheusSeriesCount +
+                (snapshots.Length * PrometheusSeriesPerApiKey),
             _maxActiveSeries,
             Interlocked.Read(ref _droppedSeries),
             Array.AsReadOnly(snapshots));
@@ -303,7 +307,12 @@ public sealed class ApiTelemetry : IDisposable
                 return existing;
             }
 
-            if (_series.Count >= _maxActiveSeries)
+            var projectedSeries =
+                FixedPrometheusSeriesCount +
+                ((_series.Count + 1) *
+                    PrometheusSeriesPerApiKey);
+
+            if (projectedSeries > _maxActiveSeries)
             {
                 Interlocked.Increment(
                     ref _droppedSeries);
