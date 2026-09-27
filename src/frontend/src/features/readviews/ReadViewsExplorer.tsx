@@ -32,6 +32,8 @@ import {
   type SchemaVersionSummary,
 } from '../../shared/api.js';
 import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
+import { StatusBadge } from '../../app/StatusBadge.js';
+import { readViewHttpStatusKind, type UiStatusKind } from '../../app/statusPresentation.js';
 import {
   MutationApiProblem,
   mutationApi,
@@ -39,12 +41,31 @@ import {
   type MutationStatus,
 } from '../mutations/mutationApi.js';
 
-function readViewError(reason: unknown): string {
-  if (reason instanceof ApiProblem && reason.status === 403) return 'Not authorized for this read view.';
-  if (reason instanceof ApiProblem && reason.status === 404) return 'This read view is not configured.';
-  if (reason instanceof ApiProblem && reason.status === 501) return 'This read view is unsupported by the configured provider.';
-  if (reason instanceof ApiProblem && reason.status === 504) return 'The upstream read operation timed out.';
-  return reason instanceof Error ? reason.message : 'The read view could not be loaded.';
+type ReadViewProblem = {
+  kind: UiStatusKind;
+  message: string;
+};
+
+function readViewError(reason: unknown): ReadViewProblem {
+  if (reason instanceof ApiProblem) {
+    const kind = readViewHttpStatusKind(reason.status);
+    if (reason.status === 401 || reason.status === 403) return { kind, message: 'Not authorized for this read view.' };
+    if (reason.status === 404) return { kind, message: 'This read view is not configured.' };
+    if (reason.status === 501) return { kind, message: 'This read view is unsupported by the configured provider.' };
+    if (reason.status === 502 || reason.status === 503 || reason.status === 504) return { kind, message: 'The upstream read operation is currently unavailable.' };
+    return { kind, message: reason.message };
+  }
+  return {
+    kind: 'unknown',
+    message: reason instanceof Error ? reason.message : 'The read view could not be loaded.',
+  };
+}
+
+function ReadViewProblemNotice({ problem }: { problem: ReadViewProblem }) {
+  return <p role={problem.kind === 'denied' ? 'alert' : 'status'}>
+    <StatusBadge kind={problem.kind} />{' '}
+    {problem.message}
+  </p>;
 }
 
 function parseConfigurationLines(source: string): Record<string, string> {
@@ -66,19 +87,19 @@ function parseConfigurationLines(source: string): Record<string, string> {
 
 function Limitations({ envelope }: { envelope: ReadViewEnvelope<unknown> }) {
   if (!envelope.partial || envelope.limitations.length === 0) return null;
-  return <aside aria-label="Read-view limitations"><strong>Partial observation</strong><ul>{envelope.limitations.map(item => <li key={item.code}>{item.code}: {item.message}</li>)}</ul></aside>;
+  return <aside aria-label="Read-view limitations"><strong><StatusBadge kind="partial" /> Partial observation</strong><ul>{envelope.limitations.map(item => <li key={item.code}>{item.code}: {item.message}</li>)}</ul></aside>;
 }
 
 export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [consumerGroups, setConsumerGroups] = useState<ReadViewEnvelope<ConsumerGroupSummary[]> | null>(null);
-  const [consumerError, setConsumerError] = useState<string | null>(null);
+  const [consumerError, setConsumerError] = useState<ReadViewProblem | null>(null);
   const [groupDetail, setGroupDetail] = useState<ReadViewEnvelope<ConsumerGroupDetail> | null>(null);
   const [groupLag, setGroupLag] = useState<ReadViewEnvelope<ConsumerLag> | null>(null);
   const [groupDiagnostics, setGroupDiagnostics] = useState<ReadViewEnvelope<ConsumerDiagnostics> | null>(null);
 
   const [subjects, setSubjects] = useState<ReadViewEnvelope<SchemaSubjectSummary[]> | null>(null);
-  const [schemaError, setSchemaError] = useState<string | null>(null);
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [schemaError, setSchemaError] = useState<ReadViewProblem | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<ReadViewProblem | null>(null);
   const [versions, setVersions] = useState<ReadViewEnvelope<SchemaVersionSummary[]> | null>(null);
   const [compatibility, setCompatibility] = useState<ReadViewEnvelope<SchemaCompatibility> | null>(null);
   const [leftVersion, setLeftVersion] = useState<number | null>(null);
@@ -96,20 +117,20 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [serdeStructuredJson, setSerdeStructuredJson] = useState('');
   const [serdeDecoded, setSerdeDecoded] = useState<ControlledSerdeDecodedValue | null>(null);
   const [serdeEncoded, setSerdeEncoded] = useState<ControlledSerdeEncodedData | null>(null);
-  const [serdeError, setSerdeError] = useState<string | null>(null);
+  const [serdeError, setSerdeError] = useState<ReadViewProblem | null>(null);
   const [serdeBusy, setSerdeBusy] = useState(false);
 
   const [connectProfiles, setConnectProfiles] = useState<ReadViewEnvelope<ConnectProfileSummary[]> | null>(null);
-  const [selectedConnectProfileId, setSelectedConnectProfileId] = useState<string | null>(null);
+  const [selectedConnectProfileId, setSelectedConnectProfileId] = useState<ReadViewProblem | null>(null);
   const [connectInfo, setConnectInfo] = useState<ReadViewEnvelope<ConnectClusterInfo> | null>(null);
   const [connectors, setConnectors] = useState<ReadViewEnvelope<ConnectConnectorSummary[]> | null>(null);
   const [connectorDetail, setConnectorDetail] = useState<ReadViewEnvelope<ConnectConnectorDetail> | null>(null);
   const [connectPlugins, setConnectPlugins] = useState<ReadViewEnvelope<ConnectPluginSummary[]> | null>(null);
-  const [selectedPluginClass, setSelectedPluginClass] = useState<string | null>(null);
+  const [selectedPluginClass, setSelectedPluginClass] = useState<ReadViewProblem | null>(null);
   const [pluginConfiguration, setPluginConfiguration] = useState('');
   const [pluginFieldValues, setPluginFieldValues] = useState<Record<string, string>>({});
   const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
-  const [connectError, setConnectError] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<ReadViewProblem | null>(null);
   const connectLoadGeneration = useRef(0);
   const [autoRestartStatus, setAutoRestartStatus] = useState<ConnectAutoRestartPolicyStatus | null>(null);
   const [autoRestartOperation, setAutoRestartOperation] = useState<MutationStatus | null>(null);
@@ -519,7 +540,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   return <>
     <section className="card kafdeck-card" id="consumers" aria-labelledby="consumers-title">
       <h2 id="consumers-title">Consumer groups</h2>
-      {consumerError && <p role="status">{consumerError}</p>}
+      {consumerError && <ReadViewProblemNotice problem={consumerError} />}
       {!consumerGroups && !consumerError && <p role="status">Loading authorized consumer groups…</p>}
       {consumerGroups && <>
         <Limitations envelope={consumerGroups} />
@@ -542,7 +563,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
     <section className="card kafdeck-card" id="schemas" aria-labelledby="schemas-title">
       <h2 id="schemas-title">Schema Registry</h2>
-      {schemaError && <p role="status">{schemaError}</p>}
+      {schemaError && <ReadViewProblemNotice problem={schemaError} />}
       {!subjects && !schemaError && <p role="status">Loading authorized schema subjects…</p>}
       {subjects && <>
         <Limitations envelope={subjects} />
@@ -594,7 +615,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     <section className="card kafdeck-card" id="serde" aria-labelledby="serde-title">
       <h2 id="serde-title">Controlled SerDe tooling</h2>
       <p>Local bounded tooling for CBOR, XML and MessagePack. No provider proxy, runtime plugin loading, file/network resolution or durable payload storage is used.</p>
-      {serdeError && <p role="alert">{serdeError}</p>}
+      {serdeError && <ReadViewProblemNotice problem={serdeError} />}
       {!serdeCapabilities && !serdeError && <p role="status">Loading controlled SerDe capabilities…</p>}
       {serdeCapabilities && <>
         <p>Server bounds: input {serdeCapabilities.limits.maxInputBytes} bytes · output {serdeCapabilities.limits.maxOutputBytes} bytes · depth {serdeCapabilities.limits.maxDepth} · nodes {serdeCapabilities.limits.maxNodes}.</p>
@@ -636,7 +657,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">
       <h2 id="ecosystem-title">Ecosystem read views</h2>
       <h3 id="connect-title">Kafka Connect</h3>
-      {connectError && <p role="status">{connectError}</p>}
+      {connectError && <ReadViewProblemNotice problem={connectError} />}
       {!connectProfiles && !connectError && <p role="status">Loading configured Connect profiles…</p>}
       {connectProfiles && connectProfiles.data.length === 0 && <p>No Kafka Connect profiles are configured.</p>}
       {connectProfiles && connectProfiles.data.length > 0 && <div>
@@ -732,7 +753,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </article>}
 
       <h3 id="ksql-title">ksqlDB</h3>
-      {ksqlError && <p role="alert">{ksqlError}</p>}
+      {ksqlError && <ReadViewProblemNotice problem={ksqlError} />}
       {ksqlInfo && <p>Version: {ksqlInfo.data.version ?? 'Unknown'} · Kafka cluster: {ksqlInfo.data.kafkaClusterId ?? 'Unknown'} · Health: {ksqlInfo.data.state ?? 'Unknown'}</p>}
       <p>v0.7 admits bounded single-statement SELECT queries only. DDL, DML, persistent-query creation, session substitution and generic provider forwarding are blocked before provider I/O.</p>
       <label htmlFor="ksql-query-editor">Read-only SELECT</label>
@@ -756,15 +777,15 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </article>}
 
       <h3 id="streams-title">Kafka Streams evidence</h3>
-      {streamsError && <p role="status">{streamsError}</p>}
+      {streamsError && <ReadViewProblemNotice problem={streamsError} />}
       {!streamsApplications && !streamsError && <p role="status">Loading registered Streams telemetry evidence…</p>}
       {streamsApplications && streamsApplications.data.length === 0 && <p>No registered Streams applications were reported.</p>}
       {streamsApplications && streamsApplications.data.length > 0 && <table><thead><tr><th>Application</th><th>Evidence source</th><th>Observed</th><th>State</th></tr></thead><tbody>
-        {streamsApplications.data.map(application => <tr key={application.applicationId}><th scope="row"><button type="button" onClick={() => void openStreamsApplication(application.applicationId)}>{application.applicationId}</button></th><td>{application.evidenceSource}</td><td>{new Date(application.observedAtUtc).toLocaleString()}</td><td>{application.stale ? 'Stale' : 'Observed'}</td></tr>)}
+        {streamsApplications.data.map(application => <tr key={application.applicationId}><th scope="row"><button type="button" onClick={() => void openStreamsApplication(application.applicationId)}>{application.applicationId}</button></th><td>{application.evidenceSource}</td><td>{new Date(application.observedAtUtc).toLocaleString()}</td><td><StatusBadge kind={application.stale ? 'stale' : 'current'} label={application.stale ? 'Stale' : 'Observed'} /></td></tr>)}
       </tbody></table>}
       {streamsTopology && <article aria-labelledby="streams-topology-title">
         <h4 id="streams-topology-title">Topology: {streamsTopology.data.applicationId}</h4>
-        <p>Source: {streamsTopology.data.evidenceSource} · Observed {new Date(streamsTopology.data.observedAtUtc).toLocaleString()} · {streamsTopology.data.stale ? 'Stale evidence' : 'Current evidence'}</p>
+        <p>Source: {streamsTopology.data.evidenceSource} · Observed {new Date(streamsTopology.data.observedAtUtc).toLocaleString()} · <StatusBadge kind={streamsTopology.data.stale ? 'stale' : 'current'} label={streamsTopology.data.stale ? 'Stale evidence' : 'Current evidence'} /></p>
         <table><thead><tr><th>Node</th><th>Type</th><th>Input topics</th><th>Output topics</th><th>State stores</th></tr></thead><tbody>{streamsTopology.data.nodes.map(node => <tr key={node.id}><th scope="row">{node.name}</th><td>{node.type}</td><td>{node.inputTopics.join(', ') || 'None'}</td><td>{node.outputTopics.join(', ') || 'None'}</td><td>{node.stateStores.join(', ') || 'None'}</td></tr>)}</tbody></table>
       </article>}
       {streamsStores && <article aria-labelledby="streams-stores-title">
@@ -773,9 +794,9 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </article>}
 
       <h3 id="lineage-title">Lineage</h3>
-      {lineageError && <p role="status">{lineageError}</p>}
+      {lineageError && <ReadViewProblemNotice problem={lineageError} />}
       {lineage && <>
-        {lineage.data.partial && <p role="status">Lineage is partial: {lineage.data.limitations.map(item => item.message).join('; ')}</p>}
+        {lineage.data.partial && <p role="status"><StatusBadge kind="partial" /> Lineage is partial: {lineage.data.limitations.map(item => item.message).join('; ')}</p>}
         {lineage.data.edges.length === 0 ? <p>No lineage edges are available from registered evidence.</p> : <table><thead><tr><th>Source</th><th>Destination</th><th>Evidence</th><th>Provenance</th><th>Confidence</th><th>State</th></tr></thead><tbody>{lineage.data.edges.map((edge, index) => <tr key={`${edge.source.kind}:${edge.source.id}->${edge.destination.kind}:${edge.destination.id}:${index}`}><td>{edge.source.kind}:{edge.source.id}</td><td>{edge.destination.kind}:{edge.destination.id}</td><td>{edge.evidenceKind}</td><td>{edge.provenance}</td><td>{edge.confidence.toFixed(2)}</td><td>{edge.stale ? 'Stale' : 'Current'}</td></tr>)}</tbody></table>}
       </>}
     </section>
