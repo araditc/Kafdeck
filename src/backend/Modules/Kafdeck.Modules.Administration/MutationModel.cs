@@ -49,6 +49,7 @@ public enum MutationOperationKind
     FleetUncertaintyDisposition = 27,
     ConnectAutoRestartPolicy = 28,
     DataJob = 29,
+    DataGenerator = 30,
 }
 
 public enum MutationRiskClass
