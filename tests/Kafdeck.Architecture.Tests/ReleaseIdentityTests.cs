@@ -75,6 +75,7 @@ public sealed class ReleaseIdentityTests
     [InlineData("v0.6-rc.1", "0.6.0-rc.1")]
     [InlineData("v0.6.1-rc.2", "0.6.1-rc.2")]
     [InlineData("v0.6", "0.6.0")]
+    [InlineData("v0.7", "0.7.0")]
     public void Release_version_normalization_preserves_prerelease_identity(
         string releaseVersion,
         string expectedPackageVersion)
