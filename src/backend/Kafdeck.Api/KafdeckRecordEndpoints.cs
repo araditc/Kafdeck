@@ -164,7 +164,13 @@ public static class KafdeckRecordEndpoints
             var query = RecordHttpQuery.Parse(http.Request.Query, clusterId, topicName, partition);
             var plan = RecordFilterCompiler.Compile(query.Filter);
             var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + query.Read.Budget.MaxDuration);
-            var filtered = await filterService.FilterPageAsync(query.Read, plan, operation, maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue, cancellationToken).ConfigureAwait(false);
+            var filtered = await filterService.FilterPageAsync(
+                query.Read,
+                plan,
+                operation,
+                maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue,
+                query.ControlledSerdeFormat,
+                cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null)
             {
                 await WriteProblemAsync(http, ApiProblemMapper.FromKafka(filtered.Failure!), cancellationToken).ConfigureAwait(false);
@@ -329,6 +335,19 @@ public static class KafdeckRecordEndpoints
             "jq" or "jqstyle" => RecordFilterLanguage.JqStyle,
             _ => throw new ArgumentException("filterLanguage must be cel or jq."),
         };
+        private static ControlledSerdeFormat? ParseControlledSerdeFormat(
+            string? value) =>
+            value?.Trim().ToLowerInvariant() switch
+            {
+                null or "" => null,
+                "cbor" => ControlledSerdeFormat.Cbor,
+                "xml" => ControlledSerdeFormat.Xml,
+                "messagepack" or "message-pack" or "msgpack" =>
+                    ControlledSerdeFormat.MessagePack,
+                _ => throw new ArgumentException(
+                    "serdeFormat must be cbor, xml or messagePack."),
+            };
+
 
         private static IReadOnlyList<RecordHeaderPredicate> CreateHeaderPredicates(IQueryCollection query)
         {
