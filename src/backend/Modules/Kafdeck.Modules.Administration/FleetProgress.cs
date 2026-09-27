@@ -49,6 +49,7 @@ public sealed record FleetOperationProgressSnapshot
     public IReadOnlyList<FleetPostCapReadReservation> PostCapReadReservations { get; init; } =
         Array.Empty<FleetPostCapReadReservation>();
     public FleetTransferProgressSnapshot? Transfer { get; init; }
+    public FleetGeneratorProgressSnapshot? Generator { get; init; }
     public string? WorkerLeaseOwner { get; init; }
     public DateTimeOffset? WorkerLeaseExpiresAtUtc { get; init; }
     public long Version { get; init; }
@@ -356,11 +357,22 @@ public sealed class FleetOperationProgress
         var transfer = snapshot.Transfer is null
             ? null
             : FleetTransferProgress.Validate(snapshot.Transfer);
+        var generator = snapshot.Generator is null
+            ? null
+            : FleetGeneratorProgress.Validate(snapshot.Generator);
+
+        if (transfer is not null &&
+            generator is not null)
+        {
+            throw new MutationStateException(
+                "Fleet progress cannot contain transfer and generator progress simultaneously.");
+        }
 
         return snapshot with
         {
             PostCapReadReservations = Array.AsReadOnly(reservations.ToArray()),
             Transfer = transfer,
+            Generator = generator,
             WorkerLeaseOwner = leaseOwner,
         };
     }

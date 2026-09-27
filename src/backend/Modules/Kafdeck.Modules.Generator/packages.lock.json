@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "kafdeck.core": {
+        "type": "Project"
+      },
+      "kafdeck.modules.administration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )"
+        }
+      },
+      "kafdeck.modules.records": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
+        }
+      },
+      "kafdeck.modules.schemas": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )",
+          "Kafdeck.Modules.Administration": "[0.4.0, )"
+        }
+      }
+    }
+  }
+}

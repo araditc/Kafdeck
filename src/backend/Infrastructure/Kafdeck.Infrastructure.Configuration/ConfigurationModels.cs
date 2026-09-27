@@ -23,7 +23,8 @@ public sealed record KafdeckOptions(
     IReadOnlyList<ClusterProfile> Clusters,
     RecordDataOptions? Records = null,
     TopicCatalogOptions? Catalog = null,
-    AdministrationOptions? Administration = null);
+    AdministrationOptions? Administration = null,
+    DataGeneratorOptions? Generator = null);
 
 public enum MutationPersistenceProvider
 {
@@ -78,6 +79,9 @@ public sealed record MutationPersistenceOptions(
 
 public sealed record RecordDataOptions(
     RecordMaskingPolicyDefinition MaskingPolicy);
+
+public sealed record DataGeneratorOptions(
+    IReadOnlyList<string> EnabledClusterIds);
 
 public sealed record TopicCatalogOptions(
     IReadOnlyList<TopicCatalogEntryProfile> Topics);
