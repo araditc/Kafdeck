@@ -273,25 +273,13 @@ public sealed class ApiTelemetry : IDisposable
     }
 
     public static string NormalizeMethod(
-        string? method)
-    {
-        if (string.IsNullOrWhiteSpace(method))
-        {
-            return "OTHER";
-        }
-
-        return method.ToUpperInvariant() switch
-        {
-            "GET" => "GET",
-            "POST" => "POST",
-            "PUT" => "PUT",
-            "PATCH" => "PATCH",
-            "DELETE" => "DELETE",
-            "HEAD" => "HEAD",
-            "OPTIONS" => "OPTIONS",
-            _ => "OTHER",
-        };
-    }
+        string? method) =>
+        string.Equals(
+            method,
+            "GET",
+            StringComparison.OrdinalIgnoreCase)
+            ? "GET"
+            : "OTHER";
 
     public static string NormalizeStatusClass(
         int statusCode) => statusCode switch
