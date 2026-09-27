@@ -3,7 +3,7 @@ using Kafdeck.Modules.Administration;
 namespace Kafdeck.Modules.Records;
 
 public sealed class GovernedDataJobRateLimitException :
-    MutationStateException
+    InvalidOperationException
 {
     public GovernedDataJobRateLimitException(string message)
         : base(message)
