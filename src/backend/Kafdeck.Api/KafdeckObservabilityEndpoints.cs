@@ -22,6 +22,13 @@ public static class KafdeckObservabilityEndpoints
     public const string CapabilitiesRoute =
         "/api/v1/observability/capabilities";
 
+    public static bool IsPrometheusScrapePath(
+        PathString path) =>
+        string.Equals(
+            path.Value,
+            PrometheusObservabilityOptions.Path,
+            StringComparison.OrdinalIgnoreCase);
+
     public static IEndpointRouteBuilder
         MapKafdeckV08Observability(
             this IEndpointRouteBuilder endpoints,
