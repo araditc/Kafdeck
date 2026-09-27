@@ -124,6 +124,35 @@ public sealed class V05AntiforgeryTests
         }
     }
 
+    [Fact]
+    public void W57_data_job_posts_carry_antiforgery_metadata()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+
+        using var app = builder.Build();
+        app.MapKafdeckDataJobEndpoints();
+
+        foreach (var pattern in new[]
+        {
+            "/api/v1/data-jobs/replay/preview",
+            "/api/v1/data-jobs/forward/preview",
+            "/api/v1/data-jobs/reprocess/preview",
+            "/api/v1/data-jobs/dlq-forward/preview",
+            "/api/v1/data-jobs/{operationId:guid}/start",
+            "/api/v1/data-jobs/{operationId:guid}/cancel",
+            "/api/v1/data-jobs/{operationId:guid}/reconcile",
+        })
+        {
+            var endpoint = FindEndpoint(app, pattern);
+            var metadata =
+                endpoint.Metadata.GetMetadata<IAntiforgeryMetadata>();
+
+            Assert.NotNull(metadata);
+            Assert.True(metadata.RequiresValidation);
+        }
+    }
+
     private static RouteEndpoint FindEndpoint(WebApplication app, string pattern) =>
         ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints)
