@@ -146,6 +146,41 @@ public static class FleetMutationAuthorization
         return Array.AsReadOnly(normalized);
     }
 
+    private static void ValidateGeneratorTopology(
+        IReadOnlyList<MutationAuthorizationTarget> requirements,
+        IReadOnlyList<string> clusters)
+    {
+        if (clusters.Count != 1)
+        {
+            throw new ArgumentException(
+                "Finite data generation must bind exactly one destination physical cluster.",
+                nameof(requirements));
+        }
+
+        var cluster = clusters[0];
+        foreach (var action in new[]
+                 {
+                     AuthorizationAction.DataGeneratorPlan,
+                     AuthorizationAction.DataGeneratorExecute,
+                     AuthorizationAction.ClusterRead,
+                     AuthorizationAction.TopicRead,
+                     AuthorizationAction.RecordProduce,
+                 })
+        {
+            if (!requirements.Any(requirement =>
+                    requirement.Action == action &&
+                    string.Equals(
+                        requirement.ClusterId,
+                        cluster,
+                        StringComparison.Ordinal)))
+            {
+                throw new ArgumentException(
+                    $"Finite data generation requires authorization action '{action}' on the exact destination cluster.",
+                    nameof(requirements));
+            }
+        }
+    }
+
     private static void ValidateTransferTopology(
         IReadOnlyList<MutationAuthorizationTarget> requirements,
         IReadOnlyList<string> clusters)
