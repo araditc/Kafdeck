@@ -138,6 +138,40 @@ public sealed class V07W59KsqlQueryTests
     }
 
     [Fact]
+    public async Task Query_header_column_count_is_bounded()
+    {
+        var names = string.Join(
+            ',',
+            Enumerable.Range(0, KsqlDbQueryAdapter.HardMaxColumns + 1)
+                .Select(index => $"\"C{index}\""));
+        var types = string.Join(
+            ',',
+            Enumerable.Range(0, KsqlDbQueryAdapter.HardMaxColumns + 1)
+                .Select(_ => "\"STRING\""));
+
+        var handler = new StubHandler(_ =>
+            Json(
+                HttpStatusCode.OK,
+                $"{{\"queryId\":\"q\",\"columnNames\":[{names}],\"columnTypes\":[{types}]}}\n"));
+
+        using var adapter = CreateAdapter(handler);
+
+        var result = await adapter.ExecuteQueryAsync(
+            "prod",
+            "SELECT * FROM ORDERS;",
+            KsqlQueryLimits.Default,
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ReadViewFailureCategory.InvalidResponse,
+            result.Failure!.Category);
+        Assert.Equal(
+            "invalid_ksql_query_response",
+            result.Failure.Code);
+    }
+
+    [Fact]
     public async Task Query_concurrency_is_bounded_per_cluster()
     {
         var handler = new BlockingHandler();
