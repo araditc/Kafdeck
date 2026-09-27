@@ -342,6 +342,75 @@ public sealed class V07OpenApiContractTests
     }
 
     [Fact]
+    public void W59_streaming_openapi_is_bounded_and_has_no_generic_proxy()
+    {
+        using var document = JsonDocument.Parse(KafdeckV07OpenApi.Document);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        var query = paths.GetProperty(
+            "/api/v1/clusters/{clusterId}/ksql/query");
+        Assert.True(query.TryGetProperty("post", out _));
+        Assert.False(query.TryGetProperty("get", out _));
+
+        var request = root
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("KsqlQueryRequest")
+            .GetProperty("properties")
+            .GetProperty("statement");
+
+        Assert.Equal(
+            65536,
+            request.GetProperty("maxLength").GetInt32());
+
+        var limits = root
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("KsqlQueryLimitRequest")
+            .GetProperty("properties");
+
+        Assert.Equal(
+            10000,
+            limits.GetProperty("maxRows")
+                .GetProperty("maximum")
+                .GetInt32());
+        Assert.Equal(
+            16777216,
+            limits.GetProperty("maxBytes")
+                .GetProperty("maximum")
+                .GetInt32());
+        Assert.Equal(
+            120,
+            limits.GetProperty("maxDurationSeconds")
+                .GetProperty("maximum")
+                .GetInt32());
+
+        string[] readPaths =
+        [
+            "/api/v1/clusters/{clusterId}/streams/applications",
+            "/api/v1/clusters/{clusterId}/streams/applications/{applicationId}/topology",
+            "/api/v1/clusters/{clusterId}/streams/applications/{applicationId}/state-stores",
+            "/api/v1/clusters/{clusterId}/lineage",
+        ];
+
+        Assert.All(
+            readPaths,
+            path =>
+            {
+                var item = paths.GetProperty(path);
+                Assert.True(item.TryGetProperty("get", out _));
+                Assert.False(item.TryGetProperty("post", out _));
+                Assert.False(item.TryGetProperty("put", out _));
+                Assert.False(item.TryGetProperty("delete", out _));
+            });
+
+        var lower = KafdeckV07OpenApi.Document.ToLowerInvariant();
+        Assert.DoesNotContain("/ksql/proxy", lower, StringComparison.Ordinal);
+        Assert.DoesNotContain("/streams/proxy", lower, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Checked_in_v07_openapi_is_reproducible()
     {
         var root = FindRepositoryRoot();
