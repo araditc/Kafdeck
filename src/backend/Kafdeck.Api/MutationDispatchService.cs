@@ -513,5 +513,6 @@ public sealed class MutationDispatchService
             MutationOperationKind.ConsumerDelete or
             MutationOperationKind.SchemaAlter or
             MutationOperationKind.SchemaDelete or
-            MutationOperationKind.RecordsPurge;
+            MutationOperationKind.RecordsPurge or
+            MutationOperationKind.ConnectAutoRestartPolicy;
 }
