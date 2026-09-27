@@ -766,10 +766,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 "Kafka Connect plugin validation response is invalid.");
         }
 
-        var redactProviderText =
-            submittedConfiguration is not null &&
-            submittedConfiguration.Keys.Any(
-                ConnectSafeConfigurationPolicy.IsSecretKey);
+        _ = submittedConfiguration;
 
         var fields = new List<ConnectPluginValidationField>();
         foreach (var config in configs.EnumerateArray())
@@ -801,39 +798,30 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 requiredElement.ValueKind == JsonValueKind.True;
 
             var errors = Array.Empty<string>();
-            var recommended = Array.Empty<string>();
-            if (config.TryGetProperty("value", out var value) &&
-                value.ValueKind == JsonValueKind.Object)
+            if (config.TryGetProperty("value", out var value))
             {
-                var rawErrors = ReadBoundedStringArray(
-                    value,
-                    "errors",
-                    MaxValidationMessagesPerField,
-                    MaxPluginTextLength);
-                var rawRecommended = ReadBoundedStringArray(
-                    value,
-                    "recommended_values",
-                    MaxValidationMessagesPerField,
-                    MaxPluginTextLength);
-
-                var definitionIsSecret =
-                    ConnectSafeConfigurationPolicy.IsSecretKey(name) ||
-                    string.Equals(
-                        type,
-                        "PASSWORD",
-                        StringComparison.OrdinalIgnoreCase);
-
-                if (redactProviderText || definitionIsSecret)
+                if (value.ValueKind != JsonValueKind.Object)
                 {
-                    errors = rawErrors.Length == 0
-                        ? Array.Empty<string>()
-                        : new[] { "[REDACTED_PROVIDER_VALIDATION_ERROR]" };
-                    recommended = Array.Empty<string>();
+                    throw new JsonException(
+                        "Kafka Connect plugin validation value is invalid.");
                 }
-                else
+
+                if (value.TryGetProperty("errors", out var providerErrors))
                 {
-                    errors = rawErrors;
-                    recommended = rawRecommended;
+                    if (providerErrors.ValueKind != JsonValueKind.Array ||
+                        providerErrors.GetArrayLength() > MaxValidationMessagesPerField)
+                    {
+                        throw new JsonException(
+                            "Kafka Connect validation error list exceeded its bound.");
+                    }
+
+                    if (providerErrors.GetArrayLength() > 0)
+                    {
+                        errors =
+                        [
+                            "[REDACTED_PROVIDER_VALIDATION_ERROR]",
+                        ];
+                    }
                 }
             }
 
@@ -843,7 +831,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     type,
                     required,
                     errors,
-                    recommended));
+                    Array.Empty<string>()));
         }
 
         return new ConnectPluginValidationResult(
