@@ -238,7 +238,10 @@ public static class KafdeckConfigurationLoader
     private static AdministrationOptions? LoadAdministration(IConfigurationSection section)
     {
         var mutations = section.GetSection("Mutations");
-        if (!mutations.GetChildren().Any())
+        var autoRestartSection =
+            section.GetSection("ConnectAutoRestart");
+        if (!mutations.GetChildren().Any() &&
+            !autoRestartSection.GetChildren().Any())
         {
             return null;
         }
@@ -270,8 +273,6 @@ public static class KafdeckConfigurationLoader
                 ParseOptionalSecret(persistenceSection["ConnectionString"]));
         }
 
-        var autoRestartSection =
-            section.GetSection("ConnectAutoRestart");
         ConnectAutoRestartOptions? autoRestart = null;
         if (autoRestartSection.GetChildren().Any())
         {
