@@ -279,6 +279,7 @@ public sealed class AdoConnectAutoRestartStateStore :
         ConnectAutoRestartActivation activation,
         long expectedVersion,
         ConnectAutoRestartLease lease,
+        DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(activation);
@@ -324,6 +325,7 @@ public sealed class AdoConnectAutoRestartStateStore :
               AND lease_owner = @lease_owner
               AND lease_generation = @lease_generation
               AND lease_expires_at_utc = @lease_expires_at_utc
+              AND lease_expires_at_utc > @now_utc
             """;
 
         AddParameter(
@@ -362,6 +364,10 @@ public sealed class AdoConnectAutoRestartStateStore :
             update,
             "@lease_expires_at_utc",
             lease.ExpiresAtUtc.ToString("O"));
+        AddParameter(
+            update,
+            "@now_utc",
+            now.ToString("O"));
 
         if (await update
                 .ExecuteNonQueryAsync(cancellationToken)
