@@ -40,12 +40,27 @@ public sealed class GovernedDataJobStateCoordinator
             CancellationToken cancellationToken =
                 default)
     {
-        var initial =
-            GovernedDataJobProgress.CreateInitial(
-                operationId,
-                workerGeneration,
-                plan,
-                nowUtc);
+        FleetOperationProgressSnapshot initial;
+        try
+        {
+            initial =
+                GovernedDataJobProgress.CreateInitial(
+                    operationId,
+                    workerGeneration,
+                    plan,
+                    nowUtc);
+        }
+        catch (Exception exception)
+            when (exception is
+                MutationStateException or
+                ArgumentException or
+                OverflowException)
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                null,
+                "data_job_initial_state_invalid");
+        }
 
         var result =
             await _store.CreateProgressAsync(
