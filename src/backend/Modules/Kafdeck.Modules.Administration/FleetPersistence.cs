@@ -98,6 +98,15 @@ public interface IFleetMutationStateStore
         Guid obligationId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<FleetConflictObligationSnapshot>>
+        ListConflictObligationsByOperationAsync(
+            Guid operationId,
+            CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<FleetConflictObligationSnapshot>>(
+            new NotSupportedException(
+                "Conflict-obligation listing is not implemented by this store."));
+
+
     Task<FleetConflictObligationSnapshot?> FindBlockingConflictObligationAsync(
         string conflictKey,
         CancellationToken cancellationToken = default);
