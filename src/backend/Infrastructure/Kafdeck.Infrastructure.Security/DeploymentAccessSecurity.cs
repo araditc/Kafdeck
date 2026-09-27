@@ -174,6 +174,9 @@ public sealed class DeploymentAccessTokenMiddleware
 
 public sealed class PrometheusScrapeTokenMiddleware
 {
+    public const string HeaderName =
+        "X-Kafdeck-Metrics-Token";
+
     private readonly RequestDelegate _next;
     private readonly string _expectedToken;
     private readonly FailedAccessAttemptLimiter _failureLimiter = new();
@@ -202,7 +205,7 @@ public sealed class PrometheusScrapeTokenMiddleware
             "unknown";
         var providedToken =
             context.Request.Headers[
-                PrometheusObservabilityOptions.HeaderName]
+                HeaderName]
                 .ToString();
 
         if (DeploymentAccessTokenValidator.Matches(
