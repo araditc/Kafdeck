@@ -342,6 +342,60 @@ public sealed class V07W56ControlledSerdeTests
             stringResult.Failure!.Code);
     }
 
+    [Fact]
+    public async Task Encode_output_bound_is_enforced_during_write()
+    {
+        using var value = JsonDocument.Parse(
+            """{"message":"this-output-is-longer-than-eight-bytes"}""");
+
+        var result = await new ControlledSerdeService().EncodeAsync(
+            new ControlledSerdeEncodeRequest(
+                ControlledSerdeFormat.Cbor,
+                value.RootElement.Clone()),
+            Limits(
+                maxOutputBytes: 8,
+                maxStringCharacters: 128),
+            Deadline);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ControlledSerdeFailureCategory.BoundExceeded,
+            result.Failure!.Category);
+        Assert.Equal(
+            "serde_output_bound_exceeded",
+            result.Failure.Code);
+    }
+
+    [Fact]
+    public async Task Decode_projection_obeys_output_bound_after_binary_expansion()
+    {
+        byte[] cborByteString =
+        [
+            0x44,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+        ];
+
+        var result = await new ControlledSerdeService().DecodeAsync(
+            new ControlledSerdeDecodeRequest(
+                ControlledSerdeFormat.Cbor,
+                cborByteString),
+            Limits(
+                maxOutputBytes: 12,
+                maxBinaryBytes: 16),
+            Deadline);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ControlledSerdeFailureCategory.BoundExceeded,
+            result.Failure!.Category);
+        Assert.Equal(
+            "serde_output_bound_exceeded",
+            result.Failure.Code);
+    }
+
     [Theory]
     [InlineData(ControlledSerdeFormat.Cbor)]
     [InlineData(ControlledSerdeFormat.MessagePack)]
