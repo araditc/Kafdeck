@@ -138,6 +138,9 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IMutationOperationRepository>(services =>
         new AdoMutationOperationRepository(
             services.GetRequiredService<IMutationDbConnectionFactory>()));
+    builder.Services.AddSingleton<IFleetMutationStateStore>(services =>
+        new AdoFleetMutationStateStore(
+            services.GetRequiredService<IMutationDbConnectionFactory>()));
     builder.Services.AddSingleton<IConnectAutoRestartStateStore>(services =>
         new AdoConnectAutoRestartStateStore(
             services.GetRequiredService<IMutationDbConnectionFactory>()));
@@ -169,6 +172,21 @@ if (mutationOptions?.Enabled == true)
             secretResolver));
     builder.Services.AddSingleton<RecordProductionExecutionService>();
     builder.Services.AddSingleton<IMutationExecutionHandler, RecordProduceExecutionHandler>();
+
+    builder.Services.AddSingleton<ClusterTransferPlanner>();
+    builder.Services.AddSingleton<ClusterTransferSourceReader>();
+    builder.Services.AddSingleton<IClusterTransferProducePort>(_ =>
+        new ConfluentKafkaClusterTransferProduceAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver));
+    builder.Services.AddSingleton<GovernedDataJobPlanner>();
+    builder.Services.AddSingleton<GovernedDataJobPreconditionValidator>();
+    builder.Services.AddSingleton<GovernedDataJobStateCoordinator>();
+    builder.Services.AddSingleton<GovernedDataJobSourceReader>();
+    builder.Services.AddSingleton<W57GovernedDataJobEffectGuard>();
+    builder.Services.AddSingleton<IGovernedDataJobEffectGuard>(services =>
+        services.GetRequiredService<W57GovernedDataJobEffectGuard>());
+    builder.Services.AddSingleton<GovernedDataJobDispatchCoordinator>();
 
     builder.Services.AddSingleton<IConsumerMutationObservationPort>(_ =>
         new ConfluentKafkaConsumerMutationObservationAdapter(
@@ -269,6 +287,10 @@ if (mutationOptions?.Enabled == true)
     _ = app.Services.GetRequiredService<IMutationMaterialDigestService>();
     var mutationRepository = app.Services.GetRequiredService<IMutationOperationRepository>();
     await mutationRepository.InitializeAsync().ConfigureAwait(false);
+
+    var fleetStateStore =
+        app.Services.GetRequiredService<IFleetMutationStateStore>();
+    await fleetStateStore.InitializeAsync().ConfigureAwait(false);
 
     var autoRestartStore =
         app.Services.GetRequiredService<IConnectAutoRestartStateStore>();
