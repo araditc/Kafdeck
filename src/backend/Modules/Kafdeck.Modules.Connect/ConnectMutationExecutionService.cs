@@ -113,6 +113,7 @@ public sealed class ConnectMutationExecutionService
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 observation =>
                     observation.Exists &&
@@ -166,6 +167,7 @@ public sealed class ConnectMutationExecutionService
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 observation =>
                     observation.Exists &&
@@ -232,6 +234,7 @@ public sealed class ConnectMutationExecutionService
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 observation =>
                     observation.Exists &&
@@ -272,6 +275,7 @@ public sealed class ConnectMutationExecutionService
 
         var verification = await VerifyUntilAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 observation => !observation.Exists,
                 cancellationToken,
@@ -307,6 +311,7 @@ public sealed class ConnectMutationExecutionService
 
     private async Task<ConnectVerificationObservation> VerifyUntilAsync(
         string clusterId,
+        string connectProfileId,
         string connectorName,
         Func<ConnectMutationObservation, bool> verify,
         CancellationToken cancellationToken,
@@ -341,6 +346,7 @@ public sealed class ConnectMutationExecutionService
             {
                 var observed = await _observations.ObserveConnectorAsync(
                         clusterId,
+                        connectProfileId,
                         connectorName,
                         new ReadViewOperationContext(
                             deadline,
@@ -413,6 +419,8 @@ public sealed class ConnectMutationExecutionService
                 canonical.ClusterId,
                 "Cluster ID",
                 256);
+            var profileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                canonical.ConnectProfileId);
             var connector = ConnectMutationCanonicalization.RequireConnectorName(
                 canonical.ConnectorName);
             var encoded = material.GetRequired(canonical.MaterialName);
@@ -431,7 +439,11 @@ public sealed class ConnectMutationExecutionService
                 return false;
             }
 
-            mutation = new ConnectCreateMutation(cluster, connector, configuration);
+            mutation = new ConnectCreateMutation(
+                cluster,
+                connector,
+                configuration,
+                profileId);
             return true;
         }
         catch (Exception exception)
@@ -463,6 +475,8 @@ public sealed class ConnectMutationExecutionService
                 canonical.ClusterId,
                 "Cluster ID",
                 256);
+            var profileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                canonical.ConnectProfileId);
             var connector = ConnectMutationCanonicalization.RequireConnectorName(
                 canonical.ConnectorName);
             var encoded = material.GetRequired(canonical.MaterialName);
@@ -481,7 +495,11 @@ public sealed class ConnectMutationExecutionService
                 return false;
             }
 
-            mutation = new ConnectAlterMutation(cluster, connector, configuration);
+            mutation = new ConnectAlterMutation(
+                cluster,
+                connector,
+                configuration,
+                profileId);
             return true;
         }
         catch (Exception exception)
@@ -510,6 +528,8 @@ public sealed class ConnectMutationExecutionService
                 canonical.ClusterId,
                 "Cluster ID",
                 256);
+            var profileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                canonical.ConnectProfileId);
             var connector = ConnectMutationCanonicalization.RequireConnectorName(
                 canonical.ConnectorName);
 
@@ -533,7 +553,8 @@ public sealed class ConnectMutationExecutionService
                 cluster,
                 connector,
                 canonical.TaskId,
-                canonical.Action);
+                canonical.Action,
+                profileId);
             return true;
         }
         catch (ArgumentException)
@@ -563,7 +584,9 @@ public sealed class ConnectMutationExecutionService
                     "Cluster ID",
                     256),
                 ConnectMutationCanonicalization.RequireConnectorName(
-                    canonical.ConnectorName));
+                    canonical.ConnectorName),
+                ConnectMutationCanonicalization.RequireConnectProfileId(
+                    canonical.ConnectProfileId));
             return true;
         }
         catch (ArgumentException)
