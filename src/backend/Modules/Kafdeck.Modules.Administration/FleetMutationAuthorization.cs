@@ -25,6 +25,7 @@ public static class FleetMutationAuthorization
         MutationOperationKind.BrokerMaintenance or
         MutationOperationKind.LogDirectoryMaintenance or
         MutationOperationKind.ClusterTransfer or
+        MutationOperationKind.DataJob or
         MutationOperationKind.ReplicationIntegration or
         MutationOperationKind.FleetUncertaintyDisposition;
 
@@ -94,6 +95,7 @@ public static class FleetMutationAuthorization
         switch (kind)
         {
             case MutationOperationKind.ClusterTransfer:
+            case MutationOperationKind.DataJob:
                 ValidateTransferTopology(normalized, clusters);
                 break;
 
@@ -301,6 +303,22 @@ public static class FleetMutationAuthorization
         MutationOperationKind.ClusterTransfer => Rule(
             new[]
             {
+                AuthorizationAction.ClusterTransferPlan,
+                AuthorizationAction.ClusterTransferExecute,
+                AuthorizationAction.ClusterRead,
+                AuthorizationAction.TopicRead,
+                AuthorizationAction.RecordRead,
+                AuthorizationAction.RecordExport,
+                AuthorizationAction.RecordProduce,
+            },
+            AuthorizationAction.TopicConfigRead,
+            AuthorizationAction.BrokerConfigRead),
+
+        MutationOperationKind.DataJob => Rule(
+            new[]
+            {
+                AuthorizationAction.DataJobPlan,
+                AuthorizationAction.DataJobExecute,
                 AuthorizationAction.ClusterTransferPlan,
                 AuthorizationAction.ClusterTransferExecute,
                 AuthorizationAction.ClusterRead,
