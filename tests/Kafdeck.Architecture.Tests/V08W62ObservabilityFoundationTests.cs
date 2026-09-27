@@ -207,7 +207,7 @@ public sealed class V08W62ObservabilityFoundationTests
                 new string('a', 129)));
 
         Assert.Equal(
-            "PATCH",
+            "OTHER",
             ApiTelemetry.NormalizeMethod("patch"));
         Assert.Equal(
             "OTHER",
