@@ -49,6 +49,8 @@ public enum AuthorizationAction
     ClusterTransferExecute = 43,
     ReplicationIntegrationAlter = 44,
     MutationReconcile = 45,
+    StreamsRead = 46,
+    LineageRead = 47,
     ConnectRestart = 46,
     ConnectAutoRestartManage = 47,
     DataJobPlan = 48,
