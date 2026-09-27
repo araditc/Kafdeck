@@ -27,6 +27,7 @@ public static class KafdeckConfigurationValidator
         ValidateClusters(options.Clusters, errors);
         ValidateCatalog(options.Catalog, options.Clusters, errors);
         ValidateAdministration(options.Administration, options.Deployment, errors);
+        ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
         {
