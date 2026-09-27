@@ -307,3 +307,40 @@ W51 planning is authorized. W52–W60 implementation remains blocked until the c
 
 Planning admission and implementation completion do not authorize publication. v0.7 tag/GHCR/GitHub Release promotion requires a separate explicit owner decision.
 
+
+
+## Gate 8 — v0.8 Observability, Automation & Platform APIs
+
+- **Date:** 2026-09-27
+- **Status:** SCOPE ACCEPTED; PLANNING ADMISSION PENDING
+- **Authority:** Project Owner, Ammar Heidari
+- **Scope issue:** #208
+- **Tracker:** #209
+- **Planning workstream:** #210 / W61
+- **Gate record:** [Gate 8](gate-8-v0.8-observability-automation.md)
+
+### Accepted decision
+
+Kafdeck v0.8 is **Observability, Automation & Platform APIs**.
+
+The accepted scope adds bounded OpenTelemetry/Prometheus observability, explicit historical metrics, operational analytics/SLOs, bounded data-quality monitoring, typed notifier/webhook delivery, REST/CLI parity, declarative GitOps/Terraform management, MCP product tools and safe compensation semantics.
+
+### Accepted invariants
+
+- no secret/raw protected payload leakage through telemetry/alerts;
+- no unbounded high-cardinality telemetry;
+- no arbitrary outbound notifier/exporter endpoint;
+- no privileged CLI/Terraform/GitOps/MCP bypass;
+- explicit automation principals and effect-time authorization revalidation;
+- CRITICAL distinct-principal approval preserved;
+- no generic automation scripting/shell/raw provider execution;
+- no generic rollback of irreversible effects;
+- release/publication separately owner-gated.
+
+### Owner approval
+
+> **v0.8 scope در Issue #208 طبق متن فعلی تأیید است؛ W61 governed planning package را شروع کن. implementation فقط بعد از protected-main planning admission مجاز است.**
+
+### Implementation gate
+
+W62–W71 remain blocked until W61 is admitted through protected-main governance.
