@@ -733,12 +733,19 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            using var document = JsonDocument.Parse(bytes);
-            return ProjectPluginValidation(
-                connectorClass,
-                document.RootElement,
-                operation.MaxItems,
-                configuration);
+            try
+            {
+                using var document = JsonDocument.Parse(bytes);
+                return ProjectPluginValidation(
+                    connectorClass,
+                    document.RootElement,
+                    operation.MaxItems,
+                    configuration);
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+            }
         }
     }
 
