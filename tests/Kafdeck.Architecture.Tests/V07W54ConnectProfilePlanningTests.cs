@@ -39,7 +39,7 @@ public sealed class V07W54ConnectProfilePlanningTests
             Assert.Single(plan.Intent.ResourceKeys));
         Assert.Equal(
             "connect-profile/analytics/connector/sink-a",
-            Assert.Single(plan.Intent.AuthorizationTargets).ResourceName);
+            Assert.Single(plan.Intent.AuthorizationTargets!).ResourceName);
         Assert.All(
             observations.CapabilityProfiles,
             profile => Assert.Equal("analytics", profile));
