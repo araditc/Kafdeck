@@ -656,6 +656,7 @@ public sealed class StreamsLineageReadService :
         var limitations = new List<ReadViewLimitation>();
         var appTopicEvidence = new List<AppTopicEvidence>();
         var partial = false;
+        var edgeBoundHit = false;
 
         foreach (var application in applications.Value)
         {
@@ -706,6 +707,7 @@ public sealed class StreamsLineageReadService :
                                 observed.Stale)))
                     {
                         partial = true;
+                        edgeBoundHit = true;
                         break;
                     }
                 }
@@ -730,6 +732,7 @@ public sealed class StreamsLineageReadService :
                                 observed.Stale)))
                     {
                         partial = true;
+                        edgeBoundHit = true;
                         break;
                     }
                 }
@@ -816,7 +819,7 @@ public sealed class StreamsLineageReadService :
             }
         }
 
-        if (partial &&
+        if (edgeBoundHit &&
             !limitations.Any(item =>
                 string.Equals(
                     item.Code,
