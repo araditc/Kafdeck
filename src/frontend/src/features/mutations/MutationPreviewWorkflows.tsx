@@ -114,7 +114,7 @@ export function MutationPreviewWorkflows({
     {workflow === 'record' && <RecordWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'consumer' && <ConsumerWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'schema' && <SchemaWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
-    {workflow === 'connect' && <ConnectWorkflow clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'connect' && <ConnectWorkflow key={`${clusterId}:${connectProfileId ?? 'default'}`} clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'dataJob' && <DataJobWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'purge' && <PurgeWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
   </article>;
