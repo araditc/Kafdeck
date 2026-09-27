@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Kafdeck.Api;
+using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Schemas;
 using Xunit;
@@ -194,6 +195,61 @@ public sealed class V07OpenApiContractTests
         Assert.DoesNotContain("/connect/proxy", lower, StringComparison.Ordinal);
         Assert.DoesNotContain("providerurl", lower, StringComparison.Ordinal);
         Assert.DoesNotContain("providermethod", lower, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void W56_controlled_serde_openapi_is_closed_and_bounded()
+    {
+        using var document = JsonDocument.Parse(KafdeckV07OpenApi.Document);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        Assert.True(paths
+            .GetProperty("/api/v1/tools/serde/capabilities")
+            .TryGetProperty("get", out _));
+        Assert.True(paths
+            .GetProperty("/api/v1/tools/serde/decode")
+            .TryGetProperty("post", out _));
+        Assert.True(paths
+            .GetProperty("/api/v1/tools/serde/encode")
+            .TryGetProperty("post", out _));
+
+        var schemas = root
+            .GetProperty("components")
+            .GetProperty("schemas");
+
+        Assert.Equal(
+            new[] { "cbor", "xml", "messagePack" },
+            schemas.GetProperty("ControlledSerdeFormat")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(item => item.GetString())
+                .ToArray());
+
+        var limits = schemas
+            .GetProperty("ControlledSerdeLimitsData")
+            .GetProperty("properties");
+
+        Assert.Equal(
+            ControlledSerdeLimits.HardMaxInputBytes,
+            limits.GetProperty("maxInputBytes")
+                .GetProperty("maximum")
+                .GetInt32());
+        Assert.Equal(
+            ControlledSerdeLimits.HardMaxDepth,
+            limits.GetProperty("maxDepth")
+                .GetProperty("maximum")
+                .GetInt32());
+        Assert.Equal(
+            ControlledSerdeLimits.HardMaxNodes,
+            limits.GetProperty("maxNodes")
+                .GetProperty("maximum")
+                .GetInt32());
+
+        var lower = KafdeckV07OpenApi.Document.ToLowerInvariant();
+        Assert.DoesNotContain("providerurl", lower, StringComparison.Ordinal);
+        Assert.DoesNotContain("/serde/proxy", lower, StringComparison.Ordinal);
+        Assert.DoesNotContain("pluginpath", lower, StringComparison.Ordinal);
     }
 
     [Fact]
