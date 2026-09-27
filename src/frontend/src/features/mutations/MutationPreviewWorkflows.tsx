@@ -175,7 +175,7 @@ function RecordWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId
       <label htmlFor="record-key">UTF-8 key (optional)</label>{' '}<input id="record-key" value={key} onChange={event => setKey(event.target.value)} autoComplete="off" /><br />
       <label htmlFor="record-value">UTF-8 value</label><br /><textarea id="record-value" required value={value} onChange={event => setValue(event.target.value)} rows={5} /><br />
       <label htmlFor="record-headers">Headers, one name=value per line</label><br /><textarea id="record-headers" value={headers} onChange={event => setHeaders(event.target.value)} rows={4} />
-      <p>Payload, key and header values remain browser-memory/request material only; this UI does not use localStorage or a durable payload staging surface.</p>
+      <p>Payload, key and header values remain browser-memory/request material only; this UI does not use persistent browser storage or a durable payload staging surface.</p>
       <button type="submit" disabled={!topicName.trim() || !value || !idempotencyKey.trim()}>Create preview</button>
     </fieldset>
   </form>;
