@@ -78,3 +78,25 @@ test('v0.7 Connect profile loads ignore stale responses after profile switches',
   assert.match(source, /if \(generation !== connectLoadGeneration\.current\) return/);
   assert.match(source, /if \(generation === connectLoadGeneration\.current\)/);
 });
+
+test('v0.7 initial Connect profile rejection is generation-fenced', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  const start = source.indexOf('void kafdeckApi.listConnectProfiles');
+  const end = source.indexOf('void kafdeckApi.getKsqlInfo', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const initialLoad = source.slice(start, end);
+  assert.match(
+    initialLoad,
+    /initialConnectGeneration === connectLoadGeneration\.current/,
+  );
+  assert.match(
+    initialLoad,
+    /setConnectError\(readViewError\(reason\)\)/,
+  );
+});
