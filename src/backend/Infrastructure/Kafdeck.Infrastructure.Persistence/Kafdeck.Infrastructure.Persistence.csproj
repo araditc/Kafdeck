@@ -9,6 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../Modules/Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj" />
+    <ProjectReference Include="../../Modules/Kafdeck.Modules.Connect/Kafdeck.Modules.Connect.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Kafdeck.Architecture.Tests" />
