@@ -16,8 +16,13 @@ import {
   type ConsumerGroupDetail,
   type ConsumerGroupSummary,
   type ConsumerLag,
+  type KsqlQueryResult,
   type KsqlServerInfo,
+  type LineageGraph,
   type ReadViewEnvelope,
+  type StreamsApplicationSummary,
+  type StreamsStateStoreObservation,
+  type StreamsTopologyObservation,
   type SchemaCompatibility,
   type SchemaCompatibilityExplanation,
   type SchemaDiff,
@@ -112,7 +117,17 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [autoRestartBusy, setAutoRestartBusy] = useState(false);
 
   const [ksqlInfo, setKsqlInfo] = useState<ReadViewEnvelope<KsqlServerInfo> | null>(null);
+  const [ksqlStatement, setKsqlStatement] = useState('');
+  const [ksqlResult, setKsqlResult] = useState<ReadViewEnvelope<KsqlQueryResult> | null>(null);
+  const [ksqlBusy, setKsqlBusy] = useState(false);
   const [ksqlError, setKsqlError] = useState<string | null>(null);
+
+  const [streamsApplications, setStreamsApplications] = useState<ReadViewEnvelope<StreamsApplicationSummary[]> | null>(null);
+  const [streamsTopology, setStreamsTopology] = useState<ReadViewEnvelope<StreamsTopologyObservation> | null>(null);
+  const [streamsStores, setStreamsStores] = useState<ReadViewEnvelope<StreamsStateStoreObservation> | null>(null);
+  const [streamsError, setStreamsError] = useState<string | null>(null);
+  const [lineage, setLineage] = useState<ReadViewEnvelope<LineageGraph> | null>(null);
+  const [lineageError, setLineageError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -121,7 +136,9 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setSerdeCapabilities(null); setSerdeFormat('cbor'); setSerdePayloadBase64(''); setSerdeStructuredJson(''); setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null); setSerdeBusy(false);
     setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null); setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null); setAutoRestartBusy(false);
-    setKsqlInfo(null); setKsqlError(null);
+    setKsqlInfo(null); setKsqlStatement(''); setKsqlResult(null); setKsqlBusy(false); setKsqlError(null);
+    setStreamsApplications(null); setStreamsTopology(null); setStreamsStores(null); setStreamsError(null);
+    setLineage(null); setLineageError(null);
 
     void kafdeckApi.listConsumerGroups(clusterId, controller.signal)
       .then(setConsumerGroups)
@@ -169,8 +186,56 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       .then(setKsqlInfo)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setKsqlError(readViewError(reason)); });
 
+    void kafdeckApi.listStreamsApplications(clusterId, controller.signal)
+      .then(setStreamsApplications)
+      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setStreamsError(readViewError(reason)); });
+
+    void kafdeckApi.getLineage(clusterId, controller.signal)
+      .then(setLineage)
+      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setLineageError(readViewError(reason)); });
+
     return () => controller.abort();
   }, [clusterId]);
+
+  const runKsqlQuery = async () => {
+    const statement = ksqlStatement.trim();
+    if (!statement) return;
+
+    setKsqlBusy(true);
+    setKsqlError(null);
+    setKsqlResult(null);
+    try {
+      setKsqlResult(await kafdeckApi.executeKsqlQuery(
+        clusterId,
+        statement,
+        {
+          maxRows: 1000,
+          maxBytes: 2 * 1024 * 1024,
+          maxDurationSeconds: 30,
+        },
+      ));
+    } catch (reason) {
+      setKsqlError(readViewError(reason));
+    } finally {
+      setKsqlBusy(false);
+    }
+  };
+
+  const openStreamsApplication = async (applicationId: string) => {
+    setStreamsError(null);
+    setStreamsTopology(null);
+    setStreamsStores(null);
+    try {
+      const [topology, stores] = await Promise.all([
+        kafdeckApi.getStreamsTopology(clusterId, applicationId),
+        kafdeckApi.getStreamsStateStores(clusterId, applicationId),
+      ]);
+      setStreamsTopology(topology);
+      setStreamsStores(stores);
+    } catch (reason) {
+      setStreamsError(readViewError(reason));
+    }
+  };
 
   const openConsumer = async (groupId: string) => {
     setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
@@ -667,9 +732,52 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </article>}
 
       <h3>ksqlDB</h3>
-      {ksqlError && <p role="status">{ksqlError}</p>}
+      {ksqlError && <p role="alert">{ksqlError}</p>}
       {ksqlInfo && <p>Version: {ksqlInfo.data.version ?? 'Unknown'} · Kafka cluster: {ksqlInfo.data.kafkaClusterId ?? 'Unknown'} · Health: {ksqlInfo.data.state ?? 'Unknown'}</p>}
-      <p>v0.4 exposes no SQL or metadata-statement execution surface. Metadata that would require statement execution is reported unsupported.</p>
+      <p>v0.7 admits bounded single-statement SELECT queries only. DDL, DML, persistent-query creation, session substitution and generic provider forwarding are blocked before provider I/O.</p>
+      <label htmlFor="ksql-query-editor">Read-only SELECT</label>
+      <textarea
+        id="ksql-query-editor"
+        rows={6}
+        value={ksqlStatement}
+        onChange={event => setKsqlStatement(event.target.value)}
+        placeholder="SELECT * FROM ORDERS LIMIT 100;"
+        autoComplete="off"
+      />
+      <button type="button" disabled={ksqlBusy || ksqlStatement.trim().length === 0} onClick={() => void runKsqlQuery()}>
+        {ksqlBusy ? 'Running…' : 'Run bounded query'}
+      </button>
+      {ksqlResult && <article aria-labelledby="ksql-query-result-title">
+        <h4 id="ksql-query-result-title">Query result</h4>
+        <p>Rows: {ksqlResult.data.rows.length} · Bytes observed: {ksqlResult.data.responseBytes} · {ksqlResult.data.truncated ? `Limited: ${ksqlResult.data.limitReason ?? 'server limit'}` : 'Complete within configured bounds'}</p>
+        <div className="table-responsive"><table><thead><tr>{ksqlResult.data.header.columnNames.map((name, index) => <th key={`${name}-${index}`} scope="col">{name}<br /><small>{ksqlResult.data.header.columnTypes[index] ?? 'Unknown'}</small></th>)}</tr></thead>
+          <tbody>{ksqlResult.data.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.columns.map((value, columnIndex) => <td key={columnIndex}><code>{JSON.stringify(value)}</code></td>)}</tr>)}</tbody>
+        </table></div>
+      </article>}
+
+      <h3>Kafka Streams evidence</h3>
+      {streamsError && <p role="status">{streamsError}</p>}
+      {!streamsApplications && !streamsError && <p role="status">Loading registered Streams telemetry evidence…</p>}
+      {streamsApplications && streamsApplications.data.length === 0 && <p>No registered Streams applications were reported.</p>}
+      {streamsApplications && streamsApplications.data.length > 0 && <table><thead><tr><th>Application</th><th>Evidence source</th><th>Observed</th><th>State</th></tr></thead><tbody>
+        {streamsApplications.data.map(application => <tr key={application.applicationId}><th scope="row"><button type="button" onClick={() => void openStreamsApplication(application.applicationId)}>{application.applicationId}</button></th><td>{application.evidenceSource}</td><td>{new Date(application.observedAtUtc).toLocaleString()}</td><td>{application.stale ? 'Stale' : 'Observed'}</td></tr>)}
+      </tbody></table>}
+      {streamsTopology && <article aria-labelledby="streams-topology-title">
+        <h4 id="streams-topology-title">Topology: {streamsTopology.data.applicationId}</h4>
+        <p>Source: {streamsTopology.data.evidenceSource} · Observed {new Date(streamsTopology.data.observedAtUtc).toLocaleString()} · {streamsTopology.data.stale ? 'Stale evidence' : 'Current evidence'}</p>
+        <table><thead><tr><th>Node</th><th>Type</th><th>Input topics</th><th>Output topics</th><th>State stores</th></tr></thead><tbody>{streamsTopology.data.nodes.map(node => <tr key={node.id}><th scope="row">{node.name}</th><td>{node.type}</td><td>{node.inputTopics.join(', ') || 'None'}</td><td>{node.outputTopics.join(', ') || 'None'}</td><td>{node.stateStores.join(', ') || 'None'}</td></tr>)}</tbody></table>
+      </article>}
+      {streamsStores && <article aria-labelledby="streams-stores-title">
+        <h4 id="streams-stores-title">State stores: {streamsStores.data.applicationId}</h4>
+        {streamsStores.data.stores.length === 0 ? <p>No state-store metrics were exposed by the telemetry provider.</p> : <table><thead><tr><th>Store</th><th>Type</th><th>Entries</th><th>Size</th><th>Health</th></tr></thead><tbody>{streamsStores.data.stores.map(store => <tr key={store.name}><th scope="row">{store.name}</th><td>{store.type}</td><td>{store.approximateEntries ?? 'Unknown'}</td><td>{store.sizeBytes ?? 'Unknown'}</td><td>{store.health ?? 'Unknown'}</td></tr>)}</tbody></table>}
+      </article>}
+
+      <h3>Lineage</h3>
+      {lineageError && <p role="status">{lineageError}</p>}
+      {lineage && <>
+        {lineage.data.partial && <p role="status">Lineage is partial: {lineage.data.limitations.map(item => item.message).join('; ')}</p>}
+        {lineage.data.edges.length === 0 ? <p>No lineage edges are available from registered evidence.</p> : <table><thead><tr><th>Source</th><th>Destination</th><th>Evidence</th><th>Provenance</th><th>Confidence</th><th>State</th></tr></thead><tbody>{lineage.data.edges.map((edge, index) => <tr key={`${edge.source.kind}:${edge.source.id}->${edge.destination.kind}:${edge.destination.id}:${index}`}><td>{edge.source.kind}:{edge.source.id}</td><td>{edge.destination.kind}:{edge.destination.id}</td><td>{edge.evidenceKind}</td><td>{edge.provenance}</td><td>{edge.confidence.toFixed(2)}</td><td>{edge.stale ? 'Stale' : 'Current'}</td></tr>)}</tbody></table>}
+      </>}
     </section>
 
     <MutationOperationsPanel clusterId={clusterId} connectProfileId={selectedConnectProfileId} />
