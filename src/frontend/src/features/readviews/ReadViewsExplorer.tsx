@@ -99,7 +99,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
   const [subjects, setSubjects] = useState<ReadViewEnvelope<SchemaSubjectSummary[]> | null>(null);
   const [schemaError, setSchemaError] = useState<ReadViewProblem | null>(null);
-  const [selectedSubject, setSelectedSubject] = useState<ReadViewProblem | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [versions, setVersions] = useState<ReadViewEnvelope<SchemaVersionSummary[]> | null>(null);
   const [compatibility, setCompatibility] = useState<ReadViewEnvelope<SchemaCompatibility> | null>(null);
   const [leftVersion, setLeftVersion] = useState<number | null>(null);
@@ -121,12 +121,12 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [serdeBusy, setSerdeBusy] = useState(false);
 
   const [connectProfiles, setConnectProfiles] = useState<ReadViewEnvelope<ConnectProfileSummary[]> | null>(null);
-  const [selectedConnectProfileId, setSelectedConnectProfileId] = useState<ReadViewProblem | null>(null);
+  const [selectedConnectProfileId, setSelectedConnectProfileId] = useState<string | null>(null);
   const [connectInfo, setConnectInfo] = useState<ReadViewEnvelope<ConnectClusterInfo> | null>(null);
   const [connectors, setConnectors] = useState<ReadViewEnvelope<ConnectConnectorSummary[]> | null>(null);
   const [connectorDetail, setConnectorDetail] = useState<ReadViewEnvelope<ConnectConnectorDetail> | null>(null);
   const [connectPlugins, setConnectPlugins] = useState<ReadViewEnvelope<ConnectPluginSummary[]> | null>(null);
-  const [selectedPluginClass, setSelectedPluginClass] = useState<ReadViewProblem | null>(null);
+  const [selectedPluginClass, setSelectedPluginClass] = useState<string | null>(null);
   const [pluginConfiguration, setPluginConfiguration] = useState('');
   const [pluginFieldValues, setPluginFieldValues] = useState<Record<string, string>>({});
   const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
