@@ -181,9 +181,7 @@ public static class GovernedDataJobPolicy
             .OrderBy(item => item.Key, StringComparer.Ordinal)
             .ToArray();
 
-        var canonical = JsonSerializer.Serialize(
-            plan,
-            CanonicalJson);
+        var canonical = SerializePlan(plan);
 
         return new MutationIntentDescriptor(
             MutationOperationKind.DataJob,
@@ -356,22 +354,71 @@ public static class GovernedDataJobPolicy
 
         try
         {
-            var plan =
+            var canonical =
                 JsonSerializer.Deserialize<
-                    GovernedDataJobPlan>(
+                    CanonicalDataJobPlan>(
                     canonicalIntent,
                     CanonicalJson) ??
                 throw new MutationStateException(
                     "Data-job canonical intent is invalid.");
 
+            var budget = new ClusterTransferBudget(
+                canonical.Budget.MaxBatchRecords,
+                canonical.Budget.MaxBatchBytes,
+                canonical.Budget.MaxTotalRecords,
+                canonical.Budget.MaxTotalBytes,
+                TimeSpan.FromTicks(
+                    canonical.Budget.MaxDurationTicks),
+                canonical.Budget.MaxRecordsPerSecond,
+                canonical.Budget.MaxBytesPerSecond);
+
+            var plan = new GovernedDataJobPlan(
+                canonical.Kind,
+                canonical.Source,
+                canonical.Destination,
+                canonical.Ranges,
+                budget,
+                canonical.DataPolicy,
+                canonical.Transform,
+                canonical.PlanFingerprint);
+
             ValidatePlan(plan);
             return plan;
         }
-        catch (JsonException exception)
+        catch (Exception exception)
+            when (exception is
+                JsonException or
+                ArgumentException or
+                OverflowException)
         {
             throw new MutationStateException(
                 $"Data-job canonical intent is invalid: {exception.GetType().Name}.");
         }
+    }
+
+    private static string SerializePlan(
+        GovernedDataJobPlan plan)
+    {
+        ValidatePlan(plan);
+
+        return JsonSerializer.Serialize(
+            new CanonicalDataJobPlan(
+                plan.Kind,
+                plan.Source,
+                plan.Destination,
+                plan.Ranges,
+                new CanonicalDataJobBudget(
+                    plan.Budget.MaxBatchRecords,
+                    plan.Budget.MaxBatchBytes,
+                    plan.Budget.MaxTotalRecords,
+                    plan.Budget.MaxTotalBytes,
+                    plan.Budget.MaxDuration.Ticks,
+                    plan.Budget.MaxRecordsPerSecond,
+                    plan.Budget.MaxBytesPerSecond),
+                plan.DataPolicy,
+                plan.Transform,
+                plan.PlanFingerprint),
+            CanonicalJson);
     }
 
     public static ClusterTransferPlan ToTransferPlan(
@@ -537,4 +584,23 @@ public static class GovernedDataJobPolicy
                 SHA256.HashData(
                     Encoding.UTF8.GetBytes(value)))
             .ToLowerInvariant();
+
+    private sealed record CanonicalDataJobPlan(
+        GovernedDataJobKind Kind,
+        GovernedDataJobEndpoint Source,
+        GovernedDataJobEndpoint Destination,
+        IReadOnlyList<GovernedDataJobRange> Ranges,
+        CanonicalDataJobBudget Budget,
+        ClusterTransferDataPolicy DataPolicy,
+        GovernedDataTransform Transform,
+        string PlanFingerprint);
+
+    private sealed record CanonicalDataJobBudget(
+        int MaxBatchRecords,
+        long MaxBatchBytes,
+        long MaxTotalRecords,
+        long MaxTotalBytes,
+        long MaxDurationTicks,
+        int MaxRecordsPerSecond,
+        long MaxBytesPerSecond);
 }
