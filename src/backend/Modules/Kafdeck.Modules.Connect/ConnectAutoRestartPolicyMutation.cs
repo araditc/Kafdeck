@@ -46,6 +46,18 @@ public sealed record ConnectAutoRestartPolicyCanonicalIntent(
     Guid? ExistingActivationId,
     long? ExistingActivationVersion);
 
+public static class ConnectAutoRestartPolicyMutationContract
+{
+    public static ConnectAutoRestartPolicyCanonicalIntent Deserialize(
+        string canonicalIntent)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalIntent);
+        return ConnectMutationCanonicalization.Deserialize<
+            ConnectAutoRestartPolicyCanonicalIntent>(
+            canonicalIntent);
+    }
+}
+
 public sealed record ConnectAutoRestartPolicyPlan(
     ConnectAutoRestartPolicyCanonicalIntent Canonical,
     MutationIntentDescriptor Intent,
