@@ -300,7 +300,7 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         string? limitReason = null;
         var sawExtraRow = false;
 
-        async Task<bool> ProcessLineAsync()
+        bool ProcessLine()
         {
             if (line.Length == 0)
             {
@@ -406,7 +406,7 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
             {
                 if (line.Length > 0)
                 {
-                    _ = await ProcessLineAsync().ConfigureAwait(false);
+                    _ = ProcessLine();
                 }
                 break;
             }
@@ -424,7 +424,7 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
                 var value = buffer[index];
                 if (value == (byte)'\n')
                 {
-                    if (await ProcessLineAsync().ConfigureAwait(false))
+                    if (ProcessLine())
                     {
                         truncated = true;
                         limitReason = "row_limit";
