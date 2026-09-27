@@ -2,6 +2,7 @@ using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Connect;
 using Kafdeck.Modules.Consumers;
+using Kafdeck.Modules.Generator;
 using Kafdeck.Modules.Records;
 using Kafdeck.Modules.Schemas;
 using Kafdeck.Modules.Topics;
@@ -26,6 +27,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly ConnectMutationPreconditionValidator? _connect;
     private readonly ConnectAutoRestartPolicyPreconditionValidator? _connectAutoRestart;
     private readonly GovernedDataJobPreconditionValidator? _dataJobs;
+    private readonly DataGeneratorPreconditionValidator? _generator;
     private readonly AclMutationPreconditionValidator? _acls;
     private readonly IAclEffectAuthorizationGuard? _aclAuthorization;
     private readonly ScramMutationPreconditionValidator? _scram;
@@ -42,6 +44,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         ConnectMutationPreconditionValidator? connect = null,
         ConnectAutoRestartPolicyPreconditionValidator? connectAutoRestart = null,
         GovernedDataJobPreconditionValidator? dataJobs = null,
+        DataGeneratorPreconditionValidator? generator = null,
         AclMutationPreconditionValidator? acls = null,
         IAclEffectAuthorizationGuard? aclAuthorization = null,
         ScramMutationPreconditionValidator? scram = null,
@@ -57,6 +60,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _connect = connect;
         _connectAutoRestart = connectAutoRestart;
         _dataJobs = dataJobs;
+        _generator = generator;
         _acls = acls;
         _aclAuthorization = aclAuthorization;
         _scram = scram;
@@ -151,6 +155,17 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
                 }
 
                 preconditions = await _dataJobs
+                    .ValidateAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
+            case MutationOperationKind.DataGenerator:
+                if (_generator is null)
+                {
+                    return Unsupported();
+                }
+
+                preconditions = await _generator
                     .ValidateAsync(operation, cancellationToken)
                     .ConfigureAwait(false);
                 break;
