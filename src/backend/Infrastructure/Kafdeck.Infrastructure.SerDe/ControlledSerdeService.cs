@@ -27,6 +27,7 @@ public sealed class ControlledSerdeService : IControlledSerdePort
             [
                 "DTD, external entity, external schema and external resource resolution are prohibited.",
                 "XML projects to the deterministic name/attributes/content model.",
+                "XML namespaces are unsupported so decode/encode identity cannot be misrepresented.",
                 "Comments and processing instructions are ignored.",
             ]),
         new(
@@ -462,6 +463,14 @@ public sealed class ControlledSerdeService : IControlledSerdePort
     {
         budget.EnterNode(depth);
 
+        if (!string.IsNullOrEmpty(reader.NamespaceURI) ||
+            !string.IsNullOrEmpty(reader.Prefix))
+        {
+            throw new UnsupportedSerdeException(
+                "serde_xml_namespace_unsupported",
+                "XML namespaces are unsupported by the controlled projection.");
+        }
+
         var name = budget.BoundString(reader.Name);
         var attributes = new SortedDictionary<string, string>(
             StringComparer.Ordinal);
@@ -470,6 +479,15 @@ public sealed class ControlledSerdeService : IControlledSerdePort
         {
             while (reader.MoveToNextAttribute())
             {
+                if (!string.IsNullOrEmpty(reader.NamespaceURI) ||
+                    !string.IsNullOrEmpty(reader.Prefix) ||
+                    string.Equals(reader.Name, "xmlns", StringComparison.Ordinal))
+                {
+                    throw new UnsupportedSerdeException(
+                        "serde_xml_namespace_unsupported",
+                        "XML namespaces are unsupported by the controlled projection.");
+                }
+
                 budget.BoundCollection(attributes.Count + 1);
                 attributes.Add(
                     budget.BoundString(reader.Name),
