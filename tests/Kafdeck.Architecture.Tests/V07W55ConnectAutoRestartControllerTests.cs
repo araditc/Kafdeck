@@ -186,6 +186,75 @@ public sealed class V07W55ConnectAutoRestartControllerTests
     }
 
     [Fact]
+    public async Task Pre_dispatch_audit_failure_blocks_without_provider_call()
+    {
+        var activation = Activation();
+        var store = new InMemoryStore(activation);
+        var dispatcher = new FakeDispatcher(
+            new ConnectAutoRestartDispatchResult(
+                ConnectAutoRestartDispatchOutcome.Accepted,
+                "accepted"));
+        var audit = new FakeAuditSink
+        {
+            ThrowOn = ConnectAutoRestartAuditEventType.DispatchStarted,
+        };
+        var controller = new ConnectAutoRestartController(
+            store,
+            Allowed(),
+            dispatcher,
+            audit,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var result = await controller.RunOnceAsync(
+            activation.ActivationId,
+            "worker-a");
+
+        Assert.Equal(
+            ConnectAutoRestartRunOutcome.AuditFailedBeforeDispatch,
+            result.Outcome);
+        Assert.Equal(0, dispatcher.Calls);
+        Assert.Equal(
+            ConnectAutoRestartCircuitState.Blocked,
+            store.Snapshot.CircuitState);
+        Assert.False(store.Snapshot.HasUnresolvedDispatch);
+    }
+
+    [Fact]
+    public async Task Post_dispatch_audit_failure_preserves_unresolved_marker()
+    {
+        var activation = Activation();
+        var store = new InMemoryStore(activation);
+        var dispatcher = new FakeDispatcher(
+            new ConnectAutoRestartDispatchResult(
+                ConnectAutoRestartDispatchOutcome.Accepted,
+                "accepted"));
+        var audit = new FakeAuditSink
+        {
+            ThrowOn = ConnectAutoRestartAuditEventType.DispatchOutcome,
+        };
+        var controller = new ConnectAutoRestartController(
+            store,
+            Allowed(),
+            dispatcher,
+            audit,
+            timeProvider: new FixedTimeProvider(Now));
+
+        var result = await controller.RunOnceAsync(
+            activation.ActivationId,
+            "worker-a");
+
+        Assert.Equal(
+            ConnectAutoRestartRunOutcome.AuditFailedAfterDispatch,
+            result.Outcome);
+        Assert.Equal(1, dispatcher.Calls);
+        Assert.Equal(
+            ConnectAutoRestartCircuitState.Dispatching,
+            store.Snapshot.CircuitState);
+        Assert.True(store.Snapshot.HasUnresolvedDispatch);
+        Assert.Equal(1, store.Snapshot.AttemptsUsed);
+    }
+
+    [Fact]
     public async Task Lifetime_expiry_is_persisted_terminal_without_dispatch()
     {
         var activation = Activation(
@@ -205,6 +274,7 @@ public sealed class V07W55ConnectAutoRestartControllerTests
             store,
             Allowed(),
             dispatcher,
+            new FakeAuditSink(),
             timeProvider: time);
 
         var result = await controller.RunOnceAsync(
@@ -228,6 +298,7 @@ public sealed class V07W55ConnectAutoRestartControllerTests
             store,
             revalidator,
             dispatcher,
+            new FakeAuditSink(),
             timeProvider: new FixedTimeProvider(Now));
 
     private static IConnectAutoRestartAttemptRevalidator Allowed() =>
@@ -280,6 +351,28 @@ public sealed class V07W55ConnectAutoRestartControllerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class FakeAuditSink :
+        IConnectAutoRestartAuditSink
+    {
+        public ConnectAutoRestartAuditEventType? ThrowOn { get; init; }
+        public List<ConnectAutoRestartAuditEvent> Events { get; } = [];
+
+        public ValueTask WriteAsync(
+            ConnectAutoRestartAuditEvent auditEvent,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (ThrowOn == auditEvent.EventType)
+            {
+                throw new InvalidOperationException(
+                    "Synthetic audit failure.");
+            }
+
+            Events.Add(auditEvent);
+            return ValueTask.CompletedTask;
         }
     }
 
