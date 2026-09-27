@@ -738,6 +738,29 @@ public interface IConnectAutoRestartAttemptRevalidator
         CancellationToken cancellationToken = default);
 }
 
+public enum ConnectAutoRestartAuditEventType
+{
+    DispatchStarted = 1,
+    DispatchOutcome = 2,
+}
+
+public sealed record ConnectAutoRestartAuditEvent(
+    DateTimeOffset TimestampUtc,
+    ConnectAutoRestartAuditEventType EventType,
+    Guid ActivationId,
+    Guid DispatchId,
+    string TargetKey,
+    string AutomationPrincipalId,
+    int AttemptNumber,
+    string Code);
+
+public interface IConnectAutoRestartAuditSink
+{
+    ValueTask WriteAsync(
+        ConnectAutoRestartAuditEvent auditEvent,
+        CancellationToken cancellationToken = default);
+}
+
 public enum ConnectAutoRestartDispatchOutcome
 {
     Accepted = 1,
