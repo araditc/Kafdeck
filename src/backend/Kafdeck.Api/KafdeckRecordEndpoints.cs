@@ -55,7 +55,7 @@ public static class KafdeckRecordEndpoints
                 plan,
                 operation,
                 maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue,
-                query.ControlledSerdeFormat,
+                query.SerdeFormat,
                 cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null) return ApiResults.Problem(ApiProblemMapper.FromKafka(filtered.Failure!));
 
@@ -111,7 +111,7 @@ public static class KafdeckRecordEndpoints
         await foreach (var frame in tailService.TailAsync(
             tailRequest,
             maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue,
-            query.ControlledSerdeFormat,
+            query.SerdeFormat,
             cancellationToken).ConfigureAwait(false))
         {
             object payload;
@@ -169,7 +169,7 @@ public static class KafdeckRecordEndpoints
                 plan,
                 operation,
                 maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue,
-                query.ControlledSerdeFormat,
+                query.SerdeFormat,
                 cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null)
             {
@@ -266,7 +266,7 @@ public static class KafdeckRecordEndpoints
         RecordReadRequest Read,
         RecordFilterRequest Filter,
         bool RequireDecodedValue,
-        ControlledSerdeFormat? ControlledSerdeFormat)
+        ControlledSerdeFormat? SerdeFormat)
     {
         public static RecordHttpQuery Parse(IQueryCollection query, string clusterId, string topicName, int partition, bool forceForward = false)
         {
