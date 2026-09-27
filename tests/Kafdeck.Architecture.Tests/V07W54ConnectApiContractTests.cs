@@ -123,6 +123,7 @@ public sealed class V07W54ConnectApiContractTests
         [
             typeof(KafdeckAuthorizationService),
             typeof(ConsumerExplorerService),
+            typeof(ConsumerDiagnosticsService),
             typeof(SchemaExplorerService),
             typeof(IConnectReadPort),
             typeof(IKsqlMetadataReadPort),
