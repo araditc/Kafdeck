@@ -341,6 +341,32 @@ public static class GovernedDataJobPolicy
         }
     }
 
+    public static GovernedDataJobPlan DeserializePlan(
+        string canonicalIntent)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            canonicalIntent);
+
+        try
+        {
+            var plan =
+                JsonSerializer.Deserialize<
+                    GovernedDataJobPlan>(
+                    canonicalIntent,
+                    CanonicalJson) ??
+                throw new MutationStateException(
+                    "Data-job canonical intent is invalid.");
+
+            ValidatePlan(plan);
+            return plan;
+        }
+        catch (JsonException exception)
+        {
+            throw new MutationStateException(
+                $"Data-job canonical intent is invalid: {exception.GetType().Name}.");
+        }
+    }
+
     public static ClusterTransferPlan ToTransferPlan(
         GovernedDataJobPlan plan)
     {
