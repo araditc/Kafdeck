@@ -273,6 +273,75 @@ public sealed class V07OpenApiContractTests
     }
 
     [Fact]
+    public void W57_data_job_openapi_is_finite_and_exposes_cancel_reconcile_lifecycle()
+    {
+        using var document = JsonDocument.Parse(KafdeckV07OpenApi.Document);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        string[] previewPaths =
+        [
+            "/api/v1/data-jobs/replay/preview",
+            "/api/v1/data-jobs/forward/preview",
+            "/api/v1/data-jobs/reprocess/preview",
+            "/api/v1/data-jobs/dlq-forward/preview",
+        ];
+
+        Assert.All(
+            previewPaths,
+            path =>
+            {
+                var item = paths.GetProperty(path);
+                Assert.True(item.TryGetProperty("post", out _));
+                Assert.False(item.TryGetProperty("get", out _));
+            });
+
+        Assert.True(
+            paths.GetProperty("/api/v1/data-jobs/{operationId}/start")
+                .TryGetProperty("post", out _));
+        Assert.True(
+            paths.GetProperty("/api/v1/data-jobs/{operationId}")
+                .TryGetProperty("get", out _));
+        Assert.True(
+            paths.GetProperty("/api/v1/data-jobs/{operationId}/cancel")
+                .TryGetProperty("post", out _));
+        Assert.True(
+            paths.GetProperty("/api/v1/data-jobs/{operationId}/reconcile")
+                .TryGetProperty("post", out _));
+
+        var schemas = root.GetProperty("components").GetProperty("schemas");
+        var ranges = schemas
+            .GetProperty("DataJobPreviewRequest")
+            .GetProperty("properties")
+            .GetProperty("ranges");
+
+        Assert.Equal(1, ranges.GetProperty("minItems").GetInt32());
+        Assert.Equal(48, ranges.GetProperty("maxItems").GetInt32());
+
+        var budget = schemas.GetProperty("DataJobBudgetRequest").GetProperty("properties");
+        Assert.Equal(
+            1_000_000L,
+            budget.GetProperty("maxTotalRecords").GetProperty("maximum").GetInt64());
+        Assert.Equal(
+            1_073_741_824L,
+            budget.GetProperty("maxTotalBytes").GetProperty("maximum").GetInt64());
+        Assert.Equal(
+            86_400L,
+            budget.GetProperty("maxDurationSeconds").GetProperty("maximum").GetInt64());
+
+        var reconcile = schemas
+            .GetProperty("DataJobReconcileRequest")
+            .GetProperty("properties")
+            .GetProperty("disposition")
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+
+        Assert.Equal(new[] { "provenNonApplication" }, reconcile);
+    }
+
+    [Fact]
     public void Checked_in_v07_openapi_is_reproducible()
     {
         var root = FindRepositoryRoot();
