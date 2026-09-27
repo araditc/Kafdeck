@@ -82,6 +82,8 @@ public sealed class StreamsTelemetryReadAdapter :
                 }
 
                 var result = new List<StreamsApplicationSummary>();
+                var applicationIds = new HashSet<string>(
+                    StringComparer.Ordinal);
                 foreach (var item in root.EnumerateArray())
                 {
                     if (result.Count >= operation.MaxItems)
@@ -89,10 +91,21 @@ public sealed class StreamsTelemetryReadAdapter :
                         throw new ResponseBoundExceededException();
                     }
 
-                    result.Add(ParseApplication(item));
+                    var application = ParseApplication(item);
+                    if (!applicationIds.Add(application.ApplicationId))
+                    {
+                        throw new JsonException(
+                            "Streams telemetry contains duplicate application IDs.");
+                    }
+
+                    result.Add(application);
                 }
 
-                return result;
+                return result
+                    .OrderBy(
+                        application => application.ApplicationId,
+                        StringComparer.Ordinal)
+                    .ToArray();
             });
 
     public Task<ReadViewResult<StreamsTopologyObservation>>
@@ -335,6 +348,7 @@ public sealed class StreamsTelemetryReadAdapter :
         }
 
         var nodes = new List<StreamsTopologyNode>();
+        var nodeIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var node in nodesElement.EnumerateArray())
         {
             if (nodes.Count >= maxItems)
@@ -348,9 +362,16 @@ public sealed class StreamsTelemetryReadAdapter :
                     "Streams topology node is invalid.");
             }
 
+            var nodeId = RequireString(node, "id", 256);
+            if (!nodeIds.Add(nodeId))
+            {
+                throw new JsonException(
+                    "Streams topology contains duplicate node IDs.");
+            }
+
             nodes.Add(
                 new StreamsTopologyNode(
-                    RequireString(node, "id", 256),
+                    nodeId,
                     RequireString(node, "name", 512),
                     RequireString(node, "type", 128),
                     ReadStringArray(
@@ -463,10 +484,15 @@ public sealed class StreamsTelemetryReadAdapter :
         var values = new List<string>();
         foreach (var item in element.EnumerateArray())
         {
-            if (values.Count >= maxItems ||
-                item.ValueKind != JsonValueKind.String)
+            if (values.Count >= maxItems)
             {
                 throw new ResponseBoundExceededException();
+            }
+
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException(
+                    $"Streams telemetry '{propertyName}' value is invalid.");
             }
 
             var value = item.GetString();
