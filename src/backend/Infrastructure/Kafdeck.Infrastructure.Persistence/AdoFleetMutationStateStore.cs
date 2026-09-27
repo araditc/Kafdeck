@@ -880,6 +880,59 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         return await ReadConflictObligationAsync(command, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<FleetConflictObligationSnapshot>>
+        ListConflictObligationsByOperationAsync(
+            Guid operationId,
+            CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Operation ID is required.",
+                nameof(operationId));
+        }
+
+        await using var connection =
+            await _connectionFactory.OpenAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT snapshot_json
+            FROM kafdeck_fleet_conflict_obligations
+            WHERE operation_id = @operation_id
+            ORDER BY step_id, conflict_key
+            """;
+        AddParameter(
+            command,
+            "@operation_id",
+            operationId.ToString("D"));
+
+        var items =
+            new List<FleetConflictObligationSnapshot>();
+        await using var reader =
+            await command.ExecuteReaderAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        while (await reader.ReadAsync(
+                   cancellationToken)
+                   .ConfigureAwait(false))
+        {
+            items.Add(
+                FleetConflictObligation.Restore(
+                        Deserialize<
+                            FleetConflictObligationSnapshot>(
+                            reader.GetString(0)))
+                    .Snapshot);
+        }
+
+        return Array.AsReadOnly(
+            items.ToArray());
+    }
+
     public async Task<FleetConflictObligationSnapshot?> FindBlockingConflictObligationAsync(
         string conflictKey,
         CancellationToken cancellationToken = default)
