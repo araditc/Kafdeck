@@ -160,22 +160,26 @@ public enum ConnectControlAction
 public sealed record ConnectCreateMutation(
     string ClusterId,
     string ConnectorName,
-    IReadOnlyDictionary<string, string> Configuration);
+    IReadOnlyDictionary<string, string> Configuration,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectAlterMutation(
     string ClusterId,
     string ConnectorName,
-    IReadOnlyDictionary<string, string> Configuration);
+    IReadOnlyDictionary<string, string> Configuration,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectControlMutation(
     string ClusterId,
     string ConnectorName,
     int? TaskId,
-    ConnectControlAction Action);
+    ConnectControlAction Action,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectDeleteMutation(
     string ClusterId,
-    string ConnectorName);
+    string ConnectorName,
+    string ConnectProfileId = "default");
 
 public interface IConnectMutationPort
 {
