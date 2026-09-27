@@ -268,6 +268,166 @@ public sealed class GovernedDataJobStateCoordinator
             release: true,
             cancellationToken);
 
+    private async Task<GovernedDataJobStateResult>
+        UpdateLeaseAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            string workerId,
+            long workerGeneration,
+            DateTimeOffset nowUtc,
+            TimeSpan leaseTtl,
+            bool release,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        if (string.IsNullOrWhiteSpace(workerId))
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                null,
+                "data_job_worker_id_invalid");
+        }
+
+        var normalizedWorker = workerId.Trim();
+        if (normalizedWorker.Length > 256 ||
+            normalizedWorker.Any(char.IsControl) ||
+            workerGeneration <= 0)
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                null,
+                "data_job_worker_identity_invalid");
+        }
+
+        if (!release &&
+            (leaseTtl < TimeSpan.FromSeconds(5) ||
+             leaseTtl > TimeSpan.FromMinutes(5)))
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                null,
+                "data_job_lease_ttl_invalid");
+        }
+
+        var current =
+            await _store.GetProgressAsync(
+                    operationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        if (current is null)
+        {
+            return new(
+                GovernedDataJobStateOutcome.NotFound,
+                null,
+                "data_job_progress_not_found");
+        }
+
+        if (!BoundToPlan(current, plan))
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                current,
+                "data_job_plan_binding_mismatch");
+        }
+
+        if (current.WorkerGeneration != workerGeneration)
+        {
+            return new(
+                GovernedDataJobStateOutcome.StaleWorker,
+                current,
+                "data_job_stale_worker");
+        }
+
+        if (!string.Equals(
+                current.WorkerLeaseOwner,
+                normalizedWorker,
+                StringComparison.Ordinal) ||
+            !current.WorkerLeaseExpiresAtUtc.HasValue)
+        {
+            return new(
+                GovernedDataJobStateOutcome.LeaseUnavailable,
+                current,
+                "data_job_lease_unavailable");
+        }
+
+        if (!release &&
+            current.WorkerLeaseExpiresAtUtc.Value <= nowUtc)
+        {
+            return new(
+                GovernedDataJobStateOutcome.LeaseUnavailable,
+                current,
+                "data_job_lease_expired");
+        }
+
+        FleetOperationProgressSnapshot next;
+        try
+        {
+            next =
+                FleetOperationProgress.Restore(
+                        current with
+                        {
+                            WorkerLeaseOwner =
+                                release
+                                    ? null
+                                    : normalizedWorker,
+                            WorkerLeaseExpiresAtUtc =
+                                release
+                                    ? null
+                                    : nowUtc.Add(leaseTtl),
+                            Version =
+                                checked(current.Version + 1),
+                            UpdatedAtUtc = nowUtc,
+                        })
+                    .Snapshot;
+        }
+        catch (
+            Exception exception)
+            when (exception is
+                MutationStateException or
+                ArgumentException or
+                OverflowException)
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                current,
+                "data_job_lease_transition_invalid");
+        }
+
+        var save =
+            await _store.TrySaveProgressAsync(
+                    next,
+                    current.Version,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        return save.Outcome switch
+        {
+            FleetProgressSaveOutcome.Saved =>
+                Applied(
+                    save.Progress,
+                    release
+                        ? "data_job_lease_released"
+                        : "data_job_lease_renewed"),
+            FleetProgressSaveOutcome.VersionConflict =>
+                new(
+                    GovernedDataJobStateOutcome.VersionConflict,
+                    save.Progress,
+                    "data_job_progress_version_conflict"),
+            FleetProgressSaveOutcome.NotFound =>
+                new(
+                    GovernedDataJobStateOutcome.NotFound,
+                    null,
+                    "data_job_progress_not_found"),
+            _ =>
+                new(
+                    GovernedDataJobStateOutcome.InvalidState,
+                    save.Progress,
+                    "data_job_lease_update_failed"),
+        };
+    }
+
     public async Task<GovernedDataJobStateResult>
         GetAsync(
             Guid operationId,
