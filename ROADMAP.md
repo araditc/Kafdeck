@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 7 scope accepted; v0.1-v0.7 released; v0.7 is the active release line**  
+Status: **Gate 0–Gate 8 scope accepted; v0.1-v0.7 released; v0.7 is the active release line; v0.8 planning active**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -218,7 +218,7 @@ Kafdeck does not implement a full stream-processing SQL engine merely to duplica
 
 Scope authority: **Issue #178 / Gate 7 — owner accepted 2026-09-26**. W51 planning was admitted through PR **#191**; W52–W59 completed through PRs **#192–#197, #200 and #201**; W60 **#190** completed through PR **#202**. Owner publication authorization was granted on **2026-09-27** under gate **#203**. Release activation PR **#204** merged as `23b3777461649f53f602ebf49c1ffd3607b546f7`; the protected-main release workflow published immutable tag/GitHub Release **v0.7** and promoted signed GHCR digest `sha256:2e089bfe4788d93e7f9b5d03fac117001daccd06c244f1017648d5ccf57535c8`.
 
-## v0.8 — Observability, Automation & Platform APIs
+## v0.8 — Observability, Automation & Platform APIs — SCOPE ACCEPTED / PLANNING ACTIVE
 
 Capabilities:
 - OpenTelemetry traces/metrics/logs
@@ -236,6 +236,8 @@ Capabilities:
 - Activity/event webhooks
 - MCP server/agent tools only after RBAC and mutation safety are enforced; MCP has no privileged bypass
 - Revert/compensation only for operations with a defined safe inverse
+
+Scope authority: **Issue #208 / Gate 8 — owner accepted 2026-09-27**. Tracker **#209** owns live state and W61 **#210** owns the governed planning package. W62–W71 implementation remains blocked until W61 receives exact-head applicable CI, substantive architecture/security review, fresh CODEOWNER approval, zero unresolved required threads and expected-head guarded protected-main merge. v0.8 release/tag/GitHub Release/GHCR publication remains separately owner-gated.
 
 ## v0.9 — Governance, Enterprise Operations & Hardening
 
