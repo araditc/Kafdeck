@@ -161,7 +161,7 @@ public sealed class DataGeneratorPreconditionValidator
                 .PolicyDenied =>
                 new(
                     MutationPreDispatchGuardOutcome
-                        .PolicyDenied,
+                        .StalePreview,
                     "data_generator_deployment_policy_denied"),
 
             _ =>
