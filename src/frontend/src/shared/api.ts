@@ -303,6 +303,7 @@ export interface RecordQuery {
   filterLanguage?: 'cel' | 'jq';
   filter?: string;
   decode?: boolean;
+  serdeFormat?: ControlledSerdeFormat;
 }
 
 export class ApiProblem extends Error {
@@ -442,6 +443,7 @@ function recordParams(query: RecordQuery): URLSearchParams {
     params.set('filter', query.filter);
   }
   if (query.decode !== undefined) params.set('decode', String(query.decode));
+  if (query.serdeFormat) params.set('serdeFormat', query.serdeFormat);
   return params;
 }
 
