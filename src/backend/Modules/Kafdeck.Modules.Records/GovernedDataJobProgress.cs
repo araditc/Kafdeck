@@ -289,6 +289,29 @@ public static class GovernedDataJobProgress
         };
     }
 
+    public static FleetOperationProgressSnapshot MarkStopped(
+        FleetOperationProgressSnapshot snapshot,
+        DateTimeOffset nowUtc)
+    {
+        var progress = FleetOperationProgress.Restore(snapshot);
+
+        if (progress.Snapshot.Transfer?.PendingBatch is not null)
+        {
+            throw new MutationStateException(
+                "Data-job with an unresolved batch cannot be stopped as a pre-dispatch activation failure.");
+        }
+
+        return FleetOperationProgress.Restore(
+                progress.Snapshot with
+                {
+                    Phase = FleetProgressPhase.Stopped,
+                    Version = checked(
+                        progress.Snapshot.Version + 1),
+                    UpdatedAtUtc = nowUtc,
+                })
+            .Snapshot;
+    }
+
     public static void EnsureCanDispatch(
         FleetOperationProgressSnapshot snapshot,
         GovernedDataJobPlan plan)
