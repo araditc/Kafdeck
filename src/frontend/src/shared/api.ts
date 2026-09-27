@@ -225,6 +225,70 @@ export interface KsqlMetadataItem {
   valueFormat: string | null;
   keyFormat: string | null;
 }
+export interface KsqlQueryHeader {
+  queryId: string | null;
+  columnNames: string[];
+  columnTypes: string[];
+}
+export interface KsqlQueryRow { columns: unknown[]; }
+export interface KsqlQueryResult {
+  header: KsqlQueryHeader;
+  rows: KsqlQueryRow[];
+  truncated: boolean;
+  limitReason: string | null;
+  responseBytes: number;
+}
+export interface StreamsApplicationSummary {
+  applicationId: string;
+  evidenceSource: string;
+  observedAtUtc: string;
+  stale: boolean;
+}
+export interface StreamsTopologyNode {
+  id: string;
+  name: string;
+  type: string;
+  inputTopics: string[];
+  outputTopics: string[];
+  stateStores: string[];
+}
+export interface StreamsTopologyObservation {
+  applicationId: string;
+  evidenceSource: string;
+  observedAtUtc: string;
+  stale: boolean;
+  nodes: StreamsTopologyNode[];
+}
+export interface StreamsStateStoreMetric {
+  name: string;
+  type: string;
+  approximateEntries: number | null;
+  sizeBytes: number | null;
+  health: string | null;
+}
+export interface StreamsStateStoreObservation {
+  applicationId: string;
+  evidenceSource: string;
+  observedAtUtc: string;
+  stale: boolean;
+  stores: StreamsStateStoreMetric[];
+}
+export type LineageEvidenceKind = 'observed' | 'inferred';
+export interface LineageEntity { kind: string; id: string; }
+export interface LineageEdge {
+  source: LineageEntity;
+  destination: LineageEntity;
+  evidenceKind: LineageEvidenceKind;
+  provenance: string;
+  observedAtUtc: string;
+  confidence: number;
+  stale: boolean;
+}
+export interface LineageGraph {
+  edges: LineageEdge[];
+  partial: boolean;
+  limitations: ReadViewLimitation[];
+}
 export interface TopicCatalogEntry {
   clusterId: string;
   topicName: string;
@@ -617,6 +681,42 @@ export const kafdeckApi = {
   },
   listKsqlMetadata(clusterId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<KsqlMetadataItem[]>>(`${clusterPath(clusterId)}/ksql/metadata`, signal);
+  },
+  executeKsqlQuery(
+    clusterId: string,
+    statement: string,
+    limits?: { maxRows?: number; maxBytes?: number; maxDurationSeconds?: number },
+    signal?: AbortSignal,
+  ) {
+    return postJson<ReadViewEnvelope<KsqlQueryResult>>(
+      `${clusterPath(clusterId)}/ksql/query`,
+      { statement, limits: limits ?? null },
+      signal,
+    );
+  },
+  listStreamsApplications(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<StreamsApplicationSummary[]>>(
+      `${clusterPath(clusterId)}/streams/applications`,
+      signal,
+    );
+  },
+  getStreamsTopology(clusterId: string, applicationId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<StreamsTopologyObservation>>(
+      `${clusterPath(clusterId)}/streams/applications/${encodeURIComponent(applicationId)}/topology`,
+      signal,
+    );
+  },
+  getStreamsStateStores(clusterId: string, applicationId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<StreamsStateStoreObservation>>(
+      `${clusterPath(clusterId)}/streams/applications/${encodeURIComponent(applicationId)}/state-stores`,
+      signal,
+    );
+  },
+  getLineage(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<LineageGraph>>(
+      `${clusterPath(clusterId)}/lineage`,
+      signal,
+    );
   },
   getTopicCatalog(clusterId: string, topicName: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<TopicCatalogEntry>>(`${clusterPath(clusterId)}/catalog/topics/${encodeURIComponent(topicName)}`, signal);
