@@ -157,6 +157,7 @@ public static class KafdeckDataJobEndpoints
                     IMutationOperationRepository repository,
                     MutationRequestAuthorizationService authorization,
                     GovernedDataJobStateCoordinator state,
+                    IMutationAuditSink audit,
                     CancellationToken cancellationToken) =>
                 {
                     var access =
@@ -182,6 +183,18 @@ public static class KafdeckDataJobEndpoints
                                 cancellationToken)
                             .ConfigureAwait(false);
 
+                    if (result.Outcome == GovernedDataJobStateOutcome.Applied)
+                    {
+                        await WriteLifecycleAuditAsync(
+                                context,
+                                audit,
+                                access.Operation!,
+                                MutationAuditEventType.Cancelled,
+                                result.Code,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
                     return MapStateResult(
                         access.Operation!,
                         access.Plan!,
@@ -200,6 +213,7 @@ public static class KafdeckDataJobEndpoints
                     IMutationOperationRepository repository,
                     MutationRequestAuthorizationService authorization,
                     GovernedDataJobStateCoordinator state,
+                    IMutationAuditSink audit,
                     CancellationToken cancellationToken) =>
                 {
                     if (request.BatchId == Guid.Empty ||
@@ -242,6 +256,18 @@ public static class KafdeckDataJobEndpoints
                                 DateTimeOffset.UtcNow,
                                 cancellationToken)
                             .ConfigureAwait(false);
+
+                    if (result.Outcome == GovernedDataJobStateOutcome.Applied)
+                    {
+                        await WriteLifecycleAuditAsync(
+                                context,
+                                audit,
+                                access.Operation!,
+                                MutationAuditEventType.Reconciled,
+                                result.Code,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
 
                     return MapStateResult(
                         access.Operation!,
@@ -395,6 +421,40 @@ public static class KafdeckDataJobEndpoints
             operation,
             plan,
             null);
+    }
+
+    private static async Task WriteLifecycleAuditAsync(
+        HttpContext context,
+        IMutationAuditSink audit,
+        MutationOperationSnapshot operation,
+        MutationAuditEventType eventType,
+        string outcomeCode,
+        CancellationToken cancellationToken)
+    {
+        var principal =
+            OperatorSessionContextFactory.TryCreate(
+                context.User,
+                out var session) &&
+            session is not null
+                ? SecurityAuditPrincipal.FromOperator(
+                    session.Identity)
+                : SecurityAuditPrincipal.LegacyDeployment;
+
+        await audit.WriteAsync(
+                new MutationAuditEvent(
+                    DateTimeOffset.UtcNow,
+                    eventType,
+                    operation.OperationId,
+                    principal,
+                    operation.ClusterId,
+                    operation.OperationKind,
+                    operation.Risk.RiskClass,
+                    operation.State,
+                    operation.ResourceKeys,
+                    operation.PreviewHash,
+                    outcomeCode),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static IResult MapStateResult(
