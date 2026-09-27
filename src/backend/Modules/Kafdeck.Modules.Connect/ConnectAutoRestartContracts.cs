@@ -541,6 +541,12 @@ public static class ConnectAutoRestartBackoff
     }
 }
 
+public sealed record ConnectAutoRestartLease(
+    Guid ActivationId,
+    string OwnerId,
+    long Generation,
+    DateTimeOffset ExpiresAtUtc);
+
 public interface IConnectAutoRestartStateStore
 {
     Task InitializeAsync(
@@ -558,6 +564,18 @@ public interface IConnectAutoRestartStateStore
     Task<bool> TryUpdateAsync(
         ConnectAutoRestartActivation activation,
         long expectedVersion,
+        ConnectAutoRestartLease lease,
+        CancellationToken cancellationToken = default);
+
+    Task<ConnectAutoRestartLease?> TryAcquireLeaseAsync(
+        Guid activationId,
+        string ownerId,
+        DateTimeOffset now,
+        TimeSpan leaseTtl,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> ReleaseLeaseAsync(
+        ConnectAutoRestartLease lease,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ConnectAutoRestartActivation>> ListActiveAsync(
