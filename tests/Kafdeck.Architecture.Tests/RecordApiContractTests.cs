@@ -83,7 +83,7 @@ public sealed class RecordApiContractTests
         Assert.Contains("query.RequireDecodedValue", source, StringComparison.Ordinal);
         Assert.Contains("ParseBoolean(query[\"decode\"], \"decode\")", source, StringComparison.Ordinal);
         Assert.Contains("ParseControlledSerdeFormat(query[\"serdeFormat\"])", source, StringComparison.Ordinal);
-        Assert.Contains("query.ControlledSerdeFormat", source, StringComparison.Ordinal);
+        Assert.Contains("query.SerdeFormat", source, StringComparison.Ordinal);
         Assert.Contains("decode and serdeFormat cannot be specified together", source, StringComparison.Ordinal);
     }
 
