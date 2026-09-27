@@ -77,6 +77,8 @@ public static class KafdeckStreamingEndpoints
                 "/api/v1/clusters/{clusterId}/streams/applications",
                 async (
                     string clusterId,
+                    HttpContext context,
+                    KafdeckAuthorizationService authorization,
                     IStreamsTelemetryReadPort streams,
                     CancellationToken cancellationToken) =>
                 {
@@ -92,7 +94,33 @@ public static class KafdeckStreamingEndpoints
                             EcosystemOperation(),
                             cancellationToken)
                         .ConfigureAwait(false);
-                    return ToReadViewResult(result);
+
+                    if (!result.IsSuccess || result.Value is null)
+                    {
+                        return ApiResults.Problem(
+                            ApiProblemMapper.FromReadView(result.Failure!));
+                    }
+
+                    var visible = result.Value
+                        .Where(application =>
+                            authorization.Authorize(
+                                context.User,
+                                new AuthorizationRequest(
+                                    AuthorizationAction.StreamsRead,
+                                    clusterId,
+                                    application.ApplicationId)) ==
+                            KafdeckAuthorizationOutcome.Allowed)
+                        .ToArray();
+
+                    var limitations = AddAuthorizationFilterLimitation(
+                        result.Limitations,
+                        result.Value.Count,
+                        visible.Length);
+
+                    return Results.Ok(
+                        ReadViewApiMapper.Envelope(
+                            visible,
+                            limitations));
                 })
             .WithName("v07-streams-applications")
             .RequireKafdeckCollectionAuthorization(
@@ -161,6 +189,8 @@ public static class KafdeckStreamingEndpoints
                 "/api/v1/clusters/{clusterId}/lineage",
                 async (
                     string clusterId,
+                    HttpContext context,
+                    KafdeckAuthorizationService authorization,
                     ILineageReadPort lineage,
                     CancellationToken cancellationToken) =>
                 {
@@ -176,7 +206,45 @@ public static class KafdeckStreamingEndpoints
                             EcosystemOperation(),
                             cancellationToken)
                         .ConfigureAwait(false);
-                    return ToReadViewResult(result);
+
+                    if (!result.IsSuccess || result.Value is null)
+                    {
+                        return ApiResults.Problem(
+                            ApiProblemMapper.FromReadView(result.Failure!));
+                    }
+
+                    var visibleEdges = result.Value.Edges
+                        .Where(edge =>
+                            IsLineageEntityAllowed(
+                                authorization,
+                                context,
+                                clusterId,
+                                edge.Source) &&
+                            IsLineageEntityAllowed(
+                                authorization,
+                                context,
+                                clusterId,
+                                edge.Destination))
+                        .ToArray();
+
+                    var limitations = AddAuthorizationFilterLimitation(
+                        result.Limitations,
+                        result.Value.Edges.Count,
+                        visibleEdges.Length);
+
+                    var filtered = result.Value with
+                    {
+                        Edges = visibleEdges,
+                        Partial = result.Value.Partial ||
+                                  visibleEdges.Length <
+                                  result.Value.Edges.Count,
+                        Limitations = limitations,
+                    };
+
+                    return Results.Ok(
+                        ReadViewApiMapper.Envelope(
+                            filtered,
+                            limitations));
                 })
             .WithName("v07-lineage")
             .RequireKafdeckCollectionAuthorization(
@@ -200,6 +268,40 @@ public static class KafdeckStreamingEndpoints
             DateTimeOffset.UtcNow.AddSeconds(10),
             maxItems: 2_000,
             maxResponseBytes: 4 * 1024 * 1024);
+
+    private static bool IsLineageEntityAllowed(
+        KafdeckAuthorizationService authorization,
+        HttpContext context,
+        string clusterId,
+        LineageEntity entity) =>
+        authorization.Authorize(
+            context.User,
+            new AuthorizationRequest(
+                AuthorizationAction.LineageRead,
+                clusterId,
+                $"{entity.Kind}:{entity.Id}")) ==
+        KafdeckAuthorizationOutcome.Allowed;
+
+    private static IReadOnlyList<ReadViewLimitation>
+        AddAuthorizationFilterLimitation(
+            IReadOnlyList<ReadViewLimitation> limitations,
+            int upstreamCount,
+            int visibleCount)
+    {
+        if (visibleCount >= upstreamCount)
+        {
+            return limitations;
+        }
+
+        var combined = new List<ReadViewLimitation>(
+            limitations.Count + 1);
+        combined.AddRange(limitations);
+        combined.Add(
+            new ReadViewLimitation(
+                "authorization_filtered",
+                "One or more resources were omitted because the authenticated operator is not authorized to view them."));
+        return combined;
+    }
 
     private static KsqlQueryLimits BuildLimits(
         KsqlQueryLimitRequest? request)
