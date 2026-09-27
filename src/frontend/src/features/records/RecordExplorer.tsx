@@ -9,9 +9,17 @@ export function withRecordProjectionPreference(
   mode: ViewMode,
   serdeFormat: ControlledSerdeFormat | null = null,
 ): RecordQuery {
-  if (mode !== 'structured') return { ...query, decode: false, serdeFormat: undefined };
-  if (serdeFormat) return { ...query, decode: false, serdeFormat };
-  return { ...query, decode: true, serdeFormat: undefined };
+  const { serdeFormat: _previousSerdeFormat, ...withoutSerdeFormat } = query;
+
+  if (mode !== 'structured') {
+    return { ...withoutSerdeFormat, decode: false };
+  }
+
+  if (serdeFormat) {
+    return { ...withoutSerdeFormat, decode: false, serdeFormat };
+  }
+
+  return { ...withoutSerdeFormat, decode: true };
 }
 
 export function activeRecordPageQuery(displayedQuery: RecordQuery | null, baseQuery: RecordQuery): RecordQuery {
