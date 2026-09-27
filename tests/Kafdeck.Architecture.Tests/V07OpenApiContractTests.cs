@@ -250,6 +250,26 @@ public sealed class V07OpenApiContractTests
         Assert.DoesNotContain("providerurl", lower, StringComparison.Ordinal);
         Assert.DoesNotContain("/serde/proxy", lower, StringComparison.Ordinal);
         Assert.DoesNotContain("pluginpath", lower, StringComparison.Ordinal);
+
+        foreach (var pathName in new[]
+        {
+            "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records",
+            "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records/tail",
+            "/api/v1/clusters/{clusterId}/topics/{topicName}/partitions/{partition}/records/export",
+        })
+        {
+            var operation = paths.GetProperty(pathName).GetProperty("get");
+            var serde = operation.GetProperty("parameters")
+                .EnumerateArray()
+                .Single(parameter =>
+                    parameter.GetProperty("name").GetString() == "serdeFormat");
+            Assert.False(serde.GetProperty("required").GetBoolean());
+            Assert.Equal(
+                "#/components/schemas/ControlledSerdeFormat",
+                serde.GetProperty("schema")
+                    .GetProperty("$ref")
+                    .GetString());
+        }
     }
 
     [Fact]
