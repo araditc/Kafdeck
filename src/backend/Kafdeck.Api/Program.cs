@@ -187,6 +187,8 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IGovernedDataJobEffectGuard>(services =>
         services.GetRequiredService<W57GovernedDataJobEffectGuard>());
     builder.Services.AddSingleton<GovernedDataJobDispatchCoordinator>();
+    builder.Services.AddSingleton<IMutationExecutionHandler,
+        GovernedDataJobActivationHandler>();
 
     builder.Services.AddSingleton<IConsumerMutationObservationPort>(_ =>
         new ConfluentKafkaConsumerMutationObservationAdapter(
