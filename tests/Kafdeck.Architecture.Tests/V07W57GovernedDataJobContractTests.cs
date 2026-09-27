@@ -80,6 +80,13 @@ public sealed class V07W57GovernedDataJobContractTests
                 target.Action ==
                     AuthorizationAction.DataJobExecute);
 
+        Assert.DoesNotContain(
+            intent.AuthorizationTargets!,
+            target =>
+                target.Action is
+                    AuthorizationAction.ClusterTransferPlan or
+                    AuthorizationAction.ClusterTransferExecute);
+
         Assert.Contains(
             intent.Preconditions!,
             item =>
