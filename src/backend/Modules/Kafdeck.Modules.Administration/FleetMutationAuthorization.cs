@@ -319,8 +319,6 @@ public static class FleetMutationAuthorization
             {
                 AuthorizationAction.DataJobPlan,
                 AuthorizationAction.DataJobExecute,
-                AuthorizationAction.ClusterTransferPlan,
-                AuthorizationAction.ClusterTransferExecute,
                 AuthorizationAction.ClusterRead,
                 AuthorizationAction.TopicRead,
                 AuthorizationAction.RecordRead,
