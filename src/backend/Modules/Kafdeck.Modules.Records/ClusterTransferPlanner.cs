@@ -32,9 +32,26 @@ public sealed class ClusterTransferPlanner
             throw new ArgumentOutOfRangeException(nameof(policy));
     }
 
-    public async Task<ClusterTransferPlanResult> PlanAsync(
+    public Task<ClusterTransferPlanResult> PlanAsync(
         ClusterTransferPlanningRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        PlanCoreAsync(
+            request,
+            requireBytePreservingPolicy: true,
+            cancellationToken);
+
+    public Task<ClusterTransferPlanResult> PlanStructuredAsync(
+        ClusterTransferPlanningRequest request,
+        CancellationToken cancellationToken = default) =>
+        PlanCoreAsync(
+            request,
+            requireBytePreservingPolicy: false,
+            cancellationToken);
+
+    private async Task<ClusterTransferPlanResult> PlanCoreAsync(
+        ClusterTransferPlanningRequest request,
+        bool requireBytePreservingPolicy,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -89,8 +106,11 @@ public sealed class ClusterTransferPlanner
         ClusterTransferDataPolicy dataPolicy;
         try
         {
-            dataPolicy = ClusterTransferPolicy.RequireBytePreservingPolicy(
-                _masking.Current);
+            dataPolicy = requireBytePreservingPolicy
+                ? ClusterTransferPolicy.RequireBytePreservingPolicy(
+                    _masking.Current)
+                : ClusterTransferPolicy.RequireStructuredPolicy(
+                    _masking.Current);
         }
         catch (MutationStateException)
         {
