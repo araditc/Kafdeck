@@ -133,6 +133,12 @@ public static class GovernedDataJobProgress
                 "Data-job byte budget would be exceeded.");
         }
 
+        EnsureRateBudget(
+            progress.Snapshot,
+            transfer.Snapshot,
+            plan,
+            rawBytes);
+
         _ = transfer.ReserveBeforeDispatch(
             rangeIndex,
             sourceOffset,
@@ -145,6 +151,45 @@ public static class GovernedDataJobProgress
             transfer.Snapshot,
             FleetProgressPhase.Submitting,
             nowUtc);
+    }
+
+    private static void EnsureRateBudget(
+        FleetOperationProgressSnapshot progress,
+        FleetTransferProgressSnapshot transfer,
+        GovernedDataJobPlan plan,
+        long nextRecordBytes)
+    {
+        var elapsedTicks = Math.Max(
+            TimeSpan.TicksPerSecond,
+            progress.ActiveObservationElapsedTicks);
+        var elapsedSeconds =
+            (decimal)elapsedTicks /
+            TimeSpan.TicksPerSecond;
+
+        var recordAllowance = decimal.Floor(
+            plan.Budget.MaxRecordsPerSecond *
+            elapsedSeconds);
+        var projectedRecords = checked(
+            transfer.AcknowledgedRecords + 1);
+
+        if (projectedRecords > recordAllowance)
+        {
+            throw new MutationStateException(
+                "Data-job record rate budget would be exceeded.");
+        }
+
+        var byteAllowance = decimal.Floor(
+            plan.Budget.MaxBytesPerSecond *
+            elapsedSeconds);
+        var projectedBytes = checked(
+            transfer.AcknowledgedBytes +
+            nextRecordBytes);
+
+        if (projectedBytes > byteAllowance)
+        {
+            throw new MutationStateException(
+                "Data-job byte rate budget would be exceeded.");
+        }
     }
 
     public static FleetOperationProgressSnapshot MarkDispatchStarted(
