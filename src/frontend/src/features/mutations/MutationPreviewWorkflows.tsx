@@ -69,9 +69,11 @@ function errorText(reason: unknown): string {
 
 export function MutationPreviewWorkflows({
   clusterId,
+  connectProfileId,
   onPreview,
 }: {
   clusterId: string;
+  connectProfileId?: string | null;
   onPreview: (operation: MutationStatus) => void;
 }) {
   const [workflow, setWorkflow] = useState<WorkflowKind>('topic');
@@ -110,7 +112,7 @@ export function MutationPreviewWorkflows({
     {workflow === 'record' && <RecordWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'consumer' && <ConsumerWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'schema' && <SchemaWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
-    {workflow === 'connect' && <ConnectWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'connect' && <ConnectWorkflow clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'purge' && <PurgeWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
   </article>;
 }
@@ -239,7 +241,7 @@ function SchemaWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId
   </form>;
 }
 
-function ConnectWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
+function ConnectWorkflow({ clusterId, connectProfileId, idempotencyKey, busy, submit }: { clusterId: string; connectProfileId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
   const [action, setAction] = useState<'create' | 'update' | 'control' | 'delete'>('create');
   const [connectorName, setConnectorName] = useState('');
   const [configuration, setConfiguration] = useState('');
@@ -249,14 +251,28 @@ function ConnectWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterI
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     void submit(() => {
-      if (action === 'create' || action === 'update') return mutationApi.previewConnectConfiguration(clusterId, connectorName, action, pairMap(configuration), idempotencyKey);
-      if (action === 'control') return mutationApi.previewConnectControl(clusterId, connectorName, { action: control, taskId: taskId ? Number(taskId) : null }, idempotencyKey);
-      return mutationApi.previewConnectDelete(clusterId, connectorName, idempotencyKey);
+      const isDefault = connectProfileId === 'default';
+      if (action === 'create' || action === 'update') {
+        const config = pairMap(configuration);
+        return isDefault
+          ? mutationApi.previewConnectConfiguration(clusterId, connectorName, action, config, idempotencyKey)
+          : mutationApi.previewConnectProfileConfiguration(clusterId, connectProfileId, connectorName, action, config, idempotencyKey);
+      }
+      if (action === 'control') {
+        const request = { action: control, taskId: taskId ? Number(taskId) : null };
+        return isDefault
+          ? mutationApi.previewConnectControl(clusterId, connectorName, request, idempotencyKey)
+          : mutationApi.previewConnectProfileControl(clusterId, connectProfileId, connectorName, request, idempotencyKey);
+      }
+      return isDefault
+        ? mutationApi.previewConnectDelete(clusterId, connectorName, idempotencyKey)
+        : mutationApi.previewConnectProfileDelete(clusterId, connectProfileId, connectorName, idempotencyKey);
     });
   };
 
   return <form onSubmit={onSubmit} aria-label="Kafka Connect mutation preview">
     <fieldset disabled={busy}><legend>Kafka Connect</legend>
+      <p>Connect profile: <strong>{connectProfileId}</strong>{connectProfileId === 'default' ? ' (legacy-compatible default)' : ''}</p>
       <label htmlFor="connect-action">Action</label>{' '}<select id="connect-action" value={action} onChange={event => setAction(event.target.value as typeof action)}><option value="create">Create connector</option><option value="update">Update connector</option><option value="control">Pause/resume/restart</option><option value="delete">Delete connector</option></select><br />
       <label htmlFor="connect-name">Exact connector</label>{' '}<input id="connect-name" required value={connectorName} onChange={event => setConnectorName(event.target.value)} /><br />
       {(action === 'create' || action === 'update') && <><label htmlFor="connect-config">Configuration, one key=value per line</label><br /><textarea id="connect-config" required value={configuration} onChange={event => setConfiguration(event.target.value)} rows={8} autoComplete="off" /><p>Configuration values can contain secrets. They remain request-scoped/browser-memory material and are never rendered in mutation status or provider evidence.</p></>}
