@@ -171,6 +171,25 @@ public sealed class V07W54ConnectProfileConfigurationTests
     }
 
     [Fact]
+    public void Profile_id_with_surrounding_whitespace_fails_closed()
+    {
+        var options = OptionsWithProfiles(
+            new KafkaConnectProfile(
+                "https://connect.example:8083",
+                null,
+                null,
+                Id: " analytics "));
+
+        var exception = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+
+        Assert.Contains(
+            "Kafka Connect profile ID is required",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Multi_profile_safe_diagnostics_do_not_expose_secret_references()
     {
         const string userVariable = "KAFDECK_CONNECT_A_USER";
