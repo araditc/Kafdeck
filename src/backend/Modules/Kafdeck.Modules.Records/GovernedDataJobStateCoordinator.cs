@@ -149,6 +149,25 @@ public sealed class GovernedDataJobStateCoordinator
             cancellationToken);
 
     public Task<GovernedDataJobStateResult>
+        StopAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            long workerGeneration,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken =
+                default) =>
+        MutateAsync(
+            operationId,
+            plan,
+            workerGeneration,
+            snapshot =>
+                GovernedDataJobProgress.MarkStopped(
+                    snapshot,
+                    nowUtc),
+            "data_job_stopped",
+            cancellationToken);
+
+    public Task<GovernedDataJobStateResult>
         ChargeRuntimeAsync(
             Guid operationId,
             GovernedDataJobPlan plan,
