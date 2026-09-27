@@ -1,6 +1,11 @@
 using Kafdeck.Api;
+using Kafdeck.Core.Catalog;
+using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
+using Kafdeck.Modules.Connect;
+using Kafdeck.Modules.Consumers;
+using Kafdeck.Modules.Schemas;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -16,6 +21,7 @@ public sealed class V07W54ConnectApiContractTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+        RegisterEndpointServices(builder.Services);
 
         using var app = builder.Build();
         var options = Options();
@@ -52,6 +58,7 @@ public sealed class V07W54ConnectApiContractTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+        RegisterEndpointServices(builder.Services);
 
         using var app = builder.Build();
         var options = Options();
@@ -86,6 +93,7 @@ public sealed class V07W54ConnectApiContractTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+        RegisterEndpointServices(builder.Services);
 
         using var app = builder.Build();
         var options = Options();
@@ -106,6 +114,32 @@ public sealed class V07W54ConnectApiContractTests
             app,
             "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/create/preview",
             "POST");
+    }
+
+    private static void RegisterEndpointServices(
+        IServiceCollection services)
+    {
+        Type[] endpointServices =
+        [
+            typeof(KafdeckAuthorizationService),
+            typeof(ConsumerExplorerService),
+            typeof(SchemaExplorerService),
+            typeof(IConnectReadPort),
+            typeof(IKsqlMetadataReadPort),
+            typeof(ITopicCatalogProvider),
+            typeof(MutationRequestAuthorizationService),
+            typeof(ConnectMutationPlanner),
+            typeof(MutationAdmissionService),
+            typeof(MutationDispatchService),
+        ];
+
+        foreach (var serviceType in endpointServices)
+        {
+            services.AddSingleton(
+                serviceType,
+                _ => throw new InvalidOperationException(
+                    $"Metadata-only service '{serviceType.Name}' must not be resolved."));
+        }
     }
 
     private static KafdeckOptions Options()
