@@ -624,6 +624,19 @@ public sealed record ConnectAutoRestartRevalidationResult(
         Outcome == ConnectAutoRestartRevalidationOutcome.Recovered;
 }
 
+public sealed record ConnectAutoRestartGovernanceSnapshot(
+    bool AuthorizationAllowed,
+    string ProviderIdentityFingerprint,
+    string PolicyFingerprint,
+    string? DenialCode = null);
+
+public interface IConnectAutoRestartGovernancePort
+{
+    Task<ConnectAutoRestartGovernanceSnapshot> GetCurrentAsync(
+        ConnectAutoRestartActivation activation,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IConnectAutoRestartAttemptRevalidator
 {
     Task<ConnectAutoRestartRevalidationResult> RevalidateAsync(
@@ -636,6 +649,7 @@ public enum ConnectAutoRestartDispatchOutcome
     Accepted = 1,
     FailedDefinitive = 2,
     Ambiguous = 3,
+    Blocked = 4,
 }
 
 public sealed record ConnectAutoRestartDispatchResult(
