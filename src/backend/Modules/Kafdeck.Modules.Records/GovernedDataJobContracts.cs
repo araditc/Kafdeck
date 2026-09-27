@@ -135,6 +135,10 @@ public static class GovernedDataJobPolicy
         var authorization = (baseIntent.AuthorizationTargets ??
             throw new MutationStateException(
                 "Cluster-transfer intent is missing authorization targets."))
+            .Where(target =>
+                target.Action is not (
+                    AuthorizationAction.ClusterTransferPlan or
+                    AuthorizationAction.ClusterTransferExecute))
             .Concat(
             [
                 new MutationAuthorizationTarget(
