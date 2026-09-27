@@ -61,7 +61,7 @@ internal static class KsqlStatementClassifier
                 "ksqlDB statement exceeds the admitted text boundary.");
         }
 
-        if (canonical.Contains("\${", StringComparison.Ordinal))
+        if (canonical.Contains("${", StringComparison.Ordinal))
         {
             return Unsupported(
                 "ksql_session_variables_not_admitted",
