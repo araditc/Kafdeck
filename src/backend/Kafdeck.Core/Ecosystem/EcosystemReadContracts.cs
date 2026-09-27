@@ -224,6 +224,94 @@ public interface IKsqlQueryPort
         CancellationToken cancellationToken);
 }
 
+public sealed record StreamsApplicationSummary(
+    string ApplicationId,
+    string EvidenceSource,
+    DateTimeOffset ObservedAtUtc,
+    bool Stale);
+
+public sealed record StreamsTopologyNode(
+    string Id,
+    string Name,
+    string Type,
+    IReadOnlyList<string> InputTopics,
+    IReadOnlyList<string> OutputTopics,
+    IReadOnlyList<string> StateStores);
+
+public sealed record StreamsTopologyObservation(
+    string ApplicationId,
+    string EvidenceSource,
+    DateTimeOffset ObservedAtUtc,
+    bool Stale,
+    IReadOnlyList<StreamsTopologyNode> Nodes);
+
+public sealed record StreamsStateStoreMetric(
+    string Name,
+    string Type,
+    long? ApproximateEntries,
+    long? SizeBytes,
+    string? Health);
+
+public sealed record StreamsStateStoreObservation(
+    string ApplicationId,
+    string EvidenceSource,
+    DateTimeOffset ObservedAtUtc,
+    bool Stale,
+    IReadOnlyList<StreamsStateStoreMetric> Stores);
+
+public interface IStreamsTelemetryReadPort
+{
+    Task<ReadViewResult<IReadOnlyList<StreamsApplicationSummary>>>
+        ListApplicationsAsync(
+            string clusterId,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken);
+
+    Task<ReadViewResult<StreamsTopologyObservation>> GetTopologyAsync(
+        string clusterId,
+        string applicationId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+
+    Task<ReadViewResult<StreamsStateStoreObservation>> GetStateStoresAsync(
+        string clusterId,
+        string applicationId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+}
+
+public enum LineageEvidenceKind
+{
+    Observed = 1,
+    Inferred = 2,
+}
+
+public sealed record LineageEntity(
+    string Kind,
+    string Id);
+
+public sealed record LineageEdge(
+    LineageEntity Source,
+    LineageEntity Destination,
+    LineageEvidenceKind EvidenceKind,
+    string Provenance,
+    DateTimeOffset ObservedAtUtc,
+    double Confidence,
+    bool Stale);
+
+public sealed record LineageGraph(
+    IReadOnlyList<LineageEdge> Edges,
+    bool Partial,
+    IReadOnlyList<ReadViewLimitation> Limitations);
+
+public interface ILineageReadPort
+{
+    Task<ReadViewResult<LineageGraph>> GetLineageAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+}
+
 public interface IMetricsObservationPort
 {
     Task<ReadViewResult<ConsumerRateObservation>> GetConsumerRateAsync(
