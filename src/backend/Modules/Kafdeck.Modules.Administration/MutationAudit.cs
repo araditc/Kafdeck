@@ -14,6 +14,7 @@ public enum MutationAuditEventType
     StalePreview = 10,
     IdempotencyConflict = 11,
     ResourceConflict = 12,
+    Reconciled = 13,
 }
 
 public sealed record MutationAuditEvent(
