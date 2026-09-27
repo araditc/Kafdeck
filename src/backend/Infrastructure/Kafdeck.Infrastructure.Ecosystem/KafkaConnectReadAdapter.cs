@@ -646,6 +646,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         var body = JsonSerializer.SerializeToUtf8Bytes(configuration);
         if (body.Length > MaxValidationRequestBytes)
         {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(body);
             throw new ResponseBoundExceededException();
         }
 
@@ -662,11 +663,22 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         request.Content.Headers.ContentType =
             new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
-        using var response = await runtime.Client.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken)
-            .ConfigureAwait(false);
+        HttpResponseMessage response;
+        try
+        {
+            response = await runtime.Client.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(body);
+        }
+
+        using (response)
+        {
 
         if ((int)response.StatusCode is >= 300 and < 400)
         {
@@ -715,23 +727,26 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 false);
         }
 
-        var bytes = await ReadBoundedContentAsync(
-                response.Content,
-                operation.MaxResponseBytes,
-                cancellationToken)
-            .ConfigureAwait(false);
+            var bytes = await ReadBoundedContentAsync(
+                    response.Content,
+                    operation.MaxResponseBytes,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-        using var document = JsonDocument.Parse(bytes);
-        return ProjectPluginValidation(
-            connectorClass,
-            document.RootElement,
-            operation.MaxItems);
+            using var document = JsonDocument.Parse(bytes);
+            return ProjectPluginValidation(
+                connectorClass,
+                document.RootElement,
+                operation.MaxItems,
+                configuration);
+        }
     }
 
     internal static ConnectPluginValidationResult ProjectPluginValidation(
         string connectorClass,
         JsonElement root,
-        int maxItems)
+        int maxItems,
+        IReadOnlyDictionary<string, string>? submittedConfiguration = null)
     {
         if (root.ValueKind != JsonValueKind.Object ||
             !root.TryGetProperty("error_count", out var errorCountElement) ||
@@ -743,6 +758,11 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             throw new JsonException(
                 "Kafka Connect plugin validation response is invalid.");
         }
+
+        var redactProviderText =
+            submittedConfiguration is not null &&
+            submittedConfiguration.Keys.Any(
+                ConnectSafeConfigurationPolicy.IsSecretKey);
 
         var fields = new List<ConnectPluginValidationField>();
         foreach (var config in configs.EnumerateArray())
@@ -778,16 +798,36 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             if (config.TryGetProperty("value", out var value) &&
                 value.ValueKind == JsonValueKind.Object)
             {
-                errors = ReadBoundedStringArray(
+                var rawErrors = ReadBoundedStringArray(
                     value,
                     "errors",
                     MaxValidationMessagesPerField,
                     MaxPluginTextLength);
-                recommended = ReadBoundedStringArray(
+                var rawRecommended = ReadBoundedStringArray(
                     value,
                     "recommended_values",
                     MaxValidationMessagesPerField,
                     MaxPluginTextLength);
+
+                var definitionIsSecret =
+                    ConnectSafeConfigurationPolicy.IsSecretKey(name) ||
+                    string.Equals(
+                        type,
+                        "PASSWORD",
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (redactProviderText || definitionIsSecret)
+                {
+                    errors = rawErrors.Length == 0
+                        ? Array.Empty<string>()
+                        : new[] { "[REDACTED_PROVIDER_VALIDATION_ERROR]" };
+                    recommended = Array.Empty<string>();
+                }
+                else
+                {
+                    errors = rawErrors;
+                    recommended = rawRecommended;
+                }
             }
 
             fields.Add(
