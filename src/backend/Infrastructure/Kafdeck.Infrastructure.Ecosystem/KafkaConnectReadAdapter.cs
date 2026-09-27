@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Kafdeck.Core.Ecosystem;
@@ -9,10 +10,18 @@ namespace Kafdeck.Infrastructure.Ecosystem;
 public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 {
     private const int MaxConnectorNameLength = 512;
+    private const int MaxConnectorClassLength = 1024;
+    private const int MaxPluginTextLength = 512;
+    private const int MaxValidationConfigurationItems = 256;
+    private const int MaxValidationConfigurationKeyLength = 512;
+    private const int MaxValidationConfigurationValueBytes = 64 * 1024;
+    private const int MaxValidationRequestBytes = 1024 * 1024;
+    private const int MaxValidationMessagesPerField = 32;
     private const int MaxTraceCharacters = 8_192;
-    private const int DefaultMaxConcurrencyPerCluster = 4;
-    private readonly IReadOnlyDictionary<string, HttpReadRuntime> _runtimes;
-    private readonly IReadOnlyDictionary<string, SemaphoreSlim> _gates;
+    private const int DefaultMaxConcurrencyPerProfile = 4;
+    private readonly IReadOnlyDictionary<ConnectRuntimeKey, HttpReadRuntime> _runtimes;
+    private readonly IReadOnlyDictionary<ConnectRuntimeKey, SemaphoreSlim> _gates;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<ConnectProfileSummary>> _profilesByCluster;
     private readonly TimeProvider _timeProvider;
 
     public KafkaConnectReadAdapter(
@@ -22,8 +31,9 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         : this(
             clusterProfiles,
             secretResolver,
-            static _ => new HttpClientHandler { AllowAutoRedirect = false },
-            timeProvider)
+            static (_, _) => new HttpClientHandler { AllowAutoRedirect = false },
+            timeProvider,
+            DefaultMaxConcurrencyPerProfile)
     {
     }
 
@@ -32,46 +42,243 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         SecretResolver secretResolver,
         Func<ClusterProfile, HttpMessageHandler> handlerFactory,
         TimeProvider? timeProvider = null,
-        int maxConcurrencyPerCluster = DefaultMaxConcurrencyPerCluster)
+        int maxConcurrencyPerCluster = DefaultMaxConcurrencyPerProfile)
+        : this(
+            clusterProfiles,
+            secretResolver,
+            (cluster, _) => handlerFactory(cluster),
+            timeProvider,
+            maxConcurrencyPerCluster)
+    {
+    }
+
+    internal KafkaConnectReadAdapter(
+        IReadOnlyList<ClusterProfile> clusterProfiles,
+        SecretResolver secretResolver,
+        Func<ClusterProfile, KafkaConnectProfile, HttpMessageHandler> handlerFactory,
+        TimeProvider? timeProvider = null,
+        int maxConcurrencyPerProfile = DefaultMaxConcurrencyPerProfile)
     {
         ArgumentNullException.ThrowIfNull(clusterProfiles);
         ArgumentNullException.ThrowIfNull(secretResolver);
         ArgumentNullException.ThrowIfNull(handlerFactory);
 
-        if (maxConcurrencyPerCluster is < 1 or > 64)
+        if (maxConcurrencyPerProfile is < 1 or > 64)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxConcurrencyPerCluster));
+            throw new ArgumentOutOfRangeException(nameof(maxConcurrencyPerProfile));
         }
 
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _runtimes = clusterProfiles
-            .Where(profile => profile.Connect is not null)
-            .ToDictionary(
-                profile => profile.Id,
-                profile =>
-                {
-                    var connect = profile.Connect!;
-                    return ReadOnlyHttpSupport.CreateRuntime(
-                        connect.Url,
-                        connect.Username,
-                        connect.Password,
-                        secretResolver,
-                        handlerFactory(profile));
-                },
-                StringComparer.Ordinal);
+
+        var bindings = clusterProfiles
+            .SelectMany(cluster =>
+                KafkaConnectProfileSet.Effective(cluster)
+                    .Select(profile => new ConnectProfileBinding(cluster, profile)))
+            .ToArray();
+
+        _runtimes = bindings.ToDictionary(
+            binding => new ConnectRuntimeKey(
+                binding.Cluster.Id,
+                binding.Profile.Id),
+            binding => ReadOnlyHttpSupport.CreateRuntime(
+                binding.Profile.Url,
+                binding.Profile.Username,
+                binding.Profile.Password,
+                secretResolver,
+                handlerFactory(binding.Cluster, binding.Profile)));
 
         _gates = _runtimes.Keys.ToDictionary(
-            clusterId => clusterId,
-            _ => new SemaphoreSlim(maxConcurrencyPerCluster, maxConcurrencyPerCluster),
-            StringComparer.Ordinal);
+            key => key,
+            _ => new SemaphoreSlim(
+                maxConcurrencyPerProfile,
+                maxConcurrencyPerProfile));
+
+        _profilesByCluster = bindings
+            .GroupBy(
+                binding => binding.Cluster.Id,
+                StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ConnectProfileSummary>)group
+                    .Select(binding => new ConnectProfileSummary(
+                        binding.Profile.Id,
+                        string.Equals(
+                            binding.Profile.Id,
+                            KafkaConnectProfileSet.DefaultProfileId,
+                            StringComparison.Ordinal),
+                        binding.Profile.MutationProviderProfile.ToString()))
+                    .OrderBy(profile => profile.Id, StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
+    }
+
+    public Task<ReadViewResult<IReadOnlyList<ConnectProfileSummary>>> ListProfilesAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.Cancelled,
+                "operation_cancelled",
+                "Kafka Connect profile read was cancelled.",
+                false));
+        }
+
+        if (operation.DeadlineUtc <= _timeProvider.GetUtcNow())
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.Timeout,
+                "deadline_exceeded",
+                "Kafka Connect profile read exceeded its deadline.",
+                true));
+        }
+
+        if (!_profilesByCluster.TryGetValue(clusterId, out var profiles))
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.NotConfigured,
+                "connect_not_configured",
+                "Kafka Connect is not configured for the requested cluster.",
+                false));
+        }
+
+        if (profiles.Count > operation.MaxItems)
+        {
+            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                ReadViewFailureCategory.ResponseTooLarge,
+                "connect_profiles_response_too_large",
+                "Kafka Connect profile list exceeded the configured bound.",
+                false));
+        }
+
+        return Task.FromResult(
+            ReadViewResult<IReadOnlyList<ConnectProfileSummary>>
+                .Success(profiles));
+    }
+
+    public Task<ReadViewResult<IReadOnlyList<ConnectPluginSummary>>> ListPluginsAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync<IReadOnlyList<ConnectPluginSummary>>(
+            clusterId,
+            connectProfileId,
+            operation,
+            cancellationToken,
+            async (runtime, token) =>
+            {
+                var root = await ReadOnlyHttpSupport.GetJsonAsync(
+                        runtime,
+                        "connector-plugins",
+                        operation.MaxResponseBytes,
+                        token)
+                    .ConfigureAwait(false);
+
+                if (root.ValueKind != JsonValueKind.Array)
+                {
+                    throw new JsonException(
+                        "Kafka Connect plugin list must be an array.");
+                }
+
+                var plugins = new List<ConnectPluginSummary>();
+                foreach (var item in root.EnumerateArray())
+                {
+                    if (plugins.Count >= operation.MaxItems)
+                    {
+                        throw new ResponseBoundExceededException();
+                    }
+
+                    if (item.ValueKind != JsonValueKind.Object)
+                    {
+                        throw new JsonException(
+                            "Kafka Connect plugin entry is invalid.");
+                    }
+
+                    var className = GetRequiredBoundedString(
+                        item,
+                        "class",
+                        MaxConnectorClassLength);
+                    var type = GetRequiredBoundedString(
+                        item,
+                        "type",
+                        MaxPluginTextLength);
+                    var version = GetOptionalBoundedString(
+                        item,
+                        "version",
+                        MaxPluginTextLength);
+
+                    plugins.Add(
+                        new ConnectPluginSummary(
+                            className,
+                            type,
+                            version));
+                }
+
+                return plugins
+                    .OrderBy(plugin => plugin.Class, StringComparer.Ordinal)
+                    .ToArray();
+            });
+
+    public Task<ReadViewResult<ConnectPluginValidationResult>> ValidateConfigurationAsync(
+        string clusterId,
+        string connectProfileId,
+        string connectorClass,
+        IReadOnlyDictionary<string, string> configuration,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken)
+    {
+        string normalizedClass;
+        IReadOnlyDictionary<string, string> normalizedConfiguration;
+        try
+        {
+            normalizedClass = NormalizeConnectorClass(connectorClass);
+            normalizedConfiguration = NormalizeValidationConfiguration(
+                configuration);
+        }
+        catch (ArgumentException)
+        {
+            return Task.FromResult(
+                Invalid<ConnectPluginValidationResult>(
+                    "invalid_connect_plugin_validation_request",
+                    "Kafka Connect plugin validation request is invalid."));
+        }
+
+        return ExecuteAsync(
+            clusterId,
+            connectProfileId,
+            operation,
+            cancellationToken,
+            (runtime, token) => ValidatePluginConfigurationAsync(
+                runtime,
+                normalizedClass,
+                normalizedConfiguration,
+                operation,
+                token));
     }
 
     public Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
         string clusterId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken) =>
+        GetClusterInfoAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            operation,
+            cancellationToken);
+
+    public Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
         ExecuteAsync(
             clusterId,
+            connectProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -98,8 +305,20 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         string clusterId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken) =>
+        ListConnectorsAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            operation,
+            cancellationToken);
+
+    public Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
         ExecuteAsync<IReadOnlyList<ConnectConnectorSummary>>(
             clusterId,
+            connectProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -132,11 +351,26 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     throw new ResponseBoundExceededException();
                 }
 
-                return names.Select(name => new ConnectConnectorSummary(name)).ToArray();
+                return names
+                    .Select(name => new ConnectConnectorSummary(name))
+                    .ToArray();
             });
 
     public Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
         string clusterId,
+        string connectorName,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        GetConnectorAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            connectorName,
+            operation,
+            cancellationToken);
+
+    public Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
+        string clusterId,
+        string connectProfileId,
         string connectorName,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken)
@@ -151,6 +385,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 
         return ExecuteAsync(
             clusterId,
+            connectProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -170,7 +405,11 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                         token)
                     .ConfigureAwait(false);
 
-                return ProjectConnector(normalized, status, config, operation.MaxItems);
+                return ProjectConnector(
+                    normalized,
+                    status,
+                    config,
+                    operation.MaxItems);
             });
     }
 
@@ -300,11 +539,20 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 
     private async Task<ReadViewResult<T>> ExecuteAsync<T>(
         string clusterId,
+        string connectProfileId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken,
         Func<HttpReadRuntime, CancellationToken, Task<T>> action)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        var normalizedProfileId = NormalizeProfileId(connectProfileId);
+        if (normalizedProfileId is null)
+        {
+            return Invalid<T>(
+                "invalid_connect_profile_id",
+                "Kafka Connect profile ID is invalid.");
+        }
 
         if (cancellationToken.IsCancellationRequested)
         {
@@ -316,13 +564,24 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
             return Failed<T>(ReadViewFailureCategory.Timeout, "deadline_exceeded", "Kafka Connect read operation exceeded its deadline.", true);
         }
 
-        if (!_runtimes.TryGetValue(clusterId, out var runtime) ||
-            !_gates.TryGetValue(clusterId, out var gate))
+        var key = new ConnectRuntimeKey(
+            clusterId,
+            normalizedProfileId);
+        if (!_runtimes.TryGetValue(key, out var runtime) ||
+            !_gates.TryGetValue(key, out var gate))
         {
+            var isDefault = string.Equals(
+                normalizedProfileId,
+                KafkaConnectProfileSet.DefaultProfileId,
+                StringComparison.Ordinal);
             return Failed<T>(
                 ReadViewFailureCategory.NotConfigured,
-                "connect_not_configured",
-                "Kafka Connect is not configured for the requested cluster.",
+                isDefault
+                    ? "connect_not_configured"
+                    : "connect_profile_not_configured",
+                isDefault
+                    ? "Kafka Connect is not configured for the requested cluster."
+                    : "Kafka Connect profile is not configured for the requested cluster.",
                 false);
         }
 
@@ -376,6 +635,391 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         }
     }
 
+    private static async Task<ConnectPluginValidationResult>
+        ValidatePluginConfigurationAsync(
+            HttpReadRuntime runtime,
+            string connectorClass,
+            IReadOnlyDictionary<string, string> configuration,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken)
+    {
+        var body = JsonSerializer.SerializeToUtf8Bytes(configuration);
+        if (body.Length > MaxValidationRequestBytes)
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(body);
+            throw new ResponseBoundExceededException();
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"connector-plugins/{Uri.EscapeDataString(connectorClass)}/config/validate");
+        request.Headers.Accept.ParseAdd("application/json");
+        if (runtime.Authorization is not null)
+        {
+            request.Headers.Authorization = runtime.Authorization;
+        }
+
+        request.Content = new ByteArrayContent(body);
+        request.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await runtime.Client.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(body);
+        }
+
+        using (response)
+        {
+
+        if ((int)response.StatusCode is >= 300 and < 400)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.InvalidResponse,
+                "connect_plugin_validation_redirect_rejected",
+                "Kafka Connect plugin validation redirect was rejected.",
+                false);
+        }
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.Unsupported,
+                "connect_plugin_validation_unsupported",
+                "Kafka Connect plugin validation is unsupported for the requested plugin.",
+                false);
+        }
+
+        if (response.StatusCode is
+            System.Net.HttpStatusCode.Unauthorized or
+            System.Net.HttpStatusCode.Forbidden)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.Unauthorized,
+                "connect_plugin_validation_authorization_denied",
+                "Kafka Connect denied plugin validation.",
+                false);
+        }
+
+        if ((int)response.StatusCode >= 500)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.Unavailable,
+                "connect_plugin_validation_unavailable",
+                "Kafka Connect plugin validation is temporarily unavailable.",
+                true);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ReadViewHttpException(
+                ReadViewFailureCategory.InvalidResponse,
+                "connect_plugin_validation_rejected",
+                "Kafka Connect rejected the plugin validation request.",
+                false);
+        }
+
+            var bytes = await ReadBoundedContentAsync(
+                    response.Content,
+                    operation.MaxResponseBytes,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            try
+            {
+                using var document = JsonDocument.Parse(bytes);
+                return ProjectPluginValidation(
+                    connectorClass,
+                    document.RootElement,
+                    operation.MaxItems);
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+            }
+        }
+    }
+
+    internal static ConnectPluginValidationResult ProjectPluginValidation(
+        string connectorClass,
+        JsonElement root,
+        int maxItems)
+    {
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("error_count", out var errorCountElement) ||
+            !errorCountElement.TryGetInt32(out var errorCount) ||
+            errorCount < 0 ||
+            !root.TryGetProperty("configs", out var configs) ||
+            configs.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException(
+                "Kafka Connect plugin validation response is invalid.");
+        }
+
+        var fields = new List<ConnectPluginValidationField>();
+        foreach (var config in configs.EnumerateArray())
+        {
+            if (fields.Count >= maxItems)
+            {
+                throw new ResponseBoundExceededException();
+            }
+
+            if (config.ValueKind != JsonValueKind.Object ||
+                !config.TryGetProperty("definition", out var definition) ||
+                definition.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException(
+                    "Kafka Connect plugin validation field is invalid.");
+            }
+
+            var name = GetRequiredBoundedString(
+                definition,
+                "name",
+                MaxValidationConfigurationKeyLength);
+            var type = GetRequiredBoundedString(
+                definition,
+                "type",
+                MaxPluginTextLength);
+            var required = definition.TryGetProperty(
+                    "required",
+                    out var requiredElement) &&
+                requiredElement.ValueKind == JsonValueKind.True;
+
+            var errors = Array.Empty<string>();
+            if (config.TryGetProperty("value", out var value))
+            {
+                if (value.ValueKind != JsonValueKind.Object)
+                {
+                    throw new JsonException(
+                        "Kafka Connect plugin validation value is invalid.");
+                }
+
+                if (value.TryGetProperty("errors", out var providerErrors))
+                {
+                    if (providerErrors.ValueKind != JsonValueKind.Array ||
+                        providerErrors.GetArrayLength() > MaxValidationMessagesPerField)
+                    {
+                        throw new JsonException(
+                            "Kafka Connect validation error list exceeded its bound.");
+                    }
+
+                    if (providerErrors.GetArrayLength() > 0)
+                    {
+                        errors =
+                        [
+                            "[REDACTED_PROVIDER_VALIDATION_ERROR]",
+                        ];
+                    }
+                }
+            }
+
+            fields.Add(
+                new ConnectPluginValidationField(
+                    name,
+                    type,
+                    required,
+                    errors,
+                    Array.Empty<string>()));
+        }
+
+        return new ConnectPluginValidationResult(
+            connectorClass,
+            errorCount,
+            fields);
+    }
+
+    private static IReadOnlyDictionary<string, string>
+        NormalizeValidationConfiguration(
+            IReadOnlyDictionary<string, string> configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        if (configuration.Count is < 1 or > MaxValidationConfigurationItems)
+        {
+            throw new ArgumentOutOfRangeException(nameof(configuration));
+        }
+
+        long totalBytes = 0;
+        var normalized = new SortedDictionary<string, string>(
+            StringComparer.Ordinal);
+
+        foreach (var pair in configuration)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+            {
+                throw new ArgumentException(
+                    "Kafka Connect configuration key is invalid.",
+                    nameof(configuration));
+            }
+
+            var key = pair.Key.Trim();
+            if (!string.Equals(key, pair.Key, StringComparison.Ordinal) ||
+                key.Length > MaxValidationConfigurationKeyLength ||
+                key.Any(char.IsControl))
+            {
+                throw new ArgumentException(
+                    "Kafka Connect configuration key is invalid.",
+                    nameof(configuration));
+            }
+
+            ArgumentNullException.ThrowIfNull(pair.Value);
+            var valueBytes = Encoding.UTF8.GetByteCount(pair.Value);
+            if (valueBytes > MaxValidationConfigurationValueBytes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(configuration));
+            }
+
+            totalBytes = checked(
+                totalBytes +
+                Encoding.UTF8.GetByteCount(key) +
+                valueBytes);
+            if (totalBytes > MaxValidationRequestBytes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(configuration));
+            }
+
+            normalized.Add(key, pair.Value);
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeConnectorClass(string connectorClass)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectorClass);
+        var normalized = connectorClass.Trim();
+        if (!string.Equals(
+                normalized,
+                connectorClass,
+                StringComparison.Ordinal) ||
+            normalized.Length > MaxConnectorClassLength ||
+            normalized.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "Kafka Connect connector class is invalid.",
+                nameof(connectorClass));
+        }
+
+        return normalized;
+    }
+
+    private static string GetRequiredBoundedString(
+        JsonElement root,
+        string propertyName,
+        int maxLength)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.String)
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        var text = value.GetString();
+        if (string.IsNullOrWhiteSpace(text) ||
+            text.Length > maxLength ||
+            text.Any(char.IsControl))
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        return text;
+    }
+
+    private static string? GetOptionalBoundedString(
+        JsonElement root,
+        string propertyName,
+        int maxLength)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        var text = value.GetString();
+        if (text is null ||
+            text.Length > maxLength ||
+            text.Any(char.IsControl))
+        {
+            throw new JsonException(
+                "Kafka Connect response string field is invalid.");
+        }
+
+        return text;
+    }
+
+    private static async Task<byte[]> ReadBoundedContentAsync(
+        HttpContent content,
+        long maxBytes,
+        CancellationToken cancellationToken)
+    {
+        if (content.Headers.ContentLength is long declared &&
+            declared > maxBytes)
+        {
+            throw new ResponseBoundExceededException();
+        }
+
+        await using var stream = await content.ReadAsStreamAsync(
+                cancellationToken)
+            .ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[16 * 1024];
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(
+                    chunk.AsMemory(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > maxBytes)
+            {
+                throw new ResponseBoundExceededException();
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.ToArray();
+    }
+
+    private static string? NormalizeProfileId(string? profileId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return null;
+        }
+
+        var normalized = profileId.Trim();
+        return normalized.Length <= KafkaConnectProfileSet.MaxProfileIdLength &&
+               !normalized.Any(char.IsControl) &&
+               normalized.All(character =>
+                   char.IsLetterOrDigit(character) ||
+                   character is '-' or '_' or '.')
+            ? normalized
+            : null;
+    }
+
     private static string? NormalizeConnectorName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -417,4 +1061,12 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         string message,
         bool retryable) =>
         ReadViewResult<T>.Failed(new ReadViewFailure(category, code, message, retryable));
+
+    private readonly record struct ConnectRuntimeKey(
+        string ClusterId,
+        string ProfileId);
+
+    private sealed record ConnectProfileBinding(
+        ClusterProfile Cluster,
+        KafkaConnectProfile Profile);
 }

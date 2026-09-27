@@ -193,8 +193,23 @@ public static class KafdeckConfigurationLoader
                 ParseEnum(
                     connectSection["MutationProviderProfile"],
                     KafkaConnectMutationProviderProfile.None,
-                    "Kafka Connect mutation provider profile"));
+                    "Kafka Connect mutation provider profile"),
+                KafkaConnectProfileSet.DefaultProfileId);
         }
+
+        var connectProfiles = section
+            .GetSection("ConnectProfiles")
+            .GetChildren()
+            .Select(profile => new KafkaConnectProfile(
+                profile["Url"] ?? string.Empty,
+                ParseOptionalSecret(profile["Username"]),
+                ParseOptionalSecret(profile["Password"]),
+                ParseEnum(
+                    profile["MutationProviderProfile"],
+                    KafkaConnectMutationProviderProfile.None,
+                    "Kafka Connect mutation provider profile"),
+                profile["Id"] ?? string.Empty))
+            .ToArray();
 
         var ksqlSection = section.GetSection("KsqlDb");
         KsqlDbProfile? ksqlDb = null;
@@ -214,7 +229,10 @@ public static class KafdeckConfigurationLoader
             sasl,
             schemaRegistry,
             connect,
-            ksqlDb);
+            ksqlDb,
+            connectProfiles.Length == 0
+                ? null
+                : Array.AsReadOnly(connectProfiles));
     }
 
     private static AdministrationOptions? LoadAdministration(IConfigurationSection section)

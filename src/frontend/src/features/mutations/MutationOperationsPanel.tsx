@@ -95,10 +95,11 @@ function pairMap(source: string): Record<string, string> {
 
 type MutationOperationsPanelProps = {
   clusterId: string;
+  connectProfileId?: string | null;
   enabled?: boolean;
 };
 
-export function MutationOperationsPanel({ clusterId, enabled }: MutationOperationsPanelProps) {
+export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }: MutationOperationsPanelProps) {
   const [mutationAvailable, setMutationAvailable] = useState<boolean | null>(enabled ?? null);
   const [approvals, setApprovals] = useState<MutationStatus[]>([]);
   const [selected, setSelected] = useState<MutationStatus | null>(null);
@@ -231,7 +232,7 @@ export function MutationOperationsPanel({ clusterId, enabled }: MutationOperatio
     <h2 id="mutations-title">Governed mutations</h2>
     <p>Mutation actions use frozen previews, explicit confirmation, current-request authorization rechecks and durable execution state. Unknown or partial outcomes are never presented as safe retries.</p>
 
-    <MutationPreviewWorkflows clusterId={clusterId} onPreview={selectOperation} />
+    <MutationPreviewWorkflows clusterId={clusterId} connectProfileId={connectProfileId ?? null} onPreview={selectOperation} />
 
     <article aria-labelledby="mutation-lookup-title">
       <h3 id="mutation-lookup-title">Operation status</h3>

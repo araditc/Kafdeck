@@ -203,6 +203,209 @@ public static class KafdeckConnectMutationEndpoints
             .RequireKafdeckAntiforgery();
 
         app.MapPost(
+                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/create/preview",
+                async (
+                    string clusterId,
+                    string connectProfileId,
+                    string connectorName,
+                    ConnectConfigurationPreviewRequest request,
+                    HttpContext context,
+                    MutationRequestAuthorizationService authorization,
+                    ConnectMutationPlanner planner,
+                    MutationAdmissionService admission,
+                    CancellationToken cancellationToken) =>
+                {
+                    var denied = Preflight(
+                        context,
+                        authorization,
+                        AuthorizationAction.ConnectCreate,
+                        clusterId,
+                        connectorName,
+                        connectProfileId);
+                    if (denied is not null)
+                    {
+                        return denied;
+                    }
+
+                    if (request.Configuration is null)
+                    {
+                        return InvalidRequest("A bounded connector configuration is required.");
+                    }
+
+                    var planning = await planner
+                        .PlanCreateAsync(
+                            new ConnectCreateRequest(
+                                clusterId,
+                                connectorName,
+                                request.Configuration,
+                                connectProfileId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    using var material = planning.ExecutionMaterial;
+
+                    return planning.IsSuccess && planning.Plan is not null
+                        ? await AdmitAsync(
+                                context,
+                                admission,
+                                planning.Plan.Intent,
+                                planning.Plan.Risk,
+                                cancellationToken)
+                            .ConfigureAwait(false)
+                        : PlanningProblem(planning.Failure!);
+                })
+            .WithName("v07-connect-profile-create-preview")
+            .RequireKafdeckAntiforgery();
+
+        app.MapPost(
+                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/update/preview",
+                async (
+                    string clusterId,
+                    string connectProfileId,
+                    string connectorName,
+                    ConnectConfigurationPreviewRequest request,
+                    HttpContext context,
+                    MutationRequestAuthorizationService authorization,
+                    ConnectMutationPlanner planner,
+                    MutationAdmissionService admission,
+                    CancellationToken cancellationToken) =>
+                {
+                    var denied = Preflight(
+                        context,
+                        authorization,
+                        AuthorizationAction.ConnectAlter,
+                        clusterId,
+                        connectorName,
+                        connectProfileId);
+                    if (denied is not null)
+                    {
+                        return denied;
+                    }
+
+                    if (request.Configuration is null)
+                    {
+                        return InvalidRequest("A bounded connector configuration is required.");
+                    }
+
+                    var planning = await planner
+                        .PlanUpdateAsync(
+                            new ConnectUpdateRequest(
+                                clusterId,
+                                connectorName,
+                                request.Configuration,
+                                connectProfileId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    using var material = planning.ExecutionMaterial;
+
+                    return planning.IsSuccess && planning.Plan is not null
+                        ? await AdmitAsync(
+                                context,
+                                admission,
+                                planning.Plan.Intent,
+                                planning.Plan.Risk,
+                                cancellationToken)
+                            .ConfigureAwait(false)
+                        : PlanningProblem(planning.Failure!);
+                })
+            .WithName("v07-connect-profile-update-preview")
+            .RequireKafdeckAntiforgery();
+
+        app.MapPost(
+                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/control/preview",
+                async (
+                    string clusterId,
+                    string connectProfileId,
+                    string connectorName,
+                    ConnectControlPreviewRequest request,
+                    HttpContext context,
+                    MutationRequestAuthorizationService authorization,
+                    ConnectMutationPlanner planner,
+                    MutationAdmissionService admission,
+                    CancellationToken cancellationToken) =>
+                {
+                    var denied = Preflight(
+                        context,
+                        authorization,
+                        AuthorizationAction.ConnectAlter,
+                        clusterId,
+                        connectorName,
+                        connectProfileId);
+                    if (denied is not null)
+                    {
+                        return denied;
+                    }
+
+                    var planning = await planner
+                        .PlanControlAsync(
+                            new ConnectControlRequest(
+                                clusterId,
+                                connectorName,
+                                request.Action,
+                                request.TaskId,
+                                connectProfileId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    return planning.IsSuccess && planning.Plan is not null
+                        ? await AdmitAsync(
+                                context,
+                                admission,
+                                planning.Plan.Intent,
+                                planning.Plan.Risk,
+                                cancellationToken)
+                            .ConfigureAwait(false)
+                        : PlanningProblem(planning.Failure!);
+                })
+            .WithName("v07-connect-profile-control-preview")
+            .RequireKafdeckAntiforgery();
+
+        app.MapPost(
+                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/delete/preview",
+                async (
+                    string clusterId,
+                    string connectProfileId,
+                    string connectorName,
+                    HttpContext context,
+                    MutationRequestAuthorizationService authorization,
+                    ConnectMutationPlanner planner,
+                    MutationAdmissionService admission,
+                    CancellationToken cancellationToken) =>
+                {
+                    var denied = Preflight(
+                        context,
+                        authorization,
+                        AuthorizationAction.ConnectDelete,
+                        clusterId,
+                        connectorName,
+                        connectProfileId);
+                    if (denied is not null)
+                    {
+                        return denied;
+                    }
+
+                    var planning = await planner
+                        .PlanDeleteAsync(
+                            new ConnectDeleteRequest(
+                                clusterId,
+                                connectorName,
+                                connectProfileId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    return planning.IsSuccess && planning.Plan is not null
+                        ? await AdmitAsync(
+                                context,
+                                admission,
+                                planning.Plan.Intent,
+                                planning.Plan.Risk,
+                                cancellationToken)
+                            .ConfigureAwait(false)
+                        : PlanningProblem(planning.Failure!);
+                })
+            .WithName("v07-connect-profile-delete-preview")
+            .RequireKafdeckAntiforgery();
+
+        app.MapPost(
                 "/api/v1/mutations/{operationId:guid}/connect-configuration/execute",
                 async (
                     Guid operationId,
@@ -250,8 +453,16 @@ public static class KafdeckConnectMutationEndpoints
         MutationRequestAuthorizationService authorization,
         AuthorizationAction action,
         string clusterId,
-        string connectorName)
+        string connectorName,
+        string connectProfileId = "default")
     {
+        var resource = string.Equals(
+            connectProfileId,
+            "default",
+            StringComparison.Ordinal)
+                ? $"connector/{connectorName}"
+                : $"connect-profile/{connectProfileId}/connector/{connectorName}";
+
         var outcome = authorization.AuthorizeTargets(
             context.User,
             new[]
@@ -259,7 +470,7 @@ public static class KafdeckConnectMutationEndpoints
                 new MutationAuthorizationTarget(
                     action,
                     clusterId,
-                    $"connector/{connectorName}"),
+                    resource),
             });
 
         return outcome switch

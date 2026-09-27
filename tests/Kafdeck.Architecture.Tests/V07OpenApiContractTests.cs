@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Kafdeck.Api;
+using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Schemas;
 using Xunit;
 
@@ -128,6 +129,71 @@ public sealed class V07OpenApiContractTests
                 .GetProperty("totalSchemaBytes")
                 .GetProperty("maximum")
                 .GetInt32());
+    }
+
+    [Fact]
+    public void W54_connect_profiles_plugin_tooling_and_mutations_are_typed_and_bounded()
+    {
+        using var document = JsonDocument.Parse(KafdeckV07OpenApi.Document);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        string[] requiredPaths =
+        [
+            "/api/v1/clusters/{clusterId}/connect/profiles",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/plugins",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/plugins/{connectorClass}/validate",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/create/preview",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/update/preview",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/control/preview",
+            "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/delete/preview",
+        ];
+
+        Assert.All(
+            requiredPaths,
+            path => Assert.True(
+                paths.TryGetProperty(path, out _),
+                $"OpenAPI is missing {path}."));
+
+        var profileList = root
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("ConnectProfileListEnvelope")
+            .GetProperty("properties")
+            .GetProperty("data");
+
+        Assert.Equal(
+            KafkaConnectProfileSet.MaxProfilesPerCluster,
+            profileList.GetProperty("maxItems").GetInt32());
+
+        var validationRequest = root
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("ConnectPluginValidationRequest")
+            .GetProperty("properties")
+            .GetProperty("configuration");
+
+        Assert.Equal(
+            256,
+            validationRequest.GetProperty("maxProperties").GetInt32());
+
+        var validationField = root
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("ConnectPluginValidationField");
+
+        Assert.False(
+            validationField
+                .GetProperty("properties")
+                .TryGetProperty("value", out _));
+
+        var lower = KafdeckV07OpenApi.Document.ToLowerInvariant();
+        Assert.DoesNotContain("/connect/proxy", lower, StringComparison.Ordinal);
+        Assert.DoesNotContain("providerurl", lower, StringComparison.Ordinal);
+        Assert.DoesNotContain("providermethod", lower, StringComparison.Ordinal);
     }
 
     [Fact]

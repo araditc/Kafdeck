@@ -142,10 +142,32 @@ export interface SchemaMockResult {
   totalBytes: number;
 }
 
+export interface ConnectProfileSummary {
+  id: string;
+  isDefault: boolean;
+  mutationProviderProfile: string;
+}
 export interface ConnectClusterInfo {
   version: string | null;
   commit: string | null;
   kafkaClusterId: string | null;
+}
+export interface ConnectPluginSummary {
+  class: string;
+  type: string;
+  version: string | null;
+}
+export interface ConnectPluginValidationField {
+  name: string;
+  type: string;
+  required: boolean;
+  errors: string[];
+  recommendedValues: string[];
+}
+export interface ConnectPluginValidationResult {
+  connectorClass: string;
+  errorCount: number;
+  fields: ConnectPluginValidationField[];
 }
 export interface ConnectConnectorSummary { name: string; }
 export interface ConnectTaskStatus {
@@ -483,6 +505,49 @@ export const kafdeckApi = {
     return postJson<ReadViewEnvelope<SchemaMockResult>>(
       `${clusterPath(clusterId)}/schemas/mock`,
       { subject, version, count, seed },
+      signal,
+    );
+  },
+  listConnectProfiles(clusterId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectProfileSummary[]>>(
+      `${clusterPath(clusterId)}/connect/profiles`,
+      signal,
+    );
+  },
+  getConnectProfileInfo(clusterId: string, connectProfileId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectClusterInfo>>(
+      `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}`,
+      signal,
+    );
+  },
+  listConnectProfileConnectors(clusterId: string, connectProfileId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectConnectorSummary[]>>(
+      `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/connectors`,
+      signal,
+    );
+  },
+  getConnectProfileConnector(clusterId: string, connectProfileId: string, connectorName: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectConnectorDetail>>(
+      `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/connectors/${encodeURIComponent(connectorName)}`,
+      signal,
+    );
+  },
+  listConnectPlugins(clusterId: string, connectProfileId: string, signal?: AbortSignal) {
+    return readJson<ReadViewEnvelope<ConnectPluginSummary[]>>(
+      `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/plugins`,
+      signal,
+    );
+  },
+  validateConnectPlugin(
+    clusterId: string,
+    connectProfileId: string,
+    connectorClass: string,
+    configuration: Record<string, string>,
+    signal?: AbortSignal,
+  ) {
+    return postJson<ReadViewEnvelope<ConnectPluginValidationResult>>(
+      `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/plugins/${encodeURIComponent(connectorClass)}/validate`,
+      { configuration },
       signal,
     );
   },

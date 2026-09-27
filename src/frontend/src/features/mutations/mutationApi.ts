@@ -244,6 +244,15 @@ function connectorMutationPath(clusterId: string, connectorName: string, action:
   return `${clusterPath(clusterId)}/connect/connectors/${encodeURIComponent(connectorName)}/mutations/${action}/preview`;
 }
 
+function connectorProfileMutationPath(
+  clusterId: string,
+  connectProfileId: string,
+  connectorName: string,
+  action: string,
+): string {
+  return `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/connectors/${encodeURIComponent(connectorName)}/mutations/${action}/preview`;
+}
+
 export const mutationApi = {
   get(operationId: string, signal?: AbortSignal) {
     return readJson<MutationStatus>(mutationPath(operationId), signal);
@@ -509,6 +518,51 @@ export const mutationApi = {
   ) {
     return postJson<MutationStatus>(
       connectorMutationPath(clusterId, connectorName, 'delete'),
+      {},
+      { idempotencyKey, signal },
+    );
+  },
+
+  previewConnectProfileConfiguration(
+    clusterId: string,
+    connectProfileId: string,
+    connectorName: string,
+    action: 'create' | 'update',
+    configuration: Record<string, string>,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<MutationStatus>(
+      connectorProfileMutationPath(clusterId, connectProfileId, connectorName, action),
+      { configuration },
+      { idempotencyKey, signal },
+    );
+  },
+
+  previewConnectProfileControl(
+    clusterId: string,
+    connectProfileId: string,
+    connectorName: string,
+    request: ConnectControlPreviewInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<MutationStatus>(
+      connectorProfileMutationPath(clusterId, connectProfileId, connectorName, 'control'),
+      request,
+      { idempotencyKey, signal },
+    );
+  },
+
+  previewConnectProfileDelete(
+    clusterId: string,
+    connectProfileId: string,
+    connectorName: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<MutationStatus>(
+      connectorProfileMutationPath(clusterId, connectProfileId, connectorName, 'delete'),
       {},
       { idempotencyKey, signal },
     );

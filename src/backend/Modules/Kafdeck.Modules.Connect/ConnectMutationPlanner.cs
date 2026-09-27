@@ -32,6 +32,7 @@ public sealed class ConnectMutationPlanner
         ArgumentNullException.ThrowIfNull(request);
 
         string clusterId;
+        string connectProfileId;
         string connectorName;
         IReadOnlyDictionary<string, string> configuration;
         try
@@ -40,6 +41,8 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
+            connectProfileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                request.ConnectProfileId);
             connectorName = ConnectMutationCanonicalization.RequireConnectorName(
                 request.ConnectorName);
             configuration = ConnectMutationCanonicalization.NormalizeConfiguration(
@@ -53,7 +56,10 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(
+                clusterId,
+                connectProfileId,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectCreateCanonicalIntent>(capabilities.Failure!);
@@ -64,7 +70,11 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit connector creation.");
         }
 
-        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
+        var observed = await ObserveAsync(
+                clusterId,
+                connectProfileId,
+                connectorName,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectCreateCanonicalIntent>(observed.Failure!);
@@ -77,6 +87,7 @@ public sealed class ConnectMutationPlanner
 
         return BuildCreate(
             clusterId,
+            connectProfileId,
             connectorName,
             configuration,
             observed.Value);
@@ -90,6 +101,7 @@ public sealed class ConnectMutationPlanner
         ArgumentNullException.ThrowIfNull(request);
 
         string clusterId;
+        string connectProfileId;
         string connectorName;
         IReadOnlyDictionary<string, string> configuration;
         try
@@ -98,6 +110,8 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
+            connectProfileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                request.ConnectProfileId);
             connectorName = ConnectMutationCanonicalization.RequireConnectorName(
                 request.ConnectorName);
             configuration = ConnectMutationCanonicalization.NormalizeConfiguration(
@@ -111,7 +125,10 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(
+                clusterId,
+                connectProfileId,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectUpdateCanonicalIntent>(capabilities.Failure!);
@@ -122,7 +139,11 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit connector update.");
         }
 
-        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
+        var observed = await ObserveAsync(
+                clusterId,
+                connectProfileId,
+                connectorName,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectUpdateCanonicalIntent>(observed.Failure!);
@@ -171,11 +192,13 @@ public sealed class ConnectMutationPlanner
                 projected,
                 diff,
                 observed.Value.State,
-                stateFingerprint);
+                stateFingerprint,
+                connectProfileId);
 
             var intent = BuildIntent(
                 MutationOperationKind.ConnectAlter,
                 clusterId,
+                connectProfileId,
                 connectorName,
                 ConnectMutationCanonicalization.Serialize(canonical),
                 stateFingerprint,
@@ -212,6 +235,7 @@ public sealed class ConnectMutationPlanner
         ArgumentNullException.ThrowIfNull(request);
 
         string clusterId;
+        string connectProfileId;
         string connectorName;
         try
         {
@@ -219,6 +243,8 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
+            connectProfileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                request.ConnectProfileId);
             connectorName = ConnectMutationCanonicalization.RequireConnectorName(
                 request.ConnectorName);
 
@@ -243,7 +269,10 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(
+                clusterId,
+                connectProfileId,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectControlCanonicalIntent>(capabilities.Failure!);
@@ -265,7 +294,11 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit the requested lifecycle operation.");
         }
 
-        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
+        var observed = await ObserveAsync(
+                clusterId,
+                connectProfileId,
+                connectorName,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectControlCanonicalIntent>(observed.Failure!);
@@ -317,10 +350,12 @@ public sealed class ConnectMutationPlanner
             request.TaskId,
             observed.Value.State,
             taskState,
-            stateFingerprint);
+            stateFingerprint,
+            connectProfileId);
         var intent = BuildIntent(
             MutationOperationKind.ConnectAlter,
             clusterId,
+            connectProfileId,
             connectorName,
             ConnectMutationCanonicalization.Serialize(canonical),
             stateFingerprint,
@@ -343,6 +378,7 @@ public sealed class ConnectMutationPlanner
         ArgumentNullException.ThrowIfNull(request);
 
         string clusterId;
+        string connectProfileId;
         string connectorName;
         try
         {
@@ -350,6 +386,8 @@ public sealed class ConnectMutationPlanner
                 request.ClusterId,
                 "Cluster ID",
                 256);
+            connectProfileId = ConnectMutationCanonicalization.RequireConnectProfileId(
+                request.ConnectProfileId);
             connectorName = ConnectMutationCanonicalization.RequireConnectorName(
                 request.ConnectorName);
         }
@@ -360,7 +398,10 @@ public sealed class ConnectMutationPlanner
                 exception.Message);
         }
 
-        var capabilities = await GetCapabilitiesAsync(clusterId, cancellationToken)
+        var capabilities = await GetCapabilitiesAsync(
+                clusterId,
+                connectProfileId,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!capabilities.IsSuccess)
             return Failed<ConnectDeleteCanonicalIntent>(capabilities.Failure!);
@@ -371,7 +412,11 @@ public sealed class ConnectMutationPlanner
                 "Configured Kafka Connect provider does not admit connector deletion.");
         }
 
-        var observed = await ObserveAsync(clusterId, connectorName, cancellationToken)
+        var observed = await ObserveAsync(
+                clusterId,
+                connectProfileId,
+                connectorName,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!observed.IsSuccess)
             return Failed<ConnectDeleteCanonicalIntent>(observed.Failure!);
@@ -389,10 +434,12 @@ public sealed class ConnectMutationPlanner
             connectorName,
             observed.Value.State,
             observed.Value.ConfigurationFingerprint,
-            stateFingerprint);
+            stateFingerprint,
+            connectProfileId);
         var intent = BuildIntent(
             MutationOperationKind.ConnectDelete,
             clusterId,
+            connectProfileId,
             connectorName,
             ConnectMutationCanonicalization.Serialize(canonical),
             stateFingerprint,
@@ -409,6 +456,7 @@ public sealed class ConnectMutationPlanner
 
     private ConnectMutationPlanningResult<ConnectCreateCanonicalIntent> BuildCreate(
         string clusterId,
+        string connectProfileId,
         string connectorName,
         IReadOnlyDictionary<string, string> configuration,
         ConnectMutationObservation observed)
@@ -432,10 +480,12 @@ public sealed class ConnectMutationPlanner
                 materialName,
                 requestedFingerprint,
                 projected,
-                stateFingerprint);
+                stateFingerprint,
+                connectProfileId);
             var intent = BuildIntent(
                 MutationOperationKind.ConnectCreate,
                 clusterId,
+                connectProfileId,
                 connectorName,
                 ConnectMutationCanonicalization.Serialize(canonical),
                 stateFingerprint,
@@ -466,6 +516,7 @@ public sealed class ConnectMutationPlanner
     private MutationIntentDescriptor BuildIntent(
         MutationOperationKind kind,
         string clusterId,
+        string connectProfileId,
         string connectorName,
         string canonicalIntent,
         string stateFingerprint,
@@ -490,7 +541,10 @@ public sealed class ConnectMutationPlanner
             canonicalIntent,
             new[]
             {
-                ConnectMutationCanonicalization.ResourceKey(clusterId, connectorName),
+                ConnectMutationCanonicalization.ResourceKey(
+                    clusterId,
+                    connectProfileId,
+                    connectorName),
             },
             new[]
             {
@@ -502,17 +556,21 @@ public sealed class ConnectMutationPlanner
                 new MutationAuthorizationTarget(
                     action,
                     clusterId,
-                    ConnectMutationCanonicalization.AuthorizationResource(connectorName)),
+                    ConnectMutationCanonicalization.AuthorizationResource(
+                        connectProfileId,
+                        connectorName)),
             });
     }
 
     private async Task<ConnectObservationResult<ConnectMutationCapabilities>>
         GetCapabilitiesAsync(
             string clusterId,
+            string connectProfileId,
             CancellationToken cancellationToken)
     {
         var result = await _observations.GetCapabilitiesAsync(
                 clusterId,
+                connectProfileId,
                 Observation(),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -523,13 +581,25 @@ public sealed class ConnectMutationPlanner
                 MapObservationFailure(result.Failure));
     }
 
+    internal Task<ConnectObservationResult<ConnectMutationObservation>> ObserveAsync(
+        string clusterId,
+        string connectorName,
+        CancellationToken cancellationToken) =>
+        ObserveAsync(
+            clusterId,
+            "default",
+            connectorName,
+            cancellationToken);
+
     internal async Task<ConnectObservationResult<ConnectMutationObservation>> ObserveAsync(
         string clusterId,
+        string connectProfileId,
         string connectorName,
         CancellationToken cancellationToken)
     {
         var result = await _observations.ObserveConnectorAsync(
                 clusterId,
+                connectProfileId,
                 connectorName,
                 Observation(),
                 cancellationToken)

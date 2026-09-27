@@ -43,7 +43,7 @@ public static class SafeConfigurationDiagnostics
                 cluster.Tls is not null,
                 cluster.Sasl is not null,
                 cluster.SchemaRegistry is not null,
-                cluster.Connect is not null,
+                KafkaConnectProfileSet.Effective(cluster).Count > 0,
                 cluster.KsqlDb is not null))
             .ToArray();
 

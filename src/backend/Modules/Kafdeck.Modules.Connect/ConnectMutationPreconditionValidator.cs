@@ -68,6 +68,7 @@ public sealed class ConnectMutationPreconditionValidator
                 operation,
                 MutationOperationKind.ConnectCreate,
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 AuthorizationAction.ConnectCreate) ||
             !MaterialBindingMatches(
@@ -80,6 +81,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -168,6 +170,7 @@ public sealed class ConnectMutationPreconditionValidator
                 operation,
                 MutationOperationKind.ConnectAlter,
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 AuthorizationAction.ConnectAlter) ||
             !MaterialBindingMatches(
@@ -180,6 +183,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -245,6 +249,7 @@ public sealed class ConnectMutationPreconditionValidator
                 operation,
                 MutationOperationKind.ConnectAlter,
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 AuthorizationAction.ConnectAlter))
         {
@@ -254,6 +259,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -330,6 +336,7 @@ public sealed class ConnectMutationPreconditionValidator
                 operation,
                 MutationOperationKind.ConnectDelete,
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 AuthorizationAction.ConnectDelete))
         {
@@ -339,6 +346,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -382,6 +390,7 @@ public sealed class ConnectMutationPreconditionValidator
         ConnectCreateCanonicalIntent canonical) =>
         ValidateCanonicalIdentity(
             canonical.ClusterId,
+            canonical.ConnectProfileId,
             canonical.ConnectorName,
             canonical.StateFingerprint) &&
         ValidateMaterialCanonical(
@@ -393,6 +402,7 @@ public sealed class ConnectMutationPreconditionValidator
         ConnectUpdateCanonicalIntent canonical) =>
         ValidateCanonicalIdentity(
             canonical.ClusterId,
+            canonical.ConnectProfileId,
             canonical.ConnectorName,
             canonical.StateFingerprint) &&
         ValidateFingerprint(
@@ -410,6 +420,7 @@ public sealed class ConnectMutationPreconditionValidator
     {
         if (!ValidateCanonicalIdentity(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 canonical.StateFingerprint) ||
             !Enum.IsDefined(canonical.Action))
@@ -442,6 +453,7 @@ public sealed class ConnectMutationPreconditionValidator
         ConnectDeleteCanonicalIntent canonical) =>
         ValidateCanonicalIdentity(
             canonical.ClusterId,
+            canonical.ConnectProfileId,
             canonical.ConnectorName,
             canonical.StateFingerprint) &&
         ValidateFingerprint(
@@ -505,6 +517,7 @@ public sealed class ConnectMutationPreconditionValidator
 
     private static bool ValidateCanonicalIdentity(
         string clusterId,
+        string connectProfileId,
         string connectorName,
         string stateFingerprint)
     {
@@ -514,6 +527,8 @@ public sealed class ConnectMutationPreconditionValidator
                 clusterId,
                 "Cluster ID",
                 256);
+            _ = ConnectMutationCanonicalization.RequireConnectProfileId(
+                connectProfileId);
             _ = ConnectMutationCanonicalization.RequireConnectorName(
                 connectorName);
             return ValidateFingerprint(stateFingerprint);
@@ -532,6 +547,7 @@ public sealed class ConnectMutationPreconditionValidator
         MutationOperationSnapshot operation,
         MutationOperationKind kind,
         string clusterId,
+        string connectProfileId,
         string connectorName,
         AuthorizationAction action) =>
         operation.OperationKind == kind &&
@@ -544,6 +560,7 @@ public sealed class ConnectMutationPreconditionValidator
             operation.ResourceKeys[0],
             ConnectMutationCanonicalization.ResourceKey(
                 clusterId,
+                connectProfileId,
                 connectorName),
             StringComparison.Ordinal) &&
         operation.AuthorizationTargets.Count == 1 &&
@@ -555,6 +572,7 @@ public sealed class ConnectMutationPreconditionValidator
         string.Equals(
             operation.AuthorizationTargets[0].ResourceName,
             ConnectMutationCanonicalization.AuthorizationResource(
+                connectProfileId,
                 connectorName),
             StringComparison.Ordinal);
 

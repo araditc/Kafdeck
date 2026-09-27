@@ -123,4 +123,44 @@ public interface IConnectMutationObservationPort
             string connectorName,
             ReadViewOperationContext operation,
             CancellationToken cancellationToken);
+
+    Task<ConnectMutationObservationResult<ConnectMutationCapabilities>>
+        GetCapabilitiesAsync(
+            string clusterId,
+            string connectProfileId,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? GetCapabilitiesAsync(
+                clusterId,
+                operation,
+                cancellationToken)
+            : Task.FromResult(
+                ConnectMutationObservationResult<ConnectMutationCapabilities>.Failed(
+                    new ConnectMutationObservationFailure(
+                        ConnectMutationObservationFailureCategory.NotConfigured,
+                        "connect_profile_not_configured",
+                        "Kafka Connect profile is not configured for the requested cluster.",
+                        false)));
+
+    Task<ConnectMutationObservationResult<ConnectMutationObservation>>
+        ObserveConnectorAsync(
+            string clusterId,
+            string connectProfileId,
+            string connectorName,
+            ReadViewOperationContext operation,
+            CancellationToken cancellationToken) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? ObserveConnectorAsync(
+                clusterId,
+                connectorName,
+                operation,
+                cancellationToken)
+            : Task.FromResult(
+                ConnectMutationObservationResult<ConnectMutationObservation>.Failed(
+                    new ConnectMutationObservationFailure(
+                        ConnectMutationObservationFailureCategory.NotConfigured,
+                        "connect_profile_not_configured",
+                        "Kafka Connect profile is not configured for the requested cluster.",
+                        false)));
 }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -37,4 +38,31 @@ test('v0.4 initial UI has no mutation controls', () => {
   ]) {
     assert.doesNotMatch(markup, new RegExp(forbidden, 'i'));
   }
+});
+
+test('v0.7 Connect view starts from the bounded profile catalog instead of assuming one worker', () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(ReadViewsExplorer, { clusterId: 'prod' }),
+  );
+
+  assert.match(markup, /Loading configured Connect profiles/);
+  assert.doesNotMatch(markup, /provider URL/i);
+  assert.doesNotMatch(markup, /HTTP method/i);
+});
+
+
+test('v0.7 Connect profile switch clears request-scoped plugin material', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+  const start = source.indexOf('const openConnectProfile = async');
+  const end = source.indexOf('const openConnector = async', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const profileSwitch = source.slice(start, end);
+  assert.match(profileSwitch, /setPluginConfiguration\(''\)/);
+  assert.match(profileSwitch, /setPluginFieldValues\(\{\}\)/);
+  assert.match(profileSwitch, /setPluginValidation\(null\)/);
 });

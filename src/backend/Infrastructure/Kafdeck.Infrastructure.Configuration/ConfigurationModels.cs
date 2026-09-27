@@ -124,7 +124,8 @@ public sealed record ClusterProfile(
     SaslProfile? Sasl,
     SchemaRegistryProfile? SchemaRegistry = null,
     KafkaConnectProfile? Connect = null,
-    KsqlDbProfile? KsqlDb = null);
+    KsqlDbProfile? KsqlDb = null,
+    IReadOnlyList<KafkaConnectProfile>? ConnectProfiles = null);
 
 public enum SchemaRegistryProviderProfile
 {
@@ -151,7 +152,38 @@ public sealed record KafkaConnectProfile(
     SecretReference? Username,
     SecretReference? Password,
     KafkaConnectMutationProviderProfile MutationProviderProfile =
-        KafkaConnectMutationProviderProfile.None);
+        KafkaConnectMutationProviderProfile.None,
+    string Id = KafkaConnectProfileSet.DefaultProfileId);
+
+public static class KafkaConnectProfileSet
+{
+    public const string DefaultProfileId = "default";
+    public const int MaxProfilesPerCluster = 16;
+    public const int MaxProfileIdLength = 128;
+
+    public static IReadOnlyList<KafkaConnectProfile> Effective(
+        ClusterProfile cluster)
+    {
+        ArgumentNullException.ThrowIfNull(cluster);
+
+        if (cluster.ConnectProfiles is { Count: > 0 })
+        {
+            return cluster.ConnectProfiles;
+        }
+
+        return cluster.Connect is null
+            ? Array.Empty<KafkaConnectProfile>()
+            : new[] { cluster.Connect };
+    }
+
+    public static KafkaConnectProfile? Default(
+        ClusterProfile cluster) =>
+        Effective(cluster).FirstOrDefault(
+            profile => string.Equals(
+                profile.Id,
+                DefaultProfileId,
+                StringComparison.Ordinal));
+}
 
 public sealed record KsqlDbProfile(
     string Url,

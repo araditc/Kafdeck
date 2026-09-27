@@ -25,9 +25,13 @@ public static class KafdeckV07OpenApi
   "info": {
     "title": "Kafdeck v0.7 Developer & Streaming Ecosystem API",
     "version": "0.7.0",
-    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects."
+    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile."
   },
-  "servers": [{ "url": "/" }],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
   "paths": {
     "/api/v1/clusters/{clusterId}/schemas/capabilities": {
       "get": {
@@ -38,7 +42,11 @@ public static class KafdeckV07OpenApi
             "name": "clusterId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
           }
         ],
         "responses": {
@@ -46,13 +54,21 @@ public static class KafdeckV07OpenApi
             "description": "Provider capability state separated from mutation-mode activation",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SchemaRegistryCapabilitiesData" }
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaRegistryCapabilitiesData"
+                }
               }
             }
           },
-          "401": { "description": "Operator authentication required in OIDC mode" },
-          "403": { "description": "Schema read authorization denied" },
-          "404": { "description": "Cluster ID is not configured" }
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Schema read authorization denied"
+          },
+          "404": {
+            "description": "Cluster ID is not configured"
+          }
         }
       }
     },
@@ -65,19 +81,30 @@ public static class KafdeckV07OpenApi
             "name": "clusterId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
           },
           {
             "name": "subject",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
           },
           {
             "name": "version",
             "in": "query",
             "required": true,
-            "schema": { "type": "integer", "minimum": 1 }
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -85,17 +112,33 @@ public static class KafdeckV07OpenApi
             "description": "Bounded deterministic schema reference graph",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SchemaReferenceGraphEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaReferenceGraphEnvelope"
+                }
               }
             }
           },
-          "400": { "description": "Invalid subject or version" },
-          "401": { "description": "Operator authentication required in OIDC mode" },
-          "403": { "description": "schema.read denied" },
-          "404": { "description": "Cluster ID is not configured" },
-          "422": { "description": "Reference graph bound exceeded" },
-          "501": { "description": "Configured Schema Registry provider is unsupported" },
-          "502": { "description": "Schema Registry returned malformed reference data" }
+          "400": {
+            "description": "Invalid subject or version"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "schema.read denied"
+          },
+          "404": {
+            "description": "Cluster ID is not configured"
+          },
+          "422": {
+            "description": "Reference graph bound exceeded"
+          },
+          "501": {
+            "description": "Configured Schema Registry provider is unsupported"
+          },
+          "502": {
+            "description": "Schema Registry returned malformed reference data"
+          }
         }
       }
     },
@@ -108,13 +151,21 @@ public static class KafdeckV07OpenApi
             "name": "clusterId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
           },
           {
             "name": "subject",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
           }
         ],
         "responses": {
@@ -122,16 +173,30 @@ public static class KafdeckV07OpenApi
             "description": "Deterministic explanation of observed subject or inherited compatibility semantics",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SchemaCompatibilityExplanationEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaCompatibilityExplanationEnvelope"
+                }
               }
             }
           },
-          "400": { "description": "Invalid subject" },
-          "401": { "description": "Operator authentication required in OIDC mode" },
-          "403": { "description": "schema.read denied" },
-          "404": { "description": "Cluster ID is not configured" },
-          "501": { "description": "Configured Schema Registry provider is unsupported" },
-          "502": { "description": "Schema Registry returned malformed compatibility data" }
+          "400": {
+            "description": "Invalid subject"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "schema.read denied"
+          },
+          "404": {
+            "description": "Cluster ID is not configured"
+          },
+          "501": {
+            "description": "Configured Schema Registry provider is unsupported"
+          },
+          "502": {
+            "description": "Schema Registry returned malformed compatibility data"
+          }
         }
       }
     },
@@ -145,14 +210,20 @@ public static class KafdeckV07OpenApi
             "name": "clusterId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
           }
         ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/SchemaMockRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/SchemaMockRequest"
+              }
             }
           }
         },
@@ -161,17 +232,685 @@ public static class KafdeckV07OpenApi
             "description": "Bounded generated examples; sensitive-looking field names are replaced with safe placeholders",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SchemaMockResultEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaMockResultEnvelope"
+                }
               }
             }
           },
-          "400": { "description": "Invalid subject, version, or count" },
-          "401": { "description": "Operator authentication required in OIDC mode" },
-          "403": { "description": "schema.read or antiforgery validation denied" },
-          "404": { "description": "Cluster ID is not configured" },
-          "422": { "description": "Schema or generated-output bound exceeded" },
-          "501": { "description": "Schema format/construct/constraint, external schema references, or configured provider are unsupported by bounded local generation" },
-          "502": { "description": "Stored schema source is malformed or invalid" }
+          "400": {
+            "description": "Invalid subject, version, or count"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "schema.read or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster ID is not configured"
+          },
+          "422": {
+            "description": "Schema or generated-output bound exceeded"
+          },
+          "501": {
+            "description": "Schema format/construct/constraint, external schema references, or configured provider are unsupported by bounded local generation"
+          },
+          "502": {
+            "description": "Stored schema source is malformed or invalid"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles": {
+      "get": {
+        "operationId": "v07-connect-profiles-list",
+        "summary": "List configured Kafka Connect profiles for a Kafka cluster",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded Connect profile catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectProfileListEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}": {
+      "get": {
+        "operationId": "v07-connect-profile-info",
+        "summary": "Read one Kafka Connect worker profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile-scoped Kafka Connect worker identity"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/plugins": {
+      "get": {
+        "operationId": "v07-connect-profile-plugins-list",
+        "summary": "List connector plugins from an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded typed connector plugin catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectPluginListEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/plugins/{connectorClass}/validate": {
+      "post": {
+        "operationId": "v07-connect-profile-plugin-validate",
+        "summary": "Validate bounded connector configuration using a typed Connect plugin endpoint",
+        "description": "Sends configuration only to the configured Connect profile's fixed connector-plugin validation route. Returned config values are never projected.",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorClass",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectPluginValidationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded validation diagnostics without echoed configuration values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectPluginValidationEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors": {
+      "get": {
+        "operationId": "v07-connect-profile-connectors-list",
+        "summary": "List connectors from an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized bounded connector names"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}": {
+      "get": {
+        "operationId": "v07-connect-profile-connectors-detail",
+        "summary": "Read connector/task status from an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile-scoped connector detail with safe configuration projection"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/create/preview": {
+      "post": {
+        "operationId": "v07-connect-profile-create-preview",
+        "summary": "Preview connector creation in an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectConfigurationPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governed durable mutation preview"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/update/preview": {
+      "post": {
+        "operationId": "v07-connect-profile-update-preview",
+        "summary": "Preview connector update in an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectConfigurationPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governed durable mutation preview"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/control/preview": {
+      "post": {
+        "operationId": "v07-connect-profile-control-preview",
+        "summary": "Preview pause, resume, connector restart or task restart in an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectControlPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governed durable lifecycle preview"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/delete/preview": {
+      "post": {
+        "operationId": "v07-connect-profile-delete-preview",
+        "summary": "Preview connector deletion in an exact Connect profile",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Governed durable deletion preview"
+          },
+          "400": {
+            "description": "Invalid bounded request"
+          },
+          "401": {
+            "description": "Operator authentication required in OIDC mode"
+          },
+          "403": {
+            "description": "Connect authorization or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Cluster or Connect profile is not configured"
+          },
+          "422": {
+            "description": "Configured result/request bound exceeded"
+          },
+          "501": {
+            "description": "Capability is unsupported by the configured provider"
+          },
+          "503": {
+            "description": "Kafka Connect is temporarily unavailable"
+          }
         }
       }
     }
@@ -180,33 +919,59 @@ public static class KafdeckV07OpenApi
     "schemas": {
       "SchemaRegistryCapabilityState": {
         "type": "object",
-        "required": ["state"],
+        "required": [
+          "state"
+        ],
         "properties": {
           "state": {
             "type": "string",
-            "enum": ["supported", "unsupported", "blocked", "unconfigured"]
+            "enum": [
+              "supported",
+              "unsupported",
+              "blocked",
+              "unconfigured"
+            ]
           },
           "reasonCode": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 128
           }
         }
       },
       "SchemaRegistryCapabilitiesData": {
         "type": "object",
-        "required": ["providerProfile", "mutationModeEnabled", "schemaTypes", "capabilities"],
+        "required": [
+          "providerProfile",
+          "mutationModeEnabled",
+          "schemaTypes",
+          "capabilities"
+        ],
         "properties": {
           "providerProfile": {
             "type": "string",
-            "enum": ["Unconfigured", "ConfluentCompatibleV1", "KarapaceCompatibleV1", "ApicurioV3"]
+            "enum": [
+              "Unconfigured",
+              "ConfluentCompatibleV1",
+              "KarapaceCompatibleV1",
+              "ApicurioV3"
+            ]
           },
-          "mutationModeEnabled": { "type": "boolean" },
+          "mutationModeEnabled": {
+            "type": "boolean"
+          },
           "schemaTypes": {
             "type": "array",
             "maxItems": 3,
             "items": {
               "type": "string",
-              "enum": ["Avro", "Protobuf", "JsonSchema"]
+              "enum": [
+                "Avro",
+                "Protobuf",
+                "JsonSchema"
+              ]
             }
           },
           "capabilities": {
@@ -219,141 +984,581 @@ public static class KafdeckV07OpenApi
       },
       "ReadViewLimitation": {
         "type": "object",
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
-          "code": { "type": "string", "maxLength": 128 },
-          "message": { "type": "string", "maxLength": 1024 }
+          "code": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1024
+          }
         }
       },
       "SchemaReferenceNode": {
         "type": "object",
-        "required": ["subject", "version", "schemaId", "format", "depth"],
+        "required": [
+          "subject",
+          "version",
+          "schemaId",
+          "format",
+          "depth"
+        ],
         "properties": {
-          "subject": { "type": "string" },
-          "version": { "type": "integer", "minimum": 1 },
-          "schemaId": { "type": "integer", "minimum": 1 },
-          "format": { "type": "string", "enum": ["avro", "protobuf", "jsonSchema"] },
-          "depth": { "type": "integer", "minimum": 0, "maximum": 12 }
+          "subject": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "schemaId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "avro",
+              "protobuf",
+              "jsonSchema"
+            ]
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          }
         }
       },
       "SchemaReferenceEdge": {
         "type": "object",
-        "required": ["name", "fromSubject", "fromVersion", "toSubject", "toVersion"],
+        "required": [
+          "name",
+          "fromSubject",
+          "fromVersion",
+          "toSubject",
+          "toVersion"
+        ],
         "properties": {
-          "name": { "type": "string", "maxLength": 512 },
-          "fromSubject": { "type": "string", "maxLength": 512 },
-          "fromVersion": { "type": "integer", "minimum": 1 },
-          "toSubject": { "type": "string", "maxLength": 512 },
-          "toVersion": { "type": "integer", "minimum": 1 }
+          "name": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "fromSubject": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "fromVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "toSubject": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "toVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
       },
       "SchemaReferenceGraph": {
         "type": "object",
-        "required": ["rootSubject", "rootVersion", "nodes", "edges", "hasCycle", "totalSchemaBytes"],
+        "required": [
+          "rootSubject",
+          "rootVersion",
+          "nodes",
+          "edges",
+          "hasCycle",
+          "totalSchemaBytes"
+        ],
         "properties": {
-          "rootSubject": { "type": "string" },
-          "rootVersion": { "type": "integer", "minimum": 1 },
+          "rootSubject": {
+            "type": "string"
+          },
+          "rootVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
           "nodes": {
             "type": "array",
             "maxItems": 64,
-            "items": { "$ref": "#/components/schemas/SchemaReferenceNode" }
+            "items": {
+              "$ref": "#/components/schemas/SchemaReferenceNode"
+            }
           },
           "edges": {
             "type": "array",
             "maxItems": 256,
-            "items": { "$ref": "#/components/schemas/SchemaReferenceEdge" }
+            "items": {
+              "$ref": "#/components/schemas/SchemaReferenceEdge"
+            }
           },
-          "hasCycle": { "type": "boolean" },
-          "totalSchemaBytes": { "type": "integer", "minimum": 0, "maximum": 2097152 }
+          "hasCycle": {
+            "type": "boolean"
+          },
+          "totalSchemaBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2097152
+          }
         }
       },
       "SchemaReferenceGraphEnvelope": {
         "type": "object",
-        "required": ["data", "partial", "limitations"],
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
         "properties": {
-          "data": { "$ref": "#/components/schemas/SchemaReferenceGraph" },
-          "partial": { "type": "boolean" },
+          "data": {
+            "$ref": "#/components/schemas/SchemaReferenceGraph"
+          },
+          "partial": {
+            "type": "boolean"
+          },
           "limitations": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/ReadViewLimitation" }
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
           }
         }
       },
       "SchemaCompatibilityExplanation": {
         "type": "object",
-        "required": ["subject", "mode", "isInherited", "scope", "summary", "rules"],
+        "required": [
+          "subject",
+          "mode",
+          "isInherited",
+          "scope",
+          "summary",
+          "rules"
+        ],
         "properties": {
-          "subject": { "type": "string" },
+          "subject": {
+            "type": "string"
+          },
           "mode": {
             "type": "string",
-            "enum": ["unknown", "none", "backward", "backwardTransitive", "forward", "forwardTransitive", "full", "fullTransitive"]
+            "enum": [
+              "unknown",
+              "none",
+              "backward",
+              "backwardTransitive",
+              "forward",
+              "forwardTransitive",
+              "full",
+              "fullTransitive"
+            ]
           },
-          "isInherited": { "type": "boolean" },
-          "scope": { "type": "string", "enum": ["subject", "global-inherited"] },
-          "summary": { "type": "string" },
+          "isInherited": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "subject",
+              "global-inherited"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
           "rules": {
             "type": "array",
             "maxItems": 4,
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
       "SchemaCompatibilityExplanationEnvelope": {
         "type": "object",
-        "required": ["data", "partial", "limitations"],
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
         "properties": {
-          "data": { "$ref": "#/components/schemas/SchemaCompatibilityExplanation" },
-          "partial": { "type": "boolean" },
+          "data": {
+            "$ref": "#/components/schemas/SchemaCompatibilityExplanation"
+          },
+          "partial": {
+            "type": "boolean"
+          },
           "limitations": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/ReadViewLimitation" }
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
           }
         }
       },
       "SchemaMockRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["subject", "version", "count"],
+        "required": [
+          "subject",
+          "version",
+          "count"
+        ],
         "properties": {
-          "subject": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "version": { "type": "integer", "minimum": 1 },
-          "count": { "type": "integer", "minimum": 1, "maximum": 10 },
-          "seed": { "type": ["integer", "null"] }
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
         }
       },
       "SchemaMockExample": {
         "type": "object",
-        "required": ["index", "json"],
+        "required": [
+          "index",
+          "json"
+        ],
         "properties": {
-          "index": { "type": "integer", "minimum": 0, "maximum": 9 },
-          "json": { "type": "string", "maxLength": 262144 }
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "json": {
+            "type": "string",
+            "maxLength": 262144
+          }
         }
       },
       "SchemaMockResult": {
         "type": "object",
-        "required": ["subject", "version", "format", "seed", "examples", "totalBytes"],
+        "required": [
+          "subject",
+          "version",
+          "format",
+          "seed",
+          "examples",
+          "totalBytes"
+        ],
         "properties": {
-          "subject": { "type": "string" },
-          "version": { "type": "integer", "minimum": 1 },
-          "format": { "type": "string", "enum": ["avro", "protobuf", "jsonSchema"] },
-          "seed": { "type": "integer" },
+          "subject": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "avro",
+              "protobuf",
+              "jsonSchema"
+            ]
+          },
+          "seed": {
+            "type": "integer"
+          },
           "examples": {
             "type": "array",
             "maxItems": 10,
-            "items": { "$ref": "#/components/schemas/SchemaMockExample" }
+            "items": {
+              "$ref": "#/components/schemas/SchemaMockExample"
+            }
           },
-          "totalBytes": { "type": "integer", "minimum": 0, "maximum": 262144 }
+          "totalBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 262144
+          }
         }
       },
       "SchemaMockResultEnvelope": {
         "type": "object",
-        "required": ["data", "partial", "limitations"],
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
         "properties": {
-          "data": { "$ref": "#/components/schemas/SchemaMockResult" },
-          "partial": { "type": "boolean" },
+          "data": {
+            "$ref": "#/components/schemas/SchemaMockResult"
+          },
+          "partial": {
+            "type": "boolean"
+          },
           "limitations": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/ReadViewLimitation" }
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
+          }
+        }
+      },
+      "ConnectProfileSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "isDefault",
+          "mutationProviderProfile"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "mutationProviderProfile": {
+            "type": "string"
+          }
+        }
+      },
+      "ConnectProfileListEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ConnectProfileSummary"
+            }
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
+          }
+        }
+      },
+      "ConnectPluginSummary": {
+        "type": "object",
+        "required": [
+          "class",
+          "type"
+        ],
+        "properties": {
+          "class": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          }
+        }
+      },
+      "ConnectPluginListEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/ConnectPluginSummary"
+            }
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
+          }
+        }
+      },
+      "ConnectPluginValidationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "configuration"
+        ],
+        "properties": {
+          "configuration": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 256,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          }
+        }
+      },
+      "ConnectPluginValidationField": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "required",
+          "errors",
+          "recommendedValues"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          "recommendedValues": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        }
+      },
+      "ConnectPluginValidationResult": {
+        "type": "object",
+        "required": [
+          "connectorClass",
+          "errorCount",
+          "fields"
+        ],
+        "properties": {
+          "connectorClass": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "errorCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fields": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/ConnectPluginValidationField"
+            }
+          }
+        }
+      },
+      "ConnectPluginValidationEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConnectPluginValidationResult"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
+          }
+        }
+      },
+      "ConnectConfigurationPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "configuration"
+        ],
+        "properties": {
+          "configuration": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 256,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          }
+        }
+      },
+      "ConnectControlPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "pause",
+              "resume",
+              "restart"
+            ]
+          },
+          "taskId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           }
         }
       }
