@@ -108,6 +108,9 @@ builder.Services.AddSingleton<IKsqlMetadataReadPort>(_ =>
     new KsqlDbMetadataReadAdapter(kafdeckOptions.Clusters, secretResolver));
 builder.Services.AddSingleton<IKsqlQueryPort>(_ =>
     new KsqlDbQueryAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IStreamsTelemetryReadPort>(_ =>
+    new StreamsTelemetryReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<ILineageReadPort, StreamsLineageReadService>();
 builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
     new ConfigurationTopicCatalogProvider(kafdeckOptions));
 builder.Services.AddSingleton<ApiTelemetry>();
