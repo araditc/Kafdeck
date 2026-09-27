@@ -29,8 +29,8 @@ public sealed class KafkaConnectMutationAdapter :
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private readonly IReadOnlyDictionary<string, HttpReadRuntime> _runtimes;
-    private readonly HashSet<string> _admittedMutationClusters;
+    private readonly IReadOnlyDictionary<ConnectRuntimeKey, HttpReadRuntime> _runtimes;
+    private readonly HashSet<ConnectRuntimeKey> _admittedMutationProfiles;
     private readonly TimeProvider _timeProvider;
 
     public KafkaConnectMutationAdapter(
@@ -40,7 +40,7 @@ public sealed class KafkaConnectMutationAdapter :
         : this(
             clusterProfiles,
             secretResolver,
-            static _ => new HttpClientHandler { AllowAutoRedirect = false },
+            static (_, _) => new HttpClientHandler { AllowAutoRedirect = false },
             timeProvider)
     {
     }
@@ -50,43 +50,86 @@ public sealed class KafkaConnectMutationAdapter :
         SecretResolver secretResolver,
         Func<ClusterProfile, HttpMessageHandler> handlerFactory,
         TimeProvider? timeProvider = null)
+        : this(
+            clusterProfiles,
+            secretResolver,
+            (cluster, _) => handlerFactory(cluster),
+            timeProvider)
+    {
+    }
+
+    internal KafkaConnectMutationAdapter(
+        IReadOnlyList<ClusterProfile> clusterProfiles,
+        SecretResolver secretResolver,
+        Func<ClusterProfile, KafkaConnectProfile, HttpMessageHandler> handlerFactory,
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(clusterProfiles);
         ArgumentNullException.ThrowIfNull(secretResolver);
         ArgumentNullException.ThrowIfNull(handlerFactory);
 
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _runtimes = clusterProfiles
-            .Where(profile => profile.Connect is not null)
-            .ToDictionary(
-                profile => profile.Id,
-                profile =>
-                {
-                    var connect = profile.Connect!;
-                    return ReadOnlyHttpSupport.CreateRuntime(
-                        connect.Url,
-                        connect.Username,
-                        connect.Password,
-                        secretResolver,
-                        handlerFactory(profile));
-                },
-                StringComparer.Ordinal);
+        var bindings = clusterProfiles
+            .SelectMany(cluster =>
+                KafkaConnectProfileSet.Effective(cluster)
+                    .Select(profile => new ConnectProfileBinding(cluster, profile)))
+            .ToArray();
 
-        _admittedMutationClusters = clusterProfiles
-            .Where(profile =>
-                profile.Connect?.MutationProviderProfile ==
+        _runtimes = bindings.ToDictionary(
+            binding => new ConnectRuntimeKey(
+                binding.Cluster.Id,
+                binding.Profile.Id),
+            binding => ReadOnlyHttpSupport.CreateRuntime(
+                binding.Profile.Url,
+                binding.Profile.Username,
+                binding.Profile.Password,
+                secretResolver,
+                handlerFactory(binding.Cluster, binding.Profile)));
+
+        _admittedMutationProfiles = bindings
+            .Where(binding =>
+                binding.Profile.MutationProviderProfile ==
                 KafkaConnectMutationProviderProfile.ConfluentCompatibleV1)
-            .Select(profile => profile.Id)
-            .ToHashSet(StringComparer.Ordinal);
+            .Select(binding => new ConnectRuntimeKey(
+                binding.Cluster.Id,
+                binding.Profile.Id))
+            .ToHashSet();
     }
 
     public Task<ConnectMutationObservationResult<ConnectMutationCapabilities>>
         GetCapabilitiesAsync(
             string clusterId,
             ReadViewOperationContext operation,
+            CancellationToken cancellationToken) =>
+        GetCapabilitiesAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            operation,
+            cancellationToken);
+
+    public Task<ConnectMutationObservationResult<ConnectMutationCapabilities>>
+        GetCapabilitiesAsync(
+            string clusterId,
+            string connectProfileId,
+            ReadViewOperationContext operation,
             CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
+
+        string normalizedProfileId;
+        try
+        {
+            normalizedProfileId = RequireProfileId(connectProfileId);
+        }
+        catch (ArgumentException)
+        {
+            return Task.FromResult(
+                ObservationFailed<ConnectMutationCapabilities>(
+                    ConnectMutationObservationFailureCategory.InvalidRequest,
+                    "invalid_connect_profile_id",
+                    "Kafka Connect profile ID is invalid.",
+                    false));
+        }
 
         if (cancellationToken.IsCancellationRequested)
         {
@@ -108,17 +151,26 @@ public sealed class KafkaConnectMutationAdapter :
                     true));
         }
 
-        if (!_runtimes.ContainsKey(clusterId))
+        var key = new ConnectRuntimeKey(clusterId, normalizedProfileId);
+        if (!_runtimes.ContainsKey(key))
         {
+            var isDefault = string.Equals(
+                normalizedProfileId,
+                KafkaConnectProfileSet.DefaultProfileId,
+                StringComparison.Ordinal);
             return Task.FromResult(
                 ObservationFailed<ConnectMutationCapabilities>(
                     ConnectMutationObservationFailureCategory.NotConfigured,
-                    "connect_not_configured",
-                    "Kafka Connect is not configured for the requested cluster.",
+                    isDefault
+                        ? "connect_not_configured"
+                        : "connect_profile_not_configured",
+                    isDefault
+                        ? "Kafka Connect is not configured for the requested cluster."
+                        : "Kafka Connect profile is not configured for the requested cluster.",
                     false));
         }
 
-        if (!_admittedMutationClusters.Contains(clusterId))
+        if (!_admittedMutationProfiles.Contains(key))
         {
             return Task.FromResult(
                 ObservationFailed<ConnectMutationCapabilities>(
@@ -145,25 +197,42 @@ public sealed class KafkaConnectMutationAdapter :
             string clusterId,
             string connectorName,
             ReadViewOperationContext operation,
+            CancellationToken cancellationToken) =>
+        ObserveConnectorAsync(
+            clusterId,
+            KafkaConnectProfileSet.DefaultProfileId,
+            connectorName,
+            operation,
+            cancellationToken);
+
+    public Task<ConnectMutationObservationResult<ConnectMutationObservation>>
+        ObserveConnectorAsync(
+            string clusterId,
+            string connectProfileId,
+            string connectorName,
+            ReadViewOperationContext operation,
             CancellationToken cancellationToken)
     {
         string normalized;
+        string normalizedProfileId;
         try
         {
             normalized = RequireConnectorName(connectorName);
+            normalizedProfileId = RequireProfileId(connectProfileId);
         }
         catch (ArgumentException)
         {
             return Task.FromResult(
                 ObservationFailed<ConnectMutationObservation>(
                     ConnectMutationObservationFailureCategory.InvalidRequest,
-                    "invalid_connector_name",
-                    "Kafka Connect connector name is invalid.",
+                    "invalid_connect_request",
+                    "Kafka Connect connector or profile identity is invalid.",
                     false));
         }
 
         return ExecuteObservationAsync(
             clusterId,
+            normalizedProfileId,
             operation,
             cancellationToken,
             async (runtime, token) =>
@@ -221,6 +290,7 @@ public sealed class KafkaConnectMutationAdapter :
 
         return ExecuteMutationAsync(
             request.ClusterId,
+            request.ConnectProfileId,
             "connect_create",
             cancellationToken,
             async (runtime, token) =>
@@ -262,6 +332,7 @@ public sealed class KafkaConnectMutationAdapter :
 
         return ExecuteMutationAsync(
             request.ClusterId,
+            request.ConnectProfileId,
             "connect_update",
             cancellationToken,
             async (runtime, token) =>
@@ -340,6 +411,7 @@ public sealed class KafkaConnectMutationAdapter :
 
         return ExecuteMutationAsync(
             request.ClusterId,
+            request.ConnectProfileId,
             operationCode,
             cancellationToken,
             async (runtime, token) =>
@@ -377,6 +449,7 @@ public sealed class KafkaConnectMutationAdapter :
 
         return ExecuteMutationAsync(
             request.ClusterId,
+            request.ConnectProfileId,
             "connect_delete",
             cancellationToken,
             async (runtime, token) =>
@@ -525,6 +598,7 @@ public sealed class KafkaConnectMutationAdapter :
     private async Task<ConnectMutationObservationResult<T>>
         ExecuteObservationAsync<T>(
             string clusterId,
+            string connectProfileId,
             ReadViewOperationContext operation,
             CancellationToken cancellationToken,
             Func<HttpReadRuntime, CancellationToken, Task<T>> action)
@@ -547,14 +621,23 @@ public sealed class KafkaConnectMutationAdapter :
                 true);
         }
 
+        var key = new ConnectRuntimeKey(clusterId, connectProfileId);
         if (!_runtimes.TryGetValue(
-                clusterId,
+                key,
                 out var runtime))
         {
+            var isDefault = string.Equals(
+                connectProfileId,
+                KafkaConnectProfileSet.DefaultProfileId,
+                StringComparison.Ordinal);
             return ObservationFailed<T>(
                 ConnectMutationObservationFailureCategory.NotConfigured,
-                "connect_not_configured",
-                "Kafka Connect is not configured for the requested cluster.",
+                isDefault
+                    ? "connect_not_configured"
+                    : "connect_profile_not_configured",
+                isDefault
+                    ? "Kafka Connect is not configured for the requested cluster."
+                    : "Kafka Connect profile is not configured for the requested cluster.",
                 false);
         }
 
@@ -644,6 +727,7 @@ public sealed class KafkaConnectMutationAdapter :
 
     private async Task<MutationProviderResult> ExecuteMutationAsync(
         string clusterId,
+        string connectProfileId,
         string operationCode,
         CancellationToken cancellationToken,
         Func<HttpReadRuntime, CancellationToken, Task<MutationProviderResult>> action)
@@ -656,15 +740,27 @@ public sealed class KafkaConnectMutationAdapter :
                 $"{operationCode}_cancelled_or_timeout");
         }
 
+        string normalizedProfileId;
+        try
+        {
+            normalizedProfileId = RequireProfileId(connectProfileId);
+        }
+        catch (ArgumentException)
+        {
+            return FailedDefinitive(
+                $"{operationCode}_invalid_profile");
+        }
+
+        var key = new ConnectRuntimeKey(clusterId, normalizedProfileId);
         if (!_runtimes.TryGetValue(
-                clusterId,
+                key,
                 out var runtime))
         {
             return FailedDefinitive(
                 $"{operationCode}_not_configured");
         }
 
-        if (!_admittedMutationClusters.Contains(clusterId))
+        if (!_admittedMutationProfiles.Contains(key))
         {
             return FailedDefinitive(
                 $"{operationCode}_provider_profile_not_admitted");
@@ -1031,6 +1127,28 @@ public sealed class KafkaConnectMutationAdapter :
         return normalized;
     }
 
+    private static string RequireProfileId(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        var normalized = value.Trim();
+        if (!string.Equals(
+                value,
+                normalized,
+                StringComparison.Ordinal) ||
+            normalized.Length > KafkaConnectProfileSet.MaxProfileIdLength ||
+            normalized.Any(char.IsControl) ||
+            !normalized.All(character =>
+                char.IsLetterOrDigit(character) ||
+                character is '-' or '_' or '.'))
+        {
+            throw new ArgumentException(
+                "Kafka Connect profile ID is invalid.",
+                nameof(value));
+        }
+
+        return normalized;
+    }
+
     private static string RequireConfigurationKey(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
@@ -1197,6 +1315,14 @@ public sealed class KafkaConnectMutationAdapter :
     private sealed record CanonicalProviderValue(
         string HashInput,
         string DisplayValue);
+
+    private readonly record struct ConnectRuntimeKey(
+        string ClusterId,
+        string ProfileId);
+
+    private sealed record ConnectProfileBinding(
+        ClusterProfile Cluster,
+        KafkaConnectProfile Profile);
 
     private sealed record ConnectorCreateBody(
         string Name,
