@@ -35,6 +35,13 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                     activation,
                     aggregateProfileLimit: 10));
 
+            var lease = await store.TryAcquireLeaseAsync(
+                activation.ActivationId,
+                "worker-a",
+                Now,
+                TimeSpan.FromSeconds(30));
+            Assert.NotNull(lease);
+
             var dispatchId = Guid.NewGuid();
             var reserved =
                 activation.ReserveAttempt(
@@ -44,7 +51,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
             Assert.True(
                 await store.TryUpdateAsync(
                     reserved,
-                    expectedVersion: activation.Version));
+                    expectedVersion: activation.Version,
+                    lease!));
 
             var reloaded =
                 new AdoConnectAutoRestartStateStore(
@@ -68,7 +76,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                     {
                         Version = reserved.Version + 1,
                     },
-                    expectedVersion: activation.Version));
+                    expectedVersion: activation.Version,
+                    lease!));
         }
         finally
         {
@@ -102,26 +111,31 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                     second,
                     aggregateProfileLimit: 1));
 
-            var dispatchId = Guid.NewGuid();
-            var recovered =
-                first
-                    .ReserveAttempt(
-                        Now,
-                        dispatchId)
-                    .RecordRecovered(
-                        dispatchId);
+            var lease = await store.TryAcquireLeaseAsync(
+                first.ActivationId,
+                "worker-a",
+                Now,
+                TimeSpan.FromSeconds(30));
+            Assert.NotNull(lease);
 
+            var dispatchId = Guid.NewGuid();
             var reserved = first.ReserveAttempt(
                 Now,
                 dispatchId);
+            var recovered =
+                reserved.RecordRecovered(
+                    dispatchId);
+
             Assert.True(
                 await store.TryUpdateAsync(
                     reserved,
-                    first.Version));
+                    first.Version,
+                    lease!));
             Assert.True(
                 await store.TryUpdateAsync(
                     recovered,
-                    reserved.Version));
+                    reserved.Version,
+                    lease!));
 
             Assert.True(
                 await store.TryCreateAsync(
@@ -154,6 +168,13 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                     first,
                     aggregateProfileLimit: 1));
 
+            var lease = await store.TryAcquireLeaseAsync(
+                first.ActivationId,
+                "worker-a",
+                Now,
+                TimeSpan.FromSeconds(30));
+            Assert.NotNull(lease);
+
             var dispatchId = Guid.NewGuid();
             var reserved =
                 first.ReserveAttempt(
@@ -162,7 +183,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
             Assert.True(
                 await store.TryUpdateAsync(
                     reserved,
-                    first.Version));
+                    first.Version,
+                    lease!));
 
             var ambiguous =
                 reserved.RecordAmbiguous(
@@ -171,7 +193,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
             Assert.True(
                 await store.TryUpdateAsync(
                     ambiguous,
-                    reserved.Version));
+                    reserved.Version,
+                    lease!));
 
             var competitor =
                 Activation("sink-b", "analytics");
@@ -223,6 +246,76 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                 await store.TryCreateAsync(
                     duplicate,
                     aggregateProfileLimit: 10));
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Lease_fencing_prevents_two_workers_and_rejects_stale_generation()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-w55-lease-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var store =
+                new AdoConnectAutoRestartStateStore(
+                    new SqliteMutationDbConnectionFactory(path));
+            await store.InitializeAsync();
+
+            var activation = Activation(
+                "sink-a",
+                "analytics");
+            Assert.True(
+                await store.TryCreateAsync(
+                    activation,
+                    aggregateProfileLimit: 2));
+
+            var firstLease = await store.TryAcquireLeaseAsync(
+                activation.ActivationId,
+                "worker-a",
+                Now,
+                TimeSpan.FromSeconds(10));
+            Assert.NotNull(firstLease);
+
+            var competingLease = await store.TryAcquireLeaseAsync(
+                activation.ActivationId,
+                "worker-b",
+                Now.AddSeconds(1),
+                TimeSpan.FromSeconds(10));
+            Assert.Null(competingLease);
+
+            var takeoverLease = await store.TryAcquireLeaseAsync(
+                activation.ActivationId,
+                "worker-b",
+                Now.AddSeconds(11),
+                TimeSpan.FromSeconds(10));
+            Assert.NotNull(takeoverLease);
+            Assert.True(
+                takeoverLease!.Generation >
+                firstLease!.Generation);
+
+            var dispatchId = Guid.NewGuid();
+            var reserved =
+                activation.ReserveAttempt(
+                    Now.AddSeconds(11),
+                    dispatchId);
+
+            Assert.False(
+                await store.TryUpdateAsync(
+                    reserved,
+                    activation.Version,
+                    firstLease));
+
+            Assert.True(
+                await store.TryUpdateAsync(
+                    reserved,
+                    activation.Version,
+                    takeoverLease));
         }
         finally
         {
