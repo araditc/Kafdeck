@@ -1,6 +1,7 @@
 using System.Text;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
+using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Modules.Records;
