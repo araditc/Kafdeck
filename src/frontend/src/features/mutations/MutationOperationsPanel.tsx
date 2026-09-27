@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   MutationApiProblem,
   mutationApi,
+  type DataJobStatus,
   type MutationStatus,
 } from './mutationApi.js';
 import { mutationExecutionSurface } from './mutationExecutionSurface.js';
@@ -110,6 +111,8 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
   const [recordHeaders, setRecordHeaders] = useState('');
   const [schemaExecutionSource, setSchemaExecutionSource] = useState('');
   const [connectExecutionConfiguration, setConnectExecutionConfiguration] = useState('');
+  const [dataJobStatus, setDataJobStatus] = useState<DataJobStatus | null>(null);
+  const [dataJobReconcileBatchId, setDataJobReconcileBatchId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,6 +127,8 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
   const selectOperation = (operation: MutationStatus) => {
     setSelected(operation);
     setTypedChallenge('');
+    setDataJobStatus(null);
+    setDataJobReconcileBatchId('');
     clearExecutionMaterial();
   };
 
@@ -226,6 +231,68 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     void apply(() => mutationApi.executeConnectConfiguration(selected, pairMap(connectExecutionConfiguration)), true);
   };
 
+  const loadDataJobStatus = async () => {
+    if (!selected || selected.operationKind !== 'dataJob') return;
+    setLoading(true);
+    setError(null);
+    try {
+      const status = await mutationApi.getDataJobStatus(selected.operationId);
+      setDataJobStatus(status);
+      setDataJobReconcileBatchId(status.pendingBatch?.batchId ?? '');
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startDataJob = async () => {
+    if (!selected || selected.operationKind !== 'dataJob') return;
+    setLoading(true);
+    setError(null);
+    try {
+      const operation = await mutationApi.startDataJob(selected.operationId);
+      setSelected(operation);
+      setDataJobStatus(await mutationApi.getDataJobStatus(operation.operationId));
+      await loadApprovals();
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelDataJob = async () => {
+    if (!selected || selected.operationKind !== 'dataJob') return;
+    setLoading(true);
+    setError(null);
+    try {
+      setDataJobStatus(await mutationApi.cancelDataJob(selected.operationId));
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reconcileDataJob = async () => {
+    if (!selected || selected.operationKind !== 'dataJob' || !dataJobReconcileBatchId.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const status = await mutationApi.reconcileDataJob(
+        selected.operationId,
+        dataJobReconcileBatchId.trim(),
+      );
+      setDataJobStatus(status);
+      setDataJobReconcileBatchId(status.pendingBatch?.batchId ?? '');
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (mutationAvailable !== true) return null;
 
   return <section className="card kafdeck-card" id="mutations" aria-labelledby="mutations-title">
@@ -267,10 +334,36 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
           <button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.reject(selected))}>Reject</button>{' '}
         </>}
         {preDispatchStates.has(selected.state) && <button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.cancel(selected))}>Cancel before dispatch</button>}
-        {executionSurface === 'genericNoMaterial' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeWithoutMaterial(selected))}>Execute governed mutation</button></>}
+        {executionSurface === 'genericNoMaterial' && selected.operationKind !== 'dataJob' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeWithoutMaterial(selected))}>Execute governed mutation</button></>}
+        {selected.operationKind === 'dataJob' && selected.state === 'ready' && <>{' '}<button type="button" disabled={loading} onClick={() => void startDataJob()}>Start governed data job</button></>}
+        {selected.operationKind === 'dataJob' && <>{' '}<button type="button" disabled={loading} onClick={() => void loadDataJobStatus()}>Load data-job status</button></>}
         {executionSurface === 'connectNoMaterial' && selected.operationKind === 'connectDelete' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute connector deletion</button></>}
         {executionSurface === 'connectNoMaterial' && selected.operationKind === 'connectAlter' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute admitted connector control</button></>}
       </div>
+
+      {selected.operationKind === 'dataJob' && dataJobStatus && <section aria-labelledby="data-job-status-title">
+        <h4 id="data-job-status-title">Data-job runtime status</h4>
+        <dl>
+          <dt>Kind</dt><dd>{dataJobStatus.kind}</dd>
+          <dt>Progress phase</dt><dd>{dataJobStatus.progressPhase}</dd>
+          <dt>Source</dt><dd>{dataJobStatus.sourceClusterId}</dd>
+          <dt>Destination</dt><dd>{dataJobStatus.destinationClusterId}</dd>
+          <dt>Acknowledged records</dt><dd>{dataJobStatus.acknowledgedRecords}</dd>
+          <dt>Acknowledged bytes</dt><dd>{dataJobStatus.acknowledgedBytes}</dd>
+          <dt>Worker generation</dt><dd>{dataJobStatus.workerGeneration}</dd>
+        </dl>
+        <p>Cancellation fences the current worker and stops future effects. It cannot erase an unresolved destination-write batch.</p>
+        <button type="button" disabled={loading || dataJobStatus.progressPhase === 'Stopped' || dataJobStatus.pendingBatch !== null} onClick={() => void cancelDataJob()}>Cancel future effects</button>
+        {dataJobStatus.pendingBatch && <div role="alert">
+          <p><strong>Unresolved external write.</strong> Batch <code>{dataJobStatus.pendingBatch.batchId}</code> remains durable and must not be blindly replayed.</p>
+          <label htmlFor="data-job-reconcile-batch">Batch ID proven not applied</label>{' '}
+          <input id="data-job-reconcile-batch" value={dataJobReconcileBatchId} onChange={event => setDataJobReconcileBatchId(event.target.value)} autoComplete="off" />{' '}
+          <button type="button" disabled={loading || dataJobReconcileBatchId.trim() !== dataJobStatus.pendingBatch.batchId} onClick={() => void reconcileDataJob()}>Reconcile proven non-application</button>
+        </div>}
+        <table><thead><tr><th>Range</th><th>Source</th><th>Destination</th><th>Frozen offsets</th><th>Next offset</th></tr></thead><tbody>
+          {dataJobStatus.ranges.map(range => <tr key={range.rangeIndex}><td>{range.rangeIndex}</td><td>{range.sourceTopic}[{range.sourcePartition}]</td><td>{range.destinationTopic}[{range.destinationPartition}]</td><td>[{range.startInclusive}, {range.endExclusive})</td><td>{range.nextSourceOffset ?? 'Not started'}</td></tr>)}
+        </tbody></table>
+      </section>}
 
       {executionSurface === 'recordMaterial' && <fieldset disabled={loading}><legend>Re-submit record execution material</legend><p>This material must digest-match the preview and is cleared from UI state after execution.</p><label htmlFor="execute-record-key">UTF-8 key (optional)</label>{' '}<input id="execute-record-key" value={recordKey} onChange={event => setRecordKey(event.target.value)} autoComplete="off" /><br /><label htmlFor="execute-record-value">UTF-8 value</label><br /><textarea id="execute-record-value" value={recordValue} onChange={event => setRecordValue(event.target.value)} rows={5} /><br /><label htmlFor="execute-record-headers">Headers, one name=value per line</label><br /><textarea id="execute-record-headers" value={recordHeaders} onChange={event => setRecordHeaders(event.target.value)} rows={4} /><br /><button type="button" disabled={!recordValue} onClick={executeRecord}>Execute with matching record material</button></fieldset>}
 
