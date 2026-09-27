@@ -14,6 +14,33 @@ public sealed class V07W56ControlledSerdeTests
         DateTimeOffset.UtcNow.AddMinutes(1);
 
     [Fact]
+    public void Api_bounds_base64_text_before_decode_allocation()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(
+            Path.Combine(
+                root,
+                "src",
+                "backend",
+                "Kafdeck.Api",
+                "KafdeckControlledSerdeEndpoints.cs"));
+
+        var boundCheck = source.IndexOf(
+            "request.PayloadBase64.Length >",
+            StringComparison.Ordinal);
+        var decodeCall = source.IndexOf(
+            "Convert.FromBase64String",
+            StringComparison.Ordinal);
+
+        Assert.True(boundCheck >= 0);
+        Assert.True(decodeCall > boundCheck);
+        Assert.Contains(
+            "MaxBase64InputCharacters",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Capabilities_are_closed_and_explicit()
     {
         var capabilities =
@@ -528,6 +555,28 @@ public sealed class V07W56ControlledSerdeTests
                         now,
                         ObservationSource.Live)));
         }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? current =
+            new(AppContext.BaseDirectory);
+
+        while (current is not null)
+        {
+            if (File.Exists(
+                    Path.Combine(
+                        current.FullName,
+                        "Kafdeck.slnx")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            "Unable to locate Kafdeck repository root.");
     }
 
     private static ControlledSerdeLimits Limits(
