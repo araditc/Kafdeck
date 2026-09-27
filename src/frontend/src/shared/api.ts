@@ -142,6 +142,36 @@ export interface SchemaMockResult {
   totalBytes: number;
 }
 
+export type ControlledSerdeFormat = 'cbor' | 'xml' | 'messagePack';
+export interface ControlledSerdeCapability {
+  format: ControlledSerdeFormat;
+  decodeSupported: boolean;
+  encodeSupported: boolean;
+  limitations: string[];
+}
+export interface ControlledSerdeLimitsData {
+  maxInputBytes: number;
+  maxOutputBytes: number;
+  maxDepth: number;
+  maxNodes: number;
+  maxCollectionItems: number;
+  maxStringCharacters: number;
+  maxBinaryBytes: number;
+}
+export interface ControlledSerdeCapabilitiesData {
+  limits: ControlledSerdeLimitsData;
+  formats: ControlledSerdeCapability[];
+}
+export interface ControlledSerdeDecodedValue {
+  format: ControlledSerdeFormat;
+  structuredValue: unknown;
+}
+export interface ControlledSerdeEncodedData {
+  format: ControlledSerdeFormat;
+  payloadBase64: string;
+  byteCount: number;
+}
+
 export interface ConnectProfileSummary {
   id: string;
   isDefault: boolean;
@@ -273,6 +303,7 @@ export interface RecordQuery {
   filterLanguage?: 'cel' | 'jq';
   filter?: string;
   decode?: boolean;
+  serdeFormat?: ControlledSerdeFormat;
 }
 
 export class ApiProblem extends Error {
@@ -412,6 +443,7 @@ function recordParams(query: RecordQuery): URLSearchParams {
     params.set('filter', query.filter);
   }
   if (query.decode !== undefined) params.set('decode', String(query.decode));
+  if (query.serdeFormat) params.set('serdeFormat', query.serdeFormat);
   return params;
 }
 
@@ -505,6 +537,26 @@ export const kafdeckApi = {
     return postJson<ReadViewEnvelope<SchemaMockResult>>(
       `${clusterPath(clusterId)}/schemas/mock`,
       { subject, version, count, seed },
+      signal,
+    );
+  },
+  getControlledSerdeCapabilities(signal?: AbortSignal) {
+    return readJson<ControlledSerdeCapabilitiesData>(
+      '/api/v1/tools/serde/capabilities',
+      signal,
+    );
+  },
+  decodeControlledSerde(format: ControlledSerdeFormat, payloadBase64: string, signal?: AbortSignal) {
+    return postJson<ControlledSerdeDecodedValue>(
+      '/api/v1/tools/serde/decode',
+      { format, payloadBase64 },
+      signal,
+    );
+  },
+  encodeControlledSerde(format: ControlledSerdeFormat, structuredValue: unknown, signal?: AbortSignal) {
+    return postJson<ControlledSerdeEncodedData>(
+      '/api/v1/tools/serde/encode',
+      { format, structuredValue },
       signal,
     );
   },

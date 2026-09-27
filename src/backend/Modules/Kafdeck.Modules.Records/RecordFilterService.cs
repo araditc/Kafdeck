@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Runtime.CompilerServices;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Core.Records;
@@ -8,6 +9,7 @@ public sealed class RecordFilterService
 {
     private readonly IKafkaRecordReadPort _reader;
     private readonly IRecordDecodePort? _decoder;
+    private readonly IControlledSerdePort? _controlledSerde;
     private readonly RecordFilterEvaluator _evaluator;
     private readonly TimeProvider _timeProvider;
 
@@ -15,10 +17,12 @@ public sealed class RecordFilterService
         IKafkaRecordReadPort reader,
         IRecordDecodePort? decoder = null,
         RecordFilterEvaluator? evaluator = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IControlledSerdePort? controlledSerde = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _decoder = decoder;
+        _controlledSerde = controlledSerde;
         _evaluator = evaluator ?? new RecordFilterEvaluator();
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -28,13 +32,34 @@ public sealed class RecordFilterService
         RecordFilterPlan plan,
         KafkaOperationContext operation,
         CancellationToken cancellationToken) =>
-        FilterPageAsync(readRequest, plan, operation, requireDecodedValue: false, cancellationToken);
+        FilterPageAsync(
+            readRequest,
+            plan,
+            operation,
+            requireDecodedValue: false,
+            controlledSerdeFormat: null,
+            cancellationToken);
+
+    public Task<KafkaResult<RecordFilterPage>> FilterPageAsync(
+        RecordReadRequest readRequest,
+        RecordFilterPlan plan,
+        KafkaOperationContext operation,
+        bool requireDecodedValue,
+        CancellationToken cancellationToken) =>
+        FilterPageAsync(
+            readRequest,
+            plan,
+            operation,
+            requireDecodedValue,
+            controlledSerdeFormat: null,
+            cancellationToken);
 
     public async Task<KafkaResult<RecordFilterPage>> FilterPageAsync(
         RecordReadRequest readRequest,
         RecordFilterPlan plan,
         KafkaOperationContext operation,
         bool requireDecodedValue,
+        ControlledSerdeFormat? controlledSerdeFormat,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(readRequest);
@@ -98,11 +123,15 @@ public sealed class RecordFilterService
             }
 
             RecordDecodedValue? decoded = null;
-            var needsDecode = plan.RequiresStructuredValue || requireDecodedValue;
+            JsonElement? controlledStructuredValue = null;
+            var needsDecode =
+                plan.RequiresStructuredValue ||
+                requireDecodedValue ||
+                controlledSerdeFormat.HasValue;
 
             if (needsDecode)
             {
-                if (_decoder is null || !record.Value.HasValue)
+                if (!record.Value.HasValue)
                 {
                     decodeUnavailable++;
                     if (plan.RequiresStructuredValue)
@@ -114,54 +143,133 @@ public sealed class RecordFilterService
                     continue;
                 }
 
-                var decodedResult = await _decoder.DecodeAsync(
-                        new RecordDecodeRequest(
-                            readRequest.ClusterId,
-                            readRequest.TopicName,
-                            readRequest.Partition,
-                            record.Offset,
-                            isKey: false,
-                            record.Value.Value),
-                        operation,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (!decodedResult.IsSuccess || decodedResult.Value is null)
+                if (controlledSerdeFormat.HasValue)
                 {
-                    if (decodedResult.Failure?.Category is
-                        RecordSchemaFailureCategory.Unavailable or
-                        RecordSchemaFailureCategory.Timeout or
-                        RecordSchemaFailureCategory.RegistryNotConfigured or
-                        RecordSchemaFailureCategory.Unauthorized)
+                    if (_controlledSerde is null)
                     {
                         decodeUnavailable++;
-                    }
-                    else
-                    {
-                        decodeFailed++;
-                    }
+                        if (plan.RequiresStructuredValue)
+                        {
+                            continue;
+                        }
 
-                    if (plan.RequiresStructuredValue)
-                    {
+                        matched.Add(new RecordFilteredItem(record, null));
                         continue;
                     }
 
-                    matched.Add(new RecordFilteredItem(record, null));
-                    continue;
+                    var serdeDeadline =
+                        operation.DeadlineUtc < filterDeadline
+                            ? operation.DeadlineUtc
+                            : filterDeadline;
+                    var serdeResult = await _controlledSerde
+                        .DecodeAsync(
+                            new ControlledSerdeDecodeRequest(
+                                controlledSerdeFormat.Value,
+                                record.Value.Value),
+                            ControlledSerdeLimits.Default,
+                            serdeDeadline,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (!serdeResult.IsSuccess ||
+                        serdeResult.Value is null)
+                    {
+                        if (serdeResult.Failure?.Category is
+                            ControlledSerdeFailureCategory.Timeout or
+                            ControlledSerdeFailureCategory.Cancelled)
+                        {
+                            decodeUnavailable++;
+                        }
+                        else
+                        {
+                            decodeFailed++;
+                        }
+
+                        if (plan.RequiresStructuredValue)
+                        {
+                            continue;
+                        }
+
+                        matched.Add(new RecordFilteredItem(record, null));
+                        continue;
+                    }
+
+                    controlledStructuredValue =
+                        serdeResult.Value.StructuredValue.Clone();
+                }
+                else
+                {
+                    if (_decoder is null)
+                    {
+                        decodeUnavailable++;
+                        if (plan.RequiresStructuredValue)
+                        {
+                            continue;
+                        }
+
+                        matched.Add(new RecordFilteredItem(record, null));
+                        continue;
+                    }
+
+                    var decodedResult = await _decoder.DecodeAsync(
+                            new RecordDecodeRequest(
+                                readRequest.ClusterId,
+                                readRequest.TopicName,
+                                readRequest.Partition,
+                                record.Offset,
+                                isKey: false,
+                                record.Value.Value),
+                            operation,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (!decodedResult.IsSuccess ||
+                        decodedResult.Value is null)
+                    {
+                        if (decodedResult.Failure?.Category is
+                            RecordSchemaFailureCategory.Unavailable or
+                            RecordSchemaFailureCategory.Timeout or
+                            RecordSchemaFailureCategory.RegistryNotConfigured or
+                            RecordSchemaFailureCategory.Unauthorized)
+                        {
+                            decodeUnavailable++;
+                        }
+                        else
+                        {
+                            decodeFailed++;
+                        }
+
+                        if (plan.RequiresStructuredValue)
+                        {
+                            continue;
+                        }
+
+                        matched.Add(new RecordFilteredItem(record, null));
+                        continue;
+                    }
+
+                    decoded = decodedResult.Value;
                 }
 
-                decoded = decodedResult.Value;
+                var structuredValue =
+                    controlledStructuredValue ??
+                    decoded?.StructuredValue;
 
                 if (plan.RequiresStructuredValue &&
-                    !_evaluator.MatchesStructuredValue(
-                        decoded.StructuredValue,
-                        plan))
+                    (!structuredValue.HasValue ||
+                     !_evaluator.MatchesStructuredValue(
+                         structuredValue.Value,
+                         plan)))
                 {
                     continue;
                 }
             }
 
-            matched.Add(new RecordFilteredItem(record, decoded));
+            matched.Add(
+                new RecordFilteredItem(
+                    record,
+                    decoded,
+                    controlledStructuredValue));
         }
 
         var limitations = new List<RecordFilterLimitation>();
@@ -287,9 +395,20 @@ public sealed class RecordLiveTailService
         CancellationToken cancellationToken = default) =>
         TailAsync(request, requireDecodedValue: false, cancellationToken);
 
+    public IAsyncEnumerable<RecordTailFrame> TailAsync(
+        RecordTailRequest request,
+        bool requireDecodedValue,
+        CancellationToken cancellationToken = default) =>
+        TailAsync(
+            request,
+            requireDecodedValue,
+            controlledSerdeFormat: null,
+            cancellationToken);
+
     public async IAsyncEnumerable<RecordTailFrame> TailAsync(
         RecordTailRequest request,
         bool requireDecodedValue,
+        ControlledSerdeFormat? controlledSerdeFormat,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -376,6 +495,7 @@ public sealed class RecordLiveTailService
                         plan,
                         operation,
                         requireDecodedValue,
+                        controlledSerdeFormat,
                         cancellationToken)
                     .ConfigureAwait(false);
 

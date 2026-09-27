@@ -178,7 +178,8 @@
           "Kafdeck.Modules.Consumers": "[0.4.0, )",
           "Kafdeck.Modules.Schemas": "[0.4.0, )",
           "Kafdeck.Modules.Topics": "[0.4.0, )",
-          "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )"
+          "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )",
+          "Kafdeck.Infrastructure.SerDe": "[0.4.0, )"
         }
       },
       "kafdeck.core": {
@@ -363,6 +364,12 @@
           "Microsoft.Data.Sqlite": "[10.0.12, )",
           "Npgsql": "[10.0.3, )",
           "Kafdeck.Modules.Connect": "[0.4.0, )"
+        }
+      },
+      "kafdeck.infrastructure.serde": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.4.0, )"
         }
       }
     }
