@@ -108,7 +108,6 @@ public sealed record PrometheusObservabilityOptions(
     SecretReference? AccessToken)
 {
     public const string Path = "/metrics";
-    public const string HeaderName = "X-Kafdeck-Metrics-Token";
 
     public static PrometheusObservabilityOptions Disabled { get; } =
         new(false, null);
