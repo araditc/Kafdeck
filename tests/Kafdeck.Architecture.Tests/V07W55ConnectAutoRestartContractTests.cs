@@ -318,6 +318,7 @@ public sealed class V07W55ConnectAutoRestartContractTests
             Fingerprint("provider"),
             Fingerprint("config"),
             Fingerprint("policy"),
+            "oidc:https://idp.example|kafdeck-auto-restart",
             Guid.Parse(
                 "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
 
