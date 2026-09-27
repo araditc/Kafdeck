@@ -381,7 +381,7 @@ public sealed class V07W57GovernedDataJobProgressTests
             plan.Ranges[0].StartInclusive + 1,
             Now);
 
-        Assert.Throws<MutationStateException>(
+        Assert.Throws<GovernedDataJobRateLimitException>(
             () => GovernedDataJobProgress.ReserveBeforeDispatch(
                 snapshot,
                 plan,
@@ -443,7 +443,7 @@ public sealed class V07W57GovernedDataJobProgressTests
             plan.Ranges[0].StartInclusive + 1,
             Now);
 
-        Assert.Throws<MutationStateException>(
+        Assert.Throws<GovernedDataJobRateLimitException>(
             () => GovernedDataJobProgress.ReserveBeforeDispatch(
                 snapshot,
                 plan,
