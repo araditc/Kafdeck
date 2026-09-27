@@ -268,7 +268,7 @@ public sealed class V08W62ObservabilityFoundationTests
         context.Response.Body =
             new MemoryStream();
         context.Request.Headers[
-            PrometheusObservabilityOptions.HeaderName] =
+            PrometheusScrapeTokenMiddleware.HeaderName] =
             supplied;
 
         var audit =
