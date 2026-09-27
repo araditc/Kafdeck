@@ -26,6 +26,7 @@ public static class FleetMutationAuthorization
         MutationOperationKind.LogDirectoryMaintenance or
         MutationOperationKind.ClusterTransfer or
         MutationOperationKind.DataJob or
+        MutationOperationKind.DataGenerator or
         MutationOperationKind.ReplicationIntegration or
         MutationOperationKind.FleetUncertaintyDisposition;
 
@@ -97,6 +98,10 @@ public static class FleetMutationAuthorization
             case MutationOperationKind.ClusterTransfer:
             case MutationOperationKind.DataJob:
                 ValidateTransferTopology(normalized, clusters);
+                break;
+
+            case MutationOperationKind.DataGenerator:
+                ValidateGeneratorTopology(normalized, clusters);
                 break;
 
             case MutationOperationKind.ReplicationIntegration:
@@ -323,6 +328,18 @@ public static class FleetMutationAuthorization
                 AuthorizationAction.TopicRead,
                 AuthorizationAction.RecordRead,
                 AuthorizationAction.RecordExport,
+                AuthorizationAction.RecordProduce,
+            },
+            AuthorizationAction.TopicConfigRead,
+            AuthorizationAction.BrokerConfigRead),
+
+        MutationOperationKind.DataGenerator => Rule(
+            new[]
+            {
+                AuthorizationAction.DataGeneratorPlan,
+                AuthorizationAction.DataGeneratorExecute,
+                AuthorizationAction.ClusterRead,
+                AuthorizationAction.TopicRead,
                 AuthorizationAction.RecordProduce,
             },
             AuthorizationAction.TopicConfigRead,
