@@ -517,6 +517,46 @@ public sealed class GovernedDataJobStateCoordinator
             cancellationToken);
 
     public Task<GovernedDataJobStateResult>
+        CancelAndFenceAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken =
+                default) =>
+        MutateAsync(
+            operationId,
+            plan,
+            expectedWorkerGeneration: null,
+            snapshot =>
+                GovernedDataJobProgress
+                    .CancelAndFence(
+                        snapshot,
+                        nowUtc),
+            "data_job_cancelled",
+            cancellationToken);
+
+    public Task<GovernedDataJobStateResult>
+        ReconcileProvenNonApplicationAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            Guid batchId,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken =
+                default) =>
+        MutateAsync(
+            operationId,
+            plan,
+            expectedWorkerGeneration: null,
+            snapshot =>
+                GovernedDataJobProgress
+                    .ResolveProvenNonApplicationAndFence(
+                        snapshot,
+                        batchId,
+                        nowUtc),
+            "data_job_non_application_reconciled",
+            cancellationToken);
+
+    public Task<GovernedDataJobStateResult>
         StopAsync(
             Guid operationId,
             GovernedDataJobPlan plan,
