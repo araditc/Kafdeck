@@ -619,7 +619,7 @@ public sealed record DataJobStatusData(
     {
         var checkpoints =
             progress?.Transfer?.Checkpoints ??
-            Array.Empty<FleetTransferCheckpoint>();
+            Array.Empty<FleetTransferPartitionCheckpoint>();
 
         var ranges = plan.Ranges
             .Select((range, index) =>
