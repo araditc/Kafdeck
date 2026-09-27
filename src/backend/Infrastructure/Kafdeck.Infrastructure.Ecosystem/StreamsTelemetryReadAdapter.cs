@@ -828,6 +828,7 @@ public sealed class StreamsLineageReadService :
                                     consumer.Stale)))
                         {
                             partial = true;
+                            edgeBoundHit = true;
                             break;
                         }
                     }
