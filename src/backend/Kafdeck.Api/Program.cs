@@ -187,6 +187,9 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IGovernedDataJobEffectGuard>(services =>
         services.GetRequiredService<ConfiguredGovernedDataJobEffectGuard>());
     builder.Services.AddSingleton<GovernedDataJobDispatchCoordinator>();
+    builder.Services.AddSingleton(
+        GovernedDataJobWorkerPolicy.Default);
+    builder.Services.AddSingleton<GovernedDataJobWorker>();
     builder.Services.AddSingleton<IMutationExecutionHandler,
         GovernedDataJobActivationHandler>();
 
@@ -276,6 +279,7 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<MutationExecutor>();
     builder.Services.AddSingleton<MutationRecoveryCoordinator>();
     builder.Services.AddHostedService<MutationRecoveryHostedService>();
+    builder.Services.AddHostedService<GovernedDataJobHostedService>();
 }
 
 var app = builder.Build();
