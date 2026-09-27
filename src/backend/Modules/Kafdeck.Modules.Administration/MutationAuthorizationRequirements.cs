@@ -22,6 +22,13 @@ public static class MutationAuthorizationRequirements
             "Operation physical cluster",
             256);
 
+        if (kind == MutationOperationKind.ConnectAutoRestartPolicy)
+        {
+            return NormalizeConnectAutoRestartRequirements(
+                normalizedOperationCluster,
+                requirements);
+        }
+
         if (!FleetMutationAuthorization.IsFleetKind(kind))
         {
             return MutationAuthorization.NormalizeTargets(
