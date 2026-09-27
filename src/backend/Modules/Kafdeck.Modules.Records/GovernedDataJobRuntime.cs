@@ -137,6 +137,7 @@ public sealed class GovernedDataJobDispatchCoordinator
             await EnsureProgressAsync(
                     operation,
                     plan,
+                    workerGeneration,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -353,6 +354,7 @@ public sealed class GovernedDataJobDispatchCoordinator
         EnsureProgressAsync(
             MutationOperationSnapshot operation,
             GovernedDataJobPlan plan,
+            long workerGeneration,
             CancellationToken cancellationToken)
     {
         var current =
