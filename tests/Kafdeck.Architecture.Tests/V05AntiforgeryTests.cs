@@ -1,4 +1,5 @@
 using Kafdeck.Api;
+using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -77,6 +78,43 @@ public sealed class V05AntiforgeryTests
 
         Assert.NotNull(metadata);
         Assert.True(metadata.RequiresValidation);
+    }
+
+    [Fact]
+    public void Oidc_controlled_serde_posts_carry_antiforgery_metadata()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddKafdeckAntiforgery("https://127.0.0.1:8443");
+
+        using var app = builder.Build();
+        var options = new KafdeckOptions(
+            new DeploymentOptions(
+                "https://127.0.0.1:8443",
+                null,
+                AccessMode.Oidc,
+                new OidcProfile(
+                    "https://idp.example",
+                    "kafdeck",
+                    null,
+                    null,
+                    new[] { "openid" })),
+            Array.Empty<ClusterProfile>());
+
+        app.MapKafdeckV07ControlledSerde(options);
+
+        foreach (var pattern in new[]
+        {
+            "/api/v1/tools/serde/decode",
+            "/api/v1/tools/serde/encode",
+        })
+        {
+            var endpoint = FindEndpoint(app, pattern);
+            var metadata =
+                endpoint.Metadata.GetMetadata<IAntiforgeryMetadata>();
+
+            Assert.NotNull(metadata);
+            Assert.True(metadata.RequiresValidation);
+        }
     }
 
     private static RouteEndpoint FindEndpoint(WebApplication app, string pattern) =>
