@@ -99,3 +99,20 @@ test('v0.7 W55 policy lookup cannot break read-only Connect detail when mutation
   assert.match(openConnector, /reason instanceof MutationApiProblem && reason\.status === 404/);
   assert.doesNotMatch(openConnector, /Promise\.all/);
 });
+
+
+test('v0.7 W56 controlled SerDe UI is bounded, local-only and clears request material', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Controlled SerDe tooling/);
+  assert.match(source, /CBOR, XML and MessagePack/);
+  assert.match(source, /decodeControlledSerde/);
+  assert.match(source, /encodeControlledSerde/);
+  assert.match(source, /setSerdePayloadBase64\(''\)/);
+  assert.match(source, /setSerdeStructuredJson\(''\)/);
+  assert.doesNotMatch(source, /provider URL/i);
+  assert.doesNotMatch(source, /runtime plugin loading/i);
+});
