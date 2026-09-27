@@ -16,7 +16,9 @@ test('v0.4 read-view UI exposes Consumers, Schemas and Ecosystem landmarks', () 
   assert.match(markup, /Schema Registry/);
   assert.match(markup, /id="ecosystem"/);
   assert.match(markup, /Ecosystem read views/);
-  assert.match(markup, /no SQL or metadata-statement execution surface/);
+  assert.match(markup, /bounded single-statement SELECT queries only/);
+  assert.match(markup, /DDL, DML, persistent-query creation/);
+  assert.doesNotMatch(markup, /generic provider forwarding is allowed/i);
 });
 
 test('v0.4 initial UI has no mutation controls', () => {
