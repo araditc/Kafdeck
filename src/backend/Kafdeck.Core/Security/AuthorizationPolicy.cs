@@ -53,6 +53,8 @@ public enum AuthorizationAction
     ConnectAutoRestartManage = 47,
     DataJobPlan = 48,
     DataJobExecute = 49,
+    DataGeneratorPlan = 50,
+    DataGeneratorExecute = 51,
 }
 
 public enum AuthorizationDecisionReason
