@@ -509,7 +509,10 @@ public sealed class ConnectAutoRestartPolicyPreconditionValidator
             !string.Equals(
                 operation.ResourceKeys[0],
                 canonical.Target.CanonicalKey,
-                StringComparison.Ordinal))
+                StringComparison.Ordinal) ||
+            !AuthorizationBindingsMatch(
+                operation,
+                canonical))
         {
             return Stale(
                 "auto_restart_policy_target_binding_changed");
@@ -631,6 +634,40 @@ public sealed class ConnectAutoRestartPolicyPreconditionValidator
         }
 
         return MutationPreDispatchGuardResult.Allowed;
+    }
+
+    private static bool AuthorizationBindingsMatch(
+        MutationOperationSnapshot operation,
+        ConnectAutoRestartPolicyCanonicalIntent canonical)
+    {
+        var expected = new List<MutationAuthorizationTarget>
+        {
+            new(
+                AuthorizationAction.ConnectAutoRestartManage,
+                canonical.Target.ClusterId,
+                canonical.Target.AuthorizationResource),
+        };
+
+        if (canonical.Mode ==
+            ConnectAutoRestartPolicyMutationMode.EnableOrReplace)
+        {
+            expected.Add(
+                new MutationAuthorizationTarget(
+                    AuthorizationAction.ConnectRead,
+                    canonical.Target.ClusterId,
+                    canonical.Target.AuthorizationResource));
+        }
+
+        var actual = operation.AuthorizationTargets
+            .OrderBy(item => item.Action)
+            .ThenBy(item => item.ResourceName, StringComparer.Ordinal)
+            .ToArray();
+        var normalizedExpected = expected
+            .OrderBy(item => item.Action)
+            .ThenBy(item => item.ResourceName, StringComparer.Ordinal)
+            .ToArray();
+
+        return actual.SequenceEqual(normalizedExpected);
     }
 
     internal static bool ExistingMatches(
