@@ -3,13 +3,14 @@ import {
   MutationApiProblem,
   mutationApi,
   type ConsumerOffsetSelectorKind,
+  type DataGeneratorSourceKindInput,
   type DataJobKindInput,
   type MutationStatus,
   type RecordsPurgeSelectorKind,
   type SchemaFormatInput,
 } from './mutationApi.js';
 
-type WorkflowKind = 'topic' | 'record' | 'consumer' | 'schema' | 'connect' | 'dataJob' | 'purge';
+type WorkflowKind = 'topic' | 'record' | 'consumer' | 'schema' | 'connect' | 'dataJob' | 'generator' | 'purge';
 
 function newIdempotencyKey(): string {
   if (
@@ -106,6 +107,7 @@ export function MutationPreviewWorkflows({
       <option value="schema">Schema Registry</option>
       <option value="connect">Kafka Connect</option>
       <option value="dataJob">Replay / forward data job</option>
+      <option value="generator">Smart Mock / Data Generator</option>
       <option value="purge">Controlled purge</option>
     </select>
     <p><label htmlFor="mutation-idempotency-key">Idempotency-Key</label>{' '}<input id="mutation-idempotency-key" value={idempotencyKey} onChange={event => setIdempotencyKey(event.target.value)} autoComplete="off" />{' '}<button type="button" onClick={() => setIdempotencyKey(newIdempotencyKey())}>Generate new key</button></p>
@@ -116,6 +118,7 @@ export function MutationPreviewWorkflows({
     {workflow === 'schema' && <SchemaWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'connect' && <ConnectWorkflow key={`${clusterId}:${connectProfileId ?? 'default'}`} clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'dataJob' && <DataJobWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'generator' && <DataGeneratorWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'purge' && <PurgeWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
   </article>;
 }
@@ -172,7 +175,7 @@ function RecordWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId
       <label htmlFor="record-key">UTF-8 key (optional)</label>{' '}<input id="record-key" value={key} onChange={event => setKey(event.target.value)} autoComplete="off" /><br />
       <label htmlFor="record-value">UTF-8 value</label><br /><textarea id="record-value" required value={value} onChange={event => setValue(event.target.value)} rows={5} /><br />
       <label htmlFor="record-headers">Headers, one name=value per line</label><br /><textarea id="record-headers" value={headers} onChange={event => setHeaders(event.target.value)} rows={4} />
-      <p>Payload, key and header values remain browser-memory/request material only; this UI does not use localStorage or a durable payload staging surface.</p>
+      <p>Payload, key and header values remain browser-memory/request material only; this UI does not use persistent browser storage or a durable payload staging surface.</p>
       <button type="submit" disabled={!topicName.trim() || !value || !idempotencyKey.trim()}>Create preview</button>
     </fieldset>
   </form>;
@@ -403,6 +406,126 @@ function DataJobWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterI
         <input id="data-job-fields" required value={projectedFields} onChange={event => setProjectedFields(event.target.value)} />
       </>}
       <br /><button type="submit" disabled={invalid}>Create finite preview</button>
+    </fieldset>
+  </form>;
+}
+
+function DataGeneratorWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
+  const [destinationClusterId, setDestinationClusterId] = useState(clusterId);
+  const [destinationProfileVersion, setDestinationProfileVersion] = useState('');
+  const [destinationTopic, setDestinationTopic] = useState('');
+  const [destinationPartition, setDestinationPartition] = useState(0);
+  const [recordCount, setRecordCount] = useState(100);
+  const [seed, setSeed] = useState(0);
+  const [sourceKind, setSourceKind] = useState<DataGeneratorSourceKindInput>('BuiltInTemplate');
+  const [schemaSubject, setSchemaSubject] = useState('');
+  const [schemaVersion, setSchemaVersion] = useState(1);
+  const [maxBatchRecords, setMaxBatchRecords] = useState(100);
+  const [maxBatchBytes, setMaxBatchBytes] = useState(1024 * 1024);
+  const [maxTotalRecords, setMaxTotalRecords] = useState(10_000);
+  const [maxTotalBytes, setMaxTotalBytes] = useState(10 * 1024 * 1024);
+  const [maxDurationSeconds, setMaxDurationSeconds] = useState(600);
+  const [maxRecordsPerSecond, setMaxRecordsPerSecond] = useState(100);
+  const [maxBytesPerSecond, setMaxBytesPerSecond] = useState(1024 * 1024);
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    void submit(() => mutationApi.previewDataGenerator(
+      {
+        destinationClusterId,
+        destinationProfileVersion,
+        destinationTopic,
+        destinationPartition,
+        recordCount,
+        seed,
+        source: sourceKind === 'Schema'
+          ? {
+              kind: 'Schema',
+              schemaSubject: schemaSubject.trim(),
+              schemaVersion,
+              template: null,
+            }
+          : {
+              kind: 'BuiltInTemplate',
+              schemaSubject: null,
+              schemaVersion: null,
+              template: 'BasicJsonV1',
+            },
+        budget: {
+          maxBatchRecords,
+          maxBatchBytes,
+          maxTotalRecords,
+          maxTotalBytes,
+          maxDurationSeconds,
+          maxRecordsPerSecond,
+          maxBytesPerSecond,
+        },
+      },
+      idempotencyKey,
+    ));
+  };
+
+  const sourceReady = sourceKind === 'BuiltInTemplate' || (schemaSubject.trim().length > 0 && schemaVersion > 0);
+
+  return <form onSubmit={onSubmit} aria-label="Governed data generator preview">
+    <fieldset disabled={busy}><legend>Smart Mock / bounded Data Generator</legend>
+      <p>Generation is finite, deterministic and server-bounded. Generated payloads are materialized in memory only; Kafdeck does not provide an unbounded producer or durable generated-payload staging area.</p>
+      <label htmlFor="generator-destination-cluster">Destination cluster</label>{' '}
+      <input id="generator-destination-cluster" required value={destinationClusterId} onChange={event => setDestinationClusterId(event.target.value)} />{' '}
+      <label htmlFor="generator-destination-profile">Destination profile version</label>{' '}
+      <input id="generator-destination-profile" required value={destinationProfileVersion} onChange={event => setDestinationProfileVersion(event.target.value)} /><br />
+
+      <label htmlFor="generator-destination-topic">Destination topic</label>{' '}
+      <input id="generator-destination-topic" required value={destinationTopic} onChange={event => setDestinationTopic(event.target.value)} />{' '}
+      <label htmlFor="generator-destination-partition">Partition</label>{' '}
+      <input id="generator-destination-partition" type="number" min={0} required value={destinationPartition} onChange={event => setDestinationPartition(Number(event.target.value))} /><br />
+
+      <label htmlFor="generator-source-kind">Source</label>{' '}
+      <select id="generator-source-kind" value={sourceKind} onChange={event => setSourceKind(event.target.value as DataGeneratorSourceKindInput)}>
+        <option value="BuiltInTemplate">Built-in BasicJsonV1</option>
+        <option value="Schema">Schema Registry subject/version</option>
+      </select>{' '}
+      {sourceKind === 'Schema' && <>
+        <label htmlFor="generator-schema-subject">Schema subject</label>{' '}
+        <input id="generator-schema-subject" required value={schemaSubject} onChange={event => setSchemaSubject(event.target.value)} />{' '}
+        <label htmlFor="generator-schema-version">Version</label>{' '}
+        <input id="generator-schema-version" type="number" min={1} required value={schemaVersion} onChange={event => setSchemaVersion(Number(event.target.value))} />
+      </>}
+      <br />
+
+      <label htmlFor="generator-record-count">Records</label>{' '}
+      <input id="generator-record-count" type="number" min={1} max={100000} required value={recordCount} onChange={event => setRecordCount(Number(event.target.value))} />{' '}
+      <label htmlFor="generator-seed">Deterministic seed</label>{' '}
+      <input id="generator-seed" type="number" value={seed} onChange={event => setSeed(Number(event.target.value))} /><br />
+
+      <details>
+        <summary>Finite runtime budgets</summary>
+        <p>Defaults remain HIGH risk. Increasing total/rate/duration ceilings above server defaults can raise the operation to CRITICAL and require independent approval. Hard caps are enforced server-side.</p>
+        <label htmlFor="generator-max-batch-records">Max batch records</label>{' '}
+        <input id="generator-max-batch-records" type="number" min={1} max={1000} value={maxBatchRecords} onChange={event => setMaxBatchRecords(Number(event.target.value))} />{' '}
+        <label htmlFor="generator-max-batch-bytes">Max batch bytes</label>{' '}
+        <input id="generator-max-batch-bytes" type="number" min={1} max={10 * 1024 * 1024} value={maxBatchBytes} onChange={event => setMaxBatchBytes(Number(event.target.value))} /><br />
+        <label htmlFor="generator-max-total-records">Max total records</label>{' '}
+        <input id="generator-max-total-records" type="number" min={1} max={100000} value={maxTotalRecords} onChange={event => setMaxTotalRecords(Number(event.target.value))} />{' '}
+        <label htmlFor="generator-max-total-bytes">Max total bytes</label>{' '}
+        <input id="generator-max-total-bytes" type="number" min={1} max={100 * 1024 * 1024} value={maxTotalBytes} onChange={event => setMaxTotalBytes(Number(event.target.value))} /><br />
+        <label htmlFor="generator-max-duration">Max duration seconds</label>{' '}
+        <input id="generator-max-duration" type="number" min={1} max={3600} value={maxDurationSeconds} onChange={event => setMaxDurationSeconds(Number(event.target.value))} />{' '}
+        <label htmlFor="generator-max-record-rate">Max records/s</label>{' '}
+        <input id="generator-max-record-rate" type="number" min={1} max={1000} value={maxRecordsPerSecond} onChange={event => setMaxRecordsPerSecond(Number(event.target.value))} />{' '}
+        <label htmlFor="generator-max-byte-rate">Max bytes/s</label>{' '}
+        <input id="generator-max-byte-rate" type="number" min={1} max={10 * 1024 * 1024} value={maxBytesPerSecond} onChange={event => setMaxBytesPerSecond(Number(event.target.value))} />
+      </details>
+
+      <p role="note">The destination must be explicitly enabled by deployment policy. No topic creation, arbitrary code/template execution, or generic Kafka producer proxy is implied.</p>
+      <button type="submit" disabled={
+        !idempotencyKey.trim() ||
+        !destinationClusterId.trim() ||
+        !destinationProfileVersion.trim() ||
+        !destinationTopic.trim() ||
+        recordCount < 1 ||
+        !sourceReady
+      }>Create generator preview</button>
     </fieldset>
   </form>;
 }

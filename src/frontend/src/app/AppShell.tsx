@@ -16,6 +16,9 @@ import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
+import { CommandPalette } from './CommandPalette.js';
+import { StatusBadge } from './StatusBadge.js';
+import { fleetCapabilityStatusKind } from './statusPresentation.js';
 
 function observationText(envelope: ApiEnvelope<unknown>) {
   const observed = new Date(envelope.observation.observedAt);
@@ -33,16 +36,6 @@ function problemText(reason: unknown) {
 function ConfigurationView({ entries }: { entries: ConfigurationEntryData[] }) {
   if (entries.length === 0) return <p className="text-secondary">No configuration entries are observable.</p>;
   return <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Name</th><th scope="col">Value</th><th scope="col">Source</th></tr></thead><tbody>{entries.map(entry => <tr key={entry.name}><th scope="row">{entry.name}</th><td>{entry.isSensitive ? <span className="badge bg-orange-lt">Sensitive value redacted</span> : (entry.value ?? 'Not set')}</td><td>{entry.source ?? 'Unknown'}</td></tr>)}</tbody></table></div>;
-}
-
-function fleetStateBadge(state: FleetCapabilityStatus['state']) {
-  switch (state) {
-    case 'supported': return 'bg-green-lt';
-    case 'unsupported': return 'bg-secondary-lt';
-    case 'blocked': return 'bg-orange-lt';
-    case 'unconfigured': return 'bg-yellow-lt';
-    default: return 'bg-blue-lt';
-  }
 }
 
 export function AppShell() {
@@ -216,6 +209,7 @@ export function AppShell() {
           </a>
         </h1>
         <div className="kafdeck-toolbar">
+          <CommandPalette />
           {operator && <div className="kafdeck-auth"><span className="text-secondary">Signed in as</span><strong>{operator.displayName ?? operator.email ?? 'operator'}</strong><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => void kafdeckApi.logout()}>Sign out</button></div>}
           {authenticationRequired && <div className="kafdeck-auth"><a className="btn btn-sm btn-primary" href="/api/v1/auth/login">Sign in with your identity provider</a></div>}
           <div>
@@ -258,7 +252,7 @@ export function AppShell() {
             <p className="text-secondary">Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.</p>
             {fleetError && <div className="alert alert-danger" role="alert">{fleetError}</div>}
             {!fleetError && fleetCapabilities.length === 0 && <p role="status">Loading fleet capability status…</p>}
-            {fleetCapabilities.length > 0 && <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Capability</th><th scope="col">State</th><th scope="col">Workstream</th><th scope="col">Reason</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row">{capability.displayName}</th><td><span className={`badge ${fleetStateBadge(capability.state)}`}>{capability.state}</span></td><td>{capability.workstream}</td><td>{capability.reason}</td></tr>)}</tbody></table></div>}
+            {fleetCapabilities.length > 0 && <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Capability</th><th scope="col">State</th><th scope="col">Workstream</th><th scope="col">Reason</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row">{capability.displayName}</th><td><StatusBadge kind={fleetCapabilityStatusKind(capability.state)} label={capability.state} /></td><td>{capability.workstream}</td><td>{capability.reason}</td></tr>)}</tbody></table></div>}
           </section>
           {selected && <>
             <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">

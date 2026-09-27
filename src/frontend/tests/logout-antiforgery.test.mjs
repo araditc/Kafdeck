@@ -6,12 +6,10 @@ test('OIDC logout obtains antiforgery token and submits it in the top-level form
   const originals = {
     fetch: globalThis.fetch,
     document: globalThis.document,
-    sessionStorage: globalThis.sessionStorage,
     window: globalThis.window,
     history: globalThis.history,
   };
 
-  const removedKeys = [];
   const fetchCalls = [];
   let submittedForm = null;
 
@@ -30,11 +28,6 @@ test('OIDC logout obtains antiforgery token and submits it in the top-level form
   };
 
   try {
-    globalThis.sessionStorage = {
-      getItem() { return null; },
-      setItem() {},
-      removeItem(key) { removedKeys.push(key); },
-    };
     globalThis.window = {
       location: {
         hash: '',
@@ -74,7 +67,6 @@ test('OIDC logout obtains antiforgery token and submits it in the top-level form
 
     await kafdeckApi.logout();
 
-    assert.deepEqual(removedKeys, ['kafdeck.deploymentAccessToken']);
     assert.equal(fetchCalls.length, 1);
     assert.equal(fetchCalls[0].path, '/api/v1/auth/csrf');
     assert.equal(fetchCalls[0].init.method, 'GET');
@@ -91,7 +83,6 @@ test('OIDC logout obtains antiforgery token and submits it in the top-level form
   } finally {
     globalThis.fetch = originals.fetch;
     globalThis.document = originals.document;
-    globalThis.sessionStorage = originals.sessionStorage;
     globalThis.window = originals.window;
     globalThis.history = originals.history;
   }

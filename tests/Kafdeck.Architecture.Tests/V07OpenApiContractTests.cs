@@ -3,6 +3,7 @@ using Kafdeck.Api;
 using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Schemas;
+using Kafdeck.Modules.Generator;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -331,6 +332,75 @@ public sealed class V07OpenApiContractTests
 
         var reconcile = schemas
             .GetProperty("DataJobReconcileRequest")
+            .GetProperty("properties")
+            .GetProperty("disposition")
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+
+        Assert.Equal(new[] { "provenNonApplication" }, reconcile);
+    }
+
+    [Fact]
+    public void W58_data_generator_openapi_is_finite_and_reconciliation_only()
+    {
+        using var document = JsonDocument.Parse(KafdeckV07OpenApi.Document);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        Assert.True(paths
+            .GetProperty("/api/v1/data-jobs/generator/preview")
+            .TryGetProperty("post", out _));
+        Assert.True(paths
+            .GetProperty("/api/v1/data-jobs/generator/{operationId}/start")
+            .TryGetProperty("post", out _));
+        Assert.True(paths
+            .GetProperty("/api/v1/data-jobs/generator/{operationId}")
+            .TryGetProperty("get", out _));
+        Assert.True(paths
+            .GetProperty("/api/v1/data-jobs/generator/{operationId}/cancel")
+            .TryGetProperty("post", out _));
+        Assert.True(paths
+            .GetProperty("/api/v1/data-jobs/generator/{operationId}/reconcile")
+            .TryGetProperty("post", out _));
+
+        var schemas = root.GetProperty("components").GetProperty("schemas");
+        var budget = schemas
+            .GetProperty("DataGeneratorBudgetRequest")
+            .GetProperty("properties");
+
+        Assert.Equal(
+            DataGeneratorBudget.HardMaxBatchRecords,
+            budget.GetProperty("maxBatchRecords")
+                .GetProperty("maximum").GetInt32());
+        Assert.Equal(
+            DataGeneratorBudget.HardMaxBatchBytes,
+            budget.GetProperty("maxBatchBytes")
+                .GetProperty("maximum").GetInt64());
+        Assert.Equal(
+            DataGeneratorBudget.HardMaxTotalRecords,
+            budget.GetProperty("maxTotalRecords")
+                .GetProperty("maximum").GetInt32());
+        Assert.Equal(
+            DataGeneratorBudget.HardMaxTotalBytes,
+            budget.GetProperty("maxTotalBytes")
+                .GetProperty("maximum").GetInt64());
+        Assert.Equal(
+            (long)DataGeneratorBudget.HardMaxDuration.TotalSeconds,
+            budget.GetProperty("maxDurationSeconds")
+                .GetProperty("maximum").GetInt64());
+        Assert.Equal(
+            DataGeneratorBudget.HardMaxRecordsPerSecond,
+            budget.GetProperty("maxRecordsPerSecond")
+                .GetProperty("maximum").GetInt32());
+        Assert.Equal(
+            DataGeneratorBudget.HardMaxBytesPerSecond,
+            budget.GetProperty("maxBytesPerSecond")
+                .GetProperty("maximum").GetInt64());
+
+        var reconcile = schemas
+            .GetProperty("DataGeneratorReconcileRequest")
             .GetProperty("properties")
             .GetProperty("disposition")
             .GetProperty("enum")

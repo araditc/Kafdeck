@@ -362,3 +362,79 @@ body {
   align-items: center;
   flex-wrap: wrap;
 }
+
+
+/* v0.7 W60 command palette. The palette is navigation-only and never stores
+   secrets, payloads, or privileged provider instructions. */
+.kafdeck-command-trigger {
+  align-self: end;
+  white-space: nowrap;
+}
+
+.kafdeck-command-trigger kbd {
+  margin-inline-start: 0.35rem;
+  font-size: 0.7rem;
+}
+
+.kafdeck-command-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: start center;
+  padding: min(12vh, 7rem) 1rem 1rem;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.kafdeck-command-palette {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: min(76vh, 44rem);
+  overflow: hidden;
+  box-shadow: var(--tblr-box-shadow-card);
+}
+
+.kafdeck-command-palette .list-group {
+  max-height: min(50vh, 30rem);
+  overflow-y: auto;
+}
+
+.kafdeck-command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: start;
+}
+
+.kafdeck-command-item > span:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.kafdeck-command-item small {
+  display: block;
+  color: var(--tblr-secondary-color);
+}
+
+.kafdeck-command-item.active small {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.kafdeck-command-item:disabled {
+  opacity: 0.72;
+}
+
+@media (max-width: 767.98px) {
+  .kafdeck-command-trigger {
+    width: auto !important;
+  }
+
+  .kafdeck-command-backdrop {
+    padding-top: 1rem;
+  }
+
+  .kafdeck-command-palette {
+    max-height: calc(100vh - 2rem);
+  }
+}

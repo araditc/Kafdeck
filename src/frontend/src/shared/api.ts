@@ -1,3 +1,4 @@
+import { clearDeploymentAccessToken, withDeploymentAccessToken } from './deploymentAccess.js';
 export type Freshness = 'fresh' | 'stale';
 
 export interface ApiObservation { observedAt: string; freshness: Freshness; cacheAgeMs: number; partial: boolean; }
@@ -378,26 +379,8 @@ export class ApiProblem extends Error {
   }
 }
 
-const deploymentTokenKey = 'kafdeck.deploymentAccessToken';
-
-function bootstrapDeploymentToken(): string | null {
-  const fragment = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash);
-  const supplied = fragment.get('access_token');
-  if (supplied) {
-    sessionStorage.setItem(deploymentTokenKey, supplied);
-    fragment.delete('access_token');
-    const remainder = fragment.toString();
-    history.replaceState(null, '', `${window.location.pathname}${window.location.search}${remainder ? `#${remainder}` : ''}`);
-    return supplied;
-  }
-  return sessionStorage.getItem(deploymentTokenKey);
-}
-
 function requestHeaders(accept: string): Record<string, string> {
-  const headers: Record<string, string> = { Accept: accept };
-  const token = bootstrapDeploymentToken();
-  if (token) headers['X-Kafdeck-Access-Token'] = token;
-  return headers;
+  return withDeploymentAccessToken({ Accept: accept });
 }
 
 async function parseProblem(response: Response): Promise<ApiProblem> {
@@ -514,7 +497,7 @@ function recordParams(query: RecordQuery): URLSearchParams {
 export const kafdeckApi = {
   getOperatorSession(signal?: AbortSignal) { return readJson<OperatorSession>('/api/v1/auth/session', signal); },
   async logout() {
-    sessionStorage.removeItem(deploymentTokenKey);
+    clearDeploymentAccessToken();
     const token = await readJson<{ requestToken: string | null; formFieldName: string | null }>('/api/v1/auth/csrf');
     if (!token.requestToken || !token.formFieldName) {
       throw new ApiProblem(
