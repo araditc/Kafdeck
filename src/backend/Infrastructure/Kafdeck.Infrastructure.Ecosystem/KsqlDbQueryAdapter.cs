@@ -11,6 +11,7 @@ namespace Kafdeck.Infrastructure.Ecosystem;
 public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
 {
     public const int HardMaxConcurrentQueriesPerCluster = 8;
+    public const int HardMaxColumns = 1_000;
     private readonly IReadOnlyDictionary<string, HttpReadRuntime> _runtimes;
     private readonly IReadOnlyDictionary<string, SemaphoreSlim> _gates;
     private readonly TimeProvider _timeProvider;
@@ -327,6 +328,13 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
                 {
                     throw new JsonException(
                         "ksqlDB query header is invalid.");
+                }
+
+                if (columnNames.GetArrayLength() is < 1 or > HardMaxColumns ||
+                    columnTypes.GetArrayLength() != columnNames.GetArrayLength())
+                {
+                    throw new JsonException(
+                        "ksqlDB query header column bounds are invalid.");
                 }
 
                 header = new KsqlQueryHeader(
