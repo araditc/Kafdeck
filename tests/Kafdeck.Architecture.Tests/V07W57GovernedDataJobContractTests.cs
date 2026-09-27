@@ -39,6 +39,30 @@ public sealed class V07W57GovernedDataJobContractTests
     }
 
     [Fact]
+    public void Canonical_intent_round_trips_budget_without_losing_duration_or_fingerprint()
+    {
+        var plan = GovernedDataJobPolicy.FromTransfer(
+            GovernedDataJobKind.Forward,
+            TransferPlan());
+        var intent = GovernedDataJobPolicy.BuildIntent(plan);
+
+        var restored =
+            GovernedDataJobPolicy.DeserializePlan(
+                intent.CanonicalIntent);
+
+        Assert.Equal(
+            plan.PlanFingerprint,
+            restored.PlanFingerprint);
+        Assert.Equal(
+            plan.Budget.MaxDuration,
+            restored.Budget.MaxDuration);
+        Assert.Equal(
+            plan.Budget.MaxTotalBytes,
+            restored.Budget.MaxTotalBytes);
+        GovernedDataJobPolicy.ValidatePlan(restored);
+    }
+
+    [Fact]
     public void Data_job_intent_requires_independent_read_export_produce_and_job_permissions()
     {
         var plan = GovernedDataJobPolicy.FromTransfer(
