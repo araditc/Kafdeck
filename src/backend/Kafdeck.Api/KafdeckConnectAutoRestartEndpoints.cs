@@ -242,8 +242,7 @@ public static class KafdeckConnectAutoRestartEndpoints
         try
         {
             var canonical =
-                ConnectMutationCanonicalization.Deserialize<
-                    ConnectAutoRestartPolicyCanonicalIntent>(
+                ConnectAutoRestartPolicyMutationContract.Deserialize(
                     operation.CanonicalIntent);
 
             return canonical.Target == target &&
