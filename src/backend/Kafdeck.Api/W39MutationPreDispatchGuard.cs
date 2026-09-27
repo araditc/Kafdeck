@@ -24,6 +24,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly RecordsPurgePreconditionValidator _recordsPurge;
     private readonly SchemaMutationPreconditionValidator? _schemas;
     private readonly ConnectMutationPreconditionValidator? _connect;
+    private readonly ConnectAutoRestartPolicyPreconditionValidator? _connectAutoRestart;
     private readonly AclMutationPreconditionValidator? _acls;
     private readonly IAclEffectAuthorizationGuard? _aclAuthorization;
     private readonly ScramMutationPreconditionValidator? _scram;
@@ -38,6 +39,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         RecordsPurgePreconditionValidator recordsPurge,
         SchemaMutationPreconditionValidator? schemas = null,
         ConnectMutationPreconditionValidator? connect = null,
+        ConnectAutoRestartPolicyPreconditionValidator? connectAutoRestart = null,
         AclMutationPreconditionValidator? acls = null,
         IAclEffectAuthorizationGuard? aclAuthorization = null,
         ScramMutationPreconditionValidator? scram = null,
@@ -51,6 +53,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _recordsPurge = recordsPurge ?? throw new ArgumentNullException(nameof(recordsPurge));
         _schemas = schemas;
         _connect = connect;
+        _connectAutoRestart = connectAutoRestart;
         _acls = acls;
         _aclAuthorization = aclAuthorization;
         _scram = scram;
@@ -117,6 +120,17 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
                 }
 
                 preconditions = await _connect
+                    .ValidateAsync(operation, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
+            case MutationOperationKind.ConnectAutoRestartPolicy:
+                if (_connectAutoRestart is null)
+                {
+                    return Unsupported();
+                }
+
+                preconditions = await _connectAutoRestart
                     .ValidateAsync(operation, cancellationToken)
                     .ConfigureAwait(false);
                 break;
