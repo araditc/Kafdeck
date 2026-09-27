@@ -1,4 +1,5 @@
 using Kafdeck.Api;
+using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
