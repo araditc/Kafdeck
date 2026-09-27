@@ -332,6 +332,138 @@ public sealed class V07W57GovernedDataJobStateCoordinatorTests
     }
 
     [Fact]
+    public async Task Cancel_fences_worker_and_stops_only_when_no_batch_is_unresolved()
+    {
+        var store = new FakeFleetStore();
+        var coordinator =
+            new GovernedDataJobStateCoordinator(store);
+        var plan = Plan();
+        var operationId = Guid.NewGuid();
+
+        _ = await coordinator.InitializeAsync(
+            operationId,
+            1,
+            plan,
+            Now);
+
+        var acquired = await coordinator.AcquireLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            Now.AddSeconds(1),
+            TimeSpan.FromSeconds(30));
+
+        var beforeGeneration =
+            acquired.Progress!.WorkerGeneration;
+
+        var cancelled =
+            await coordinator.CancelAndFenceAsync(
+                operationId,
+                plan,
+                Now.AddSeconds(2));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.Applied,
+            cancelled.Outcome);
+        Assert.Equal(
+            FleetProgressPhase.Stopped,
+            cancelled.Progress!.Phase);
+        Assert.Equal(
+            beforeGeneration + 1,
+            cancelled.Progress.WorkerGeneration);
+        Assert.Null(
+            cancelled.Progress.WorkerLeaseOwner);
+        Assert.Null(
+            cancelled.Progress.WorkerLeaseExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task Ambiguous_batch_requires_reconciliation_before_cancel_and_reconcile_fences_worker()
+    {
+        var store = new FakeFleetStore();
+        var coordinator =
+            new GovernedDataJobStateCoordinator(store);
+        var plan = Plan();
+        var operationId = Guid.NewGuid();
+
+        _ = await coordinator.InitializeAsync(
+            operationId,
+            1,
+            plan,
+            Now);
+
+        var acquired = await coordinator.AcquireLeaseAsync(
+            operationId,
+            plan,
+            "worker-a",
+            Now.AddSeconds(1),
+            TimeSpan.FromSeconds(30));
+        var generation =
+            acquired.Progress!.WorkerGeneration;
+
+        var reserved =
+            await coordinator.ReserveBeforeDispatchAsync(
+                operationId,
+                plan,
+                generation,
+                0,
+                plan.Ranges[0].StartInclusive,
+                0,
+                64,
+                Now.AddSeconds(2));
+        var batchId =
+            reserved.Progress!.Transfer!
+                .PendingBatch!.BatchId;
+
+        _ = await coordinator.MarkDispatchStartedAsync(
+            operationId,
+            plan,
+            generation,
+            batchId,
+            Now.AddSeconds(3));
+
+        _ = await coordinator.MarkAmbiguousAsync(
+            operationId,
+            plan,
+            generation,
+            batchId,
+            Now.AddSeconds(4));
+
+        var cancel =
+            await coordinator.CancelAndFenceAsync(
+                operationId,
+                plan,
+                Now.AddSeconds(5));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.InvalidState,
+            cancel.Outcome);
+        Assert.NotNull(
+            cancel.Progress!.Transfer!.PendingBatch);
+
+        var reconciled =
+            await coordinator.ReconcileProvenNonApplicationAsync(
+                operationId,
+                plan,
+                batchId,
+                Now.AddSeconds(6));
+
+        Assert.Equal(
+            GovernedDataJobStateOutcome.Applied,
+            reconciled.Outcome);
+        Assert.Equal(
+            FleetProgressPhase.Observing,
+            reconciled.Progress!.Phase);
+        Assert.Null(
+            reconciled.Progress.Transfer!.PendingBatch);
+        Assert.Equal(
+            generation + 1,
+            reconciled.Progress.WorkerGeneration);
+        Assert.Null(
+            reconciled.Progress.WorkerLeaseOwner);
+    }
+
+    [Fact]
     public async Task Fence_advances_generation_without_resetting_counters()
     {
         var store = new FakeFleetStore();
