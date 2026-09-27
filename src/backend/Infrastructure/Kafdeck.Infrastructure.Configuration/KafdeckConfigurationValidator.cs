@@ -27,6 +27,7 @@ public static class KafdeckConfigurationValidator
         ValidateClusters(options.Clusters, errors);
         ValidateCatalog(options.Catalog, options.Clusters, errors);
         ValidateAdministration(options.Administration, options.Deployment, errors);
+        ValidateGenerator(options.Generator, options.Clusters, errors);
         ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
@@ -504,6 +505,61 @@ public static class KafdeckConfigurationValidator
             .TrimEnd('/')
             .ToLowerInvariant();
         return true;
+    }
+
+    private static void ValidateGenerator(
+        DataGeneratorOptions? generator,
+        IReadOnlyList<ClusterProfile> clusters,
+        ICollection<string> errors)
+    {
+        if (generator is null)
+        {
+            return;
+        }
+
+        if (generator.EnabledClusterIds.Count > 256)
+        {
+            errors.Add(
+                "Data generator allowlist must not contain more than 256 cluster IDs.");
+            return;
+        }
+
+        var known = clusters
+            .Select(cluster => cluster.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var value in generator.EnabledClusterIds)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                errors.Add(
+                    "Data generator allowlist cluster IDs must be non-empty.");
+                continue;
+            }
+
+            var id = value.Trim();
+            if (!string.Equals(id, value, StringComparison.Ordinal) ||
+                id.Length > 256 ||
+                id.Any(char.IsControl))
+            {
+                errors.Add(
+                    "Data generator allowlist cluster IDs must be trimmed, at most 256 characters, and contain no control characters.");
+                continue;
+            }
+
+            if (!seen.Add(id))
+            {
+                errors.Add(
+                    $"Data generator allowlist contains duplicate cluster '{id}'.");
+            }
+
+            if (!known.Contains(id))
+            {
+                errors.Add(
+                    $"Data generator allowlist references unknown cluster '{id}'.");
+            }
+        }
     }
 
     private static void ValidateCatalog(
