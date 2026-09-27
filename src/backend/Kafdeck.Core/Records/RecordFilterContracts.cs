@@ -260,7 +260,13 @@ public sealed record RecordFilterRequest
 
 public sealed record RecordFilteredItem(
     KafkaRawRecord RawRecord,
-    RecordDecodedValue? DecodedValue);
+    RecordDecodedValue? DecodedValue,
+    JsonElement? ControlledStructuredValue = null)
+{
+    public JsonElement? StructuredValue =>
+        ControlledStructuredValue ??
+        DecodedValue?.StructuredValue;
+}
 
 public enum RecordFilterLimitationCode
 {
