@@ -73,10 +73,7 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
 
             Assert.False(
                 await reloaded.TryUpdateAsync(
-                    reserved with
-                    {
-                        Version = reserved.Version + 1,
-                    },
+                    reserved,
                     expectedVersion: activation.Version,
                     lease!,
                     Now));
