@@ -42,22 +42,26 @@ public sealed record ConnectMutationPlanningFailure(
 public sealed record ConnectCreateRequest(
     string ClusterId,
     string ConnectorName,
-    IReadOnlyDictionary<string, string> Configuration);
+    IReadOnlyDictionary<string, string> Configuration,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectUpdateRequest(
     string ClusterId,
     string ConnectorName,
-    IReadOnlyDictionary<string, string> Configuration);
+    IReadOnlyDictionary<string, string> Configuration,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectControlRequest(
     string ClusterId,
     string ConnectorName,
     ConnectControlAction Action,
-    int? TaskId = null);
+    int? TaskId = null,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectDeleteRequest(
     string ClusterId,
-    string ConnectorName);
+    string ConnectorName,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectConfigurationCanonicalItem(
     string Key,
@@ -76,7 +80,8 @@ public sealed record ConnectCreateCanonicalIntent(
     string MaterialName,
     string RequestedConfigurationFingerprint,
     IReadOnlyList<ConnectConfigurationCanonicalItem> RequestedConfiguration,
-    string StateFingerprint);
+    string StateFingerprint,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectUpdateCanonicalIntent(
     ConnectAlterIntentKind AlterKind,
@@ -88,7 +93,8 @@ public sealed record ConnectUpdateCanonicalIntent(
     IReadOnlyList<ConnectConfigurationCanonicalItem> RequestedConfiguration,
     IReadOnlyList<ConnectConfigurationDiffItem> Diff,
     string CurrentState,
-    string StateFingerprint);
+    string StateFingerprint,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectControlCanonicalIntent(
     ConnectAlterIntentKind AlterKind,
@@ -98,14 +104,16 @@ public sealed record ConnectControlCanonicalIntent(
     int? TaskId,
     string CurrentState,
     string? CurrentTaskState,
-    string StateFingerprint);
+    string StateFingerprint,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectDeleteCanonicalIntent(
     string ClusterId,
     string ConnectorName,
     string CurrentState,
     string CurrentConfigurationFingerprint,
-    string StateFingerprint);
+    string StateFingerprint,
+    string ConnectProfileId = "default");
 
 public sealed record ConnectMutationPlan<TCanonical>(
     TCanonical Canonical,
@@ -238,6 +246,25 @@ internal static class ConnectMutationCanonicalization
             value,
             "Connector name",
             ConnectMutationPolicy.HardMaxConnectorNameCharacters);
+
+    public static string RequireConnectProfileId(string value)
+    {
+        var normalized = RequireIdentifier(
+            value,
+            "Kafka Connect profile ID",
+            128);
+
+        if (!normalized.All(character =>
+                char.IsLetterOrDigit(character) ||
+                character is '-' or '_' or '.'))
+        {
+            throw new ArgumentException(
+                "Kafka Connect profile ID is invalid.",
+                nameof(value));
+        }
+
+        return normalized;
+    }
 
     public static IReadOnlyDictionary<string, string> NormalizeConfiguration(
         IReadOnlyDictionary<string, string> configuration,
@@ -460,11 +487,26 @@ internal static class ConnectMutationCanonicalization
     public static string ResourceKey(
         string clusterId,
         string connectorName) =>
-        $"cluster/{clusterId}/connect/{connectorName}";
+        ResourceKey(clusterId, "default", connectorName);
+
+    public static string ResourceKey(
+        string clusterId,
+        string connectProfileId,
+        string connectorName) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? $"cluster/{clusterId}/connect/{connectorName}"
+            : $"cluster/{clusterId}/connect-profile/{connectProfileId}/connector/{connectorName}";
 
     public static string AuthorizationResource(
         string connectorName) =>
-        $"connector/{connectorName}";
+        AuthorizationResource("default", connectorName);
+
+    public static string AuthorizationResource(
+        string connectProfileId,
+        string connectorName) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? $"connector/{connectorName}"
+            : $"connect-profile/{connectProfileId}/connector/{connectorName}";
 
     public static string Sha256(ReadOnlySpan<byte> value) =>
         Convert.ToHexString(
