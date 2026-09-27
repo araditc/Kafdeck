@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 7 scope accepted; v0.1-v0.6 released; v0.6 is the active release line; v0.7 W51-W59 complete; W60 release-readiness work active; v0.7 publication not authorized**  
+Status: **Gate 0–Gate 7 scope accepted; v0.1-v0.7 implementation complete; v0.7 release activation owner-authorized under #203; protected-main publication workflow is the final release gate**  
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -185,7 +185,7 @@ There is no fabricated generic Kafka "broker read-only mode"; maintenance action
 
 Scope authority: **Issue #145 / Gate 6 — owner accepted 2026-09-23**. Tracker **#146** and W41-W50 are complete. v0.6 was published from protected `main` as the active release line on 2026-09-26. Capability availability remains evidence-based: foundations that are present in the codebase are not advertised as active mutation surfaces when their production runtime path is Blocked or Unsupported.
 
-## v0.7 — Developer & Streaming Ecosystem Platform — IMPLEMENTATION ACTIVE / W60
+## v0.7 — Developer & Streaming Ecosystem Platform — RELEASE AUTHORIZED / ACTIVATION
 
 Schema Registry:
 - Confluent-compatible baseline adapters
@@ -216,7 +216,7 @@ Streaming ecosystem:
 
 Kafdeck does not implement a full stream-processing SQL engine merely to duplicate ksqlDB/Flink.
 
-Scope authority: **Issue #178 / Gate 7 — owner accepted 2026-09-26**. W51 planning was admitted through PR **#191**. W52–W59 are complete through PRs **#192–#197, #200 and #201**. W60 **#190** is the active final workstream through PR **#202**, covering integrated developer UX, accessibility/browser-security closeout and release-readiness evidence. v0.7 release/tag/GitHub Release/GHCR publication remains a separate explicit owner gate.
+Scope authority: **Issue #178 / Gate 7 — owner accepted 2026-09-26**. W51 planning was admitted through PR **#191**; W52–W59 completed through PRs **#192–#197, #200 and #201**; W60 **#190** completed through PR **#202** and protected-main merge `4a217c2990aa639c3f2f508f8fea972107a16603`. Owner publication authorization was granted on **2026-09-27** under gate **#203**. The release activation PR selects the v0.7 manifest/package identity; immutable tag/GitHub Release/GHCR publication remains conditional on the protected-main release workflow succeeding.
 
 ## v0.8 — Observability, Automation & Platform APIs
 

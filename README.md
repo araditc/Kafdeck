@@ -30,7 +30,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **v0.6 is the current release line.** Read-only remains the default operating posture. v0.6 adds safe remote/multi-address deployment, a Tabler-based branded operator dashboard, and capability-driven Fleet Operations status. Governed mutations remain opt-in, and any fleet capability whose typed provider/runtime boundary is incomplete is reported `Blocked` or `Unsupported` rather than exposed through a generic provider/CLI escape path.
+> **v0.7 is the current release line.** Read-only remains the default operating posture. v0.7 adds governed Schema Registry lifecycle and developer tooling, multi-profile Kafka Connect with bounded auto-restart, controlled SerDe and finite data jobs/generation, bounded ksqlDB and Streams/lineage evidence, plus a keyboard-first Command Palette. Governed mutations remain opt-in, and unsupported or unsafe provider capabilities remain explicit `Blocked`/`Unsupported` states rather than falling through to a generic provider/CLI escape path.
 
 ## Why Kafdeck?
 
@@ -45,7 +45,7 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.6 is the active/current release identity selected by the governed release manifest.** Until the protected-main publication workflow completes, the latest already-published GitHub Release remains the fallback artifact. The main branch can also contain capabilities that have passed implementation gates but are not part of a published release.
+Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.7 is the active/current release identity selected by the governed release manifest.** The protected-main publication workflow owns the immutable source tag, GitHub Release and GHCR promotion for that identity. The main branch can also contain capabilities that have passed implementation gates but are not part of a later published release.
 
 | Capability | Status |
 | --- | --- |
@@ -54,7 +54,8 @@ Stable releases are published through [GitHub Releases](https://github.com/aradi
 | Safe Data Explorer + Server-Side Masking | Released in v0.3 |
 | Consumers / Schemas / Ecosystem Read Views | Released in v0.4 |
 | Controlled Kafka mutations | Released in v0.5 — governed and opt-in; read-only remains the default posture |
-| Fleet Operations capability boundary, secure remote UI and Tabler dashboard | v0.6 — capability-driven; unavailable fleet mutations remain explicitly Blocked/Unsupported |
+| Fleet Operations capability boundary, secure remote UI and Tabler dashboard | Released in v0.6 — capability-driven; unavailable fleet mutations remain explicitly Blocked/Unsupported |
+| Developer & Streaming Ecosystem Platform | Released in v0.7 — governed schema/Connect/data tooling, bounded streaming integrations, command palette and evidence-driven capability states |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
 
@@ -166,6 +167,21 @@ For the design and safety contract, see:
 - classification metadata.
 
 Catalog metadata is descriptive; it does not grant Kafka or record permissions.
+
+### v0.7 Developer & Streaming Ecosystem Platform
+
+Released in v0.7:
+
+- governed Schema Registry lifecycle plus bounded references, diff, compatibility explanation and mock tooling;
+- multiple Kafka Connect profiles with typed plugin/configuration tooling and disabled-by-default bounded auto-restart;
+- controlled CBOR, XML and MessagePack SerDe paths with strict structural/security limits;
+- finite governed replay, reprocess, DLQ/cross-topic/cross-cluster forwarding and deterministic Data Generator jobs;
+- bounded single-statement read-only ksqlDB queries;
+- registered Kafka Streams topology/state-store evidence and provenance-labelled lineage;
+- keyboard-first Command Palette and unified explicit operational states;
+- memory-only deployment token handling and no runtime CDN requirement.
+
+v0.7 does not introduce a generic provider/HTTP/SQL/CLI proxy, unbounded stream processing, arbitrary runtime plugins, or blind replay after ambiguous external effects.
 
 ## How Kafdeck works
 
