@@ -23,6 +23,11 @@ import {
   type SchemaVersionSummary,
 } from '../../shared/api.js';
 import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
+import {
+  mutationApi,
+  type ConnectAutoRestartPolicyStatus,
+  type MutationStatus,
+} from '../mutations/mutationApi.js';
 
 function readViewError(reason: unknown): string {
   if (reason instanceof ApiProblem && reason.status === 403) return 'Not authorized for this read view.';
@@ -86,6 +91,10 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [pluginFieldValues, setPluginFieldValues] = useState<Record<string, string>>({});
   const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [autoRestartStatus, setAutoRestartStatus] = useState<ConnectAutoRestartPolicyStatus | null>(null);
+  const [autoRestartOperation, setAutoRestartOperation] = useState<MutationStatus | null>(null);
+  const [autoRestartError, setAutoRestartError] = useState<string | null>(null);
+  const [autoRestartBusy, setAutoRestartBusy] = useState(false);
 
   const [ksqlInfo, setKsqlInfo] = useState<ReadViewEnvelope<KsqlServerInfo> | null>(null);
   const [ksqlError, setKsqlError] = useState<string | null>(null);
@@ -94,7 +103,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     const controller = new AbortController();
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
-    setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null);
+    setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null); setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null); setAutoRestartBusy(false);
     setKsqlInfo(null); setKsqlError(null);
 
     void kafdeckApi.listConsumerGroups(clusterId, controller.signal)
@@ -209,6 +218,9 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     setPluginConfiguration('');
     setPluginFieldValues({});
     setPluginValidation(null);
+    setAutoRestartStatus(null);
+    setAutoRestartOperation(null);
+    setAutoRestartError(null);
     try {
       const [info, list, plugins] = await Promise.all([
         kafdeckApi.getConnectProfileInfo(clusterId, profileId),
@@ -226,14 +238,81 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const openConnector = async (name: string) => {
     if (!selectedConnectProfileId) return;
     setConnectError(null); setConnectorDetail(null);
+    setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null);
     try {
-      setConnectorDetail(await kafdeckApi.getConnectProfileConnector(
-        clusterId,
-        selectedConnectProfileId,
-        name,
-      ));
+      const [detail, restartPolicy] = await Promise.all([
+        kafdeckApi.getConnectProfileConnector(
+          clusterId,
+          selectedConnectProfileId,
+          name,
+        ),
+        mutationApi.getConnectAutoRestartPolicy(
+          clusterId,
+          selectedConnectProfileId,
+          name,
+        ),
+      ]);
+      setConnectorDetail(detail);
+      setAutoRestartStatus(restartPolicy);
     } catch (reason) {
       setConnectError(readViewError(reason));
+    }
+  };
+
+  const previewAutoRestart = async (enabled: boolean) => {
+    if (!selectedConnectProfileId || !connectorDetail) return;
+    setAutoRestartBusy(true);
+    setAutoRestartError(null);
+    try {
+      const operation = await mutationApi.previewConnectAutoRestartPolicy(
+        clusterId,
+        selectedConnectProfileId,
+        connectorDetail.data.name,
+        { enabled },
+        crypto.randomUUID(),
+      );
+      setAutoRestartOperation(operation);
+    } catch (reason) {
+      setAutoRestartError(reason instanceof Error ? reason.message : 'Auto-restart policy preview failed.');
+    } finally {
+      setAutoRestartBusy(false);
+    }
+  };
+
+  const refreshAutoRestartOperation = async () => {
+    if (!autoRestartOperation) return;
+    setAutoRestartBusy(true);
+    setAutoRestartError(null);
+    try {
+      setAutoRestartOperation(await mutationApi.get(autoRestartOperation.operationId));
+    } catch (reason) {
+      setAutoRestartError(reason instanceof Error ? reason.message : 'Auto-restart operation refresh failed.');
+    } finally {
+      setAutoRestartBusy(false);
+    }
+  };
+
+  const applyAutoRestart = async () => {
+    if (!selectedConnectProfileId || !connectorDetail || !autoRestartOperation) return;
+    setAutoRestartBusy(true);
+    setAutoRestartError(null);
+    try {
+      const operation = await mutationApi.applyConnectAutoRestartPolicy(
+        clusterId,
+        selectedConnectProfileId,
+        connectorDetail.data.name,
+        autoRestartOperation.operationId,
+      );
+      setAutoRestartOperation(operation);
+      setAutoRestartStatus(await mutationApi.getConnectAutoRestartPolicy(
+        clusterId,
+        selectedConnectProfileId,
+        connectorDetail.data.name,
+      ));
+    } catch (reason) {
+      setAutoRestartError(reason instanceof Error ? reason.message : 'Auto-restart policy apply failed.');
+    } finally {
+      setAutoRestartBusy(false);
     }
   };
 
@@ -394,7 +473,25 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       </div>}
       {connectInfo && <p>Version: {connectInfo.data.version ?? 'Unknown'} · Kafka cluster: {connectInfo.data.kafkaClusterId ?? 'Unknown'}</p>}
       {connectors && (connectors.data.length === 0 ? <p>No authorized connectors are observable in this profile.</p> : <ul>{connectors.data.map(item => <li key={item.name}><button type="button" onClick={() => void openConnector(item.name)}>{item.name}</button></li>)}</ul>)}
-      {connectorDetail && <article><h4>{connectorDetail.data.name}</h4><p>State: {connectorDetail.data.state} · Worker: {connectorDetail.data.workerId ?? 'Unknown'} · Tasks: {connectorDetail.data.tasks.length}</p><table><thead><tr><th>Configuration key</th><th>Safe value</th></tr></thead><tbody>{Object.entries(connectorDetail.data.safeConfiguration).map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value ?? 'Not set'}</td></tr>)}</tbody></table></article>}
+      {connectorDetail && <article><h4>{connectorDetail.data.name}</h4><p>State: {connectorDetail.data.state} · Worker: {connectorDetail.data.workerId ?? 'Unknown'} · Tasks: {connectorDetail.data.tasks.length}</p><table><thead><tr><th>Configuration key</th><th>Safe value</th></tr></thead><tbody>{Object.entries(connectorDetail.data.safeConfiguration).map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value ?? 'Not set'}</td></tr>)}</tbody></table>
+        <section aria-labelledby="connect-auto-restart-title">
+          <h5 id="connect-auto-restart-title">Bounded auto-restart</h5>
+          {autoRestartError && <p role="alert">{autoRestartError}</p>}
+          {autoRestartStatus && <>
+            <p>Deployment policy: {autoRestartStatus.deploymentEnabled ? 'enabled' : 'disabled'} · Activation: {autoRestartStatus.active ? 'active' : 'inactive'} · Circuit: {autoRestartStatus.circuitState ?? 'none'}</p>
+            <p>Attempts: {autoRestartStatus.attemptsUsed}/{autoRestartStatus.maxAttempts} · Next attempt: {autoRestartStatus.nextAttemptUtc ? new Date(autoRestartStatus.nextAttemptUtc).toLocaleString() : 'none'} · Unresolved dispatch: {autoRestartStatus.hasUnresolvedDispatch ? 'yes' : 'no'}</p>
+            {autoRestartStatus.terminalReason && <p>Terminal reason: {autoRestartStatus.terminalReason}</p>}
+            <button type="button" disabled={autoRestartBusy || !autoRestartStatus.deploymentEnabled || autoRestartStatus.active} onClick={() => void previewAutoRestart(true)}>Preview enable</button>{' '}
+            <button type="button" disabled={autoRestartBusy || !autoRestartStatus.active} onClick={() => void previewAutoRestart(false)}>Preview disable</button>
+          </>}
+          {autoRestartOperation && <div>
+            <p>Governed operation: <code>{autoRestartOperation.operationId}</code> · Risk: {autoRestartOperation.riskClass} · State: {autoRestartOperation.state}</p>
+            <p>Use the Governed mutations panel below for required confirmation/independent approval, then refresh this operation before applying.</p>
+            <button type="button" disabled={autoRestartBusy} onClick={() => void refreshAutoRestartOperation()}>Refresh operation</button>{' '}
+            <button type="button" disabled={autoRestartBusy || autoRestartOperation.state !== 'ready'} onClick={() => void applyAutoRestart()}>Apply policy</button>
+          </div>}
+        </section>
+      </article>}
       {connectPlugins && <article aria-labelledby="connect-plugins-title">
         <h4 id="connect-plugins-title">Connector plugins</h4>
         {connectPlugins.data.length === 0 ? <p>No connector plugins were reported.</p> :
