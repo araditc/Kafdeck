@@ -171,6 +171,44 @@ public sealed class AdoConnectAutoRestartStateStore :
                     CultureInfo.InvariantCulture)!);
     }
 
+    public async Task<ConnectAutoRestartActivation?> GetActiveByTargetAsync(
+        ConnectAutoRestartTarget target,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT activation.snapshot_json
+            FROM kafdeck_connect_auto_restart_target_claims AS claim
+            INNER JOIN kafdeck_connect_auto_restart_activations AS activation
+              ON activation.activation_id = claim.activation_id
+            WHERE claim.target_key = @target_key
+            """;
+        AddParameter(
+            command,
+            "@target_key",
+            target.CanonicalKey);
+
+        var value = await command
+            .ExecuteScalarAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return value is null or DBNull
+            ? null
+            : Deserialize(
+                Convert.ToString(
+                    value,
+                    CultureInfo.InvariantCulture)!);
+    }
+
     public async Task<bool> TryCreateAsync(
         ConnectAutoRestartActivation activation,
         int aggregateProfileLimit,
