@@ -205,7 +205,7 @@ public static class GovernedDataJobPolicy
             .ToArray();
 
         return new MutationRiskDecision(
-            transferRisk.RiskClass < MutationRiskClass.High
+            (int)transferRisk.RiskClass < (int)MutationRiskClass.High
                 ? MutationRiskClass.High
                 : transferRisk.RiskClass,
             Array.AsReadOnly(reasons),
