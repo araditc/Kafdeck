@@ -302,7 +302,7 @@ public sealed class V07W56ControlledSerdeTests
             collectionResult.Failure!.Code);
 
         using var text = JsonDocument.Parse(
-            """"abcd"""");
+            "\"abcd\"");
         var stringResult = await service.EncodeAsync(
             new ControlledSerdeEncodeRequest(
                 ControlledSerdeFormat.Cbor,
