@@ -66,3 +66,18 @@ test('v0.7 Connect profile switch clears request-scoped plugin material', () => 
   assert.match(profileSwitch, /setPluginFieldValues\(\{\}\)/);
   assert.match(profileSwitch, /setPluginValidation\(null\)/);
 });
+
+
+test('v0.7 W55 Connect auto-restart UI remains governed and bounded', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Bounded auto-restart/);
+  assert.match(source, /previewConnectAutoRestartPolicy/);
+  assert.match(source, /applyConnectAutoRestartPolicy/);
+  assert.match(source, /Governed operation/);
+  assert.match(source, /autoRestartOperation\.state !== 'ready'/);
+  assert.doesNotMatch(source, /fetch\([^\n]*restart/i);
+});
