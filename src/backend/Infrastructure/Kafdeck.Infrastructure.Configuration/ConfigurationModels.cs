@@ -88,6 +88,7 @@ public sealed record ObservabilityOptions(
     int MaxActiveSeries,
     PrometheusObservabilityOptions Prometheus)
 {
+    public const int MinimumMaxActiveSeries = 2;
     public const int DefaultMaxActiveSeries = 10_000;
     public const int HardMaxActiveSeries = 50_000;
 
