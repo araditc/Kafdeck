@@ -39,10 +39,89 @@ public sealed record ConnectConnectorDetail(
 
 public interface IConnectReadPort
 {
-    Task<ReadViewResult<IReadOnlyList<ConnectProfileSummary>>> ListProfilesAsync(
+    Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
         string clusterId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken);
+
+    Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+
+    Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
+        string clusterId,
+        string connectorName,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+
+    Task<ReadViewResult<IReadOnlyList<ConnectProfileSummary>>> ListProfilesAsync(
+        string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(
+            ReadViewResult<IReadOnlyList<ConnectProfileSummary>>.Failed(
+                new ReadViewFailure(
+                    ReadViewFailureCategory.Unsupported,
+                    "connect_profiles_unsupported",
+                    "Kafka Connect profile discovery is unsupported by this provider.",
+                    false)));
+
+    Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? GetClusterInfoAsync(
+                clusterId,
+                operation,
+                cancellationToken)
+            : Task.FromResult(
+                ReadViewResult<ConnectClusterInfo>.Failed(
+                    new ReadViewFailure(
+                        ReadViewFailureCategory.NotConfigured,
+                        "connect_profile_not_configured",
+                        "Kafka Connect profile is not configured for the requested cluster.",
+                        false)));
+
+    Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? ListConnectorsAsync(
+                clusterId,
+                operation,
+                cancellationToken)
+            : Task.FromResult(
+                ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>.Failed(
+                    new ReadViewFailure(
+                        ReadViewFailureCategory.NotConfigured,
+                        "connect_profile_not_configured",
+                        "Kafka Connect profile is not configured for the requested cluster.",
+                        false)));
+
+    Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
+        string clusterId,
+        string connectProfileId,
+        string connectorName,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken) =>
+        string.Equals(connectProfileId, "default", StringComparison.Ordinal)
+            ? GetConnectorAsync(
+                clusterId,
+                connectorName,
+                operation,
+                cancellationToken)
+            : Task.FromResult(
+                ReadViewResult<ConnectConnectorDetail>.Failed(
+                    new ReadViewFailure(
+                        ReadViewFailureCategory.NotConfigured,
+                        "connect_profile_not_configured",
+                        "Kafka Connect profile is not configured for the requested cluster.",
+                        false)));
 
     Task<ReadViewResult<IReadOnlyList<ConnectPluginSummary>>> ListPluginsAsync(
         string clusterId,
@@ -71,57 +150,6 @@ public interface IConnectReadPort
                     "connect_plugin_validation_unsupported",
                     "Kafka Connect plugin validation is unsupported by the configured provider.",
                     false)));
-
-    Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
-        string clusterId,
-        string connectProfileId,
-        ReadViewOperationContext operation,
-        CancellationToken cancellationToken);
-
-    Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
-        string clusterId,
-        string connectProfileId,
-        ReadViewOperationContext operation,
-        CancellationToken cancellationToken);
-
-    Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
-        string clusterId,
-        string connectProfileId,
-        string connectorName,
-        ReadViewOperationContext operation,
-        CancellationToken cancellationToken);
-
-    Task<ReadViewResult<ConnectClusterInfo>> GetClusterInfoAsync(
-        string clusterId,
-        ReadViewOperationContext operation,
-        CancellationToken cancellationToken) =>
-        GetClusterInfoAsync(
-            clusterId,
-            "default",
-            operation,
-            cancellationToken);
-
-    Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
-        string clusterId,
-        ReadViewOperationContext operation,
-        CancellationToken cancellationToken) =>
-        ListConnectorsAsync(
-            clusterId,
-            "default",
-            operation,
-            cancellationToken);
-
-    Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
-        string clusterId,
-        string connectorName,
-        ReadViewOperationContext operation,
-        CancellationToken cancellationToken) =>
-        GetConnectorAsync(
-            clusterId,
-            "default",
-            connectorName,
-            operation,
-            cancellationToken);
 }
 
 public sealed record KsqlServerInfo(string? Version, string? KafkaClusterId, string? State);
