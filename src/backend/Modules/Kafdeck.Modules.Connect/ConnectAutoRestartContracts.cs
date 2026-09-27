@@ -425,6 +425,18 @@ public sealed record ConnectAutoRestartActivation(
         };
     }
 
+    public ConnectAutoRestartActivation Disable(
+        string reason = "auto_restart_policy_disabled") =>
+        this with
+        {
+            CircuitState =
+                ConnectAutoRestartCircuitState.Disabled,
+            HasUnresolvedDispatch = false,
+            UnresolvedDispatchId = null,
+            TerminalReason = RequireReason(reason),
+            Version = checked(Version + 1),
+        };
+
     public ConnectAutoRestartActivation MarkRecovered(
         string reason = "auto_restart_target_recovered") =>
         this with
@@ -737,6 +749,10 @@ public interface IConnectAutoRestartStateStore
 
     Task<ConnectAutoRestartActivation?> GetAsync(
         Guid activationId,
+        CancellationToken cancellationToken = default);
+
+    Task<ConnectAutoRestartActivation?> GetActiveByTargetAsync(
+        ConnectAutoRestartTarget target,
         CancellationToken cancellationToken = default);
 
     Task<bool> TryCreateAsync(
