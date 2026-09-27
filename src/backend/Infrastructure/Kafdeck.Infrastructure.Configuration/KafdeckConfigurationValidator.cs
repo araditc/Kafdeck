@@ -28,6 +28,7 @@ public static class KafdeckConfigurationValidator
         ValidateCatalog(options.Catalog, options.Clusters, errors);
         ValidateAdministration(options.Administration, options.Deployment, errors);
         ValidateGenerator(options.Generator, options.Clusters, errors);
+        ValidateObservability(options.Observability, options.Deployment, errors);
         ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
@@ -266,6 +267,58 @@ public static class KafdeckConfigurationValidator
             default:
                 errors.Add("Mutation persistence provider is unsupported.");
                 break;
+        }
+    }
+
+    private static void ValidateObservability(
+        ObservabilityOptions? observability,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        if (observability is null)
+        {
+            return;
+        }
+
+        if (observability.MaxActiveSeries is < 1 or > ObservabilityOptions.HardMaxActiveSeries)
+        {
+            errors.Add(
+                $"Observability max active series must be between 1 and {ObservabilityOptions.HardMaxActiveSeries}.");
+        }
+
+        var prometheus = observability.Prometheus;
+        if (!prometheus.Enabled)
+        {
+            if (prometheus.AccessToken is not null)
+            {
+                errors.Add(
+                    "Prometheus access-token secret must not be configured while Prometheus is disabled.");
+            }
+
+            return;
+        }
+
+        var remoteListenUrls = deployment.ListenUrls
+            .Where(url => !IsLoopbackBinding(url))
+            .ToArray();
+
+        if (remoteListenUrls.Length == 0)
+        {
+            return;
+        }
+
+        if (prometheus.AccessToken is null)
+        {
+            errors.Add(
+                "Prometheus scrape on a non-loopback deployment requires a dedicated access-token secret reference.");
+        }
+
+        if (remoteListenUrls.Any(url =>
+                !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add(
+                "Prometheus scrape on a non-loopback deployment requires HTTPS for every remote listen URL.");
         }
     }
 

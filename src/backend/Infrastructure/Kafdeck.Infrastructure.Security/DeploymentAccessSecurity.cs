@@ -170,3 +170,95 @@ public sealed class DeploymentAccessTokenMiddleware
             cancellationToken: context.RequestAborted);
     }
 }
+
+
+public sealed class PrometheusScrapeTokenMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly string _expectedToken;
+    private readonly FailedAccessAttemptLimiter _failureLimiter = new();
+
+    public PrometheusScrapeTokenMiddleware(
+        RequestDelegate next,
+        string expectedToken)
+    {
+        _next = next ?? throw new ArgumentNullException(nameof(next));
+        _expectedToken = string.IsNullOrEmpty(expectedToken)
+            ? throw new ArgumentException(
+                "Expected Prometheus scrape token must not be empty.",
+                nameof(expectedToken))
+            : expectedToken;
+    }
+
+    public async Task InvokeAsync(
+        HttpContext context,
+        ISecurityAuditSink audit)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(audit);
+
+        var clientKey =
+            context.Connection.RemoteIpAddress?.ToString() ??
+            "unknown";
+        var providedToken =
+            context.Request.Headers[
+                PrometheusObservabilityOptions.HeaderName]
+                .ToString();
+
+        if (DeploymentAccessTokenValidator.Matches(
+                _expectedToken,
+                providedToken))
+        {
+            _failureLimiter.Reset(clientKey);
+            await audit.WriteAsync(
+                new SecurityAuditEvent(
+                    DateTimeOffset.UtcNow,
+                    SecurityAuditEventType.MetricsScrapeRequest,
+                    SecurityAuditPrincipal.ObservabilityScrape,
+                    null,
+                    null,
+                    null,
+                    SecurityAuditOutcome.Succeeded,
+                    "prometheus_scrape_token_accepted"),
+                context.RequestAborted).ConfigureAwait(false);
+
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
+
+        var withinLimit =
+            _failureLimiter.TryRecordFailure(
+                clientKey,
+                DateTimeOffset.UtcNow);
+
+        await audit.WriteAsync(
+            new SecurityAuditEvent(
+                DateTimeOffset.UtcNow,
+                SecurityAuditEventType.MetricsScrapeRequest,
+                SecurityAuditPrincipal.ObservabilityScrape,
+                null,
+                null,
+                null,
+                SecurityAuditOutcome.Denied,
+                withinLimit
+                    ? "prometheus_scrape_token_rejected"
+                    : "prometheus_scrape_token_rate_limited"),
+            context.RequestAborted).ConfigureAwait(false);
+
+        context.Response.StatusCode = withinLimit
+            ? StatusCodes.Status401Unauthorized
+            : StatusCodes.Status429TooManyRequests;
+        context.Response.ContentType = "application/problem+json";
+
+        await context.Response.WriteAsJsonAsync(
+            new
+            {
+                type = "about:blank",
+                title = withinLimit
+                    ? "Unauthorized"
+                    : "Too many failed access attempts",
+                status = context.Response.StatusCode,
+            },
+            cancellationToken: context.RequestAborted);
+    }
+}
