@@ -323,6 +323,27 @@ public sealed class V07W59StreamsTelemetryTests
     }
 
     [Fact]
+    public async Task Missing_topology_is_partial_without_false_edge_bound()
+    {
+        var telemetry = new PartialTelemetryPort();
+        var result = await new StreamsLineageReadService(telemetry)
+            .GetLineageAsync(
+                "prod",
+                Operation(maxItems: 10),
+                CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        Assert.NotNull(result.Value);
+        Assert.True(result.Value!.Partial);
+        Assert.Contains(
+            result.Value.Limitations,
+            item => item.Code == "streams_topology_partial");
+        Assert.DoesNotContain(
+            result.Value.Limitations,
+            item => item.Code == "lineage_edge_bound");
+    }
+
+    [Fact]
     public async Task Lineage_edge_bound_is_explicit()
     {
         var nodes = Enumerable.Range(0, 5)
@@ -424,6 +445,54 @@ public sealed class V07W59StreamsTelemetryTests
             Methods.Add(request.Method);
             return Task.FromResult(_response(request));
         }
+    }
+
+    private sealed class PartialTelemetryPort :
+        IStreamsTelemetryReadPort
+    {
+        public Task<ReadViewResult<IReadOnlyList<StreamsApplicationSummary>>>
+            ListApplicationsAsync(
+                string clusterId,
+                ReadViewOperationContext operation,
+                CancellationToken cancellationToken) =>
+            Task.FromResult(
+                ReadViewResult<IReadOnlyList<StreamsApplicationSummary>>.Success(
+                    new[]
+                    {
+                        new StreamsApplicationSummary(
+                            "missing-app",
+                            "agent",
+                            DateTimeOffset.UtcNow,
+                            false),
+                    }));
+
+        public Task<ReadViewResult<StreamsTopologyObservation>>
+            GetTopologyAsync(
+                string clusterId,
+                string applicationId,
+                ReadViewOperationContext operation,
+                CancellationToken cancellationToken) =>
+            Task.FromResult(
+                ReadViewResult<StreamsTopologyObservation>.Failed(
+                    new ReadViewFailure(
+                        ReadViewFailureCategory.Unavailable,
+                        "topology_unavailable",
+                        "Topology unavailable.",
+                        true)));
+
+        public Task<ReadViewResult<StreamsStateStoreObservation>>
+            GetStateStoresAsync(
+                string clusterId,
+                string applicationId,
+                ReadViewOperationContext operation,
+                CancellationToken cancellationToken) =>
+            Task.FromResult(
+                ReadViewResult<StreamsStateStoreObservation>.Failed(
+                    new ReadViewFailure(
+                        ReadViewFailureCategory.Unavailable,
+                        "stores_unavailable",
+                        "Stores unavailable.",
+                        true)));
     }
 
     private sealed class FakeTelemetryPort :
