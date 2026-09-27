@@ -2,6 +2,15 @@ using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Modules.Records;
 
+public sealed class GovernedDataJobRateLimitException :
+    MutationStateException
+{
+    public GovernedDataJobRateLimitException(string message)
+        : base(message)
+    {
+    }
+}
+
 public static class GovernedDataJobProgress
 {
     public static FleetOperationProgressSnapshot CreateInitial(
@@ -174,7 +183,7 @@ public static class GovernedDataJobProgress
 
         if (projectedRecords > recordAllowance)
         {
-            throw new MutationStateException(
+            throw new GovernedDataJobRateLimitException(
                 "Data-job record rate budget would be exceeded.");
         }
 
@@ -187,7 +196,7 @@ public static class GovernedDataJobProgress
 
         if (projectedBytes > byteAllowance)
         {
-            throw new MutationStateException(
+            throw new GovernedDataJobRateLimitException(
                 "Data-job byte rate budget would be exceeded.");
         }
     }
