@@ -35,6 +35,8 @@ public static class KafdeckControlledSerdeEndpoints
 {
     private static readonly TimeSpan OperationTimeout =
         TimeSpan.FromSeconds(10);
+    private const int MaxBase64InputCharacters =
+        ((ControlledSerdeLimits.HardMaxInputBytes + 2) / 3) * 4;
 
     public static WebApplication MapKafdeckV07ControlledSerde(
         this WebApplication app,
@@ -76,6 +78,20 @@ public static class KafdeckControlledSerdeEndpoints
                     {
                         return Invalid(
                             "A non-empty base64 payload is required.");
+                    }
+
+                    if (request.PayloadBase64.Length >
+                        MaxBase64InputCharacters)
+                    {
+                        return Results.Problem(
+                            statusCode:
+                                StatusCodes.Status422UnprocessableEntity,
+                            type:
+                                "urn:kafdeck:problem:serde-bound-exceeded",
+                            title:
+                                "SerDe input bound exceeded",
+                            detail:
+                                "Base64 payload exceeds the hard server input bound.");
                     }
 
                     byte[] payload;
