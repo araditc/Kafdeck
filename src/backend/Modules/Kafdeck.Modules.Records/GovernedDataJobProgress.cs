@@ -339,6 +339,62 @@ public static class GovernedDataJobProgress
             .Snapshot;
     }
 
+    public static FleetOperationProgressSnapshot CancelAndFence(
+        FleetOperationProgressSnapshot snapshot,
+        DateTimeOffset nowUtc)
+    {
+        var progress = FleetOperationProgress.Restore(snapshot);
+        if (progress.Snapshot.Transfer?.PendingBatch is not null)
+        {
+            throw new MutationStateException(
+                "Data-job with an unresolved batch requires reconciliation before cancellation.");
+        }
+
+        return FleetOperationProgress.Restore(
+                progress.Snapshot with
+                {
+                    WorkerGeneration =
+                        checked(progress.Snapshot.WorkerGeneration + 1),
+                    WorkerLeaseOwner = null,
+                    WorkerLeaseExpiresAtUtc = null,
+                    Phase = FleetProgressPhase.Stopped,
+                    Version =
+                        checked(progress.Snapshot.Version + 1),
+                    UpdatedAtUtc = nowUtc,
+                })
+            .Snapshot;
+    }
+
+    public static FleetOperationProgressSnapshot
+        ResolveProvenNonApplicationAndFence(
+            FleetOperationProgressSnapshot snapshot,
+            Guid batchId,
+            DateTimeOffset nowUtc)
+    {
+        var progress = FleetOperationProgress.Restore(snapshot);
+        var transfer = FleetTransferProgress.Restore(
+            progress.Snapshot.Transfer ??
+            throw new MutationStateException(
+                "Data-job transfer progress is unavailable."));
+
+        transfer.ResolveProvenNonApplication(batchId);
+
+        return FleetOperationProgress.Restore(
+                progress.Snapshot with
+                {
+                    Transfer = transfer.Snapshot,
+                    WorkerGeneration =
+                        checked(progress.Snapshot.WorkerGeneration + 1),
+                    WorkerLeaseOwner = null,
+                    WorkerLeaseExpiresAtUtc = null,
+                    Phase = FleetProgressPhase.Observing,
+                    Version =
+                        checked(progress.Snapshot.Version + 1),
+                    UpdatedAtUtc = nowUtc,
+                })
+            .Snapshot;
+    }
+
     public static FleetOperationProgressSnapshot MarkStopped(
         FleetOperationProgressSnapshot snapshot,
         DateTimeOffset nowUtc)
