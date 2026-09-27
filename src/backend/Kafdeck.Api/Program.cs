@@ -353,6 +353,7 @@ if (mutationOptions?.Enabled == true)
     app.MapKafdeckConsumerMutationEndpoints();
     app.MapKafdeckSchemaMutationEndpoints();
     app.MapKafdeckConnectMutationEndpoints();
+    app.MapKafdeckConnectAutoRestartEndpoints();
     app.MapKafdeckRecordsPurgeEndpoints();
 }
 app.MapFallbackToFile("index.html");
