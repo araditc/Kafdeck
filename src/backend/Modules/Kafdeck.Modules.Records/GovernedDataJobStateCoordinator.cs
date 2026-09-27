@@ -11,6 +11,7 @@ public enum GovernedDataJobStateOutcome
     VersionConflict = 5,
     StaleWorker = 6,
     InvalidState = 7,
+    LeaseUnavailable = 8,
 }
 
 public sealed record GovernedDataJobStateResult(
@@ -95,6 +96,177 @@ public sealed class GovernedDataJobStateCoordinator
                 "data_job_progress_create_failed"),
         };
     }
+
+    public async Task<GovernedDataJobStateResult>
+        AcquireLeaseAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            string workerId,
+            DateTimeOffset nowUtc,
+            TimeSpan leaseTtl,
+            CancellationToken cancellationToken =
+                default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
+        var normalizedWorker = workerId.Trim();
+        if (normalizedWorker.Length > 256 ||
+            normalizedWorker.Any(char.IsControl))
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                null,
+                "data_job_worker_id_invalid");
+        }
+
+        if (leaseTtl < TimeSpan.FromSeconds(5) ||
+            leaseTtl > TimeSpan.FromMinutes(5))
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                null,
+                "data_job_lease_ttl_invalid");
+        }
+
+        var current =
+            await _store.GetProgressAsync(
+                    operationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        if (current is null)
+        {
+            return new(
+                GovernedDataJobStateOutcome.NotFound,
+                null,
+                "data_job_progress_not_found");
+        }
+
+        if (!BoundToPlan(current, plan))
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                current,
+                "data_job_plan_binding_mismatch");
+        }
+
+        if (current.Phase is
+            FleetProgressPhase.Completed or
+            FleetProgressPhase.Stopped or
+            FleetProgressPhase.Unknown or
+            FleetProgressPhase.WaitingForExternalAction)
+        {
+            return new(
+                GovernedDataJobStateOutcome.InvalidState,
+                current,
+                "data_job_not_lease_eligible");
+        }
+
+        var leaseActive =
+            current.WorkerLeaseExpiresAtUtc.HasValue &&
+            current.WorkerLeaseExpiresAtUtc.Value > nowUtc;
+
+        if (leaseActive &&
+            !string.Equals(
+                current.WorkerLeaseOwner,
+                normalizedWorker,
+                StringComparison.Ordinal))
+        {
+            return new(
+                GovernedDataJobStateOutcome.LeaseUnavailable,
+                current,
+                "data_job_lease_unavailable");
+        }
+
+        var generation =
+            leaseActive &&
+            string.Equals(
+                current.WorkerLeaseOwner,
+                normalizedWorker,
+                StringComparison.Ordinal)
+                ? current.WorkerGeneration
+                : checked(current.WorkerGeneration + 1);
+
+        var next = FleetOperationProgress.Restore(
+                current with
+                {
+                    WorkerGeneration = generation,
+                    WorkerLeaseOwner = normalizedWorker,
+                    WorkerLeaseExpiresAtUtc =
+                        nowUtc.Add(leaseTtl),
+                    Version = checked(current.Version + 1),
+                    UpdatedAtUtc = nowUtc,
+                })
+            .Snapshot;
+
+        var save =
+            await _store.TrySaveProgressAsync(
+                    next,
+                    current.Version,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        return save.Outcome switch
+        {
+            FleetProgressSaveOutcome.Saved =>
+                Applied(
+                    save.Progress,
+                    "data_job_lease_acquired"),
+            FleetProgressSaveOutcome.VersionConflict =>
+                new(
+                    GovernedDataJobStateOutcome.VersionConflict,
+                    save.Progress,
+                    "data_job_progress_version_conflict"),
+            FleetProgressSaveOutcome.NotFound =>
+                new(
+                    GovernedDataJobStateOutcome.NotFound,
+                    null,
+                    "data_job_progress_not_found"),
+            _ =>
+                new(
+                    GovernedDataJobStateOutcome.InvalidState,
+                    save.Progress,
+                    "data_job_lease_acquire_failed"),
+        };
+    }
+
+    public Task<GovernedDataJobStateResult>
+        RenewLeaseAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            string workerId,
+            long workerGeneration,
+            DateTimeOffset nowUtc,
+            TimeSpan leaseTtl,
+            CancellationToken cancellationToken =
+                default) =>
+        UpdateLeaseAsync(
+            operationId,
+            plan,
+            workerId,
+            workerGeneration,
+            nowUtc,
+            leaseTtl,
+            release: false,
+            cancellationToken);
+
+    public Task<GovernedDataJobStateResult>
+        ReleaseLeaseAsync(
+            Guid operationId,
+            GovernedDataJobPlan plan,
+            string workerId,
+            long workerGeneration,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken =
+                default) =>
+        UpdateLeaseAsync(
+            operationId,
+            plan,
+            workerId,
+            workerGeneration,
+            nowUtc,
+            leaseTtl: TimeSpan.Zero,
+            release: true,
+            cancellationToken);
 
     public async Task<GovernedDataJobStateResult>
         GetAsync(
