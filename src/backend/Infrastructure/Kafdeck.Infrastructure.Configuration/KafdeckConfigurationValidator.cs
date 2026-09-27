@@ -280,10 +280,11 @@ public static class KafdeckConfigurationValidator
             return;
         }
 
-        if (observability.MaxActiveSeries is < 1 or > ObservabilityOptions.HardMaxActiveSeries)
+        if (observability.MaxActiveSeries < ObservabilityOptions.MinimumMaxActiveSeries ||
+            observability.MaxActiveSeries > ObservabilityOptions.HardMaxActiveSeries)
         {
             errors.Add(
-                $"Observability max active series must be between 1 and {ObservabilityOptions.HardMaxActiveSeries}.");
+                $"Observability max active series must be between {ObservabilityOptions.MinimumMaxActiveSeries} and {ObservabilityOptions.HardMaxActiveSeries}.");
         }
 
         var prometheus = observability.Prometheus;
@@ -301,6 +302,16 @@ public static class KafdeckConfigurationValidator
         var remoteListenUrls = deployment.ListenUrls
             .Where(url => !IsLoopbackBinding(url))
             .ToArray();
+
+        if (prometheus.AccessToken is not null &&
+            deployment.AccessToken is not null &&
+            SameSecretReference(
+                prometheus.AccessToken,
+                deployment.AccessToken))
+        {
+            errors.Add(
+                "Prometheus scrape token must use a distinct secret reference from the deployment access token.");
+        }
 
         if (remoteListenUrls.Length == 0)
         {
@@ -321,6 +332,15 @@ public static class KafdeckConfigurationValidator
                 "Prometheus scrape on a non-loopback deployment requires HTTPS for every remote listen URL.");
         }
     }
+
+    private static bool SameSecretReference(
+        SecretReference left,
+        SecretReference right) =>
+        left.Kind == right.Kind &&
+        string.Equals(
+            left.Locator,
+            right.Locator,
+            StringComparison.Ordinal);
 
     private static void ValidateConnectAutoRestart(
         AdministrationOptions? administration,
