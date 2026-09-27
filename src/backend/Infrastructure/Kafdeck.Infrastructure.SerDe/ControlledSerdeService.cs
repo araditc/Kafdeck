@@ -95,12 +95,21 @@ public sealed class ControlledSerdeService : IControlledSerdePort
                     "SerDe format is unsupported."),
             };
 
-            var element = JsonSerializer.SerializeToElement(structured);
+            using var projected = new BoundedMemoryStream(
+                limits.MaxOutputBytes);
+            JsonSerializer.Serialize(
+                projected,
+                structured,
+                structured?.GetType() ?? typeof(object));
+            var projectedBytes = projected.ToArray();
+            using var projectedDocument =
+                JsonDocument.Parse(projectedBytes);
+
             return Task.FromResult(
                 ControlledSerdeResult<ControlledSerdeDecodedValue>.Success(
                     new ControlledSerdeDecodedValue(
                         request.Format,
-                        element)));
+                        projectedDocument.RootElement.Clone())));
         }
         catch (OperationCanceledException)
         {
@@ -255,7 +264,8 @@ public sealed class ControlledSerdeService : IControlledSerdePort
         JsonElement value,
         StructureBudget budget)
     {
-        using var stream = new MemoryStream();
+        using var stream = new BoundedMemoryStream(
+            budget.Limits.MaxOutputBytes);
         WriteCbor(stream, value, budget, depth: 0);
         return stream.ToArray();
     }
@@ -558,7 +568,8 @@ public sealed class ControlledSerdeService : IControlledSerdePort
         JsonElement value,
         StructureBudget budget)
     {
-        using var stream = new MemoryStream();
+        using var stream = new BoundedMemoryStream(
+            budget.Limits.MaxOutputBytes);
         var settings = new XmlWriterSettings
         {
             Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
@@ -681,7 +692,8 @@ public sealed class ControlledSerdeService : IControlledSerdePort
         JsonElement value,
         StructureBudget budget)
     {
-        using var stream = new MemoryStream();
+        using var stream = new BoundedMemoryStream(
+            budget.Limits.MaxOutputBytes);
         WriteMessagePack(stream, value, budget, depth: 0);
         return stream.ToArray();
     }
@@ -1427,6 +1439,55 @@ public sealed class ControlledSerdeService : IControlledSerdePort
                     "serde_collection_bound_exceeded",
                     "Structured collection exceeded the configured bound.")
                 : (int)value;
+    }
+
+    private sealed class BoundedMemoryStream : MemoryStream
+    {
+        private readonly int _maxBytes;
+
+        public BoundedMemoryStream(int maxBytes)
+            : base(Math.Min(maxBytes, 64 * 1024))
+        {
+            if (maxBytes <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxBytes));
+            }
+
+            _maxBytes = maxBytes;
+        }
+
+        public override void Write(
+            byte[] buffer,
+            int offset,
+            int count)
+        {
+            EnsureWrite(count);
+            base.Write(buffer, offset, count);
+        }
+
+        public override void Write(
+            ReadOnlySpan<byte> buffer)
+        {
+            EnsureWrite(buffer.Length);
+            base.Write(buffer);
+        }
+
+        public override void WriteByte(byte value)
+        {
+            EnsureWrite(1);
+            base.WriteByte(value);
+        }
+
+        private void EnsureWrite(int count)
+        {
+            if (count < 0 ||
+                Position > _maxBytes - (long)count)
+            {
+                throw new SerdeBoundException(
+                    "serde_output_bound_exceeded",
+                    "SerDe output exceeded the configured bound.");
+            }
+        }
     }
 
     private sealed class StructureBudget
