@@ -390,6 +390,10 @@ public sealed class ConnectAutoRestartController
                     dispatchId,
                     dispatch.Code),
 
+            ConnectAutoRestartDispatchOutcome.Blocked =>
+                reserved.Block(
+                    dispatch.Code),
+
             _ =>
                 reserved.RecordAmbiguous(
                     dispatchId,
@@ -442,6 +446,12 @@ public sealed class ConnectAutoRestartController
             ConnectAutoRestartDispatchOutcome.FailedDefinitive =>
                 Result(
                     ConnectAutoRestartRunOutcome.DispatchFailedDefinitive,
+                    dispatch.Code,
+                    next),
+
+            ConnectAutoRestartDispatchOutcome.Blocked =>
+                Result(
+                    ConnectAutoRestartRunOutcome.Blocked,
                     dispatch.Code,
                     next),
 
