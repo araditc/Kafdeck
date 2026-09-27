@@ -183,6 +183,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -258,6 +259,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -344,6 +346,7 @@ public sealed class ConnectMutationPreconditionValidator
 
         var observed = await _planner.ObserveAsync(
                 canonical.ClusterId,
+                canonical.ConnectProfileId,
                 canonical.ConnectorName,
                 cancellationToken)
             .ConfigureAwait(false);
