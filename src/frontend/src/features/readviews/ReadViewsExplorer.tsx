@@ -444,6 +444,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
           rows={6}
         />
         <button type="button" onClick={() => void validatePlugin()} disabled={pluginConfiguration.trim().length === 0}>Validate configuration</button>
+        </details>
       </article>}
       {pluginValidation && <article aria-labelledby="connect-plugin-validation-result-title">
         <h4 id="connect-plugin-validation-result-title">Validation diagnostics</h4>
