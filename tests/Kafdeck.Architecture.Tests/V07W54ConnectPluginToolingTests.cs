@@ -153,17 +153,26 @@ public sealed class V07W54ConnectPluginToolingTests
             field =>
                 field.Name == "api.password" &&
                 field.Required &&
-                field.Errors.SequenceEqual(new[] { "credential rejected" }));
+                field.Errors.SequenceEqual(
+                    new[] { "[REDACTED_PROVIDER_VALIDATION_ERROR]" }) &&
+                field.RecommendedValues.Count == 0);
         Assert.Contains(
             result.Value.Fields,
             field =>
                 field.Name == "topics" &&
-                field.RecommendedValues.SequenceEqual(
-                    new[] { "orders", "payments" }));
+                field.RecommendedValues.Count == 0);
 
         var serialized = JsonSerializer.Serialize(result.Value);
         Assert.DoesNotContain(
             secret,
+            serialized,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "credential rejected",
+            serialized,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "payments",
             serialized,
             StringComparison.Ordinal);
         Assert.Equal(
