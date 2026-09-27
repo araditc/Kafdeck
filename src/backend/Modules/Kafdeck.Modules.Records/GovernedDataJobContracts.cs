@@ -52,7 +52,10 @@ public sealed record GovernedDataJobPlan(
 
 public static class GovernedDataJobPolicy
 {
-    public const int MaxRanges = ClusterTransferPolicy.MaxMappings;
+    // One transfer-pair obligation plus at most two exact partition
+    // obligations per range must fit one atomic fleet-obligation batch
+    // (current durable store hard cap: 100).
+    public const int MaxRanges = 48;
     public const int MaxProjectedFields = 64;
     public const int MaxProjectedFieldCharacters = 256;
 
