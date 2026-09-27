@@ -59,6 +59,9 @@ public sealed class AdoConnectAutoRestartStateStore :
                 task_id INTEGER NULL,
                 circuit_state INTEGER NOT NULL,
                 version BIGINT NOT NULL,
+                lease_owner TEXT NULL,
+                lease_generation BIGINT NOT NULL DEFAULT 0,
+                lease_expires_at_utc TEXT NULL,
                 snapshot_json TEXT NOT NULL,
                 updated_at_utc TEXT NOT NULL
             )
@@ -275,15 +278,26 @@ public sealed class AdoConnectAutoRestartStateStore :
     public async Task<bool> TryUpdateAsync(
         ConnectAutoRestartActivation activation,
         long expectedVersion,
+        ConnectAutoRestartLease lease,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(activation);
+        ArgumentNullException.ThrowIfNull(lease);
 
         if (expectedVersion < 1 ||
             activation.Version != expectedVersion + 1)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(expectedVersion));
+        }
+
+        if (lease.ActivationId != activation.ActivationId ||
+            lease.Generation < 1 ||
+            string.IsNullOrWhiteSpace(lease.OwnerId))
+        {
+            throw new ArgumentException(
+                "Auto-restart lease does not match the activation.",
+                nameof(lease));
         }
 
         await using var connection =
@@ -307,6 +321,9 @@ public sealed class AdoConnectAutoRestartStateStore :
                 updated_at_utc = @updated_at_utc
             WHERE activation_id = @activation_id
               AND version = @expected_version
+              AND lease_owner = @lease_owner
+              AND lease_generation = @lease_generation
+              AND lease_expires_at_utc = @lease_expires_at_utc
             """;
 
         AddParameter(
@@ -333,6 +350,18 @@ public sealed class AdoConnectAutoRestartStateStore :
             update,
             "@expected_version",
             expectedVersion);
+        AddParameter(
+            update,
+            "@lease_owner",
+            lease.OwnerId);
+        AddParameter(
+            update,
+            "@lease_generation",
+            lease.Generation);
+        AddParameter(
+            update,
+            "@lease_expires_at_utc",
+            lease.ExpiresAtUtc.ToString("O"));
 
         if (await update
                 .ExecuteNonQueryAsync(cancellationToken)
@@ -358,6 +387,160 @@ public sealed class AdoConnectAutoRestartStateStore :
             .CommitAsync(cancellationToken)
             .ConfigureAwait(false);
         return true;
+    }
+
+    public async Task<ConnectAutoRestartLease?> TryAcquireLeaseAsync(
+        Guid activationId,
+        string ownerId,
+        DateTimeOffset now,
+        TimeSpan leaseTtl,
+        CancellationToken cancellationToken = default)
+    {
+        if (activationId == Guid.Empty)
+        {
+            throw new ArgumentOutOfRangeException(nameof(activationId));
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
+        var normalizedOwner = ownerId.Trim();
+        if (!string.Equals(ownerId, normalizedOwner, StringComparison.Ordinal) ||
+            normalizedOwner.Length > 256 ||
+            normalizedOwner.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "Auto-restart lease owner is invalid.",
+                nameof(ownerId));
+        }
+
+        if (leaseTtl < TimeSpan.FromSeconds(5) ||
+            leaseTtl > TimeSpan.FromMinutes(5))
+        {
+            throw new ArgumentOutOfRangeException(nameof(leaseTtl));
+        }
+
+        var expiresAt = now.Add(leaseTtl);
+
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var transaction =
+            await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        await using var update =
+            connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText =
+            """
+            UPDATE kafdeck_connect_auto_restart_activations
+            SET lease_owner = @lease_owner,
+                lease_generation = lease_generation + 1,
+                lease_expires_at_utc = @lease_expires_at_utc
+            WHERE activation_id = @activation_id
+              AND circuit_state IN (
+                    @armed,
+                    @waiting,
+                    @dispatching,
+                    @ambiguous)
+              AND (
+                    lease_owner IS NULL
+                 OR lease_expires_at_utc IS NULL
+                 OR lease_expires_at_utc <= @now_utc
+                 OR lease_owner = @lease_owner)
+            """;
+        AddParameter(update, "@lease_owner", normalizedOwner);
+        AddParameter(update, "@lease_expires_at_utc", expiresAt.ToString("O"));
+        AddParameter(update, "@activation_id", activationId.ToString("D"));
+        AddParameter(update, "@armed", (int)ConnectAutoRestartCircuitState.Armed);
+        AddParameter(update, "@waiting", (int)ConnectAutoRestartCircuitState.Waiting);
+        AddParameter(update, "@dispatching", (int)ConnectAutoRestartCircuitState.Dispatching);
+        AddParameter(update, "@ambiguous", (int)ConnectAutoRestartCircuitState.Ambiguous);
+        AddParameter(update, "@now_utc", now.ToString("O"));
+
+        if (await update
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false) != 1)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        await using var select =
+            connection.CreateCommand();
+        select.Transaction = transaction;
+        select.CommandText =
+            """
+            SELECT lease_generation
+            FROM kafdeck_connect_auto_restart_activations
+            WHERE activation_id = @activation_id
+              AND lease_owner = @lease_owner
+              AND lease_expires_at_utc = @lease_expires_at_utc
+            """;
+        AddParameter(select, "@activation_id", activationId.ToString("D"));
+        AddParameter(select, "@lease_owner", normalizedOwner);
+        AddParameter(select, "@lease_expires_at_utc", expiresAt.ToString("O"));
+
+        var generationValue = await select
+            .ExecuteScalarAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (generationValue is null or DBNull)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        var generation = Convert.ToInt64(
+            generationValue,
+            CultureInfo.InvariantCulture);
+
+        await transaction
+            .CommitAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new ConnectAutoRestartLease(
+            activationId,
+            normalizedOwner,
+            generation,
+            expiresAt);
+    }
+
+    public async Task<bool> ReleaseLeaseAsync(
+        ConnectAutoRestartLease lease,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE kafdeck_connect_auto_restart_activations
+            SET lease_owner = NULL,
+                lease_expires_at_utc = NULL
+            WHERE activation_id = @activation_id
+              AND lease_owner = @lease_owner
+              AND lease_generation = @lease_generation
+              AND lease_expires_at_utc = @lease_expires_at_utc
+            """;
+        AddParameter(command, "@activation_id", lease.ActivationId.ToString("D"));
+        AddParameter(command, "@lease_owner", lease.OwnerId);
+        AddParameter(command, "@lease_generation", lease.Generation);
+        AddParameter(command, "@lease_expires_at_utc", lease.ExpiresAtUtc.ToString("O"));
+
+        return await command
+            .ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false) == 1;
     }
 
     public async Task<IReadOnlyList<ConnectAutoRestartActivation>>
