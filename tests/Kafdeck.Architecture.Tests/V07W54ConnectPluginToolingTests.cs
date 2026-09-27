@@ -88,42 +88,45 @@ public sealed class V07W54ConnectPluginToolingTests
 
                 return Json(
                     HttpStatusCode.OK,
-                    $"""
-                    {{
+                    """
+                    {
                       "name":"org.example.AnalyticsSink",
                       "error_count":1,
                       "configs":[
-                        {{
-                          "definition":{{
+                        {
+                          "definition":{
                             "name":"api.password",
                             "type":"PASSWORD",
                             "required":true
-                          }},
-                          "value":{{
+                          },
+                          "value":{
                             "name":"api.password",
-                            "value":"{secret}",
+                            "value":"__SECRET__",
                             "recommended_values":[],
                             "errors":["credential rejected"],
                             "visible":false
-                          }}
-                        }},
-                        {{
-                          "definition":{{
+                          }
+                        },
+                        {
+                          "definition":{
                             "name":"topics",
                             "type":"LIST",
                             "required":true
-                          }},
-                          "value":{{
+                          },
+                          "value":{
                             "name":"topics",
                             "value":"orders",
                             "recommended_values":["orders","payments"],
                             "errors":[],
                             "visible":true
-                          }}
-                        }}
+                          }
+                        }
                       ]
-                    }}
-                    """);
+                    }
+                    """.Replace(
+                        "__SECRET__",
+                        secret,
+                        StringComparison.Ordinal));
             });
 
         using var adapter = CreateAdapter(
@@ -230,25 +233,28 @@ public sealed class V07W54ConnectPluginToolingTests
     {
         const string secret = "do-not-project";
         using var document = JsonDocument.Parse(
-            $"""
-            {{
+            """
+            {
               "error_count":0,
               "configs":[
-                {{
-                  "definition":{{
+                {
+                  "definition":{
                     "name":"password",
                     "type":"PASSWORD",
                     "required":false
-                  }},
-                  "value":{{
-                    "value":"{secret}",
+                  },
+                  "value":{
+                    "value":"__SECRET__",
                     "errors":[],
                     "recommended_values":[]
-                  }}
-                }}
+                  }
+                }
               ]
-            }}
-            """);
+            }
+            """.Replace(
+                "__SECRET__",
+                secret,
+                StringComparison.Ordinal));
 
         var projected =
             KafkaConnectReadAdapter.ProjectPluginValidation(
