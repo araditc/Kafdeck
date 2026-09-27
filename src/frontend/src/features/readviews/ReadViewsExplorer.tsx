@@ -5,6 +5,9 @@ import {
   type ConnectClusterInfo,
   type ConnectConnectorDetail,
   type ConnectConnectorSummary,
+  type ConnectPluginSummary,
+  type ConnectPluginValidationResult,
+  type ConnectProfileSummary,
   type ConsumerDiagnostics,
   type ConsumerGroupDetail,
   type ConsumerGroupSummary,
@@ -27,6 +30,23 @@ function readViewError(reason: unknown): string {
   if (reason instanceof ApiProblem && reason.status === 501) return 'This read view is unsupported by the configured provider.';
   if (reason instanceof ApiProblem && reason.status === 504) return 'The upstream read operation timed out.';
   return reason instanceof Error ? reason.message : 'The read view could not be loaded.';
+}
+
+function parseConfigurationLines(source: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const rawLine of source.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const separator = line.indexOf('=');
+    if (separator <= 0) throw new Error('Each configuration line must use key=value.');
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1);
+    if (!key) throw new Error('Configuration keys must not be empty.');
+    if (Object.prototype.hasOwnProperty.call(result, key)) throw new Error(`Duplicate configuration key: ${key}`);
+    result[key] = value;
+  }
+  if (Object.keys(result).length === 0) throw new Error('At least one configuration entry is required.');
+  return result;
 }
 
 function Limitations({ envelope }: { envelope: ReadViewEnvelope<unknown> }) {
@@ -55,9 +75,15 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [mockCount, setMockCount] = useState(1);
   const [mockSeed, setMockSeed] = useState(0);
 
+  const [connectProfiles, setConnectProfiles] = useState<ReadViewEnvelope<ConnectProfileSummary[]> | null>(null);
+  const [selectedConnectProfileId, setSelectedConnectProfileId] = useState<string | null>(null);
   const [connectInfo, setConnectInfo] = useState<ReadViewEnvelope<ConnectClusterInfo> | null>(null);
   const [connectors, setConnectors] = useState<ReadViewEnvelope<ConnectConnectorSummary[]> | null>(null);
   const [connectorDetail, setConnectorDetail] = useState<ReadViewEnvelope<ConnectConnectorDetail> | null>(null);
+  const [connectPlugins, setConnectPlugins] = useState<ReadViewEnvelope<ConnectPluginSummary[]> | null>(null);
+  const [selectedPluginClass, setSelectedPluginClass] = useState<string | null>(null);
+  const [pluginConfiguration, setPluginConfiguration] = useState('');
+  const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const [ksqlInfo, setKsqlInfo] = useState<ReadViewEnvelope<KsqlServerInfo> | null>(null);
@@ -67,7 +93,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     const controller = new AbortController();
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
-    setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectError(null);
+    setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginValidation(null); setConnectError(null);
     setKsqlInfo(null); setKsqlError(null);
 
     void kafdeckApi.listConsumerGroups(clusterId, controller.signal)
@@ -78,11 +104,25 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       .then(setSubjects)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setSchemaError(readViewError(reason)); });
 
-    void Promise.all([
-      kafdeckApi.getConnectInfo(clusterId, controller.signal),
-      kafdeckApi.listConnectors(clusterId, controller.signal),
-    ])
-      .then(([info, list]) => { setConnectInfo(info); setConnectors(list); })
+    void kafdeckApi.listConnectProfiles(clusterId, controller.signal)
+      .then(async profileResult => {
+        setConnectProfiles(profileResult);
+        const selectedProfile =
+          profileResult.data.find(profile => profile.isDefault) ??
+          profileResult.data[0] ??
+          null;
+        if (!selectedProfile) return;
+
+        setSelectedConnectProfileId(selectedProfile.id);
+        const [info, list, plugins] = await Promise.all([
+          kafdeckApi.getConnectProfileInfo(clusterId, selectedProfile.id, controller.signal),
+          kafdeckApi.listConnectProfileConnectors(clusterId, selectedProfile.id, controller.signal),
+          kafdeckApi.listConnectPlugins(clusterId, selectedProfile.id, controller.signal),
+        ]);
+        setConnectInfo(info);
+        setConnectors(list);
+        setConnectPlugins(plugins);
+      })
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setConnectError(readViewError(reason)); });
 
     void kafdeckApi.getKsqlInfo(clusterId, controller.signal)
@@ -157,12 +197,60 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     }
   };
 
-  const openConnector = async (name: string) => {
-    setConnectError(null); setConnectorDetail(null);
+  const openConnectProfile = async (profileId: string) => {
+    setConnectError(null);
+    setSelectedConnectProfileId(profileId);
+    setConnectInfo(null);
+    setConnectors(null);
+    setConnectorDetail(null);
+    setConnectPlugins(null);
+    setSelectedPluginClass(null);
+    setPluginConfiguration('');
+    setPluginValidation(null);
     try {
-      setConnectorDetail(await kafdeckApi.getConnector(clusterId, name));
+      const [info, list, plugins] = await Promise.all([
+        kafdeckApi.getConnectProfileInfo(clusterId, profileId),
+        kafdeckApi.listConnectProfileConnectors(clusterId, profileId),
+        kafdeckApi.listConnectPlugins(clusterId, profileId),
+      ]);
+      setConnectInfo(info);
+      setConnectors(list);
+      setConnectPlugins(plugins);
     } catch (reason) {
       setConnectError(readViewError(reason));
+    }
+  };
+
+  const openConnector = async (name: string) => {
+    if (!selectedConnectProfileId) return;
+    setConnectError(null); setConnectorDetail(null);
+    try {
+      setConnectorDetail(await kafdeckApi.getConnectProfileConnector(
+        clusterId,
+        selectedConnectProfileId,
+        name,
+      ));
+    } catch (reason) {
+      setConnectError(readViewError(reason));
+    }
+  };
+
+  const validatePlugin = async () => {
+    if (!selectedConnectProfileId || !selectedPluginClass) return;
+    setConnectError(null);
+    setPluginValidation(null);
+    try {
+      const configuration = parseConfigurationLines(pluginConfiguration);
+      setPluginValidation(await kafdeckApi.validateConnectPlugin(
+        clusterId,
+        selectedConnectProfileId,
+        selectedPluginClass,
+        configuration,
+      ));
+    } catch (reason) {
+      setConnectError(readViewError(reason));
+    } finally {
+      setPluginConfiguration('');
     }
   };
 
@@ -245,9 +333,47 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       <h2 id="ecosystem-title">Ecosystem read views</h2>
       <h3>Kafka Connect</h3>
       {connectError && <p role="status">{connectError}</p>}
+      {!connectProfiles && !connectError && <p role="status">Loading configured Connect profiles…</p>}
+      {connectProfiles && connectProfiles.data.length === 0 && <p>No Kafka Connect profiles are configured.</p>}
+      {connectProfiles && connectProfiles.data.length > 0 && <div>
+        <label htmlFor="connect-profile-selector">Connect profile</label>{' '}
+        <select
+          id="connect-profile-selector"
+          value={selectedConnectProfileId ?? ''}
+          onChange={event => void openConnectProfile(event.target.value)}
+        >
+          {connectProfiles.data.map(profile => <option key={profile.id} value={profile.id}>
+            {profile.id}{profile.isDefault ? ' (default)' : ''}
+          </option>)}
+        </select>
+        {selectedConnectProfileId && <p>Profile: <strong>{selectedConnectProfileId}</strong> · Mutation provider: {connectProfiles.data.find(profile => profile.id === selectedConnectProfileId)?.mutationProviderProfile ?? 'Unknown'}</p>}
+      </div>}
       {connectInfo && <p>Version: {connectInfo.data.version ?? 'Unknown'} · Kafka cluster: {connectInfo.data.kafkaClusterId ?? 'Unknown'}</p>}
-      {connectors && (connectors.data.length === 0 ? <p>No authorized connectors are observable.</p> : <ul>{connectors.data.map(item => <li key={item.name}><button type="button" onClick={() => void openConnector(item.name)}>{item.name}</button></li>)}</ul>)}
+      {connectors && (connectors.data.length === 0 ? <p>No authorized connectors are observable in this profile.</p> : <ul>{connectors.data.map(item => <li key={item.name}><button type="button" onClick={() => void openConnector(item.name)}>{item.name}</button></li>)}</ul>)}
       {connectorDetail && <article><h4>{connectorDetail.data.name}</h4><p>State: {connectorDetail.data.state} · Worker: {connectorDetail.data.workerId ?? 'Unknown'} · Tasks: {connectorDetail.data.tasks.length}</p><table><thead><tr><th>Configuration key</th><th>Safe value</th></tr></thead><tbody>{Object.entries(connectorDetail.data.safeConfiguration).map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value ?? 'Not set'}</td></tr>)}</tbody></table></article>}
+      {connectPlugins && <article aria-labelledby="connect-plugins-title">
+        <h4 id="connect-plugins-title">Connector plugins</h4>
+        {connectPlugins.data.length === 0 ? <p>No connector plugins were reported.</p> :
+          <table><thead><tr><th>Class</th><th>Type</th><th>Version</th><th>Validate</th></tr></thead><tbody>{connectPlugins.data.map(plugin => <tr key={plugin.class}><th scope="row">{plugin.class}</th><td>{plugin.type}</td><td>{plugin.version ?? 'Unknown'}</td><td><button type="button" onClick={() => { setSelectedPluginClass(plugin.class); setPluginValidation(null); setPluginConfiguration(''); }}>Use</button></td></tr>)}</tbody></table>}
+      </article>}
+      {selectedPluginClass && <article aria-labelledby="connect-plugin-validation-title">
+        <h4 id="connect-plugin-validation-title">Validate configuration</h4>
+        <p>Plugin: <code>{selectedPluginClass}</code>. Values are sent only to the selected configured Connect profile and are cleared from this form after validation.</p>
+        <label htmlFor="connect-plugin-configuration">Configuration (one key=value per line)</label>
+        <textarea
+          id="connect-plugin-configuration"
+          value={pluginConfiguration}
+          onChange={event => setPluginConfiguration(event.target.value)}
+          autoComplete="off"
+          rows={6}
+        />
+        <button type="button" onClick={() => void validatePlugin()} disabled={pluginConfiguration.trim().length === 0}>Validate configuration</button>
+      </article>}
+      {pluginValidation && <article aria-labelledby="connect-plugin-validation-result-title">
+        <h4 id="connect-plugin-validation-result-title">Validation diagnostics</h4>
+        <p>Error count: {pluginValidation.data.errorCount}</p>
+        <table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Errors</th><th>Recommended</th></tr></thead><tbody>{pluginValidation.data.fields.map(field => <tr key={field.name}><th scope="row">{field.name}</th><td>{field.type}</td><td>{field.required ? 'Yes' : 'No'}</td><td>{field.errors.join('; ') || 'None'}</td><td>{field.recommendedValues.join(', ') || 'None'}</td></tr>)}</tbody></table>
+      </article>}
 
       <h3>ksqlDB</h3>
       {ksqlError && <p role="status">{ksqlError}</p>}
