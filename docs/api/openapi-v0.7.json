@@ -1927,6 +1927,224 @@
         }
       }
     },
+    "/api/v1/data-jobs/generator/preview": {
+      "post": {
+        "operationId": "v07-data-generator-preview",
+        "summary": "Create a governed finite Data Generator preview",
+        "description": "Creates a deterministic bounded generator plan. Omitted budgets use finite server defaults; production generation is deny-by-default unless deployment policy explicitly enables the destination cluster.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataGeneratorPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing idempotent governed preview"
+          },
+          "201": {
+            "description": "Governed preview created"
+          },
+          "400": {
+            "description": "Invalid bounded generator request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization, deployment policy, or antiforgery validation denied"
+          },
+          "409": {
+            "description": "Plan/state/precondition conflict"
+          },
+          "501": {
+            "description": "Generator source/provider capability is unsupported"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/generator/{operationId}/start": {
+      "post": {
+        "operationId": "v07-data-generator-start",
+        "summary": "Start an approved bounded Data Generator job",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activation result"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization, deployment policy, or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Generator operation not found"
+          },
+          "409": {
+            "description": "Generator is not dispatchable or has unresolved external effect"
+          },
+          "503": {
+            "description": "Required provider is temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/generator/{operationId}": {
+      "get": {
+        "operationId": "v07-data-generator-status",
+        "summary": "Read bounded Data Generator runtime status",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Generator status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataGeneratorStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Generator access denied"
+          },
+          "404": {
+            "description": "Generator operation not found"
+          },
+          "409": {
+            "description": "Generator durable state is invalid"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/generator/{operationId}/cancel": {
+      "post": {
+        "operationId": "v07-data-generator-cancel",
+        "summary": "Fence workers and stop future Data Generator effects",
+        "description": "Cancellation does not erase an unresolved provider write.",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled/fenced generator status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataGeneratorStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Generator access or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Generator operation not found"
+          },
+          "409": {
+            "description": "Cancellation blocked by durable state"
+          }
+        }
+      }
+    },
+    "/api/v1/data-jobs/generator/{operationId}/reconcile": {
+      "post": {
+        "operationId": "v07-data-generator-reconcile",
+        "summary": "Reconcile one unresolved Data Generator write proven not applied",
+        "description": "Only exact proven-non-application reconciliation is admitted; no assume-success or blind replay path exists.",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataGeneratorReconcileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reconciled/fenced generator status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataGeneratorStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid reconciliation request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Mutation reconcile permission or antiforgery validation denied"
+          },
+          "404": {
+            "description": "Generator operation not found"
+          },
+          "409": {
+            "description": "Batch/state does not permit reconciliation"
+          }
+        }
+      }
+    },
     "/api/v1/clusters/{clusterId}/ksql/query": {
       "post": {
         "operationId": "v07-ksql-query",
@@ -3513,6 +3731,318 @@
           },
           "pendingBatch": {
             "$ref": "#/components/schemas/DataJobPendingBatchStatus"
+          }
+        }
+      },
+      "DataGeneratorSourceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "Schema",
+              "BuiltInTemplate"
+            ]
+          },
+          "schemaSubject": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "schemaVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "template": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "BasicJsonV1",
+              null
+            ]
+          }
+        }
+      },
+      "DataGeneratorBudgetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxBatchRecords": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "maxBatchBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "maxTotalRecords": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "maxTotalBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 104857600
+          },
+          "maxDurationSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "maxRecordsPerSecond": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "maxBytesPerSecond": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10485760
+          }
+        }
+      },
+      "DataGeneratorPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "destinationClusterId",
+          "destinationProfileVersion",
+          "destinationTopic",
+          "destinationPartition",
+          "recordCount",
+          "source"
+        ],
+        "properties": {
+          "destinationClusterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "destinationProfileVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "destinationTopic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 249
+          },
+          "destinationPartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/DataGeneratorSourceRequest"
+          },
+          "budget": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DataGeneratorBudgetRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DataGeneratorReconcileRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchId",
+          "disposition"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "provenNonApplication"
+            ]
+          }
+        }
+      },
+      "DataGeneratorPendingBatchStatus": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "batchId",
+          "recordIndex",
+          "destinationPartition",
+          "rawBytes",
+          "state",
+          "reservedAtUtc"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recordIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "destinationPartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rawBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string"
+          },
+          "reservedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatchStartedAtUtc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "DataGeneratorStatus": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "mutationState",
+          "planFingerprint",
+          "destinationClusterId",
+          "destinationTopic",
+          "destinationPartition",
+          "sourceKind",
+          "recordCount",
+          "seed",
+          "progressPhase",
+          "workerGeneration",
+          "nextRecordIndex",
+          "acknowledgedRecords",
+          "acknowledgedBytes",
+          "activeRuntimeMilliseconds",
+          "pendingBatch"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mutationState": {
+            "type": "string"
+          },
+          "resultCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "planFingerprint": {
+            "type": "string"
+          },
+          "destinationClusterId": {
+            "type": "string"
+          },
+          "destinationTopic": {
+            "type": "string"
+          },
+          "destinationPartition": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sourceKind": {
+            "type": "string"
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "seed": {
+            "type": "integer"
+          },
+          "progressPhase": {
+            "type": "string"
+          },
+          "workerGeneration": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextRecordIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "acknowledgedRecords": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "acknowledgedBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeRuntimeMilliseconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingBatch": {
+            "$ref": "#/components/schemas/DataGeneratorPendingBatchStatus"
           }
         }
       },

@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   MutationApiProblem,
   mutationApi,
+  type DataGeneratorStatus,
   type DataJobStatus,
   type MutationStatus,
 } from './mutationApi.js';
@@ -113,6 +114,8 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
   const [connectExecutionConfiguration, setConnectExecutionConfiguration] = useState('');
   const [dataJobStatus, setDataJobStatus] = useState<DataJobStatus | null>(null);
   const [dataJobReconcileBatchId, setDataJobReconcileBatchId] = useState('');
+  const [dataGeneratorStatus, setDataGeneratorStatus] = useState<DataGeneratorStatus | null>(null);
+  const [dataGeneratorReconcileBatchId, setDataGeneratorReconcileBatchId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,6 +132,8 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     setTypedChallenge('');
     setDataJobStatus(null);
     setDataJobReconcileBatchId('');
+    setDataGeneratorStatus(null);
+    setDataGeneratorReconcileBatchId('');
     clearExecutionMaterial();
   };
 
@@ -202,6 +207,68 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setTypedChallenge('');
       if (clearMaterialAfter) clearExecutionMaterial();
       await loadApprovals();
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDataGeneratorStatus = async () => {
+    if (!selected || selected.operationKind !== 'dataGenerator') return;
+    setLoading(true);
+    setError(null);
+    try {
+      const status = await mutationApi.getDataGeneratorStatus(selected.operationId);
+      setDataGeneratorStatus(status);
+      setDataGeneratorReconcileBatchId(status.pendingBatch?.batchId ?? '');
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startDataGenerator = async () => {
+    if (!selected || selected.operationKind !== 'dataGenerator') return;
+    setLoading(true);
+    setError(null);
+    try {
+      const operation = await mutationApi.startDataGenerator(selected.operationId);
+      setSelected(operation);
+      setDataGeneratorStatus(await mutationApi.getDataGeneratorStatus(operation.operationId));
+      await loadApprovals();
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelDataGenerator = async () => {
+    if (!selected || selected.operationKind !== 'dataGenerator') return;
+    setLoading(true);
+    setError(null);
+    try {
+      setDataGeneratorStatus(await mutationApi.cancelDataGenerator(selected.operationId));
+    } catch (reason) {
+      setError(describeProblem(reason));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reconcileDataGenerator = async () => {
+    if (!selected || selected.operationKind !== 'dataGenerator' || !dataGeneratorReconcileBatchId.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const status = await mutationApi.reconcileDataGenerator(
+        selected.operationId,
+        dataGeneratorReconcileBatchId.trim(),
+      );
+      setDataGeneratorStatus(status);
+      setDataGeneratorReconcileBatchId(status.pendingBatch?.batchId ?? '');
     } catch (reason) {
       setError(describeProblem(reason));
     } finally {
@@ -337,6 +404,8 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
         {executionSurface === 'genericNoMaterial' && selected.operationKind !== 'dataJob' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeWithoutMaterial(selected))}>Execute governed mutation</button></>}
         {selected.operationKind === 'dataJob' && selected.state === 'ready' && <>{' '}<button type="button" disabled={loading} onClick={() => void startDataJob()}>Start governed data job</button></>}
         {selected.operationKind === 'dataJob' && <>{' '}<button type="button" disabled={loading} onClick={() => void loadDataJobStatus()}>Load data-job status</button></>}
+        {selected.operationKind === 'dataGenerator' && selected.state === 'ready' && <>{' '}<button type="button" disabled={loading} onClick={() => void startDataGenerator()}>Start bounded generator</button></>}
+        {selected.operationKind === 'dataGenerator' && <>{' '}<button type="button" disabled={loading} onClick={() => void loadDataGeneratorStatus()}>Load generator status</button></>}
         {executionSurface === 'connectNoMaterial' && selected.operationKind === 'connectDelete' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute connector deletion</button></>}
         {executionSurface === 'connectNoMaterial' && selected.operationKind === 'connectAlter' && <>{' '}<button type="button" disabled={loading} onClick={() => void apply(() => mutationApi.executeConnectWithoutMaterial(selected))}>Execute admitted connector control</button></>}
       </div>
@@ -363,6 +432,51 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
         <table><thead><tr><th>Range</th><th>Source</th><th>Destination</th><th>Frozen offsets</th><th>Next offset</th></tr></thead><tbody>
           {dataJobStatus.ranges.map(range => <tr key={range.rangeIndex}><td>{range.rangeIndex}</td><td>{range.sourceTopic}[{range.sourcePartition}]</td><td>{range.destinationTopic}[{range.destinationPartition}]</td><td>[{range.startInclusive}, {range.endExclusive})</td><td>{range.nextSourceOffset ?? 'Not started'}</td></tr>)}
         </tbody></table>
+      </section>}
+
+      {selected.operationKind === 'dataGenerator' && dataGeneratorStatus && <section aria-labelledby="data-generator-status-title">
+        <h4 id="data-generator-status-title">Data Generator runtime status</h4>
+        <dl>
+          <dt>Progress phase</dt><dd>{dataGeneratorStatus.progressPhase}</dd>
+          <dt>Destination</dt><dd>{dataGeneratorStatus.destinationClusterId} / {dataGeneratorStatus.destinationTopic}[{dataGeneratorStatus.destinationPartition}]</dd>
+          <dt>Source</dt><dd>{dataGeneratorStatus.sourceKind}</dd>
+          <dt>Deterministic seed</dt><dd>{dataGeneratorStatus.seed}</dd>
+          <dt>Records planned</dt><dd>{dataGeneratorStatus.recordCount}</dd>
+          <dt>Next record index</dt><dd>{dataGeneratorStatus.nextRecordIndex}</dd>
+          <dt>Acknowledged records</dt><dd>{dataGeneratorStatus.acknowledgedRecords}</dd>
+          <dt>Acknowledged bytes</dt><dd>{dataGeneratorStatus.acknowledgedBytes}</dd>
+          <dt>Worker generation</dt><dd>{dataGeneratorStatus.workerGeneration}</dd>
+          <dt>Active runtime</dt><dd>{dataGeneratorStatus.activeRuntimeMilliseconds} ms</dd>
+        </dl>
+        <p>Cancellation fences future generator effects. A pending external write is never blindly retried; exact provider evidence is required before reconciliation.</p>
+        <button
+          type="button"
+          disabled={
+            loading ||
+            dataGeneratorStatus.pendingBatch !== null ||
+            dataGeneratorStatus.progressPhase.toLocaleLowerCase() === 'stopped'
+          }
+          onClick={() => void cancelDataGenerator()}
+        >
+          Cancel future generator effects
+        </button>
+        {dataGeneratorStatus.pendingBatch && <div role="alert">
+          <p><strong>Unresolved generator write.</strong> Batch <code>{dataGeneratorStatus.pendingBatch.batchId}</code>, record index {dataGeneratorStatus.pendingBatch.recordIndex}, remains durable and must not be replayed automatically.</p>
+          <label htmlFor="data-generator-reconcile-batch">Batch ID proven not applied</label>{' '}
+          <input
+            id="data-generator-reconcile-batch"
+            value={dataGeneratorReconcileBatchId}
+            onChange={event => setDataGeneratorReconcileBatchId(event.target.value)}
+            autoComplete="off"
+          />{' '}
+          <button
+            type="button"
+            disabled={loading || dataGeneratorReconcileBatchId.trim() !== dataGeneratorStatus.pendingBatch.batchId}
+            onClick={() => void reconcileDataGenerator()}
+          >
+            Reconcile proven non-application
+          </button>
+        </div>}
       </section>}
 
       {executionSurface === 'recordMaterial' && <fieldset disabled={loading}><legend>Re-submit record execution material</legend><p>This material must digest-match the preview and is cleared from UI state after execution.</p><label htmlFor="execute-record-key">UTF-8 key (optional)</label>{' '}<input id="execute-record-key" value={recordKey} onChange={event => setRecordKey(event.target.value)} autoComplete="off" /><br /><label htmlFor="execute-record-value">UTF-8 value</label><br /><textarea id="execute-record-value" value={recordValue} onChange={event => setRecordValue(event.target.value)} rows={5} /><br /><label htmlFor="execute-record-headers">Headers, one name=value per line</label><br /><textarea id="execute-record-headers" value={recordHeaders} onChange={event => setRecordHeaders(event.target.value)} rows={4} /><br /><button type="button" disabled={!recordValue} onClick={executeRecord}>Execute with matching record material</button></fieldset>}

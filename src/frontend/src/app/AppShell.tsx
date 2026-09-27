@@ -16,6 +16,7 @@ import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
+import { CommandPalette } from './CommandPalette.js';
 
 function observationText(envelope: ApiEnvelope<unknown>) {
   const observed = new Date(envelope.observation.observedAt);
@@ -216,6 +217,7 @@ export function AppShell() {
           </a>
         </h1>
         <div className="kafdeck-toolbar">
+          <CommandPalette />
           {operator && <div className="kafdeck-auth"><span className="text-secondary">Signed in as</span><strong>{operator.displayName ?? operator.email ?? 'operator'}</strong><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => void kafdeckApi.logout()}>Sign out</button></div>}
           {authenticationRequired && <div className="kafdeck-auth"><a className="btn btn-sm btn-primary" href="/api/v1/auth/login">Sign in with your identity provider</a></div>}
           <div>

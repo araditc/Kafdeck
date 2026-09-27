@@ -1,3 +1,4 @@
+import { withDeploymentAccessToken } from '../../shared/deploymentAccess.js';
 export type MutationRiskClass = 'low' | 'moderate' | 'high' | 'critical';
 export type MutationConfirmationMode = 'explicit' | 'typedTarget';
 export type MutationOperationState =
@@ -224,6 +225,66 @@ export interface DataJobStatus {
   pendingBatch: DataJobPendingBatchStatus | null;
 }
 
+export type DataGeneratorSourceKindInput = 'Schema' | 'BuiltInTemplate';
+
+export interface DataGeneratorBudgetInput {
+  maxBatchRecords?: number | null;
+  maxBatchBytes?: number | null;
+  maxTotalRecords?: number | null;
+  maxTotalBytes?: number | null;
+  maxDurationSeconds?: number | null;
+  maxRecordsPerSecond?: number | null;
+  maxBytesPerSecond?: number | null;
+}
+
+export interface DataGeneratorSourceInput {
+  kind: DataGeneratorSourceKindInput;
+  schemaSubject?: string | null;
+  schemaVersion?: number | null;
+  template?: 'BasicJsonV1' | null;
+}
+
+export interface DataGeneratorPreviewInput {
+  destinationClusterId: string;
+  destinationProfileVersion: string;
+  destinationTopic: string;
+  destinationPartition: number;
+  recordCount: number;
+  seed?: number | null;
+  source: DataGeneratorSourceInput;
+  budget?: DataGeneratorBudgetInput | null;
+}
+
+export interface DataGeneratorPendingBatchStatus {
+  batchId: string;
+  recordIndex: number;
+  destinationPartition: number;
+  rawBytes: number;
+  state: string;
+  reservedAtUtc: string;
+  dispatchStartedAtUtc: string | null;
+}
+
+export interface DataGeneratorStatus {
+  operationId: string;
+  mutationState: string;
+  resultCode: string | null;
+  planFingerprint: string;
+  destinationClusterId: string;
+  destinationTopic: string;
+  destinationPartition: number;
+  sourceKind: string;
+  recordCount: number;
+  seed: number;
+  progressPhase: string;
+  workerGeneration: number;
+  nextRecordIndex: number;
+  acknowledgedRecords: number;
+  acknowledgedBytes: number;
+  activeRuntimeMilliseconds: number;
+  pendingBatch: DataGeneratorPendingBatchStatus | null;
+}
+
 export type RecordsPurgeSelectorKind = 'absolute' | 'timestamp';
 
 export interface RecordsPurgeTargetInput {
@@ -273,7 +334,7 @@ async function parseProblem(response: Response): Promise<MutationApiProblem> {
 async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const init: RequestInit = {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: withDeploymentAccessToken({ Accept: 'application/json' }),
     credentials: 'same-origin',
   };
   if (signal !== undefined) init.signal = signal;
@@ -305,11 +366,11 @@ async function putJson<T>(
   options?: { idempotencyKey?: string | undefined; signal?: AbortSignal | undefined },
 ): Promise<T> {
   const token = await csrf(options?.signal);
-  const headers: Record<string, string> = {
+  const headers: Record<string, string> = withDeploymentAccessToken({
     Accept: 'application/json',
     'Content-Type': 'application/json',
     [token.headerName]: token.requestToken,
-  };
+  });
   if (options?.idempotencyKey) {
     headers['Idempotency-Key'] = options.idempotencyKey;
   }
@@ -340,11 +401,11 @@ async function postJson<T>(
   options?: { idempotencyKey?: string | undefined; signal?: AbortSignal | undefined },
 ): Promise<T> {
   const token = await csrf(options?.signal);
-  const headers: Record<string, string> = {
+  const headers: Record<string, string> = withDeploymentAccessToken({
     Accept: 'application/json',
     'Content-Type': 'application/json',
     [token.headerName]: token.requestToken,
-  };
+  });
   if (options?.idempotencyKey) {
     headers['Idempotency-Key'] = options.idempotencyKey;
   }
@@ -826,6 +887,53 @@ export const mutationApi = {
   ) {
     return postJson<DataJobStatus>(
       `/api/v1/data-jobs/${encodeURIComponent(operationId)}/reconcile`,
+      { batchId, disposition: 'provenNonApplication' },
+      { signal },
+    );
+  },
+
+  previewDataGenerator(
+    request: DataGeneratorPreviewInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<MutationStatus>(
+      '/api/v1/data-jobs/generator/preview',
+      request,
+      { idempotencyKey, signal },
+    );
+  },
+
+  startDataGenerator(operationId: string, signal?: AbortSignal) {
+    return postJson<MutationStatus>(
+      `/api/v1/data-jobs/generator/${encodeURIComponent(operationId)}/start`,
+      {},
+      { signal },
+    );
+  },
+
+  getDataGeneratorStatus(operationId: string, signal?: AbortSignal) {
+    return readJson<DataGeneratorStatus>(
+      `/api/v1/data-jobs/generator/${encodeURIComponent(operationId)}`,
+      signal,
+    );
+  },
+
+  cancelDataGenerator(operationId: string, signal?: AbortSignal) {
+    return postJson<DataGeneratorStatus>(
+      `/api/v1/data-jobs/generator/${encodeURIComponent(operationId)}/cancel`,
+      {},
+      { signal },
+    );
+  },
+
+  reconcileDataGenerator(
+    operationId: string,
+    batchId: string,
+    signal?: AbortSignal,
+  ) {
+    return postJson<DataGeneratorStatus>(
+      `/api/v1/data-jobs/generator/${encodeURIComponent(operationId)}/reconcile`,
       { batchId, disposition: 'provenNonApplication' },
       { signal },
     );

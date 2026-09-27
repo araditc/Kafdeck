@@ -635,7 +635,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
 
     <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">
       <h2 id="ecosystem-title">Ecosystem read views</h2>
-      <h3>Kafka Connect</h3>
+      <h3 id="connect-title">Kafka Connect</h3>
       {connectError && <p role="status">{connectError}</p>}
       {!connectProfiles && !connectError && <p role="status">Loading configured Connect profiles…</p>}
       {connectProfiles && connectProfiles.data.length === 0 && <p>No Kafka Connect profiles are configured.</p>}
@@ -731,7 +731,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         <table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Errors</th><th>Recommended</th></tr></thead><tbody>{pluginValidation.data.fields.map(field => <tr key={field.name}><th scope="row">{field.name}</th><td>{field.type}</td><td>{field.required ? 'Yes' : 'No'}</td><td>{field.errors.join('; ') || 'None'}</td><td>{field.recommendedValues.join(', ') || 'None'}</td></tr>)}</tbody></table>
       </article>}
 
-      <h3>ksqlDB</h3>
+      <h3 id="ksql-title">ksqlDB</h3>
       {ksqlError && <p role="alert">{ksqlError}</p>}
       {ksqlInfo && <p>Version: {ksqlInfo.data.version ?? 'Unknown'} · Kafka cluster: {ksqlInfo.data.kafkaClusterId ?? 'Unknown'} · Health: {ksqlInfo.data.state ?? 'Unknown'}</p>}
       <p>v0.7 admits bounded single-statement SELECT queries only. DDL, DML, persistent-query creation, session substitution and generic provider forwarding are blocked before provider I/O.</p>
@@ -755,7 +755,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         </table></div>
       </article>}
 
-      <h3>Kafka Streams evidence</h3>
+      <h3 id="streams-title">Kafka Streams evidence</h3>
       {streamsError && <p role="status">{streamsError}</p>}
       {!streamsApplications && !streamsError && <p role="status">Loading registered Streams telemetry evidence…</p>}
       {streamsApplications && streamsApplications.data.length === 0 && <p>No registered Streams applications were reported.</p>}
@@ -772,7 +772,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         {streamsStores.data.stores.length === 0 ? <p>No state-store metrics were exposed by the telemetry provider.</p> : <table><thead><tr><th>Store</th><th>Type</th><th>Entries</th><th>Size</th><th>Health</th></tr></thead><tbody>{streamsStores.data.stores.map(store => <tr key={store.name}><th scope="row">{store.name}</th><td>{store.type}</td><td>{store.approximateEntries ?? 'Unknown'}</td><td>{store.sizeBytes ?? 'Unknown'}</td><td>{store.health ?? 'Unknown'}</td></tr>)}</tbody></table>}
       </article>}
 
-      <h3>Lineage</h3>
+      <h3 id="lineage-title">Lineage</h3>
       {lineageError && <p role="status">{lineageError}</p>}
       {lineage && <>
         {lineage.data.partial && <p role="status">Lineage is partial: {lineage.data.limitations.map(item => item.message).join('; ')}</p>}
