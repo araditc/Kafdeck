@@ -232,7 +232,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     <h2 id="mutations-title">Governed mutations</h2>
     <p>Mutation actions use frozen previews, explicit confirmation, current-request authorization rechecks and durable execution state. Unknown or partial outcomes are never presented as safe retries.</p>
 
-    <MutationPreviewWorkflows clusterId={clusterId} connectProfileId={connectProfileId} onPreview={selectOperation} />
+    <MutationPreviewWorkflows clusterId={clusterId} connectProfileId={connectProfileId ?? null} onPreview={selectOperation} />
 
     <article aria-labelledby="mutation-lookup-title">
       <h3 id="mutation-lookup-title">Operation status</h3>
