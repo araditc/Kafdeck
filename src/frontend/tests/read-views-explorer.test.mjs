@@ -38,3 +38,13 @@ test('v0.4 initial UI has no mutation controls', () => {
     assert.doesNotMatch(markup, new RegExp(forbidden, 'i'));
   }
 });
+
+test('v0.7 Connect view starts from the bounded profile catalog instead of assuming one worker', () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(ReadViewsExplorer, { clusterId: 'prod' }),
+  );
+
+  assert.match(markup, /Loading configured Connect profiles/);
+  assert.doesNotMatch(markup, /provider URL/i);
+  assert.doesNotMatch(markup, /HTTP method/i);
+});
