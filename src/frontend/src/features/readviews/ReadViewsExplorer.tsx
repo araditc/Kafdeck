@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ApiProblem,
   kafdeckApi,
@@ -86,12 +86,14 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [pluginFieldValues, setPluginFieldValues] = useState<Record<string, string>>({});
   const [pluginValidation, setPluginValidation] = useState<ReadViewEnvelope<ConnectPluginValidationResult> | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const connectLoadGeneration = useRef(0);
 
   const [ksqlInfo, setKsqlInfo] = useState<ReadViewEnvelope<KsqlServerInfo> | null>(null);
   const [ksqlError, setKsqlError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    connectLoadGeneration.current += 1;
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null);
@@ -115,11 +117,13 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         if (!selectedProfile) return;
 
         setSelectedConnectProfileId(selectedProfile.id);
+        const generation = ++connectLoadGeneration.current;
         const [info, list, plugins] = await Promise.all([
           kafdeckApi.getConnectProfileInfo(clusterId, selectedProfile.id, controller.signal),
           kafdeckApi.listConnectProfileConnectors(clusterId, selectedProfile.id, controller.signal),
           kafdeckApi.listConnectPlugins(clusterId, selectedProfile.id, controller.signal),
         ]);
+        if (generation !== connectLoadGeneration.current) return;
         setConnectInfo(info);
         setConnectors(list);
         setConnectPlugins(plugins);
@@ -199,6 +203,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   };
 
   const openConnectProfile = async (profileId: string) => {
+    const generation = ++connectLoadGeneration.current;
     setConnectError(null);
     setSelectedConnectProfileId(profileId);
     setConnectInfo(null);
@@ -215,11 +220,14 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         kafdeckApi.listConnectProfileConnectors(clusterId, profileId),
         kafdeckApi.listConnectPlugins(clusterId, profileId),
       ]);
+      if (generation !== connectLoadGeneration.current) return;
       setConnectInfo(info);
       setConnectors(list);
       setConnectPlugins(plugins);
     } catch (reason) {
-      setConnectError(readViewError(reason));
+      if (generation === connectLoadGeneration.current) {
+        setConnectError(readViewError(reason));
+      }
     }
   };
 
