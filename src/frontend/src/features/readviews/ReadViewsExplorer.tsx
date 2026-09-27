@@ -141,14 +141,14 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [ksqlStatement, setKsqlStatement] = useState('');
   const [ksqlResult, setKsqlResult] = useState<ReadViewEnvelope<KsqlQueryResult> | null>(null);
   const [ksqlBusy, setKsqlBusy] = useState(false);
-  const [ksqlError, setKsqlError] = useState<string | null>(null);
+  const [ksqlError, setKsqlError] = useState<ReadViewProblem | null>(null);
 
   const [streamsApplications, setStreamsApplications] = useState<ReadViewEnvelope<StreamsApplicationSummary[]> | null>(null);
   const [streamsTopology, setStreamsTopology] = useState<ReadViewEnvelope<StreamsTopologyObservation> | null>(null);
   const [streamsStores, setStreamsStores] = useState<ReadViewEnvelope<StreamsStateStoreObservation> | null>(null);
-  const [streamsError, setStreamsError] = useState<string | null>(null);
+  const [streamsError, setStreamsError] = useState<ReadViewProblem | null>(null);
   const [lineage, setLineage] = useState<ReadViewEnvelope<LineageGraph> | null>(null);
-  const [lineageError, setLineageError] = useState<string | null>(null);
+  const [lineageError, setLineageError] = useState<ReadViewProblem | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
