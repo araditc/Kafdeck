@@ -129,7 +129,9 @@ public static class GovernedDataJobPolicy
         var dataJobResource =
             $"data-job/{plan.PlanFingerprint}";
 
-        var authorization = baseIntent.AuthorizationTargets
+        var authorization = (baseIntent.AuthorizationTargets ??
+            throw new MutationStateException(
+                "Cluster-transfer intent is missing authorization targets."))
             .Concat(
             [
                 new MutationAuthorizationTarget(
@@ -153,7 +155,9 @@ public static class GovernedDataJobPolicy
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
 
-        var preconditions = baseIntent.Preconditions
+        var preconditions = (baseIntent.Preconditions ??
+            throw new MutationStateException(
+                "Cluster-transfer intent is missing preconditions."))
             .Where(item => !string.Equals(
                 item.Key,
                 "transfer.plan",
