@@ -117,3 +117,36 @@ test('v0.7 Connect smart form is evidence-driven and clears in-memory values aft
   assert.match(source, /setPluginFieldValues\(\{\}\)/);
   assert.match(source, /Smart-form values remain in browser memory only and are cleared/);
 });
+
+test('v0.7 W57 data-job UI uses finite governed routes and explicit reconciliation', () => {
+  const workflowSource = readFileSync(
+    new URL('../src/features/mutations/MutationPreviewWorkflows.tsx', import.meta.url),
+    'utf8',
+  );
+  const panelSource = readFileSync(
+    new URL('../src/features/mutations/MutationOperationsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+  const apiSource = readFileSync(
+    new URL('../src/features/mutations/mutationApi.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(workflowSource, /Replay \/ forward data job/);
+  assert.match(workflowSource, /Ranges are frozen at preview/);
+  assert.match(workflowSource, /max="1000000"/);
+  assert.match(workflowSource, /max="1073741824"/);
+  assert.match(workflowSource, /max="86400"/);
+  assert.match(workflowSource, /MaskedStructuredProjection/);
+  assert.doesNotMatch(workflowSource, /script editor/i);
+
+  assert.match(apiSource, /\/api\/v1\/data-jobs\/\$\{encodeURIComponent\(kind\)\}\/preview/);
+  assert.match(apiSource, /\/api\/v1\/data-jobs\/\$\{encodeURIComponent\(operationId\)\}\/cancel/);
+  assert.match(apiSource, /provenNonApplication/);
+
+  assert.match(panelSource, /selected\.operationKind !== 'dataJob'/);
+  assert.match(panelSource, /Start governed data job/);
+  assert.match(panelSource, /Unresolved external write/);
+  assert.match(panelSource, /must not be blindly replayed/);
+  assert.match(panelSource, /Reconcile proven non-application/);
+});
