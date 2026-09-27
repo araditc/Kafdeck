@@ -463,6 +463,68 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         return Array.AsReadOnly(items.ToArray());
     }
 
+    public async Task<IReadOnlyList<FleetOperationProgressSnapshot>>
+        ListActiveDataGeneratorProgressAsync(
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 1_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        await using var connection =
+            await _connectionFactory.OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT progress.snapshot_json, parent.snapshot_json
+            FROM kafdeck_fleet_progress AS progress
+            INNER JOIN kafdeck_mutation_operations AS parent
+              ON parent.operation_id = progress.operation_id
+            WHERE progress.phase IN (1, 2, 3, 4, 5)
+              AND parent.state = @parent_state
+            ORDER BY progress.updated_at_utc, progress.operation_id
+            """;
+        AddParameter(
+            command,
+            "@parent_state",
+            (int)MutationOperationState.AppliedVerified);
+
+        var items =
+            new List<FleetOperationProgressSnapshot>(limit);
+        await using var reader =
+            await command.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        while (items.Count < limit &&
+               await reader.ReadAsync(cancellationToken)
+                   .ConfigureAwait(false))
+        {
+            var progress = ValidateProgress(
+                Deserialize<FleetOperationProgressSnapshot>(
+                    reader.GetString(0)));
+            var parent =
+                Deserialize<MutationOperationSnapshot>(
+                    reader.GetString(1));
+
+            if (parent.OperationKind !=
+                    MutationOperationKind.DataGenerator ||
+                !string.Equals(
+                    parent.ResultCode,
+                    "data_generator_activated",
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            items.Add(progress);
+        }
+
+        return Array.AsReadOnly(items.ToArray());
+    }
+
     public async Task<FleetProgressSaveResult> TrySaveProgressAsync(
         FleetOperationProgressSnapshot progress,
         long expectedVersion,
