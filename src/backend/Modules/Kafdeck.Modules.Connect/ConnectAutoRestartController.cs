@@ -13,6 +13,8 @@ public enum ConnectAutoRestartRunOutcome
     DispatchFailedDefinitive = 9,
     DispatchAmbiguous = 10,
     StatePersistenceFailedAfterDispatch = 11,
+    AuditFailedBeforeDispatch = 12,
+    AuditFailedAfterDispatch = 13,
 }
 
 public sealed record ConnectAutoRestartRunResult(
@@ -45,6 +47,7 @@ public sealed class ConnectAutoRestartController
     private readonly IConnectAutoRestartStateStore _store;
     private readonly IConnectAutoRestartAttemptRevalidator _revalidator;
     private readonly IConnectAutoRestartDispatchPort _dispatcher;
+    private readonly IConnectAutoRestartAuditSink _audit;
     private readonly ConnectAutoRestartControllerPolicy _policy;
     private readonly TimeProvider _timeProvider;
 
@@ -52,6 +55,7 @@ public sealed class ConnectAutoRestartController
         IConnectAutoRestartStateStore store,
         IConnectAutoRestartAttemptRevalidator revalidator,
         IConnectAutoRestartDispatchPort dispatcher,
+        IConnectAutoRestartAuditSink audit,
         ConnectAutoRestartControllerPolicy? policy = null,
         TimeProvider? timeProvider = null)
     {
@@ -63,6 +67,8 @@ public sealed class ConnectAutoRestartController
         _dispatcher =
             dispatcher ??
             throw new ArgumentNullException(nameof(dispatcher));
+        _audit =
+            audit ?? throw new ArgumentNullException(nameof(audit));
         _policy =
             policy ?? ConnectAutoRestartControllerPolicy.Default;
         _timeProvider =
@@ -348,6 +354,62 @@ public sealed class ConnectAutoRestartController
                 current);
         }
 
+        try
+        {
+            await _audit
+                .WriteAsync(
+                    AuditEvent(
+                        reserved,
+                        dispatchId,
+                        ConnectAutoRestartAuditEventType.DispatchStarted,
+                        "auto_restart_dispatch_started",
+                        _timeProvider.GetUtcNow()),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            var blocked =
+                reserved.Block(
+                    "auto_restart_audit_unavailable");
+
+            bool blockedPersisted;
+            try
+            {
+                blockedPersisted =
+                    await _store
+                        .TryUpdateAsync(
+                            blocked,
+                            reserved.Version,
+                            lease,
+                            _timeProvider.GetUtcNow(),
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+            }
+            catch
+            {
+                blockedPersisted = false;
+            }
+
+            if (blockedPersisted)
+            {
+                await ReleaseLeaseBestEffortAsync(
+                        lease,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+
+                return Result(
+                    ConnectAutoRestartRunOutcome.AuditFailedBeforeDispatch,
+                    "auto_restart_audit_unavailable",
+                    blocked);
+            }
+
+            return Result(
+                ConnectAutoRestartRunOutcome.PersistenceConflict,
+                "auto_restart_audit_failure_persistence_conflict",
+                reserved);
+        }
+
         ConnectAutoRestartDispatchResult dispatch;
         try
         {
@@ -375,6 +437,29 @@ public sealed class ConnectAutoRestartController
                 new ConnectAutoRestartDispatchResult(
                     ConnectAutoRestartDispatchOutcome.Ambiguous,
                     "auto_restart_dispatch_exception_unknown");
+        }
+
+        try
+        {
+            await _audit
+                .WriteAsync(
+                    AuditEvent(
+                        reserved,
+                        dispatchId,
+                        ConnectAutoRestartAuditEventType.DispatchOutcome,
+                        dispatch.Code,
+                        _timeProvider.GetUtcNow()),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // Provider dispatch has already occurred. Preserve the durable
+            // Dispatching + unresolved marker and require reconciliation.
+            return Result(
+                ConnectAutoRestartRunOutcome.AuditFailedAfterDispatch,
+                "auto_restart_post_dispatch_audit_failed",
+                reserved);
         }
 
         var next = dispatch.Outcome switch
@@ -514,6 +599,22 @@ public sealed class ConnectAutoRestartController
             // Lease expiry/takeover is already fenced by generation.
         }
     }
+
+    private static ConnectAutoRestartAuditEvent AuditEvent(
+        ConnectAutoRestartActivation activation,
+        Guid dispatchId,
+        ConnectAutoRestartAuditEventType eventType,
+        string code,
+        DateTimeOffset timestampUtc) =>
+        new(
+            timestampUtc,
+            eventType,
+            activation.ActivationId,
+            dispatchId,
+            activation.Target.CanonicalKey,
+            activation.AutomationPrincipalId,
+            activation.AttemptsUsed,
+            code);
 
     private static string EligibilityCode(
         ConnectAutoRestartEligibility eligibility) =>
