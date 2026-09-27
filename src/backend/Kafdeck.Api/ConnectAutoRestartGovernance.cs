@@ -100,7 +100,9 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
         return new ConnectAutoRestartGovernanceSnapshot(
             decision.IsAllowed,
             providerFingerprint,
-            policy.Fingerprint,
+            ConnectAutoRestartPolicyFingerprint.ComputeEffective(
+                policy,
+                activation.Policy),
             decision.IsAllowed
                 ? null
                 : "auto_restart_authorization_revoked");
