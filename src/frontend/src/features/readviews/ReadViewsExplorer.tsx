@@ -128,7 +128,14 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         setConnectors(list);
         setConnectPlugins(plugins);
       })
-      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setConnectError(readViewError(reason)); });
+      .catch(reason => {
+        if (
+          initialConnectGeneration === connectLoadGeneration.current &&
+          !(reason instanceof DOMException && reason.name === 'AbortError')
+        ) {
+          setConnectError(readViewError(reason));
+        }
+      });
 
     void kafdeckApi.getKsqlInfo(clusterId, controller.signal)
       .then(setKsqlInfo)
