@@ -63,13 +63,13 @@ public sealed class V07W55ConnectAutoRestartPolicyTests
                 AuthorizationAction.ConnectRead,
                 AuthorizationAction.ConnectAutoRestartManage,
             },
-            plan.Intent.AuthorizationTargets
+            plan.Intent.AuthorizationTargets!
                 .Select(item => item.Action)
                 .OrderBy(item => item)
                 .ToArray());
 
         Assert.All(
-            plan.Intent.AuthorizationTargets,
+            plan.Intent.AuthorizationTargets!,
             item => Assert.Equal(
                 "connect-profile/analytics/connector/sink-a",
                 item.ResourceName));
@@ -126,7 +126,7 @@ public sealed class V07W55ConnectAutoRestartPolicyTests
             MutationRiskClass.Moderate,
             result.Plan!.Risk.RiskClass);
         var target = Assert.Single(
-            result.Plan.Intent.AuthorizationTargets);
+            result.Plan.Intent.AuthorizationTargets!);
         Assert.Equal(
             AuthorizationAction.ConnectAutoRestartManage,
             target.Action);
