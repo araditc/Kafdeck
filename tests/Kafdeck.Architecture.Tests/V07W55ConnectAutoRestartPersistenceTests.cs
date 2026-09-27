@@ -52,7 +52,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                 await store.TryUpdateAsync(
                     reserved,
                     expectedVersion: activation.Version,
-                    lease!));
+                    lease!,
+                    Now));
 
             var reloaded =
                 new AdoConnectAutoRestartStateStore(
@@ -77,7 +78,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                         Version = reserved.Version + 1,
                     },
                     expectedVersion: activation.Version,
-                    lease!));
+                    lease!,
+                    Now));
         }
         finally
         {
@@ -130,12 +132,14 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                 await store.TryUpdateAsync(
                     reserved,
                     first.Version,
-                    lease!));
+                    lease!,
+                    Now));
             Assert.True(
                 await store.TryUpdateAsync(
                     recovered,
                     reserved.Version,
-                    lease!));
+                    lease!,
+                    Now));
 
             Assert.True(
                 await store.TryCreateAsync(
@@ -184,7 +188,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                 await store.TryUpdateAsync(
                     reserved,
                     first.Version,
-                    lease!));
+                    lease!,
+                    Now));
 
             var ambiguous =
                 reserved.RecordAmbiguous(
@@ -194,7 +199,8 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                 await store.TryUpdateAsync(
                     ambiguous,
                     reserved.Version,
-                    lease!));
+                    lease!,
+                    Now));
 
             var competitor =
                 Activation("sink-b", "analytics");
@@ -309,13 +315,15 @@ public sealed class V07W55ConnectAutoRestartPersistenceTests
                 await store.TryUpdateAsync(
                     reserved,
                     activation.Version,
-                    firstLease));
+                    firstLease,
+                    Now.AddSeconds(11)));
 
             Assert.True(
                 await store.TryUpdateAsync(
                     reserved,
                     activation.Version,
-                    takeoverLease));
+                    takeoverLease,
+                    Now.AddSeconds(11)));
         }
         finally
         {
