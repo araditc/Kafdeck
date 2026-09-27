@@ -347,8 +347,36 @@ public sealed class SchemaDeveloperService
             return ReadViewResult<SchemaMockResult>.Failed(result.Failure!);
         }
 
-        var detail = result.Value;
-        if (detail.Schema.References.Count > 0)
+        return GenerateMockFromDocument(
+            normalizedSubject,
+            version,
+            result.Value.Schema,
+            count,
+            seed,
+            cancellationToken);
+    }
+
+    public ReadViewResult<SchemaMockResult> GenerateMockFromDocument(
+        string subject,
+        int version,
+        RecordSchemaDocument schema,
+        int count,
+        int? seed,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSubject = NormalizeSubject(subject);
+        ArgumentNullException.ThrowIfNull(schema);
+
+        if (normalizedSubject is null ||
+            version <= 0 ||
+            count <= 0 ||
+            count > _policy.MaxGeneratedExamples)
+        {
+            return Invalid<SchemaMockResult>(
+                "invalid_schema_mock_request");
+        }
+
+        if (schema.References.Count > 0)
         {
             return Failed<SchemaMockResult>(
                 ReadViewFailureCategory.Unsupported,
@@ -358,7 +386,7 @@ public sealed class SchemaDeveloperService
         }
 
         var schemaBytes =
-            Encoding.UTF8.GetByteCount(detail.Schema.SchemaText);
+            Encoding.UTF8.GetByteCount(schema.SchemaText);
         if (schemaBytes > _policy.MaxSchemaBytes)
         {
             return Bound<SchemaMockResult>(
@@ -377,14 +405,14 @@ public sealed class SchemaDeveloperService
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var payload = detail.Schema.Format switch
+                var payload = schema.Format switch
                 {
                     RecordSchemaFormat.Avro =>
-                        GenerateAvro(detail.Schema.SchemaText, random, index),
+                        GenerateAvro(schema.SchemaText, random, index),
                     RecordSchemaFormat.JsonSchema =>
-                        GenerateJsonSchema(detail.Schema.SchemaText, random, index),
+                        GenerateJsonSchema(schema.SchemaText, random, index),
                     RecordSchemaFormat.Protobuf =>
-                        GenerateProtobuf(detail.Schema.SchemaText, random, index),
+                        GenerateProtobuf(schema.SchemaText, random, index),
                     _ => throw new NotSupportedException(
                         "Schema format is unsupported."),
                 };
@@ -438,7 +466,7 @@ public sealed class SchemaDeveloperService
             new SchemaMockResult(
                 normalizedSubject,
                 version,
-                detail.Schema.Format,
+                schema.Format,
                 resolvedSeed,
                 examples,
                 totalBytes));
