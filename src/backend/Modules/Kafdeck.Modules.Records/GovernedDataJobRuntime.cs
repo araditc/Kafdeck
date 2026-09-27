@@ -64,11 +64,24 @@ public sealed class GovernedDataJobSourceReader
             progress.Transfer ??
             throw new MutationStateException(
                 "Data-job transfer progress is unavailable.");
+        var transferPlan =
+            GovernedDataJobPolicy.ToTransferPlan(plan);
+
+        // Durable W57 progress binds the stronger data-job fingerprint, which
+        // includes kind/transform. The reused W47 source reader validates its
+        // own transfer-only fingerprint. Bridge only the read projection;
+        // never rewrite the durable W57 progress identity.
+        var readProjection =
+            transfer with
+            {
+                PlanFingerprint =
+                    transferPlan.PlanFingerprint,
+            };
 
         return _reader.ReadNextAsync(
-            GovernedDataJobPolicy.ToTransferPlan(plan),
+            transferPlan,
             rangeIndex,
-            transfer,
+            readProjection,
             operation,
             cancellationToken);
     }
