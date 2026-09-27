@@ -37,6 +37,35 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
+    public void Prometheus_scrape_token_must_not_reuse_deployment_token_reference()
+    {
+        var options = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "https://0.0.0.0:8443",
+                ["Kafdeck:Deployment:AccessMode"] =
+                    "Token",
+                ["Kafdeck:Deployment:AccessToken"] =
+                    "env:SHARED_TOKEN",
+                ["Kafdeck:Observability:Prometheus:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Prometheus:AccessToken"] =
+                    "env:SHARED_TOKEN",
+            });
+
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () => KafdeckConfigurationValidator
+                    .ValidateAndThrow(options));
+
+        Assert.Contains(
+            "distinct secret reference",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Prometheus_local_scrape_can_be_enabled_without_a_token()
     {
         var options = Load(
@@ -129,6 +158,7 @@ public sealed class V08W62ObservabilityFoundationTests
 
     [Theory]
     [InlineData(0)]
+    [InlineData(1)]
     [InlineData(50001)]
     public void Active_series_cap_plus_invalid_values_fail_closed(
         int value)
@@ -152,7 +182,7 @@ public sealed class V08W62ObservabilityFoundationTests
     public void Api_telemetry_enforces_series_cap_without_unbounded_growth()
     {
         using var telemetry =
-            new ApiTelemetry(maxActiveSeries: 2);
+            new ApiTelemetry(maxActiveSeries: 8);
 
         telemetry.RecordRequest(
             "route-one",
@@ -177,8 +207,8 @@ public sealed class V08W62ObservabilityFoundationTests
 
         var snapshot = telemetry.Snapshot();
 
-        Assert.Equal(2, snapshot.ActiveSeries);
-        Assert.Equal(2, snapshot.MaxActiveSeries);
+        Assert.Equal(8, snapshot.ActiveSeries);
+        Assert.Equal(8, snapshot.MaxActiveSeries);
         Assert.Equal(1, snapshot.DroppedSeries);
 
         var first = snapshot.Series.Single(
@@ -319,6 +349,19 @@ public sealed class V08W62ObservabilityFoundationTests
 
         var disabledRoutes =
             Routes(disabled);
+        Assert.True(
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    new PathString("/metrics")));
+        Assert.True(
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    new PathString("/METRICS")));
+        Assert.False(
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    new PathString("/metrics/extra")));
+
         Assert.Contains(
             KafdeckObservabilityEndpoints.CapabilitiesRoute,
             disabledRoutes);
