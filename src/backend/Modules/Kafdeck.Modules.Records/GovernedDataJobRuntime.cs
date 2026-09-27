@@ -160,6 +160,22 @@ public sealed class GovernedDataJobDispatchCoordinator
                 "Data-job worker generation could not be durably fenced.");
         }
 
+        if (current.Phase ==
+                FleetProgressPhase.WaitingForExternalAction &&
+            current.Transfer?.PendingBatch is
+            {
+                State:
+                    FleetTransferBatchState.DispatchStarted,
+            })
+        {
+            return new(
+                new MutationProviderResult(
+                    MutationExecutionResultKind.ExecutionUnknown,
+                    "data_job_unresolved_dispatch_prevents_replay",
+                    ProgressEvidence(current)),
+                current);
+        }
+
         GovernedDataJobProgress.EnsureCanDispatch(
             current,
             plan);
