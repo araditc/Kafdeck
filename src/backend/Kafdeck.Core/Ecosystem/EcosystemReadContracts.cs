@@ -13,6 +13,23 @@ public sealed record ConnectTaskStatus(int Id, string State, string? WorkerId, s
 
 public sealed record ConnectConnectorSummary(string Name);
 
+public sealed record ConnectPluginSummary(
+    string Class,
+    string Type,
+    string? Version);
+
+public sealed record ConnectPluginValidationField(
+    string Name,
+    string Type,
+    bool Required,
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<string> RecommendedValues);
+
+public sealed record ConnectPluginValidationResult(
+    string ConnectorClass,
+    int ErrorCount,
+    IReadOnlyList<ConnectPluginValidationField> Fields);
+
 public sealed record ConnectConnectorDetail(
     string Name,
     string State,
@@ -24,6 +41,20 @@ public interface IConnectReadPort
 {
     Task<ReadViewResult<IReadOnlyList<ConnectProfileSummary>>> ListProfilesAsync(
         string clusterId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+
+    Task<ReadViewResult<IReadOnlyList<ConnectPluginSummary>>> ListPluginsAsync(
+        string clusterId,
+        string connectProfileId,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+
+    Task<ReadViewResult<ConnectPluginValidationResult>> ValidateConfigurationAsync(
+        string clusterId,
+        string connectProfileId,
+        string connectorClass,
+        IReadOnlyDictionary<string, string> configuration,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken);
 
