@@ -137,6 +137,82 @@ public sealed class V07W59StreamsTelemetryTests
     }
 
     [Fact]
+    public async Task Duplicate_application_ids_are_rejected()
+    {
+        var handler = new StubHandler(_ =>
+            Json(
+                HttpStatusCode.OK,
+                """
+                [
+                  {
+                    "applicationId":"app",
+                    "evidenceSource":"agent",
+                    "observedAtUtc":"2026-09-27T12:00:00Z",
+                    "stale":false
+                  },
+                  {
+                    "applicationId":"app",
+                    "evidenceSource":"agent",
+                    "observedAtUtc":"2026-09-27T12:00:01Z",
+                    "stale":false
+                  }
+                ]
+                """));
+
+        using var adapter = CreateAdapter(handler);
+        var result = await adapter.ListApplicationsAsync(
+            "prod",
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ReadViewFailureCategory.InvalidResponse,
+            result.Failure!.Category);
+    }
+
+    [Fact]
+    public async Task Non_string_topic_evidence_is_invalid_not_size_overflow()
+    {
+        var handler = new StubHandler(_ =>
+            Json(
+                HttpStatusCode.OK,
+                """
+                {
+                  "applicationId":"app",
+                  "evidenceSource":"agent",
+                  "observedAtUtc":"2026-09-27T12:00:00Z",
+                  "stale":false,
+                  "nodes":[
+                    {
+                      "id":"node",
+                      "name":"node",
+                      "type":"source",
+                      "inputTopics":[42],
+                      "outputTopics":[],
+                      "stateStores":[]
+                    }
+                  ]
+                }
+                """));
+
+        using var adapter = CreateAdapter(handler);
+        var result = await adapter.GetTopologyAsync(
+            "prod",
+            "app",
+            Operation(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            ReadViewFailureCategory.InvalidResponse,
+            result.Failure!.Category);
+        Assert.Equal(
+            "invalid_streams_telemetry_response",
+            result.Failure.Code);
+    }
+
+    [Fact]
     public async Task Missing_telemetry_profile_is_explicit_not_configured()
     {
         using var adapter = new StreamsTelemetryReadAdapter(
