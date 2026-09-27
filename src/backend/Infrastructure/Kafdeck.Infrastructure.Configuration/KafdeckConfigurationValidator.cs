@@ -372,6 +372,7 @@ public static class KafdeckConfigurationValidator
         {
             var id = profile.Id?.Trim() ?? string.Empty;
             if (id.Length == 0 ||
+                !string.Equals(profile.Id, id, StringComparison.Ordinal) ||
                 id.Length > KafkaConnectProfileSet.MaxProfileIdLength ||
                 id.Any(char.IsControl) ||
                 id.Any(character =>
