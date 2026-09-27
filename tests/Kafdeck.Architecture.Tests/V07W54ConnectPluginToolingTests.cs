@@ -229,6 +229,57 @@ public sealed class V07W54ConnectPluginToolingTests
     }
 
     [Fact]
+    public void Validation_projection_never_returns_raw_provider_messages_or_recommendations()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+              "error_count":1,
+              "configs":[
+                {
+                  "definition":{
+                    "name":"topics",
+                    "type":"LIST",
+                    "required":true
+                  },
+                  "value":{
+                    "value":"orders",
+                    "errors":["internal broker topic orders-secret was rejected"],
+                    "recommended_values":["orders-secret","payments-secret"]
+                  }
+                }
+              ]
+            }
+            """);
+
+        var projected =
+            KafkaConnectReadAdapter.ProjectPluginValidation(
+                "org.example.Sink",
+                document.RootElement,
+                maxItems: 10);
+
+        var field = Assert.Single(projected.Fields);
+        Assert.Equal(
+            new[] { "[REDACTED_PROVIDER_VALIDATION_ERROR]" },
+            field.Errors);
+        Assert.Empty(field.RecommendedValues);
+
+        var serialized = JsonSerializer.Serialize(projected);
+        Assert.DoesNotContain(
+            "orders-secret",
+            serialized,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "payments-secret",
+            serialized,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "internal broker",
+            serialized,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validation_projection_ignores_provider_echoed_value()
     {
         const string secret = "do-not-project";
