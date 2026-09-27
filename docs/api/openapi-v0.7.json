@@ -3,7 +3,7 @@
   "info": {
     "title": "Kafdeck v0.7 Developer & Streaming Ecosystem API",
     "version": "0.7.0",
-    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile. W55 adds disabled-by-default, finite, durable Kafka Connect auto-restart policy controls that reuse governed W54 restart paths and never blindly retry ambiguous dispatch. W56 adds closed, bounded CBOR/XML/MessagePack local SerDe tooling with no runtime plugin loading or external XML resource resolution. W57 adds finite governed replay/reprocess/DLQ/forwarding jobs with immutable ranges, bounded budgets, durable checkpoints, fenced cancellation and explicit proven-non-application reconciliation; ambiguous destination writes are never blindly retried."
+    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile. W55 adds disabled-by-default, finite, durable Kafka Connect auto-restart policy controls that reuse governed W54 restart paths and never blindly retry ambiguous dispatch. W56 adds closed, bounded CBOR/XML/MessagePack local SerDe tooling with no runtime plugin loading or external XML resource resolution. W57 adds finite governed replay/reprocess/DLQ/forwarding jobs with immutable ranges, bounded budgets, durable checkpoints, fenced cancellation and explicit proven-non-application reconciliation; ambiguous destination writes are never blindly retried. W58 adds a finite governed bounded data generator. W59 adds bounded read-only ksqlDB SELECT execution plus registered Streams telemetry, state-store evidence and provenance-labelled lineage."
   },
   "servers": [
     {
@@ -1926,6 +1926,200 @@
           }
         }
       }
+    },
+    "/api/v1/clusters/{clusterId}/ksql/query": {
+      "post": {
+        "operationId": "v07-ksql-query",
+        "summary": "Execute one bounded read-only ksqlDB SELECT query",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KsqlQueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded rows with explicit truncation metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KsqlQueryResultEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or ambiguous statement"
+          },
+          "403": {
+            "description": "ksql.read or antiforgery denied"
+          },
+          "404": {
+            "description": "Cluster or ksqlDB profile not configured"
+          },
+          "501": {
+            "description": "Statement class is blocked/unsupported"
+          },
+          "503": {
+            "description": "ksqlDB unavailable"
+          },
+          "504": {
+            "description": "Query duration bound exceeded before a usable result"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/streams/applications": {
+      "get": {
+        "operationId": "v07-streams-applications",
+        "summary": "List applications from registered Streams telemetry",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Explicit telemetry application evidence"
+          },
+          "403": {
+            "description": "streams.read denied"
+          },
+          "404": {
+            "description": "Streams telemetry not configured"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/streams/applications/{applicationId}/topology": {
+      "get": {
+        "operationId": "v07-streams-topology",
+        "summary": "Read topology from explicit application telemetry",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Topology evidence with provenance and timestamp"
+          },
+          "403": {
+            "description": "streams.read denied"
+          },
+          "404": {
+            "description": "Telemetry/application unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/streams/applications/{applicationId}/state-stores": {
+      "get": {
+        "operationId": "v07-streams-state-stores",
+        "summary": "Read state-store metrics when exposed by telemetry",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "State-store evidence"
+          },
+          "403": {
+            "description": "streams.read denied"
+          },
+          "404": {
+            "description": "Telemetry/application unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/lineage": {
+      "get": {
+        "operationId": "v07-lineage",
+        "summary": "Read provenance-labelled observed and inferred lineage",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lineage graph with Observed/Inferred truth"
+          },
+          "403": {
+            "description": "lineage.read denied"
+          },
+          "404": {
+            "description": "Required telemetry evidence not configured"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3319,6 +3513,348 @@
           },
           "pendingBatch": {
             "$ref": "#/components/schemas/DataJobPendingBatchStatus"
+          }
+        }
+      },
+      "KsqlQueryLimitRequest": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "maxRows": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "maxBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 16777216
+          },
+          "maxDurationSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 120
+          }
+        }
+      },
+      "KsqlQueryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "statement"
+        ],
+        "properties": {
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "limits": {
+            "$ref": "#/components/schemas/KsqlQueryLimitRequest"
+          }
+        }
+      },
+      "KsqlQueryHeader": {
+        "type": "object",
+        "required": [
+          "columnNames",
+          "columnTypes"
+        ],
+        "properties": {
+          "queryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "columnNames": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "string"
+            }
+          },
+          "columnTypes": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "KsqlQueryRow": {
+        "type": "object",
+        "required": [
+          "columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {}
+          }
+        }
+      },
+      "KsqlQueryResult": {
+        "type": "object",
+        "required": [
+          "header",
+          "rows",
+          "truncated",
+          "responseBytes"
+        ],
+        "properties": {
+          "header": {
+            "$ref": "#/components/schemas/KsqlQueryHeader"
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "$ref": "#/components/schemas/KsqlQueryRow"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "limitReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "row_limit",
+              "byte_limit",
+              "duration_limit",
+              null
+            ]
+          },
+          "responseBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16777216
+          }
+        }
+      },
+      "KsqlQueryResultEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "partial",
+          "limitations"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/KsqlQueryResult"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
+          }
+        }
+      },
+      "StreamsApplicationSummary": {
+        "type": "object",
+        "required": [
+          "applicationId",
+          "evidenceSource",
+          "observedAtUtc",
+          "stale"
+        ],
+        "properties": {
+          "applicationId": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "evidenceSource": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "observedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StreamsTopologyNode": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "inputTopics",
+          "outputTopics",
+          "stateStores"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "inputTopics": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          "outputTopics": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          "stateStores": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        }
+      },
+      "StreamsTopologyObservation": {
+        "type": "object",
+        "required": [
+          "applicationId",
+          "evidenceSource",
+          "observedAtUtc",
+          "stale",
+          "nodes"
+        ],
+        "properties": {
+          "applicationId": {
+            "type": "string"
+          },
+          "evidenceSource": {
+            "type": "string"
+          },
+          "observedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "$ref": "#/components/schemas/StreamsTopologyNode"
+            }
+          }
+        }
+      },
+      "LineageEntity": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "LineageEdge": {
+        "type": "object",
+        "required": [
+          "source",
+          "destination",
+          "evidenceKind",
+          "provenance",
+          "observedAtUtc",
+          "confidence",
+          "stale"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/LineageEntity"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/LineageEntity"
+          },
+          "evidenceKind": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "inferred"
+            ]
+          },
+          "provenance": {
+            "type": "string"
+          },
+          "observedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LineageGraph": {
+        "type": "object",
+        "required": [
+          "edges",
+          "partial",
+          "limitations"
+        ],
+        "properties": {
+          "edges": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "$ref": "#/components/schemas/LineageEdge"
+            }
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadViewLimitation"
+            }
           }
         }
       }

@@ -420,6 +420,24 @@ public static class KafdeckConfigurationValidator
                     cluster.KsqlDb.Password,
                     errors);
             }
+
+            if (cluster.StreamsTelemetry is not null)
+            {
+                ValidateReadOnlyHttpProfile(
+                    cluster.Id,
+                    "Streams telemetry",
+                    cluster.StreamsTelemetry.Url,
+                    cluster.StreamsTelemetry.Username,
+                    cluster.StreamsTelemetry.Password,
+                    errors);
+
+                if (!Enum.IsDefined(
+                        cluster.StreamsTelemetry.ProviderProfile))
+                {
+                    errors.Add(
+                        $"Cluster '{cluster.Id}' Streams telemetry provider profile is unsupported.");
+                }
+            }
         }
     }
 

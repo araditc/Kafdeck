@@ -153,7 +153,8 @@ public sealed record ClusterProfile(
     SchemaRegistryProfile? SchemaRegistry = null,
     KafkaConnectProfile? Connect = null,
     KsqlDbProfile? KsqlDb = null,
-    IReadOnlyList<KafkaConnectProfile>? ConnectProfiles = null);
+    IReadOnlyList<KafkaConnectProfile>? ConnectProfiles = null,
+    StreamsTelemetryProfile? StreamsTelemetry = null);
 
 public enum SchemaRegistryProviderProfile
 {
@@ -217,6 +218,18 @@ public sealed record KsqlDbProfile(
     string Url,
     SecretReference? Username,
     SecretReference? Password);
+
+public enum StreamsTelemetryProviderProfile
+{
+    KafdeckTelemetryV1 = 1,
+}
+
+public sealed record StreamsTelemetryProfile(
+    string Url,
+    SecretReference? Username,
+    SecretReference? Password,
+    StreamsTelemetryProviderProfile ProviderProfile =
+        StreamsTelemetryProviderProfile.KafdeckTelemetryV1);
 
 public sealed record TlsProfile(
     bool VerifyServerCertificate,

@@ -241,6 +241,20 @@ public static class KafdeckConfigurationLoader
                 ParseOptionalSecret(ksqlSection["Password"]));
         }
 
+        var streamsSection = section.GetSection("StreamsTelemetry");
+        StreamsTelemetryProfile? streamsTelemetry = null;
+        if (streamsSection.GetChildren().Any())
+        {
+            streamsTelemetry = new StreamsTelemetryProfile(
+                streamsSection["Url"] ?? string.Empty,
+                ParseOptionalSecret(streamsSection["Username"]),
+                ParseOptionalSecret(streamsSection["Password"]),
+                ParseEnum(
+                    streamsSection["ProviderProfile"],
+                    StreamsTelemetryProviderProfile.KafdeckTelemetryV1,
+                    "Streams telemetry provider profile"));
+        }
+
         return new ClusterProfile(
             id,
             Array.AsReadOnly(bootstrapServers),
@@ -252,7 +266,8 @@ public static class KafdeckConfigurationLoader
             ksqlDb,
             connectProfiles.Length == 0
                 ? null
-                : Array.AsReadOnly(connectProfiles));
+                : Array.AsReadOnly(connectProfiles),
+            streamsTelemetry);
     }
 
     private static AdministrationOptions? LoadAdministration(IConfigurationSection section)

@@ -23,7 +23,8 @@ public sealed record SafeClusterDiagnostic(
     bool SaslConfigured,
     bool SchemaRegistryConfigured,
     bool ConnectConfigured,
-    bool KsqlDbConfigured);
+    bool KsqlDbConfigured,
+    bool StreamsTelemetryConfigured = false);
 
 public static class SafeConfigurationDiagnostics
 {
@@ -44,7 +45,8 @@ public static class SafeConfigurationDiagnostics
                 cluster.Sasl is not null,
                 cluster.SchemaRegistry is not null,
                 KafkaConnectProfileSet.Effective(cluster).Count > 0,
-                cluster.KsqlDb is not null))
+                cluster.KsqlDb is not null,
+                cluster.StreamsTelemetry is not null))
             .ToArray();
 
         return new SafeConfigurationDiagnostic(
