@@ -118,6 +118,73 @@ public sealed class V07W57GovernedDataJobPlannerTests
     }
 
     [Fact]
+    public async Task Pre_dispatch_replan_detects_physical_provider_identity_drift()
+    {
+        var masking =
+            new StaticRecordMaskingPolicyProvider(
+                RecordMaskingPolicyCompiler.Compile(
+                    new RecordMaskingPolicyDefinition(
+                        "none",
+                        1)));
+
+        var initialPlanner = Planner(masking);
+        var request = Request(
+            GovernedDataJobKind.Forward,
+            new GovernedDataTransform(
+                GovernedDataTransformKind.BytePreserving));
+        var planned = await initialPlanner.PlanAsync(request);
+
+        Assert.True(
+            planned.IsSuccess,
+            planned.Failure?.SafeMessage);
+
+        var now = DateTimeOffset.Parse(
+            "2026-09-27T08:00:00Z");
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://idp.example|data-job-user",
+            planned.Intent!,
+            planned.Risk!,
+            "v0.7-w57-provider-drift",
+            now.AddMinutes(10),
+            now,
+            "w57-provider-drift");
+
+        var driftedKafka = new StubKafka(
+            new ClusterMetadata(
+                "source",
+                "physical-source",
+                1,
+                Array.Empty<BrokerMetadata>()),
+            new ClusterMetadata(
+                "destination",
+                "physical-destination-recreated",
+                2,
+                Array.Empty<BrokerMetadata>()),
+            Topic("orders", 2),
+            Topic("orders-copy", 3));
+
+        var driftedPlanner =
+            new GovernedDataJobPlanner(
+                new ClusterTransferPlanner(
+                    driftedKafka,
+                    masking));
+        var validator =
+            new GovernedDataJobPreconditionValidator(
+                driftedPlanner);
+
+        var validation =
+            await validator.ValidateAsync(
+                operation.Snapshot);
+
+        Assert.Equal(
+            MutationPreDispatchGuardOutcome.StalePreview,
+            validation.Outcome);
+        Assert.Equal(
+            "data_job_plan_drift",
+            validation.ResultCode);
+    }
+
+    [Fact]
     public async Task Same_physical_cluster_alias_is_rejected_by_preview()
     {
         var masking =
