@@ -48,6 +48,14 @@ public sealed record ConnectAutoRestartTarget(
         TaskId.HasValue
             ? $"cluster/{ClusterId}/connect-profile/{ConnectProfileId}/connector/{ConnectorName}/task/{TaskId.Value}"
             : $"cluster/{ClusterId}/connect-profile/{ConnectProfileId}/connector/{ConnectorName}";
+
+    public string AuthorizationResource =>
+        string.Equals(
+            ConnectProfileId,
+            "default",
+            StringComparison.Ordinal)
+            ? $"connector/{ConnectorName}"
+            : $"connect-profile/{ConnectProfileId}/connector/{ConnectorName}";
 }
 
 public sealed record ConnectAutoRestartPolicy
@@ -622,6 +630,59 @@ public sealed record ConnectAutoRestartRevalidationResult(
 
     public bool IsRecovered =>
         Outcome == ConnectAutoRestartRevalidationOutcome.Recovered;
+}
+
+public sealed record ConnectAutoRestartRuntimePolicySnapshot(
+    bool Enabled,
+    string PolicyVersion,
+    ConnectAutoRestartPolicy Policy)
+{
+    public string Fingerprint =>
+        ConnectAutoRestartPolicyFingerprint.Compute(
+            Enabled,
+            PolicyVersion,
+            Policy);
+}
+
+public interface IConnectAutoRestartRuntimePolicyProvider
+{
+    Task<ConnectAutoRestartRuntimePolicySnapshot> GetCurrentAsync(
+        ConnectAutoRestartTarget target,
+        CancellationToken cancellationToken = default);
+}
+
+public static class ConnectAutoRestartPolicyFingerprint
+{
+    public static string Compute(
+        bool enabled,
+        string policyVersion,
+        ConnectAutoRestartPolicy policy)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
+        ArgumentNullException.ThrowIfNull(policy);
+
+        var canonical = string.Join(
+            "\n",
+            enabled ? "1" : "0",
+            policyVersion.Trim(),
+            policy.MaxAttempts.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            policy.InitialBackoff.Ticks.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            policy.MaxBackoff.Ticks.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            policy.ActivationLifetime.Ticks.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            policy.MaxActivePoliciesPerProfile.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            policy.JitterBasisPoints.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+
+        return Convert.ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(canonical)))
+            .ToLowerInvariant();
+    }
 }
 
 public sealed record ConnectAutoRestartGovernanceSnapshot(
