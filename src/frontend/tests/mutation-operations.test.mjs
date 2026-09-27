@@ -79,3 +79,28 @@ test('v0.5 idempotency key generation never falls back to insecure randomness', 
   assert.match(source, /crypto\.randomUUID/);
   assert.doesNotMatch(source, /Math\.random/);
 });
+test('v0.7 Connect mutations preserve default compatibility and use profile-scoped routes otherwise', () => {
+  const workflowSource = readFileSync(
+    new URL('../src/features/mutations/MutationPreviewWorkflows.tsx', import.meta.url),
+    'utf8',
+  );
+  const apiSource = readFileSync(
+    new URL('../src/features/mutations/mutationApi.ts', import.meta.url),
+    'utf8',
+  );
+  const readViewsSource = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(workflowSource, /connectProfileId === 'default'/);
+  assert.match(workflowSource, /previewConnectProfileConfiguration/);
+  assert.match(workflowSource, /previewConnectProfileControl/);
+  assert.match(workflowSource, /previewConnectProfileDelete/);
+  assert.match(apiSource, /connect\/profiles\/\$\{encodeURIComponent\(connectProfileId\)\}\/connectors/);
+  assert.doesNotMatch(apiSource, /providerUrl/i);
+  assert.doesNotMatch(apiSource, /providerMethod/i);
+
+  assert.match(readViewsSource, /setPluginConfiguration\(''\)/);
+  assert.match(readViewsSource, /Values are sent only to the selected configured Connect profile/);
+});
