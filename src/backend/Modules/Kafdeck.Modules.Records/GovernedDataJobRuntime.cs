@@ -108,6 +108,8 @@ public sealed class GovernedDataJobDispatchCoordinator
         DispatchRecordAsync(
             MutationOperationSnapshot operation,
             GovernedDataJobPlan plan,
+            string workerId,
+            long workerGeneration,
             int rangeIndex,
             KafkaRawRecord record,
             CancellationToken cancellationToken =
@@ -138,28 +140,11 @@ public sealed class GovernedDataJobDispatchCoordinator
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        if (current.WorkerGeneration >
-            operation.ExecutionClaimGeneration)
-        {
-            throw new MutationStateException(
-                "A stale data-job worker cannot dispatch a provider effect.");
-        }
-
-        if (current.WorkerGeneration <
-            operation.ExecutionClaimGeneration)
-        {
-            var fenced =
-                await _state.FenceAsync(
-                        operation.OperationId,
-                        plan,
-                        operation.ExecutionClaimGeneration,
-                        _timeProvider.GetUtcNow(),
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            current = RequireApplied(
-                fenced,
-                "Data-job worker generation could not be durably fenced.");
-        }
+        EnsureWorkerLease(
+            current,
+            workerId,
+            workerGeneration,
+            _timeProvider.GetUtcNow());
 
         if (current.Phase ==
                 FleetProgressPhase.WaitingForExternalAction &&
@@ -214,7 +199,7 @@ public sealed class GovernedDataJobDispatchCoordinator
             await _state.ReserveBeforeDispatchAsync(
                     operation.OperationId,
                     plan,
-                    operation.ExecutionClaimGeneration,
+                    workerGeneration,
                     rangeIndex,
                     record.Offset,
                     range.DestinationPartition,
@@ -236,7 +221,7 @@ public sealed class GovernedDataJobDispatchCoordinator
                     .ReleaseBeforeDispatchAsync(
                         operation.OperationId,
                         plan,
-                        operation.ExecutionClaimGeneration,
+                        workerGeneration,
                         batchId,
                         _timeProvider.GetUtcNow(),
                         CancellationToken.None)
@@ -256,7 +241,7 @@ public sealed class GovernedDataJobDispatchCoordinator
             await _state.MarkDispatchStartedAsync(
                     operation.OperationId,
                     plan,
-                    operation.ExecutionClaimGeneration,
+                    workerGeneration,
                     batchId,
                     _timeProvider.GetUtcNow(),
                     CancellationToken.None)
@@ -264,6 +249,12 @@ public sealed class GovernedDataJobDispatchCoordinator
         current = RequireApplied(
             started,
             "Data-job dispatch-start marker could not be durably persisted.");
+
+        EnsureWorkerLease(
+            current,
+            workerId,
+            workerGeneration,
+            _timeProvider.GetUtcNow());
 
         MutationProviderResult provider;
         try
@@ -296,7 +287,7 @@ public sealed class GovernedDataJobDispatchCoordinator
                 await _state.CompleteAcknowledgedAsync(
                         operation.OperationId,
                         plan,
-                        operation.ExecutionClaimGeneration,
+                        workerGeneration,
                         batchId,
                         checked(record.Offset + 1),
                         _timeProvider.GetUtcNow(),
@@ -321,7 +312,7 @@ public sealed class GovernedDataJobDispatchCoordinator
                     .ResolveProvenNonApplicationAsync(
                         operation.OperationId,
                         plan,
-                        operation.ExecutionClaimGeneration,
+                        workerGeneration,
                         batchId,
                         _timeProvider.GetUtcNow(),
                         CancellationToken.None)
@@ -341,7 +332,7 @@ public sealed class GovernedDataJobDispatchCoordinator
             await _state.MarkAmbiguousAsync(
                     operation.OperationId,
                     plan,
-                    operation.ExecutionClaimGeneration,
+                    workerGeneration,
                     batchId,
                     _timeProvider.GetUtcNow(),
                     CancellationToken.None)
@@ -388,7 +379,7 @@ public sealed class GovernedDataJobDispatchCoordinator
         var initialized =
             await _state.InitializeAsync(
                     operation.OperationId,
-                    operation.ExecutionClaimGeneration,
+                    workerGeneration,
                     plan,
                     _timeProvider.GetUtcNow(),
                     cancellationToken)
@@ -425,11 +416,14 @@ public sealed class GovernedDataJobDispatchCoordinator
         if (operation.OperationKind !=
                 MutationOperationKind.DataJob ||
             operation.State !=
-                MutationOperationState.Executing ||
-            operation.ExecutionClaimGeneration <= 0)
+                MutationOperationState.AppliedVerified ||
+            !string.Equals(
+                operation.ResultCode,
+                "data_job_activated",
+                StringComparison.Ordinal))
         {
             throw new MutationStateException(
-                "Data-job dispatch requires one executing admitted data-job operation.");
+                "Data-job dispatch requires one durably activated data-job operation.");
         }
 
         if (!string.Equals(
@@ -513,6 +507,28 @@ public sealed class GovernedDataJobDispatchCoordinator
         {
             throw new MutationStateException(
                 $"Data-job operation is missing required authorization '{action}'.");
+        }
+    }
+
+    private static void EnsureWorkerLease(
+        FleetOperationProgressSnapshot progress,
+        string workerId,
+        long workerGeneration,
+        DateTimeOffset nowUtc)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
+
+        if (workerGeneration <= 0 ||
+            progress.WorkerGeneration != workerGeneration ||
+            !string.Equals(
+                progress.WorkerLeaseOwner,
+                workerId.Trim(),
+                StringComparison.Ordinal) ||
+            !progress.WorkerLeaseExpiresAtUtc.HasValue ||
+            progress.WorkerLeaseExpiresAtUtc.Value <= nowUtc)
+        {
+            throw new MutationStateException(
+                "Data-job worker does not hold the current durable lease.");
         }
     }
 
