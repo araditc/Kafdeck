@@ -73,8 +73,133 @@ public static class KafdeckStreamingEndpoints
             query.RequireKafdeckAntiforgery();
         }
 
+        app.MapGet(
+                "/api/v1/clusters/{clusterId}/streams/applications",
+                async (
+                    string clusterId,
+                    IStreamsTelemetryReadPort streams,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!IsConfiguredCluster(options, clusterId))
+                    {
+                        return ApiResults.Problem(
+                            ApiProblemMapper.InvalidClusterId(clusterId));
+                    }
+
+                    var result = await streams
+                        .ListApplicationsAsync(
+                            clusterId,
+                            EcosystemOperation(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    return ToReadViewResult(result);
+                })
+            .WithName("v07-streams-applications")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.StreamsRead,
+                "clusterId");
+
+        app.MapGet(
+                "/api/v1/clusters/{clusterId}/streams/applications/{applicationId}/topology",
+                async (
+                    string clusterId,
+                    string applicationId,
+                    IStreamsTelemetryReadPort streams,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!IsConfiguredCluster(options, clusterId))
+                    {
+                        return ApiResults.Problem(
+                            ApiProblemMapper.InvalidClusterId(clusterId));
+                    }
+
+                    var result = await streams
+                        .GetTopologyAsync(
+                            clusterId,
+                            applicationId,
+                            EcosystemOperation(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    return ToReadViewResult(result);
+                })
+            .WithName("v07-streams-topology")
+            .RequireKafdeckAuthorization(
+                AuthorizationAction.StreamsRead,
+                "clusterId",
+                "applicationId");
+
+        app.MapGet(
+                "/api/v1/clusters/{clusterId}/streams/applications/{applicationId}/state-stores",
+                async (
+                    string clusterId,
+                    string applicationId,
+                    IStreamsTelemetryReadPort streams,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!IsConfiguredCluster(options, clusterId))
+                    {
+                        return ApiResults.Problem(
+                            ApiProblemMapper.InvalidClusterId(clusterId));
+                    }
+
+                    var result = await streams
+                        .GetStateStoresAsync(
+                            clusterId,
+                            applicationId,
+                            EcosystemOperation(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    return ToReadViewResult(result);
+                })
+            .WithName("v07-streams-state-stores")
+            .RequireKafdeckAuthorization(
+                AuthorizationAction.StreamsRead,
+                "clusterId",
+                "applicationId");
+
+        app.MapGet(
+                "/api/v1/clusters/{clusterId}/lineage",
+                async (
+                    string clusterId,
+                    ILineageReadPort lineage,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!IsConfiguredCluster(options, clusterId))
+                    {
+                        return ApiResults.Problem(
+                            ApiProblemMapper.InvalidClusterId(clusterId));
+                    }
+
+                    var result = await lineage
+                        .GetLineageAsync(
+                            clusterId,
+                            EcosystemOperation(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    return ToReadViewResult(result);
+                })
+            .WithName("v07-lineage")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.LineageRead,
+                "clusterId");
+
         return app;
     }
+
+    private static bool IsConfiguredCluster(
+        KafdeckOptions options,
+        string clusterId) =>
+        options.Clusters.Any(cluster =>
+            string.Equals(
+                cluster.Id,
+                clusterId,
+                StringComparison.Ordinal));
+
+    private static ReadViewOperationContext EcosystemOperation() =>
+        new(
+            DateTimeOffset.UtcNow.AddSeconds(10),
+            maxItems: 2_000,
+            maxResponseBytes: 4 * 1024 * 1024);
 
     private static KsqlQueryLimits BuildLimits(
         KsqlQueryLimitRequest? request)
