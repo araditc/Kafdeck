@@ -50,7 +50,13 @@ public static class KafdeckRecordEndpoints
             var query = RecordHttpQuery.Parse(http.Request.Query, clusterId, topicName, partition);
             var plan = RecordFilterCompiler.Compile(query.Filter);
             var operation = new KafkaOperationContext(DateTimeOffset.UtcNow + query.Read.Budget.MaxDuration);
-            var filtered = await filterService.FilterPageAsync(query.Read, plan, operation, maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue, cancellationToken).ConfigureAwait(false);
+            var filtered = await filterService.FilterPageAsync(
+                query.Read,
+                plan,
+                operation,
+                maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue,
+                query.ControlledSerdeFormat,
+                cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null) return ApiResults.Problem(ApiProblemMapper.FromKafka(filtered.Failure!));
 
             var safe = maskingService.Apply(query.Read, filtered.Value, maskingPolicy);
@@ -102,7 +108,11 @@ public static class KafdeckRecordEndpoints
         http.Response.Headers.CacheControl = "no-store";
         http.Response.Headers.Append("X-Accel-Buffering", "no");
 
-        await foreach (var frame in tailService.TailAsync(tailRequest, maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue, cancellationToken).ConfigureAwait(false))
+        await foreach (var frame in tailService.TailAsync(
+            tailRequest,
+            maskingPolicy.RequiresStructuredValue || query.RequireDecodedValue,
+            query.ControlledSerdeFormat,
+            cancellationToken).ConfigureAwait(false))
         {
             object payload;
             if (frame.Kind == RecordTailFrameKind.Records && frame.Page is not null)
@@ -246,7 +256,11 @@ public static class KafdeckRecordEndpoints
 
     private sealed record RecordTailSafeFrame(string Kind, RecordSafePage? Page, object? Failure);
 
-    private sealed record RecordHttpQuery(RecordReadRequest Read, RecordFilterRequest Filter, bool RequireDecodedValue)
+    private sealed record RecordHttpQuery(
+        RecordReadRequest Read,
+        RecordFilterRequest Filter,
+        bool RequireDecodedValue,
+        ControlledSerdeFormat? ControlledSerdeFormat)
     {
         public static RecordHttpQuery Parse(IQueryCollection query, string clusterId, string topicName, int partition, bool forceForward = false)
         {
@@ -268,7 +282,18 @@ public static class KafdeckRecordEndpoints
             var expression = EmptyToNull(query["filter"]);
             if (expression is not null) structured = new RecordStructuredFilter(ParseFilterLanguage(query["filterLanguage"]), expression);
             var requireDecodedValue = ParseBoolean(query["decode"], "decode");
-            return new RecordHttpQuery(read, new RecordFilterRequest(preFilter, structured), requireDecodedValue);
+            var controlledSerdeFormat = ParseControlledSerdeFormat(query["serdeFormat"]);
+            if (requireDecodedValue && controlledSerdeFormat.HasValue)
+            {
+                throw new ArgumentException(
+                    "decode and serdeFormat cannot be specified together; choose Schema Registry decoding or one controlled SerDe format.");
+            }
+
+            return new RecordHttpQuery(
+                read,
+                new RecordFilterRequest(preFilter, structured),
+                requireDecodedValue,
+                controlledSerdeFormat);
         }
 
         public static RecordExportFormat ParseExportFormat(string? value)
