@@ -123,6 +123,7 @@ public static class MutationRiskClassifier
         MutationOperationKind.ConnectCreate => MutationRiskClass.Moderate,
         MutationOperationKind.ConnectAlter => MutationRiskClass.Moderate,
         MutationOperationKind.ConnectDelete => MutationRiskClass.High,
+        MutationOperationKind.ConnectAutoRestartPolicy => MutationRiskClass.Moderate,
         MutationOperationKind.RecordsPurge => MutationRiskClass.Critical,
         MutationOperationKind.AclAlter => MutationRiskClass.High,
         MutationOperationKind.ScramAlter => MutationRiskClass.Critical,
