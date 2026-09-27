@@ -268,6 +268,82 @@ public static class KafdeckConfigurationValidator
         }
     }
 
+    private static void ValidateConnectAutoRestart(
+        AdministrationOptions? administration,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        var options = administration?.ConnectAutoRestart;
+        if (options is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.PolicyVersion) ||
+            options.PolicyVersion.Trim().Length > 128 ||
+            options.PolicyVersion.Any(char.IsControl))
+        {
+            errors.Add(
+                "Connect auto-restart policy version is required and must not exceed 128 characters or contain control characters.");
+        }
+
+        if (options.MaxAttempts is < 1 or > 10)
+        {
+            errors.Add(
+                "Connect auto-restart max attempts must be between 1 and 10.");
+        }
+
+        if (options.InitialBackoffSeconds is < 5 or > 1800)
+        {
+            errors.Add(
+                "Connect auto-restart initial backoff must be between 5 and 1800 seconds.");
+        }
+
+        if (options.MaxBackoffSeconds < options.InitialBackoffSeconds ||
+            options.MaxBackoffSeconds > 1800)
+        {
+            errors.Add(
+                "Connect auto-restart max backoff must be at least the initial backoff and at most 1800 seconds.");
+        }
+
+        if (options.ActivationLifetimeSeconds is < 1 or > 86400)
+        {
+            errors.Add(
+                "Connect auto-restart activation lifetime must be between 1 and 86400 seconds.");
+        }
+
+        if (options.MaxActivePoliciesPerProfile is < 1 or > 100)
+        {
+            errors.Add(
+                "Connect auto-restart max active policies per profile must be between 1 and 100.");
+        }
+
+        if (options.JitterBasisPoints is < 0 or > 5000)
+        {
+            errors.Add(
+                "Connect auto-restart jitter basis points must be between 0 and 5000.");
+        }
+
+        if (!options.Enabled)
+        {
+            return;
+        }
+
+        if (administration is null ||
+            !administration.Mutations.Enabled ||
+            administration.Mutations.Persistence is null)
+        {
+            errors.Add(
+                "Enabled Connect auto-restart requires enabled durable mutation persistence.");
+        }
+
+        if (deployment.Mode != AccessMode.Oidc)
+        {
+            errors.Add(
+                "Enabled Connect auto-restart requires OIDC access mode for canonical automation-principal authorization.");
+        }
+    }
+
     private static void ValidateClusters(IReadOnlyList<ClusterProfile> clusters, ICollection<string> errors)
     {
         var clusterIds = new HashSet<string>(StringComparer.Ordinal);
