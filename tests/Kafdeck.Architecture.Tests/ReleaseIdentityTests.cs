@@ -44,6 +44,28 @@ public sealed class ReleaseIdentityTests
     }
 
     [Fact]
+    public void Readme_release_badge_matches_the_governed_release_manifest()
+    {
+        var root = FindRepositoryRoot();
+
+        using var releaseDocument = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(root, ".github", "release", "release.json")));
+        var releaseVersion = releaseDocument.RootElement.GetProperty("version").GetString()
+                             ?? throw new InvalidOperationException("Release version is missing.");
+
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        var expectedBadge =
+            $"[![Latest Release](https://img.shields.io/badge/release-{releaseVersion}-2ea44f)]" +
+            $"(https://github.com/araditc/Kafdeck/releases/tag/{releaseVersion})";
+
+        Assert.Contains(expectedBadge, readme, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "img.shields.io/github/v/release/araditc/Kafdeck",
+            readme,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void System_info_reports_read_only_when_mutation_mode_is_disabled()
     {
         var options = CreateOptions(mutationsEnabled: false);

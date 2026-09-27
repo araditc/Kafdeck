@@ -8,7 +8,7 @@
 
 Secure, vendor-neutral, operations-first visibility for Apache Kafka.
 
-[![Latest Release](https://img.shields.io/github/v/release/araditc/Kafdeck?display_name=tag&sort=semver)](https://github.com/araditc/Kafdeck/releases)
+[![Latest Release](https://img.shields.io/badge/release-v0.7-2ea44f)](https://github.com/araditc/Kafdeck/releases/tag/v0.7)
 [![Quality Gate](https://github.com/araditc/Kafdeck/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/araditc/Kafdeck/actions/workflows/quality-gate.yml)
 [![CodeQL](https://github.com/araditc/Kafdeck/actions/workflows/codeql.yml/badge.svg)](https://github.com/araditc/Kafdeck/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/github/license/araditc/Kafdeck)](LICENSE)
