@@ -218,6 +218,8 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<ConnectAutoRestartTypedDispatchAdapter>();
     builder.Services.AddSingleton<IConnectAutoRestartDispatchPort>(services =>
         services.GetRequiredService<ConnectAutoRestartTypedDispatchAdapter>());
+    builder.Services.AddSingleton<IConnectAutoRestartAuditSink,
+        LoggingConnectAutoRestartAuditSink>();
     builder.Services.AddSingleton<ConnectAutoRestartController>();
     builder.Services.AddSingleton<ConnectAutoRestartPolicyPlanner>();
     builder.Services.AddSingleton<ConnectAutoRestartPolicyPreconditionValidator>();
