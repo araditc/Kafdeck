@@ -183,9 +183,9 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<GovernedDataJobPreconditionValidator>();
     builder.Services.AddSingleton<GovernedDataJobStateCoordinator>();
     builder.Services.AddSingleton<GovernedDataJobSourceReader>();
-    builder.Services.AddSingleton<W57GovernedDataJobEffectGuard>();
+    builder.Services.AddSingleton<ConfiguredGovernedDataJobEffectGuard>();
     builder.Services.AddSingleton<IGovernedDataJobEffectGuard>(services =>
-        services.GetRequiredService<W57GovernedDataJobEffectGuard>());
+        services.GetRequiredService<ConfiguredGovernedDataJobEffectGuard>());
     builder.Services.AddSingleton<GovernedDataJobDispatchCoordinator>();
     builder.Services.AddSingleton<IMutationExecutionHandler,
         GovernedDataJobActivationHandler>();
