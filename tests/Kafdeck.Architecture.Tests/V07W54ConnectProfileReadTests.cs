@@ -68,7 +68,7 @@ public sealed class V07W54ConnectProfileReadTests
             new[] { "analytics", "default" },
             profiles.Value!.Select(profile => profile.Id).ToArray());
         Assert.True(
-            profiles.Value.Single(profile => profile.Id == "default").IsDefault);
+            profiles.Value!.Single(profile => profile.Id == "default").IsDefault);
 
         Assert.True(legacy.IsSuccess, legacy.Failure?.SafeMessage);
         Assert.Equal("default-kafka", legacy.Value!.KafkaClusterId);
