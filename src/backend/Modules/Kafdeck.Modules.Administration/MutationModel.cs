@@ -47,6 +47,7 @@ public enum MutationOperationKind
     ClusterTransfer = 25,
     ReplicationIntegration = 26,
     FleetUncertaintyDisposition = 27,
+    ConnectAutoRestartPolicy = 28,
 }
 
 public enum MutationRiskClass

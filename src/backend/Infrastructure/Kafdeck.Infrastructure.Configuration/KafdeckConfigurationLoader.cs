@@ -238,7 +238,10 @@ public static class KafdeckConfigurationLoader
     private static AdministrationOptions? LoadAdministration(IConfigurationSection section)
     {
         var mutations = section.GetSection("Mutations");
-        if (!mutations.GetChildren().Any())
+        var autoRestartSection =
+            section.GetSection("ConnectAutoRestart");
+        if (!mutations.GetChildren().Any() &&
+            !autoRestartSection.GetChildren().Any())
         {
             return null;
         }
@@ -270,13 +273,53 @@ public static class KafdeckConfigurationLoader
                 ParseOptionalSecret(persistenceSection["ConnectionString"]));
         }
 
+        ConnectAutoRestartOptions? autoRestart = null;
+        if (autoRestartSection.GetChildren().Any())
+        {
+            var defaults =
+                ConnectAutoRestartOptions.DisabledDefault;
+            autoRestart = new ConnectAutoRestartOptions(
+                ParseOptionalBoolean(
+                    autoRestartSection["Enabled"],
+                    defaults.Enabled,
+                    "Connect auto-restart Enabled"),
+                NullIfBlank(
+                    autoRestartSection["PolicyVersion"]) ??
+                    defaults.PolicyVersion,
+                ParseOptionalInt(
+                    autoRestartSection["MaxAttempts"],
+                    defaults.MaxAttempts,
+                    "Connect auto-restart max attempts"),
+                ParseOptionalInt(
+                    autoRestartSection["InitialBackoffSeconds"],
+                    defaults.InitialBackoffSeconds,
+                    "Connect auto-restart initial backoff"),
+                ParseOptionalInt(
+                    autoRestartSection["MaxBackoffSeconds"],
+                    defaults.MaxBackoffSeconds,
+                    "Connect auto-restart max backoff"),
+                ParseOptionalInt(
+                    autoRestartSection["ActivationLifetimeSeconds"],
+                    defaults.ActivationLifetimeSeconds,
+                    "Connect auto-restart activation lifetime"),
+                ParseOptionalInt(
+                    autoRestartSection["MaxActivePoliciesPerProfile"],
+                    defaults.MaxActivePoliciesPerProfile,
+                    "Connect auto-restart max active policies per profile"),
+                ParseOptionalInt(
+                    autoRestartSection["JitterBasisPoints"],
+                    defaults.JitterBasisPoints,
+                    "Connect auto-restart jitter basis points"));
+        }
+
         return new AdministrationOptions(
             new MutationOptions(
                 enabled,
                 persistence,
                 ParseOptionalSecret(mutations["MaterialDigestKey"]),
                 TimeSpan.FromSeconds(previewTtlSeconds),
-                maxConcurrentPerCluster));
+                maxConcurrentPerCluster),
+            autoRestart);
     }
 
     private static TopicCatalogOptions? LoadTopicCatalog(IConfigurationSection section)

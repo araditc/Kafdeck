@@ -136,6 +136,9 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IMutationOperationRepository>(services =>
         new AdoMutationOperationRepository(
             services.GetRequiredService<IMutationDbConnectionFactory>()));
+    builder.Services.AddSingleton<IConnectAutoRestartStateStore>(services =>
+        new AdoConnectAutoRestartStateStore(
+            services.GetRequiredService<IMutationDbConnectionFactory>()));
     builder.Services.AddSingleton<IMutationAuditSink, LoggingMutationAuditSink>();
     builder.Services.AddSingleton<MutationApprovalAuthorizer>();
     builder.Services.AddSingleton<MutationRequestAuthorizationService>();
@@ -205,6 +208,23 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<ConnectMutationPlanner>();
     builder.Services.AddSingleton<ConnectMutationPreconditionValidator>();
     builder.Services.AddSingleton<ConnectMutationExecutionService>();
+    builder.Services.AddSingleton<IConnectAutoRestartRuntimePolicyProvider,
+        ConfiguredConnectAutoRestartRuntimePolicyProvider>();
+    builder.Services.AddSingleton<IConnectAutoRestartGovernancePort,
+        ConfiguredConnectAutoRestartGovernancePort>();
+    builder.Services.AddSingleton<ConnectAutoRestartAttemptRevalidator>();
+    builder.Services.AddSingleton<IConnectAutoRestartAttemptRevalidator>(services =>
+        services.GetRequiredService<ConnectAutoRestartAttemptRevalidator>());
+    builder.Services.AddSingleton<ConnectAutoRestartTypedDispatchAdapter>();
+    builder.Services.AddSingleton<IConnectAutoRestartDispatchPort>(services =>
+        services.GetRequiredService<ConnectAutoRestartTypedDispatchAdapter>());
+    builder.Services.AddSingleton<IConnectAutoRestartAuditSink,
+        LoggingConnectAutoRestartAuditSink>();
+    builder.Services.AddSingleton<ConnectAutoRestartController>();
+    builder.Services.AddSingleton<ConnectAutoRestartPolicyPlanner>();
+    builder.Services.AddSingleton<ConnectAutoRestartPolicyPreconditionValidator>();
+    builder.Services.AddSingleton<IMutationExecutionHandler,
+        ConnectAutoRestartPolicyExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, ConnectCreateExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, ConnectAlterExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, ConnectDeleteExecutionHandler>();
@@ -247,6 +267,10 @@ if (mutationOptions?.Enabled == true)
     _ = app.Services.GetRequiredService<IMutationMaterialDigestService>();
     var mutationRepository = app.Services.GetRequiredService<IMutationOperationRepository>();
     await mutationRepository.InitializeAsync().ConfigureAwait(false);
+
+    var autoRestartStore =
+        app.Services.GetRequiredService<IConnectAutoRestartStateStore>();
+    await autoRestartStore.InitializeAsync().ConfigureAwait(false);
 
     var mutationRecovery = app.Services.GetRequiredService<MutationRecoveryCoordinator>();
     var recoveredMutations = await mutationRecovery
@@ -331,6 +355,7 @@ if (mutationOptions?.Enabled == true)
     app.MapKafdeckConsumerMutationEndpoints();
     app.MapKafdeckSchemaMutationEndpoints();
     app.MapKafdeckConnectMutationEndpoints();
+    app.MapKafdeckConnectAutoRestartEndpoints();
     app.MapKafdeckRecordsPurgeEndpoints();
 }
 app.MapFallbackToFile("index.html");

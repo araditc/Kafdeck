@@ -21,6 +21,7 @@ public static class MutationAuthorization
         MutationOperationKind.ConnectCreate => AuthorizationAction.ConnectCreate,
         MutationOperationKind.ConnectAlter => AuthorizationAction.ConnectAlter,
         MutationOperationKind.ConnectDelete => AuthorizationAction.ConnectDelete,
+        MutationOperationKind.ConnectAutoRestartPolicy => AuthorizationAction.ConnectAutoRestartManage,
         MutationOperationKind.RecordsPurge => AuthorizationAction.RecordsPurge,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported mutation operation kind."),
     };

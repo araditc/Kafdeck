@@ -25,7 +25,7 @@ public static class KafdeckV07OpenApi
   "info": {
     "title": "Kafdeck v0.7 Developer & Streaming Ecosystem API",
     "version": "0.7.0",
-    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile."
+    "description": "Incremental v0.7 ecosystem extension. Existing v0.1-v0.6 routes retain their published contracts. Provider capability truth is explicit. W53 schema developer tooling is bounded, read-authorized, deterministic where specified, and does not create provider or Kafka side effects. W54 adds stable profile-scoped Kafka Connect administration, bounded plugin tooling, and compatibility aliases for the legacy default profile. W55 adds disabled-by-default, finite, durable Kafka Connect auto-restart policy controls that reuse governed W54 restart paths and never blindly retry ambiguous dispatch."
   },
   "servers": [
     {
@@ -913,6 +913,220 @@ public static class KafdeckV07OpenApi
           }
         }
       }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy": {
+      "get": {
+        "operationId": "v07-connect-auto-restart-policy-read",
+        "summary": "Read bounded Connect auto-restart policy and activation status",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment policy and durable activation status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectAutoRestartPolicyStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid target"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "connect.read denied"
+          }
+        }
+      },
+      "put": {
+        "operationId": "v07-connect-auto-restart-policy-apply",
+        "summary": "Apply a previously governed auto-restart policy operation",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectAutoRestartPolicyApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governed mutation operation after apply dispatch"
+          },
+          "400": {
+            "description": "Invalid target or operation ID"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Authorization or antiforgery denied"
+          },
+          "404": {
+            "description": "Mutation operation not found"
+          },
+          "409": {
+            "description": "Operation target mismatch or operation not ready"
+          },
+          "501": {
+            "description": "Mutation handler is not admitted"
+          }
+        }
+      }
+    },
+    "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy/preview": {
+      "put": {
+        "operationId": "v07-connect-auto-restart-policy-preview",
+        "summary": "Preview enable, replace, or disable of a bounded Connect auto-restart policy",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "connectProfileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectAutoRestartPolicyPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing governed operation with the same idempotent intent"
+          },
+          "201": {
+            "description": "New governed mutation operation"
+          },
+          "400": {
+            "description": "Invalid bounded policy request"
+          },
+          "401": {
+            "description": "Operator authentication required"
+          },
+          "403": {
+            "description": "Automation authorization denied"
+          },
+          "404": {
+            "description": "Connector or task not found"
+          },
+          "409": {
+            "description": "No change, deployment policy disabled, or MM2/replication guard blocked"
+          },
+          "503": {
+            "description": "Provider observation or persistence unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1554,6 +1768,205 @@ public static class KafdeckV07OpenApi
             ]
           },
           "taskId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "ConnectAutoRestartPolicyPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "taskId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "maxAttempts": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10
+          },
+          "initialBackoffSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 5,
+            "maximum": 1800
+          },
+          "maxBackoffSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 5,
+            "maximum": 1800
+          },
+          "activationLifetimeSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "maxActivePoliciesPerProfile": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100
+          },
+          "jitterBasisPoints": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 5000
+          }
+        }
+      },
+      "ConnectAutoRestartPolicyApplyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "taskId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "ConnectAutoRestartPolicyStatus": {
+        "type": "object",
+        "required": [
+          "clusterId",
+          "connectProfileId",
+          "connectorName",
+          "deploymentEnabled",
+          "active",
+          "attemptsUsed",
+          "maxAttempts",
+          "hasUnresolvedDispatch"
+        ],
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "connectProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "connectorName": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "taskId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "deploymentEnabled": {
+            "type": "boolean"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "activationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "circuitState": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "Disabled",
+              "Armed",
+              "Waiting",
+              "Dispatching",
+              "Recovered",
+              "Exhausted",
+              "Blocked",
+              "Ambiguous",
+              null
+            ]
+          },
+          "attemptsUsed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "maxAttempts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "activatedAtUtc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "deadlineUtc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "nextAttemptUtc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "terminalReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "hasUnresolvedDispatch": {
+            "type": "boolean"
+          },
+          "version": {
             "type": [
               "integer",
               "null"

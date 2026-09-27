@@ -361,7 +361,8 @@
         "dependencies": {
           "Kafdeck.Modules.Administration": "[0.4.0, )",
           "Microsoft.Data.Sqlite": "[10.0.12, )",
-          "Npgsql": "[10.0.3, )"
+          "Npgsql": "[10.0.3, )",
+          "Kafdeck.Modules.Connect": "[0.4.0, )"
         }
       }
     }

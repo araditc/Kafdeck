@@ -37,7 +37,31 @@ public enum MutationExecutionMode
     HighAvailability = 2,
 }
 
-public sealed record AdministrationOptions(MutationOptions Mutations);
+public sealed record AdministrationOptions(
+    MutationOptions Mutations,
+    ConnectAutoRestartOptions? ConnectAutoRestart = null);
+
+public sealed record ConnectAutoRestartOptions(
+    bool Enabled,
+    string PolicyVersion,
+    int MaxAttempts,
+    int InitialBackoffSeconds,
+    int MaxBackoffSeconds,
+    int ActivationLifetimeSeconds,
+    int MaxActivePoliciesPerProfile,
+    int JitterBasisPoints)
+{
+    public static ConnectAutoRestartOptions DisabledDefault { get; } =
+        new(
+            Enabled: false,
+            PolicyVersion: "v0.7-w55-default",
+            MaxAttempts: 3,
+            InitialBackoffSeconds: 10,
+            MaxBackoffSeconds: 300,
+            ActivationLifetimeSeconds: 1800,
+            MaxActivePoliciesPerProfile: 10,
+            JitterBasisPoints: 2000);
+}
 
 public sealed record MutationOptions(
     bool Enabled,

@@ -54,6 +54,95 @@ public sealed class V02AuthorizationIntegrationTests
     }
 
     [Fact]
+    public void W55_restart_and_policy_management_permissions_are_not_implied_by_connect_alter()
+    {
+        var policy = AuthorizationPolicyCompiler.Compile(
+            new AuthorizationPolicyDefinition(
+                new[]
+                {
+                    new AuthorizationRoleDefinition(
+                        "connect-operator",
+                        new[]
+                        {
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.ConnectAlter,
+                                new[] { "prod" },
+                                new[] { "connector/*" }),
+                        }),
+                    new AuthorizationRoleDefinition(
+                        "auto-restart",
+                        new[]
+                        {
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.ConnectRestart,
+                                new[] { "prod" },
+                                new[] { "connector/*" }),
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.ConnectAutoRestartManage,
+                                new[] { "prod" },
+                                new[] { "connector/*" }),
+                        }),
+                },
+                new[]
+                {
+                    new AuthorizationSubjectBindingDefinition(
+                        "https://idp.example",
+                        "alter-only",
+                        new[] { "connect-operator" }),
+                    new AuthorizationSubjectBindingDefinition(
+                        "https://idp.example",
+                        "automation",
+                        new[] { "auto-restart" }),
+                },
+                Array.Empty<AuthorizationGroupBindingDefinition>()));
+
+        var evaluator = new AuthorizationPolicyEvaluator(policy);
+        var alterOnly = new OperatorIdentity(
+            new OperatorIdentityKey(
+                "https://idp.example",
+                "alter-only"));
+        var automation = new OperatorIdentity(
+            new OperatorIdentityKey(
+                "https://idp.example",
+                "automation"));
+
+        Assert.True(evaluator.Evaluate(
+            alterOnly,
+            new AuthorizationRequest(
+                AuthorizationAction.ConnectAlter,
+                "prod",
+                "connector/sink-a")).IsAllowed);
+
+        Assert.False(evaluator.Evaluate(
+            alterOnly,
+            new AuthorizationRequest(
+                AuthorizationAction.ConnectRestart,
+                "prod",
+                "connector/sink-a")).IsAllowed);
+
+        Assert.False(evaluator.Evaluate(
+            alterOnly,
+            new AuthorizationRequest(
+                AuthorizationAction.ConnectAutoRestartManage,
+                "prod",
+                "connector/sink-a")).IsAllowed);
+
+        Assert.True(evaluator.Evaluate(
+            automation,
+            new AuthorizationRequest(
+                AuthorizationAction.ConnectRestart,
+                "prod",
+                "connector/sink-a")).IsAllowed);
+
+        Assert.True(evaluator.Evaluate(
+            automation,
+            new AuthorizationRequest(
+                AuthorizationAction.ConnectAutoRestartManage,
+                "prod",
+                "connector/sink-a")).IsAllowed);
+    }
+
+    [Fact]
     public void Authorization_evaluator_has_bounded_release_readiness_latency()
     {
         var permissions = Enumerable.Range(0, 64)

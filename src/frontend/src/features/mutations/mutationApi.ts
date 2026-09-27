@@ -118,6 +118,36 @@ export interface ConnectControlPreviewInput {
   taskId?: number | null;
 }
 
+export interface ConnectAutoRestartPolicyStatus {
+  clusterId: string;
+  connectProfileId: string;
+  connectorName: string;
+  taskId: number | null;
+  deploymentEnabled: boolean;
+  active: boolean;
+  activationId: string | null;
+  circuitState: string | null;
+  attemptsUsed: number;
+  maxAttempts: number;
+  activatedAtUtc: string | null;
+  deadlineUtc: string | null;
+  nextAttemptUtc: string | null;
+  terminalReason: string | null;
+  hasUnresolvedDispatch: boolean;
+  version: number | null;
+}
+
+export interface ConnectAutoRestartPolicyPreviewInput {
+  enabled: boolean;
+  taskId?: number | null;
+  maxAttempts?: number | null;
+  initialBackoffSeconds?: number | null;
+  maxBackoffSeconds?: number | null;
+  activationLifetimeSeconds?: number | null;
+  maxActivePoliciesPerProfile?: number | null;
+  jitterBasisPoints?: number | null;
+}
+
 export type RecordsPurgeSelectorKind = 'absolute' | 'timestamp';
 
 export interface RecordsPurgeTargetInput {
@@ -193,6 +223,41 @@ async function csrf(signal?: AbortSignal): Promise<CsrfToken> {
   return token;
 }
 
+async function putJson<T>(
+  path: string,
+  body: unknown,
+  options?: { idempotencyKey?: string | undefined; signal?: AbortSignal | undefined },
+): Promise<T> {
+  const token = await csrf(options?.signal);
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    [token.headerName]: token.requestToken,
+  };
+  if (options?.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
+
+  const init: RequestInit = {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+    credentials: 'same-origin',
+  };
+  if (options?.signal !== undefined) init.signal = options.signal;
+
+  const response = await fetch(path, init);
+  if (!response.ok) {
+    const problem = await parseProblem(response);
+    if (problem.code === 'urn:kafdeck:problem:antiforgery-validation-failed') {
+      csrfToken = null;
+    }
+    throw problem;
+  }
+
+  return (await response.json()) as T;
+}
+
 async function postJson<T>(
   path: string,
   body: unknown,
@@ -251,6 +316,14 @@ function connectorProfileMutationPath(
   action: string,
 ): string {
   return `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/connectors/${encodeURIComponent(connectorName)}/mutations/${action}/preview`;
+}
+
+function connectAutoRestartPolicyPath(
+  clusterId: string,
+  connectProfileId: string,
+  connectorName: string,
+): string {
+  return `${clusterPath(clusterId)}/connect/profiles/${encodeURIComponent(connectProfileId)}/connectors/${encodeURIComponent(connectorName)}/restart-policy`;
 }
 
 export const mutationApi = {
@@ -584,6 +657,52 @@ export const mutationApi = {
     return postJson<MutationStatus>(
       `${mutationPath(operation.operationId)}/connect/execute`,
       {},
+      { signal },
+    );
+  },
+
+  getConnectAutoRestartPolicy(
+    clusterId: string,
+    connectProfileId: string,
+    connectorName: string,
+    taskId?: number | null,
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams();
+    if (taskId !== undefined && taskId !== null) params.set('taskId', String(taskId));
+    const suffix = params.size > 0 ? `?${params}` : '';
+    return readJson<ConnectAutoRestartPolicyStatus>(
+      `${connectAutoRestartPolicyPath(clusterId, connectProfileId, connectorName)}${suffix}`,
+      signal,
+    );
+  },
+
+  previewConnectAutoRestartPolicy(
+    clusterId: string,
+    connectProfileId: string,
+    connectorName: string,
+    request: ConnectAutoRestartPolicyPreviewInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return putJson<MutationStatus>(
+      `${connectAutoRestartPolicyPath(clusterId, connectProfileId, connectorName)}/preview`,
+      request,
+      { idempotencyKey, signal },
+    );
+  },
+
+  applyConnectAutoRestartPolicy(
+    clusterId: string,
+    connectProfileId: string,
+    connectorName: string,
+    operationId: string,
+    taskId?: number | null,
+    signal?: AbortSignal,
+  ) {
+    return putJson<MutationStatus>(
+      connectAutoRestartPolicyPath(clusterId, connectProfileId, connectorName),
+      { operationId, taskId: taskId ?? null },
       { signal },
     );
   },
