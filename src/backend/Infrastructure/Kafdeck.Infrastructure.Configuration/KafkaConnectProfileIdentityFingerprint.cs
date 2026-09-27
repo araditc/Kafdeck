@@ -40,8 +40,7 @@ public static class KafkaConnectProfileIdentityFingerprint
             uri.AbsolutePath.TrimEnd('/'));
 
         var canonical = string.Join(
-            "
-",
+            "\n",
             cluster.Id,
             profile.Id,
             canonicalEndpoint,
