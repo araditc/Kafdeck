@@ -84,8 +84,14 @@ public static class KafdeckObservabilityEndpoints
 
         endpoints.MapGet(
                 CapabilitiesRoute,
-                (OtlpExporterHealthState otlpHealth) =>
-                    Results.Ok(
+                (HttpContext context) =>
+                {
+                    var otlpHealth =
+                        context.RequestServices
+                            .GetRequiredService<
+                                OtlpExporterHealthState>();
+
+                    return Results.Ok(
                         new ObservabilityCapabilitiesData(
                             new ObservabilityCapabilityValue(
                                 "supported"),
@@ -104,7 +110,8 @@ public static class KafdeckObservabilityEndpoints
                             ObservabilityOptions.HardMaxActiveSeries,
                             observability.MaxMetricLabelsPerSeries,
                             observability.MaxMetricLabelValueBytes,
-                            observability.MaxTraceAttributes)))
+                            observability.MaxTraceAttributes));
+                })
             .WithName("v08-observability-capabilities");
 
         if (observability.Prometheus.Enabled)
