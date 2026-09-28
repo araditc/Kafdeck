@@ -44,6 +44,14 @@
         "resolved": "17.14.1",
         "contentHash": "pmTrhfFIoplzFVbhVwUquT+77CbGH+h4/3mBpdmIlYtBi9nAB+kKI6dN3A/nV4DFi3wLLx/BlHIPK+MkbQ6Tpg=="
       },
+      "Microsoft.Data.Sqlite.Core": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "2aL9eL5HQr0V4b8V909SD+jQAx6qnTTl7sT/v3D8dIvmr2UGdpZIQxqm1pj2Js3e4EYTvpw0oMH7DjapJJuPPw==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.12"
+        }
+      },
       "Microsoft.IdentityModel.Abstractions": {
         "type": "Transitive",
         "resolved": "8.19.2",
@@ -110,6 +118,54 @@
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
+      "OpenTelemetry": {
+        "type": "Transitive",
+        "resolved": "1.19.1",
+        "contentHash": "6ywhc3upf+dq8EsOohj7I7zS3l4yX9vfbtFkvyEC8xIUY4Z9iDIOVuke356eCAzIZaWtmwmmyl2UXYCp5n7I3Q==",
+        "dependencies": {
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "1.19.1"
+        }
+      },
+      "OpenTelemetry.Api": {
+        "type": "Transitive",
+        "resolved": "1.19.1",
+        "contentHash": "9JKIH+xrV0HNTFjQC8zrx9gZpDOMEljN5Htg/U0VE2IvO3N+7bKALCCsGy5tp09marX5dd8UkrgQFoLaulIBRw=="
+      },
+      "OpenTelemetry.Api.ProviderBuilderExtensions": {
+        "type": "Transitive",
+        "resolved": "1.19.1",
+        "contentHash": "HtGe72B/IhzKqdU0a3fNE5osax/Cegwxd+p4u6lOFy20nsgmeaFuP2NRyFs1WvrOv/bpkII3IvvBkKoZXG8BLg==",
+        "dependencies": {
+          "OpenTelemetry.Api": "1.19.1"
+        }
+      },
+      "SQLitePCLRaw.bundle_e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.12",
+        "contentHash": "mAgscpQMLw5/nfA1Q5oJVAT29yROUo1ifZGbbTpx/lwZpSxMUGoYbKfmvdm8oXER+RzxqBmmQzeBEVKfeHv2nw==",
+        "dependencies": {
+          "SQLitePCLRaw.lib.e_sqlite3": "2.1.12",
+          "SQLitePCLRaw.provider.e_sqlite3": "2.1.12"
+        }
+      },
+      "SQLitePCLRaw.core": {
+        "type": "Transitive",
+        "resolved": "2.1.12",
+        "contentHash": "ETpNw9DY3ckWLgRRAeCHj+GKOuPi61aeczkXhgHexUvqoZBAYg8RYESE2J7O1M7+o6QbdSEZwrw9bfqztUVWXg=="
+      },
+      "SQLitePCLRaw.lib.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.12",
+        "contentHash": "fWi8Dbknuhgg72fWinIdjXVaqO1hHL4YBBwVLnr7e1c9TAZwJ0QE38j9syW1hwx6HaqEVTwI+O07WPdZn8Rp0w=="
+      },
+      "SQLitePCLRaw.provider.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.12",
+        "contentHash": "W3oH4XIfCzFrgUSDKHhN6N+dgzA5YHOR2VxX8GB6Qy7CyrJJgxPEG8NirgYWlPQC5P2jz2knSsexWu4tDUL33g==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.12"
+        }
+      },
       "System.CodeDom": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -167,20 +223,20 @@
       "kafdeck.api": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.4.0, )",
-          "Kafdeck.Infrastructure.Ecosystem": "[0.4.0, )",
-          "Kafdeck.Infrastructure.Kafka": "[0.4.0, )",
-          "Kafdeck.Infrastructure.Persistence": "[0.4.0, )",
-          "Kafdeck.Infrastructure.Security": "[0.4.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )",
-          "Kafdeck.Modules.Clusters": "[0.4.0, )",
-          "Kafdeck.Modules.Consumers": "[0.4.0, )",
-          "Kafdeck.Modules.Schemas": "[0.4.0, )",
-          "Kafdeck.Modules.Topics": "[0.4.0, )",
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Ecosystem": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Kafka": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Persistence": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Security": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )",
+          "Kafdeck.Modules.Clusters": "[0.7.0, )",
+          "Kafdeck.Modules.Consumers": "[0.7.0, )",
+          "Kafdeck.Modules.Schemas": "[0.7.0, )",
+          "Kafdeck.Modules.Topics": "[0.7.0, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )",
-          "Kafdeck.Infrastructure.SerDe": "[0.4.0, )",
-          "Kafdeck.Modules.Generator": "[0.4.0, )"
+          "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.19.1, )",
+          "OpenTelemetry.Extensions.Hosting": "[1.19.1, )"
         }
       },
       "kafdeck.core": {
@@ -189,16 +245,33 @@
       "kafdeck.infrastructure.configuration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )"
+          "Kafdeck.Core": "[0.7.0, )"
+        }
+      },
+      "kafdeck.infrastructure.ecosystem": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
         }
       },
       "kafdeck.infrastructure.kafka": {
         "type": "Project",
         "dependencies": {
           "Confluent.Kafka": "[2.15.1, )",
-          "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
+        }
+      },
+      "kafdeck.infrastructure.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Modules.Administration": "[0.7.0, )",
+          "Kafdeck.Modules.Connect": "[0.7.0, )",
+          "Microsoft.Data.Sqlite": "[10.0.12, )",
+          "Npgsql": "[10.0.3, )"
         }
       },
       "kafdeck.infrastructure.schemaregistry": {
@@ -206,35 +279,78 @@
         "dependencies": {
           "Apache.Avro": "[1.12.2, )",
           "Google.Protobuf": "[3.36.2, )",
-          "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
         }
       },
       "kafdeck.infrastructure.security": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
+        }
+      },
+      "kafdeck.infrastructure.serde": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )"
+        }
+      },
+      "kafdeck.modules.administration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )"
         }
       },
       "kafdeck.modules.clusters": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )"
+          "Kafdeck.Core": "[0.7.0, )"
+        }
+      },
+      "kafdeck.modules.connect": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
+        }
+      },
+      "kafdeck.modules.consumers": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
+        }
+      },
+      "kafdeck.modules.generator": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )",
+          "Kafdeck.Modules.Records": "[0.7.0, )",
+          "Kafdeck.Modules.Schemas": "[0.7.0, )"
         }
       },
       "kafdeck.modules.records": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )"
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
+        }
+      },
+      "kafdeck.modules.schemas": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
         }
       },
       "kafdeck.modules.topics": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
+          "Kafdeck.Core": "[0.7.0, )",
+          "Kafdeck.Modules.Administration": "[0.7.0, )"
         }
       },
       "Apache.Avro": {
@@ -271,41 +387,6 @@
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.19.2"
         }
       },
-      "kafdeck.modules.consumers": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
-        }
-      },
-      "kafdeck.modules.connect": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
-        }
-      },
-      "kafdeck.modules.schemas": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
-        }
-      },
-      "kafdeck.infrastructure.ecosystem": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.2.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.2.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )"
-        }
-      },
-      "kafdeck.modules.administration": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )"
-        }
-      },
       "Microsoft.Data.Sqlite": {
         "type": "CentralTransitive",
         "requested": "[10.0.12, )",
@@ -317,69 +398,28 @@
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
-      "Microsoft.Data.Sqlite.Core": {
-        "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "2aL9eL5HQr0V4b8V909SD+jQAx6qnTTl7sT/v3D8dIvmr2UGdpZIQxqm1pj2Js3e4EYTvpw0oMH7DjapJJuPPw==",
-        "dependencies": {
-          "SQLitePCLRaw.core": "2.1.12"
-        }
-      },
       "Npgsql": {
         "type": "CentralTransitive",
         "requested": "[10.0.3, )",
         "resolved": "10.0.3",
         "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
       },
-      "SQLitePCLRaw.bundle_e_sqlite3": {
-        "type": "Transitive",
-        "resolved": "2.1.12",
-        "contentHash": "mAgscpQMLw5/nfA1Q5oJVAT29yROUo1ifZGbbTpx/lwZpSxMUGoYbKfmvdm8oXER+RzxqBmmQzeBEVKfeHv2nw==",
+      "OpenTelemetry.Exporter.OpenTelemetryProtocol": {
+        "type": "CentralTransitive",
+        "requested": "[1.19.1, )",
+        "resolved": "1.19.1",
+        "contentHash": "vsYYOBf/KxNubnuoja8pjJ9LG0zCC9HAYPay+R6N5ZKZMbhNdKWbaq6JZqJqTvK+55rudiqErJySekf9ql8okA==",
         "dependencies": {
-          "SQLitePCLRaw.lib.e_sqlite3": "2.1.12",
-          "SQLitePCLRaw.provider.e_sqlite3": "2.1.12"
+          "OpenTelemetry": "1.19.1"
         }
       },
-      "SQLitePCLRaw.core": {
-        "type": "Transitive",
-        "resolved": "2.1.12",
-        "contentHash": "ETpNw9DY3ckWLgRRAeCHj+GKOuPi61aeczkXhgHexUvqoZBAYg8RYESE2J7O1M7+o6QbdSEZwrw9bfqztUVWXg=="
-      },
-      "SQLitePCLRaw.lib.e_sqlite3": {
-        "type": "Transitive",
-        "resolved": "2.1.12",
-        "contentHash": "fWi8Dbknuhgg72fWinIdjXVaqO1hHL4YBBwVLnr7e1c9TAZwJ0QE38j9syW1hwx6HaqEVTwI+O07WPdZn8Rp0w=="
-      },
-      "SQLitePCLRaw.provider.e_sqlite3": {
-        "type": "Transitive",
-        "resolved": "2.1.12",
-        "contentHash": "W3oH4XIfCzFrgUSDKHhN6N+dgzA5YHOR2VxX8GB6Qy7CyrJJgxPEG8NirgYWlPQC5P2jz2knSsexWu4tDUL33g==",
+      "OpenTelemetry.Extensions.Hosting": {
+        "type": "CentralTransitive",
+        "requested": "[1.19.1, )",
+        "resolved": "1.19.1",
+        "contentHash": "3qqZfVmW8mKA2/fRwI83o8z+yZd33KbEqRlXrlX0+3e/U7i+z0MQiCr0L3Axxa0jGdiylIrpWX4DIT9nAbJ00A==",
         "dependencies": {
-          "SQLitePCLRaw.core": "2.1.12"
-        }
-      },
-      "kafdeck.infrastructure.persistence": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Modules.Administration": "[0.4.0, )",
-          "Microsoft.Data.Sqlite": "[10.0.12, )",
-          "Npgsql": "[10.0.3, )",
-          "Kafdeck.Modules.Connect": "[0.4.0, )"
-        }
-      },
-      "kafdeck.infrastructure.serde": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )"
-        }
-      },
-      "kafdeck.modules.generator": {
-        "type": "Project",
-        "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )",
-          "Kafdeck.Modules.Administration": "[0.4.0, )",
-          "Kafdeck.Modules.Records": "[0.4.0, )",
-          "Kafdeck.Modules.Schemas": "[0.4.0, )"
+          "OpenTelemetry": "1.19.1"
         }
       }
     }
