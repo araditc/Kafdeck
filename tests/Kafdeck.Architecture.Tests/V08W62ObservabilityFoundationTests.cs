@@ -461,7 +461,7 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
-    public void Otlp_runtime_health_requires_real_success_from_all_three_signals()
+    public void Otlp_runtime_health_requires_real_trace_and_metric_export_success()
     {
         var health = new OtlpExporterHealthState();
 
@@ -489,14 +489,6 @@ public sealed class V08W62ObservabilityFoundationTests
             ExportResult.Success);
 
         Assert.Equal(
-            OtlpRuntimeHealth.Unknown,
-            health.Current);
-
-        health.Record(
-            OtlpSignalKind.Logs,
-            ExportResult.Success);
-
-        Assert.Equal(
             OtlpRuntimeHealth.Supported,
             health.Current);
         Assert.Equal(
@@ -517,9 +509,6 @@ public sealed class V08W62ObservabilityFoundationTests
             ExportResult.Success);
         health.Record(
             OtlpSignalKind.Metrics,
-            ExportResult.Success);
-        health.Record(
-            OtlpSignalKind.Logs,
             ExportResult.Success);
         health.Record(
             OtlpSignalKind.Traces,
