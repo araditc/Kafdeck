@@ -1,3 +1,5 @@
+using Kafdeck.Core.Observability;
+
 namespace Kafdeck.Modules.Administration;
 
 public enum MutationPreDispatchGuardOutcome
@@ -153,6 +155,7 @@ public sealed class MutationExecutor
     private readonly IMutationMaterialDigestService _materialDigestService;
     private readonly MutationExecutorPolicy _policy;
     private readonly TimeProvider _timeProvider;
+    private readonly IKafdeckOperationalTelemetry _telemetry;
     private readonly object _clusterSemaphoreGate = new();
     private readonly Dictionary<string, ClusterSemaphoreEntry> _clusterSemaphores =
         new(StringComparer.Ordinal);
@@ -164,7 +167,8 @@ public sealed class MutationExecutor
         MutationExecutionHandlerRegistry handlers,
         IMutationMaterialDigestService materialDigestService,
         MutationExecutorPolicy policy,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IKafdeckOperationalTelemetry? telemetry = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
@@ -174,6 +178,9 @@ public sealed class MutationExecutor
                                  throw new ArgumentNullException(nameof(materialDigestService));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _telemetry =
+            telemetry ??
+            NullKafdeckOperationalTelemetry.Instance;
     }
 
     public Task<MutationOperationSnapshot> ExecuteAsync(
@@ -194,6 +201,11 @@ public sealed class MutationExecutor
             return initial;
         }
 
+        using var telemetryScope =
+            _telemetry.Start(
+                KafdeckOperationalKind.GovernedOperation,
+                KafdeckOperationalFamily.MutationExecution);
+
         var clusterEntry = AcquireClusterSemaphore(initial.ClusterId);
         var permitAcquired = false;
         var lateExecution = new LateExecutionPermitState();
@@ -204,12 +216,30 @@ public sealed class MutationExecutor
                 .ConfigureAwait(false);
             permitAcquired = true;
 
-            return await ExecuteUnderClusterLimitAsync(
-                    operationId,
-                    executionMaterial,
-                    lateExecution,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            var result =
+                await ExecuteUnderClusterLimitAsync(
+                        operationId,
+                        executionMaterial,
+                        lateExecution,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            telemetryScope.Complete(
+                MapTelemetryOutcome(
+                    result.State));
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            telemetryScope.Complete(
+                KafdeckOperationalOutcome.Cancelled);
+            throw;
+        }
+        catch
+        {
+            telemetryScope.Complete(
+                KafdeckOperationalOutcome.Failed);
+            throw;
         }
         finally
         {
@@ -763,6 +793,31 @@ public sealed class MutationExecutor
             ReleaseClusterSemaphore(clusterId, clusterEntry);
         }
     }
+
+    private static KafdeckOperationalOutcome
+        MapTelemetryOutcome(
+            MutationOperationState state) =>
+        state switch
+        {
+            MutationOperationState.AppliedVerified =>
+                KafdeckOperationalOutcome.Success,
+            MutationOperationState.AppliedUnverified or
+            MutationOperationState.PartiallyApplied or
+            MutationOperationState.ExecutionUnknown =>
+                KafdeckOperationalOutcome.UnknownExternalEffect,
+            MutationOperationState.Cancelled =>
+                KafdeckOperationalOutcome.Cancelled,
+            MutationOperationState.Rejected =>
+                KafdeckOperationalOutcome.Denied,
+            MutationOperationState.StalePreview or
+            MutationOperationState.Expired =>
+                KafdeckOperationalOutcome.Blocked,
+            MutationOperationState.FailedBeforeDispatch or
+            MutationOperationState.FailedDefinitive =>
+                KafdeckOperationalOutcome.Failed,
+            _ =>
+                KafdeckOperationalOutcome.Blocked,
+        };
 
     private bool ExecutionMaterialMatches(
         MutationOperationSnapshot operation,
