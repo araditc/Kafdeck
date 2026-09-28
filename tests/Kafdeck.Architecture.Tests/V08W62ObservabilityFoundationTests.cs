@@ -317,6 +317,11 @@ public sealed class V08W62ObservabilityFoundationTests
         "Authorization=Basic%20ZGVwbG95bWVudC10b2tlbjpwYXNzd29yZA",
         "deployment access token")]
     [InlineData(
+        "user:deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjpkZXBsb3ltZW50LXRva2Vu",
+        "deployment access token")]
+    [InlineData(
         "deployment-token",
         "metrics-token",
         "Authorization=Basic%20bWV0cmljcy10b2tlbjpwYXNzd29yZA==",
