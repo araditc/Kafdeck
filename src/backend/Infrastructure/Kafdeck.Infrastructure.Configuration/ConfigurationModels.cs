@@ -90,7 +90,9 @@ public sealed record ObservabilityOptions(
     OtlpObservabilityOptions Otlp,
     int MaxMetricLabelsPerSeries,
     int MaxMetricLabelValueBytes,
-    int MaxTraceAttributes)
+    int MaxTraceAttributes,
+    int MaxLogAttributes,
+    int MaxDiagnosticStringBytes)
 {
     public const int MinimumMaxActiveSeries = 2;
     public const int DefaultMaxActiveSeries = 10_000;
@@ -108,6 +110,13 @@ public sealed record ObservabilityOptions(
     public const int DefaultMaxTraceAttributes = 24;
     public const int HardMaxTraceAttributes = 48;
 
+    public const int MinimumMaxLogAttributes = 1;
+    public const int DefaultMaxLogAttributes = 24;
+    public const int HardMaxLogAttributes = 48;
+
+    public const int MinimumMaxDiagnosticStringBytes = 64;
+    public const int DefaultMaxDiagnosticStringBytes = 512;
+    public const int HardMaxDiagnosticStringBytes = 2048;
 
     public static ObservabilityOptions Default { get; } =
         new(
@@ -116,7 +125,9 @@ public sealed record ObservabilityOptions(
             OtlpObservabilityOptions.Disabled,
             DefaultMaxMetricLabelsPerSeries,
             DefaultMaxMetricLabelValueBytes,
-            DefaultMaxTraceAttributes);
+            DefaultMaxTraceAttributes,
+            DefaultMaxLogAttributes,
+            DefaultMaxDiagnosticStringBytes);
 
     public ObservabilityOptions(
         int maxActiveSeries,
@@ -127,7 +138,9 @@ public sealed record ObservabilityOptions(
             OtlpObservabilityOptions.Disabled,
             DefaultMaxMetricLabelsPerSeries,
             DefaultMaxMetricLabelValueBytes,
-            DefaultMaxTraceAttributes)
+            DefaultMaxTraceAttributes,
+            DefaultMaxLogAttributes,
+            DefaultMaxDiagnosticStringBytes)
     {
     }
 
@@ -141,7 +154,9 @@ public sealed record ObservabilityOptions(
             otlp,
             DefaultMaxMetricLabelsPerSeries,
             DefaultMaxMetricLabelValueBytes,
-            DefaultMaxTraceAttributes)
+            DefaultMaxTraceAttributes,
+            DefaultMaxLogAttributes,
+            DefaultMaxDiagnosticStringBytes)
     {
     }
 

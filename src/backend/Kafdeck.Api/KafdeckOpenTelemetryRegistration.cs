@@ -2,9 +2,11 @@ using System.Diagnostics;
 using Kafdeck.Infrastructure.Configuration;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Microsoft.Extensions.Logging;
 
 namespace Kafdeck.Api;
 
@@ -66,6 +68,40 @@ public static class KafdeckOpenTelemetryRegistration
                                 health)));
                 }
             });
+
+        services.AddLogging(logging =>
+        {
+            logging.AddFilter<OpenTelemetryLoggerProvider>(
+                (category, level) =>
+                    string.Equals(
+                        category,
+                        typeof(ApiTelemetry).FullName,
+                        StringComparison.Ordinal) &&
+                    level >= LogLevel.Information);
+
+            logging.AddOpenTelemetry(options =>
+            {
+                options.IncludeScopes = false;
+                options.IncludeFormattedMessage = true;
+                options.ParseStateValues = true;
+
+                if (observability.Otlp.Enabled)
+                {
+                    var exporterOptions =
+                        new OtlpExporterOptions();
+                    ConfigureExporter(
+                        exporterOptions,
+                        observability.Otlp,
+                        resolvedOtlpHeaders,
+                        OtlpSignalKind.Logs);
+
+                    options.AddProcessor(
+                        new BatchLogRecordExportProcessor(
+                            new OtlpLogExporter(
+                                exporterOptions)));
+                }
+            });
+        });
 
         return services;
     }
@@ -137,6 +173,7 @@ public static class KafdeckOpenTelemetryRegistration
         {
             OtlpSignalKind.Traces => "v1/traces",
             OtlpSignalKind.Metrics => "v1/metrics",
+            OtlpSignalKind.Logs => "v1/logs",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(signal)),
         };
@@ -186,7 +223,8 @@ public sealed class OtlpExporterHealthState
                 return OtlpRuntimeHealth.Unavailable;
             }
 
-            return trace > 0 && metric > 0
+            return trace > 0 &&
+                   metric > 0
                 ? OtlpRuntimeHealth.Supported
                 : OtlpRuntimeHealth.Unknown;
         }
@@ -272,4 +310,5 @@ internal enum OtlpSignalKind
 {
     Traces = 1,
     Metrics = 2,
+    Logs = 3,
 }

@@ -1,3 +1,4 @@
+using Kafdeck.Core.Observability;
 using Kafdeck.Core.Records;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Generator;
@@ -65,6 +66,7 @@ public sealed class DataGeneratorWorker
     private readonly SchemaExplorerService _schemas;
     private readonly DataGeneratorWorkerPolicy _policy;
     private readonly TimeProvider _timeProvider;
+    private readonly IKafdeckOperationalTelemetry _telemetry;
     private readonly string _workerId;
 
     public DataGeneratorWorker(
@@ -76,7 +78,8 @@ public sealed class DataGeneratorWorker
         SchemaExplorerService schemas,
         DataGeneratorWorkerPolicy? policy = null,
         TimeProvider? timeProvider = null,
-        string? workerId = null)
+        string? workerId = null,
+        IKafdeckOperationalTelemetry? telemetry = null)
     {
         _operations =
             operations ??
@@ -108,6 +111,9 @@ public sealed class DataGeneratorWorker
         _timeProvider =
             timeProvider ??
             TimeProvider.System;
+        _telemetry =
+            telemetry ??
+            NullKafdeckOperationalTelemetry.Instance;
 
         _workerId =
             NormalizeWorkerId(
@@ -167,6 +173,43 @@ public sealed class DataGeneratorWorker
     public async Task ProcessOperationOnceAsync(
         MutationOperationSnapshot operation,
         CancellationToken cancellationToken = default)
+    {
+        if (!IsActive(operation))
+        {
+            return;
+        }
+
+        using var telemetryScope =
+            _telemetry.Start(
+                KafdeckOperationalKind.Worker,
+                KafdeckOperationalFamily.DataGeneratorWorker);
+
+        try
+        {
+            await ProcessOperationOnceCoreAsync(
+                    operation,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            telemetryScope.Complete(
+                KafdeckOperationalOutcome.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            telemetryScope.Complete(
+                KafdeckOperationalOutcome.Cancelled);
+            throw;
+        }
+        catch
+        {
+            telemetryScope.Complete(
+                KafdeckOperationalOutcome.Failed);
+            throw;
+        }
+    }
+
+    private async Task ProcessOperationOnceCoreAsync(
+        MutationOperationSnapshot operation,
+        CancellationToken cancellationToken)
     {
         if (!IsActive(operation))
         {

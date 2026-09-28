@@ -18,7 +18,9 @@ public sealed record ObservabilityCapabilitiesData(
     int HardMaxActiveSeries,
     int MaxMetricLabelsPerSeries,
     int MaxMetricLabelValueBytes,
-    int MaxTraceAttributes);
+    int MaxTraceAttributes,
+    int MaxLogAttributes,
+    int MaxDiagnosticStringBytes);
 
 public static class KafdeckObservabilityEndpoints
 {
@@ -110,7 +112,9 @@ public static class KafdeckObservabilityEndpoints
                             ObservabilityOptions.HardMaxActiveSeries,
                             observability.MaxMetricLabelsPerSeries,
                             observability.MaxMetricLabelValueBytes,
-                            observability.MaxTraceAttributes));
+                            observability.MaxTraceAttributes,
+                            observability.MaxLogAttributes,
+                            observability.MaxDiagnosticStringBytes));
                 })
             .WithName("v08-observability-capabilities");
 

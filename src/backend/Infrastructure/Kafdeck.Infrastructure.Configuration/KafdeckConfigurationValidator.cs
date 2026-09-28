@@ -314,6 +314,23 @@ public static class KafdeckConfigurationValidator
                 $"Observability max trace attributes must be between {ObservabilityOptions.MinimumMaxTraceAttributes} and {ObservabilityOptions.HardMaxTraceAttributes}.");
         }
 
+        if (observability.MaxLogAttributes <
+                ObservabilityOptions.MinimumMaxLogAttributes ||
+            observability.MaxLogAttributes >
+                ObservabilityOptions.HardMaxLogAttributes)
+        {
+            errors.Add(
+                $"Observability max log attributes must be between {ObservabilityOptions.MinimumMaxLogAttributes} and {ObservabilityOptions.HardMaxLogAttributes}.");
+        }
+
+        if (observability.MaxDiagnosticStringBytes <
+                ObservabilityOptions.MinimumMaxDiagnosticStringBytes ||
+            observability.MaxDiagnosticStringBytes >
+                ObservabilityOptions.HardMaxDiagnosticStringBytes)
+        {
+            errors.Add(
+                $"Observability max diagnostic string bytes must be between {ObservabilityOptions.MinimumMaxDiagnosticStringBytes} and {ObservabilityOptions.HardMaxDiagnosticStringBytes}.");
+        }
 
         ValidatePrometheus(
             observability.Prometheus,
