@@ -55,6 +55,7 @@ var deploymentAccessToken =
         : null;
 
 var prometheusScrapeToken =
+    observabilityOptions.Prometheus.Enabled &&
     observabilityOptions.Prometheus.ScrapeToken is not null
         ? secretResolver.Resolve(
                 observabilityOptions.Prometheus.ScrapeToken)
@@ -126,7 +127,9 @@ builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
 builder.Services.AddSingleton(observabilityOptions);
 builder.Services.AddSingleton(
     new PrometheusMetricsRegistry(
-        observabilityOptions.MaxActiveMetricSeries));
+        observabilityOptions.MaxActiveMetricSeries,
+        observabilityOptions.MaxMetricLabelsPerSeries,
+        observabilityOptions.MaxMetricLabelValueBytes));
 builder.Services.AddSingleton<ApiTelemetry>();
 
 if (mutationOptions?.Enabled == true)
