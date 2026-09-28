@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Security;
@@ -34,17 +33,37 @@ public sealed class PrometheusMetricsRegistry
 
     private readonly object _seriesGate = new();
     private readonly Dictionary<ApiMetricSeriesKey, ApiSeries> _apiSeries = new();
+    private const int FixedSeriesCount = 2;
+    private const int ApiSeriesPerDimension = 3;
+
     private readonly int _maxActiveSeries;
+    private readonly int _maxLabelsPerSeries;
+    private readonly int _maxLabelValueBytes;
     private long _droppedSeries;
 
-    public PrometheusMetricsRegistry(int maxActiveSeries)
+    public PrometheusMetricsRegistry(
+        int maxActiveSeries,
+        int maxLabelsPerSeries,
+        int maxLabelValueBytes)
     {
-        if (maxActiveSeries is < 1 or > 50_000)
+        if (maxActiveSeries is < FixedSeriesCount or > 50_000)
         {
             throw new ArgumentOutOfRangeException(nameof(maxActiveSeries));
         }
 
+        if (maxLabelsPerSeries is < 3 or > 12)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLabelsPerSeries));
+        }
+
+        if (maxLabelValueBytes is < 5 or > 128)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLabelValueBytes));
+        }
+
         _maxActiveSeries = maxActiveSeries;
+        _maxLabelsPerSeries = maxLabelsPerSeries;
+        _maxLabelValueBytes = maxLabelValueBytes;
     }
 
     public int ActiveSeriesCount
@@ -53,7 +72,8 @@ public sealed class PrometheusMetricsRegistry
         {
             lock (_seriesGate)
             {
-                return _apiSeries.Count;
+                return FixedSeriesCount +
+                       (_apiSeries.Count * ApiSeriesPerDimension);
             }
         }
     }
@@ -66,16 +86,33 @@ public sealed class PrometheusMetricsRegistry
         string statusClass,
         double durationMilliseconds)
     {
-        var key = new ApiMetricSeriesKey(route, method, statusClass);
+        if (_maxLabelsPerSeries < 3)
+        {
+            Interlocked.Add(
+                ref _droppedSeries,
+                ApiSeriesPerDimension);
+            return false;
+        }
+
+        var key = new ApiMetricSeriesKey(
+            NormalizeLabelValue(route),
+            NormalizeLabelValue(method),
+            NormalizeLabelValue(statusClass));
         ApiSeries series;
 
         lock (_seriesGate)
         {
             if (!_apiSeries.TryGetValue(key, out series!))
             {
-                if (_apiSeries.Count >= _maxActiveSeries)
+                var projectedSeries =
+                    FixedSeriesCount +
+                    ((_apiSeries.Count + 1) *
+                     ApiSeriesPerDimension);
+                if (projectedSeries > _maxActiveSeries)
                 {
-                    Interlocked.Increment(ref _droppedSeries);
+                    Interlocked.Add(
+                        ref _droppedSeries,
+                        ApiSeriesPerDimension);
                     return false;
                 }
 
@@ -163,6 +200,20 @@ public sealed class PrometheusMetricsRegistry
             .AppendLine();
     }
 
+    private string NormalizeLabelValue(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "other";
+        }
+
+        var normalized = value.Trim();
+        return Encoding.UTF8.GetByteCount(normalized) <=
+               _maxLabelValueBytes
+            ? normalized
+            : "other";
+    }
+
     private static string EscapeLabel(string value) =>
         value
             .Replace("\\", "\\\\", StringComparison.Ordinal)
@@ -180,20 +231,12 @@ public static class PrometheusScrapeAccessPolicy
     public const string HeaderName = "X-Kafdeck-Metrics-Token";
 
     public static bool IsAllowed(
-        IPAddress? remoteAddress,
         string? expectedToken,
-        string? providedToken)
-    {
-        if (!string.IsNullOrEmpty(expectedToken))
-        {
-            return DeploymentAccessTokenValidator.Matches(
-                expectedToken,
-                providedToken);
-        }
-
-        return remoteAddress is not null &&
-               IPAddress.IsLoopback(remoteAddress);
-    }
+        string? providedToken) =>
+        !string.IsNullOrEmpty(expectedToken) &&
+        DeploymentAccessTokenValidator.Matches(
+            expectedToken,
+            providedToken);
 
     public static string? ReadProvidedToken(HttpRequest request)
     {
@@ -240,15 +283,12 @@ public static class KafdeckPrometheusEndpoints
                         PrometheusScrapeAccessPolicy.ReadProvidedToken(
                             context.Request);
                     if (!PrometheusScrapeAccessPolicy.IsAllowed(
-                            context.Connection.RemoteIpAddress,
                             scrapeToken,
                             providedToken))
                     {
                         return Results.Problem(
                             statusCode:
-                                string.IsNullOrEmpty(scrapeToken)
-                                    ? StatusCodes.Status403Forbidden
-                                    : StatusCodes.Status401Unauthorized,
+                                StatusCodes.Status401Unauthorized,
                             title: "Prometheus scrape access denied");
                     }
 
