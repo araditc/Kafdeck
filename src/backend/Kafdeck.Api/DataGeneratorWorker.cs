@@ -409,6 +409,13 @@ public sealed class DataGeneratorWorker
                     providerTelemetry?.Complete(
                         result.Result.ResultKind);
                 }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    providerTelemetry?.Complete(
+                        RuntimeTelemetryOutcome.Cancelled);
+                    throw;
+                }
                 catch (DataGeneratorRateLimitException)
                 {
                     providerTelemetry?.Complete(
