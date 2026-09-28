@@ -3,6 +3,7 @@ using System.Text;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Numerics;
 using Kafdeck.Core.Observability;
 using Microsoft.Data.Sqlite;
 using SQLitePCL;
@@ -12,7 +13,7 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoHistoricalMetricMaintenanceStore :
     IHistoricalMetricMaintenanceStore
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const int SingletonId = 1;
     private const string Component =
         "historical-metrics-maintenance";
@@ -31,6 +32,244 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
         string? State,
         DateTimeOffset FirstObservedAtUtc,
         DateTimeOffset LastObservedAtUtc);
+    private readonly record struct ExactBinarySum(
+        BigInteger Significand,
+        int Exponent)
+    {
+        public static ExactBinarySum Zero =>
+            new(
+                BigInteger.Zero,
+                0);
+
+        public static ExactBinarySum FromDouble(
+            double value)
+        {
+            if (!double.IsFinite(value))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value));
+            }
+
+            if (value == 0)
+            {
+                return Zero;
+            }
+
+            var bits =
+                unchecked(
+                    (ulong)BitConverter
+                        .DoubleToInt64Bits(value));
+            var negative =
+                (bits >> 63) != 0;
+            var exponentBits =
+                (int)((bits >> 52) & 0x7ff);
+            var fraction =
+                bits &
+                0x000f_ffff_ffff_ffffUL;
+
+            BigInteger significand;
+            int exponent;
+
+            if (exponentBits == 0)
+            {
+                significand =
+                    new BigInteger(
+                        fraction);
+                exponent = -1074;
+            }
+            else
+            {
+                significand =
+                    new BigInteger(
+                        (1UL << 52) |
+                        fraction);
+                exponent =
+                    exponentBits -
+                    1023 -
+                    52;
+            }
+
+            if (negative)
+            {
+                significand =
+                    -significand;
+            }
+
+            return Normalize(
+                new ExactBinarySum(
+                    significand,
+                    exponent));
+        }
+
+        public ExactBinarySum Add(
+            ExactBinarySum other)
+        {
+            if (Significand.IsZero)
+            {
+                return other;
+            }
+
+            if (other.Significand.IsZero)
+            {
+                return this;
+            }
+
+            var commonExponent =
+                Math.Min(
+                    Exponent,
+                    other.Exponent);
+            var left =
+                Significand <<
+                (Exponent - commonExponent);
+            var right =
+                other.Significand <<
+                (other.Exponent - commonExponent);
+
+            return Normalize(
+                new ExactBinarySum(
+                    left + right,
+                    commonExponent));
+        }
+
+        public double ToFiniteDouble(
+            out bool bounded)
+        {
+            bounded = false;
+
+            if (Significand.IsZero)
+            {
+                return 0;
+            }
+
+            var sign =
+                Significand.Sign;
+            var magnitude =
+                BigInteger.Abs(
+                    Significand);
+            var max =
+                FromDouble(
+                    double.MaxValue);
+
+            if (CompareMagnitude(
+                    this,
+                    max) > 0)
+            {
+                bounded = true;
+                return sign < 0
+                    ? -double.MaxValue
+                    : double.MaxValue;
+            }
+
+            var bitLength =
+                magnitude.GetBitLength();
+            var shift =
+                Math.Max(
+                    0,
+                    checked(
+                        (int)bitLength - 53));
+            var top =
+                magnitude >> shift;
+
+            if (shift > 0)
+            {
+                var remainder =
+                    magnitude -
+                    (top << shift);
+                var halfway =
+                    BigInteger.One <<
+                    (shift - 1);
+
+                if (remainder > halfway ||
+                    (remainder == halfway &&
+                     !top.IsEven))
+                {
+                    top +=
+                        BigInteger.One;
+
+                    if (top.GetBitLength() > 53)
+                    {
+                        top >>= 1;
+                        shift++;
+                    }
+                }
+            }
+
+            var value =
+                Math.ScaleB(
+                    (double)top,
+                    checked(
+                        Exponent + shift));
+
+            if (!double.IsFinite(value))
+            {
+                bounded = true;
+                value =
+                    double.MaxValue;
+            }
+
+            return sign < 0
+                ? -value
+                : value;
+        }
+
+        private static int CompareMagnitude(
+            ExactBinarySum left,
+            ExactBinarySum right)
+        {
+            var commonExponent =
+                Math.Min(
+                    left.Exponent,
+                    right.Exponent);
+            var leftMagnitude =
+                BigInteger.Abs(
+                    left.Significand) <<
+                (left.Exponent - commonExponent);
+            var rightMagnitude =
+                BigInteger.Abs(
+                    right.Significand) <<
+                (right.Exponent - commonExponent);
+
+            return leftMagnitude.CompareTo(
+                rightMagnitude);
+        }
+
+        private static ExactBinarySum Normalize(
+            ExactBinarySum value)
+        {
+            var significand =
+                value.Significand;
+            var exponent =
+                value.Exponent;
+
+            if (significand.IsZero)
+            {
+                return Zero;
+            }
+
+            while (significand.IsEven)
+            {
+                significand >>= 1;
+                exponent++;
+            }
+
+            return new ExactBinarySum(
+                significand,
+                exponent);
+        }
+    }
+
+    private sealed record ExistingRollup(
+        double Min,
+        double Max,
+        string? State,
+        DateTimeOffset? FirstObservedAtUtc,
+        DateTimeOffset? LastObservedAtUtc,
+        ExactBinarySum ExactSum,
+        BigInteger ExactCount,
+        string? ExactState,
+        bool ExactSumIsLossy,
+        bool ExactCountIsLossy);
+
     private const long MaintenanceMigrationLockKey =
         4_839_176_502_110_873_342L;
 
@@ -99,10 +338,24 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 .ConfigureAwait(false);
 
         if (existingVersion is not null &&
-            existingVersion.Value != SchemaVersion)
+            (existingVersion.Value < 1 ||
+             existingVersion.Value > SchemaVersion))
         {
             throw new InvalidOperationException(
-                $"Historical metric maintenance schema version {existingVersion.Value} is unsupported by this binary (expected {SchemaVersion}).");
+                $"Historical metric maintenance schema version {existingVersion.Value} is unsupported by this binary (expected 1..{SchemaVersion}).");
+        }
+
+        var historyVersion =
+            await ReadComponentSchemaVersionAsync(
+                    connection,
+                    transaction,
+                    "historical-metrics",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        if (historyVersion != 3)
+        {
+            throw new InvalidOperationException(
+                $"Historical metric maintenance requires historical-metrics schema version 3; found {historyVersion?.ToString(CultureInfo.InvariantCulture) ?? "missing"}.");
         }
 
         await ExecuteAsync(
@@ -152,6 +405,60 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 """,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (_connectionFactory.SupportsSelectForUpdate)
+        {
+            await ExecuteAsync(
+                    connection,
+                    transaction,
+                    """
+                    CREATE OR REPLACE FUNCTION kafdeck_enforce_history_exact_writer_fence()
+                    RETURNS trigger
+                    LANGUAGE plpgsql
+                    AS $function$
+                    BEGIN
+                        IF OLD.resolution_seconds > 0
+                           AND OLD.exact_sum_significand IS NOT NULL
+                           AND (
+                               NEW.sum_value IS DISTINCT FROM OLD.sum_value
+                               OR NEW.sample_count IS DISTINCT FROM OLD.sample_count)
+                           AND NEW.exact_sum_significand IS NOT DISTINCT FROM OLD.exact_sum_significand
+                           AND NEW.exact_sum_exponent IS NOT DISTINCT FROM OLD.exact_sum_exponent
+                           AND NEW.exact_sample_count IS NOT DISTINCT FROM OLD.exact_sample_count
+                           AND NEW.exact_state IS NOT DISTINCT FROM OLD.exact_state
+                        THEN
+                            RAISE EXCEPTION 'KAFDECK_HISTORY_EXACT_WRITER_FENCE';
+                        END IF;
+
+                        RETURN NEW;
+                    END;
+                    $function$
+                    """,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            await ExecuteAsync(
+                    connection,
+                    transaction,
+                    """
+                    DROP TRIGGER IF EXISTS trg_kafdeck_history_exact_writer_fence
+                    ON kafdeck_historical_metric_samples
+                    """,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            await ExecuteAsync(
+                    connection,
+                    transaction,
+                    """
+                    CREATE TRIGGER trg_kafdeck_history_exact_writer_fence
+                    BEFORE UPDATE ON kafdeck_historical_metric_samples
+                    FOR EACH ROW
+                    EXECUTE FUNCTION kafdeck_enforce_history_exact_writer_fence()
+                    """,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         await using (var seed =
                      connection.CreateCommand())
@@ -213,6 +520,35 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             await versionInsert
                 .ExecuteNonQueryAsync(cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (existingVersion == 1)
+        {
+            await using var versionUpdate =
+                connection.CreateCommand();
+            versionUpdate.Transaction = transaction;
+            versionUpdate.CommandText =
+                """
+                UPDATE kafdeck_schema_info
+                SET schema_version = @schema_version
+                WHERE component = @component
+                """;
+            AddParameter(
+                versionUpdate,
+                "@schema_version",
+                SchemaVersion);
+            AddParameter(
+                versionUpdate,
+                "@component",
+                Component);
+
+            if (await versionUpdate
+                    .ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Historical metric maintenance schema version was upgraded without a durable component row.");
+            }
         }
 
         await transaction
@@ -822,19 +1158,45 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 group.Min(row => row.Min);
             var max =
                 group.Max(row => row.Max);
+            var exactSum =
+                ExactBinarySum.Zero;
+            var exactCount =
+                BigInteger.Zero;
+
+            foreach (var row in group)
+            {
+                exactSum =
+                    exactSum.Add(
+                        ExactBinarySum.FromDouble(
+                            row.Sum));
+                exactCount +=
+                    row.Count;
+            }
+
             var sum =
-                group.Sum(row => row.Sum);
+                exactSum.ToFiniteDouble(
+                    out var sumWasBounded);
+            var countWasBounded =
+                exactCount >
+                long.MaxValue;
             var count =
-                group.Sum(row => row.Count);
+                countWasBounded
+                    ? long.MaxValue
+                    : (long)exactCount;
             var states =
                 group
                     .Select(row => row.State)
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
-            var state =
+            var baseState =
                 states.Length == 1
                     ? states[0]
                     : "Partial";
+            var state =
+                sumWasBounded ||
+                countWasBounded
+                    ? "Partial"
+                    : baseState;
             var firstObservedAtUtc =
                 group.Min(
                     row =>
@@ -859,6 +1221,9 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                         state,
                         firstObservedAtUtc,
                         lastObservedAtUtc),
+                    exactSum,
+                    exactCount,
+                    baseState,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -989,12 +1354,348 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
         return rows;
     }
 
-    private static async Task UpsertRollupAsync(
+    private static BigInteger ReadLegacyExactCount(
+        object value,
+        out bool wasLossy)
+    {
+        wasLossy = false;
+
+        switch (value)
+        {
+            case byte byteValue:
+                return new BigInteger(
+                    byteValue);
+            case short shortValue
+                when shortValue >= 0:
+                return new BigInteger(
+                    shortValue);
+            case int intValue
+                when intValue >= 0:
+                return new BigInteger(
+                    intValue);
+            case long longValue
+                when longValue >= 0:
+                return new BigInteger(
+                    longValue);
+            case decimal decimalValue
+                when decimalValue >= 0:
+            {
+                var truncated =
+                    decimal.Truncate(
+                        decimalValue);
+                wasLossy =
+                    truncated !=
+                    decimalValue;
+                return new BigInteger(
+                    truncated);
+            }
+            case double doubleValue:
+            {
+                if (!double.IsFinite(
+                        doubleValue) ||
+                    doubleValue < 0)
+                {
+                    wasLossy = true;
+                    return new BigInteger(
+                               long.MaxValue) +
+                           BigInteger.One;
+                }
+
+                var truncated =
+                    Math.Truncate(
+                        doubleValue);
+                wasLossy =
+                    truncated !=
+                    doubleValue;
+                return new BigInteger(
+                    truncated);
+            }
+            case float floatValue:
+            {
+                if (!float.IsFinite(
+                        floatValue) ||
+                    floatValue < 0)
+                {
+                    wasLossy = true;
+                    return new BigInteger(
+                               long.MaxValue) +
+                           BigInteger.One;
+                }
+
+                var truncated =
+                    MathF.Truncate(
+                        floatValue);
+                wasLossy =
+                    truncated !=
+                    floatValue;
+                return new BigInteger(
+                    truncated);
+            }
+            case string text
+                when BigInteger.TryParse(
+                    text,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var parsed) &&
+                     parsed >=
+                     BigInteger.Zero:
+                return parsed;
+            default:
+                wasLossy = true;
+                return new BigInteger(
+                           long.MaxValue) +
+                       BigInteger.One;
+        }
+    }
+
+    private static async Task<ExistingRollup?> ReadExistingRollupAsync(
         DbConnection connection,
         DbTransaction transaction,
         HistoricalMetricSample sample,
         CancellationToken cancellationToken)
     {
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT
+                min_value,
+                max_value,
+                sum_value,
+                sample_count,
+                state,
+                first_observed_at_utc,
+                last_observed_at_utc,
+                exact_sum_significand,
+                exact_sum_exponent,
+                exact_sample_count,
+                exact_state
+            FROM kafdeck_historical_metric_samples
+            WHERE metric_name = @metric_name
+              AND cluster_id = @cluster_id
+              AND resource_kind = @resource_kind
+              AND resource_id = @resource_id
+              AND observed_at_utc = @observed_at_utc
+              AND resolution_seconds = @resolution_seconds
+            """;
+        AddParameter(command, "@metric_name", sample.Identity.MetricName);
+        AddParameter(command, "@cluster_id", sample.Identity.ClusterId);
+        AddParameter(command, "@resource_kind", sample.Identity.ResourceKind);
+        AddParameter(command, "@resource_id", sample.Identity.ResourceId);
+        AddParameter(
+            command,
+            "@observed_at_utc",
+            sample.ObservedAtUtc.ToUniversalTime().ToString("O"));
+        AddParameter(command, "@resolution_seconds", sample.ResolutionSeconds);
+
+        await using var reader =
+            await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+        if (!await reader
+                .ReadAsync(cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var storedSum =
+            Convert.ToDouble(
+                reader.GetValue(2),
+                CultureInfo.InvariantCulture);
+        var storedCount =
+            ReadLegacyExactCount(
+                reader.GetValue(3),
+                out var exactCountIsLossy);
+
+        var hasExactSum =
+            !reader.IsDBNull(7) &&
+            !reader.IsDBNull(8);
+        var exactSumIsLossy =
+            !hasExactSum &&
+            !double.IsFinite(
+                storedSum);
+        var safeStoredSum =
+            double.IsFinite(storedSum)
+                ? storedSum
+                : storedSum > 0
+                    ? double.MaxValue
+                    : storedSum < 0
+                        ? -double.MaxValue
+                        : 0d;
+        var exactSum =
+            hasExactSum
+                ? new ExactBinarySum(
+                    BigInteger.Parse(
+                        reader.GetString(7),
+                        CultureInfo.InvariantCulture),
+                    Convert.ToInt32(
+                        reader.GetValue(8),
+                        CultureInfo.InvariantCulture))
+                : ExactBinarySum.FromDouble(
+                    safeStoredSum);
+        var exactCount =
+            !reader.IsDBNull(9)
+                ? BigInteger.Parse(
+                    reader.GetString(9),
+                    CultureInfo.InvariantCulture)
+                : storedCount;
+
+        return new ExistingRollup(
+            Convert.ToDouble(
+                reader.GetValue(0),
+                CultureInfo.InvariantCulture),
+            Convert.ToDouble(
+                reader.GetValue(1),
+                CultureInfo.InvariantCulture),
+            reader.IsDBNull(4)
+                ? null
+                : reader.GetString(4),
+            reader.IsDBNull(5)
+                ? null
+                : DateTimeOffset.Parse(
+                    reader.GetString(5),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind),
+            reader.IsDBNull(6)
+                ? null
+                : DateTimeOffset.Parse(
+                    reader.GetString(6),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind),
+            exactSum,
+            exactCount,
+            reader.IsDBNull(10)
+                ? exactSumIsLossy
+                    ? "Partial:LegacyNonFinite"
+                    : null
+                : reader.GetString(10),
+            exactSumIsLossy,
+            exactCountIsLossy);
+    }
+
+    private static async Task UpsertRollupAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        HistoricalMetricSample sample,
+        ExactBinarySum incomingExactSum,
+        BigInteger incomingExactCount,
+        string? incomingExactState,
+        CancellationToken cancellationToken)
+    {
+        var existing =
+            await ReadExistingRollupAsync(
+                    connection,
+                    transaction,
+                    sample,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        var exactSum =
+            existing is null
+                ? incomingExactSum
+                : existing.ExactSumIsLossy
+                    ? existing.ExactSum
+                    : existing.ExactSum.Add(
+                        incomingExactSum);
+        var exactCount =
+            existing is null
+                ? incomingExactCount
+                : existing.ExactCountIsLossy
+                    ? existing.ExactCount
+                    : existing.ExactCount +
+                      incomingExactCount;
+        var exactState =
+            existing is null
+                ? incomingExactState
+                : existing.ExactSumIsLossy
+                    ? "Partial:LegacyNonFinite"
+                    : string.Equals(
+                        existing.ExactState ??
+                        existing.State,
+                        incomingExactState,
+                        StringComparison.Ordinal)
+                        ? existing.ExactState ??
+                          existing.State
+                        : "Partial";
+
+        var sum =
+            exactSum.ToFiniteDouble(
+                out var sumWasBounded);
+        var countWasBounded =
+            exactCount >
+            long.MaxValue;
+        var count =
+            countWasBounded
+                ? long.MaxValue
+                : (long)exactCount;
+        var state =
+            sumWasBounded ||
+            countWasBounded ||
+            existing?.ExactSumIsLossy == true ||
+            existing?.ExactCountIsLossy == true
+                ? "Partial"
+                : exactState;
+
+        var min =
+            existing is null
+                ? sample.Min
+                : Math.Min(
+                    existing.Min,
+                    sample.Min);
+        var max =
+            existing is null
+                ? sample.Max
+                : Math.Max(
+                    existing.Max,
+                    sample.Max);
+
+        DateTimeOffset? firstObservedAtUtc =
+            sample.FirstObservedAtUtc;
+        DateTimeOffset? lastObservedAtUtc =
+            sample.LastObservedAtUtc;
+
+        if (existing is not null)
+        {
+            if (existing.FirstObservedAtUtc is null ||
+                existing.LastObservedAtUtc is null ||
+                firstObservedAtUtc is null ||
+                lastObservedAtUtc is null)
+            {
+                firstObservedAtUtc = null;
+                lastObservedAtUtc = null;
+            }
+            else
+            {
+                firstObservedAtUtc =
+                    existing.FirstObservedAtUtc.Value <
+                    firstObservedAtUtc.Value
+                        ? existing.FirstObservedAtUtc
+                        : firstObservedAtUtc;
+                lastObservedAtUtc =
+                    existing.LastObservedAtUtc.Value >
+                    lastObservedAtUtc.Value
+                        ? existing.LastObservedAtUtc
+                        : lastObservedAtUtc;
+            }
+        }
+
+        var finalSample =
+            new HistoricalMetricSample(
+                sample.Identity,
+                sample.ObservedAtUtc,
+                min,
+                max,
+                sum,
+                count,
+                sample.ResolutionSeconds,
+                sample.Source,
+                state,
+                firstObservedAtUtc,
+                lastObservedAtUtc);
+        finalSample.Validate();
+
         await using var command =
             connection.CreateCommand();
         command.Transaction = transaction;
@@ -1014,7 +1715,11 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 source,
                 state,
                 first_observed_at_utc,
-                last_observed_at_utc)
+                last_observed_at_utc,
+                exact_sum_significand,
+                exact_sum_exponent,
+                exact_sample_count,
+                exact_state)
             VALUES (
                 @metric_name,
                 @cluster_id,
@@ -1029,7 +1734,11 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 @source,
                 @state,
                 @first_observed_at_utc,
-                @last_observed_at_utc)
+                @last_observed_at_utc,
+                @exact_sum_significand,
+                @exact_sum_exponent,
+                @exact_sample_count,
+                @exact_state)
             ON CONFLICT (
                 metric_name,
                 cluster_id,
@@ -1038,81 +1747,75 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 observed_at_utc,
                 resolution_seconds)
             DO UPDATE SET
-                min_value = CASE
-                    WHEN excluded.min_value <
-                         min_value
-                    THEN excluded.min_value
-                    ELSE min_value
-                END,
-                max_value = CASE
-                    WHEN excluded.max_value >
-                         max_value
-                    THEN excluded.max_value
-                    ELSE max_value
-                END,
-                sum_value =
-                    sum_value +
-                    excluded.sum_value,
-                sample_count =
-                    sample_count +
-                    excluded.sample_count,
+                min_value = excluded.min_value,
+                max_value = excluded.max_value,
+                sum_value = excluded.sum_value,
+                sample_count = excluded.sample_count,
                 source = excluded.source,
-                state = CASE
-                    WHEN state = excluded.state
-                      OR (state IS NULL AND
-                          excluded.state IS NULL)
-                    THEN state
-                    ELSE 'Partial'
-                END,
-                first_observed_at_utc = CASE
-                    WHEN first_observed_at_utc IS NULL
-                    THEN NULL
-                    WHEN excluded.first_observed_at_utc <
-                         first_observed_at_utc
-                    THEN excluded.first_observed_at_utc
-                    ELSE first_observed_at_utc
-                END,
-                last_observed_at_utc = CASE
-                    WHEN last_observed_at_utc IS NULL
-                    THEN NULL
-                    WHEN excluded.last_observed_at_utc >
-                         last_observed_at_utc
-                    THEN excluded.last_observed_at_utc
-                    ELSE last_observed_at_utc
-                END
+                state = excluded.state,
+                first_observed_at_utc = excluded.first_observed_at_utc,
+                last_observed_at_utc = excluded.last_observed_at_utc,
+                exact_sum_significand = excluded.exact_sum_significand,
+                exact_sum_exponent = excluded.exact_sum_exponent,
+                exact_sample_count = excluded.exact_sample_count,
+                exact_state = excluded.exact_state
             """;
-        AddParameter(command, "@metric_name", sample.Identity.MetricName);
-        AddParameter(command, "@cluster_id", sample.Identity.ClusterId);
-        AddParameter(command, "@resource_kind", sample.Identity.ResourceKind);
-        AddParameter(command, "@resource_id", sample.Identity.ResourceId);
+        AddParameter(command, "@metric_name", finalSample.Identity.MetricName);
+        AddParameter(command, "@cluster_id", finalSample.Identity.ClusterId);
+        AddParameter(command, "@resource_kind", finalSample.Identity.ResourceKind);
+        AddParameter(command, "@resource_id", finalSample.Identity.ResourceId);
         AddParameter(
             command,
             "@observed_at_utc",
-            sample.ObservedAtUtc.ToUniversalTime().ToString("O"));
-        AddParameter(command, "@resolution_seconds", sample.ResolutionSeconds);
-        AddParameter(command, "@min_value", sample.Min);
-        AddParameter(command, "@max_value", sample.Max);
-        AddParameter(command, "@sum_value", sample.Sum);
-        AddParameter(command, "@sample_count", sample.Count);
-        AddParameter(command, "@source", sample.Source);
+            finalSample.ObservedAtUtc.ToUniversalTime().ToString("O"));
+        AddParameter(command, "@resolution_seconds", finalSample.ResolutionSeconds);
+        AddParameter(command, "@min_value", finalSample.Min);
+        AddParameter(command, "@max_value", finalSample.Max);
+        AddParameter(command, "@sum_value", finalSample.Sum);
+        AddParameter(command, "@sample_count", finalSample.Count);
+        AddParameter(command, "@source", finalSample.Source);
         AddParameter(
             command,
             "@state",
-            sample.State is null
+            finalSample.State is null
                 ? DBNull.Value
-                : sample.State);
+                : finalSample.State);
         AddParameter(
             command,
             "@first_observed_at_utc",
-            sample.FirstObservedAtUtc!.Value
-                .ToUniversalTime()
-                .ToString("O"));
+            finalSample.FirstObservedAtUtc is null
+                ? DBNull.Value
+                : finalSample.FirstObservedAtUtc.Value
+                    .ToUniversalTime()
+                    .ToString("O"));
         AddParameter(
             command,
             "@last_observed_at_utc",
-            sample.LastObservedAtUtc!.Value
-                .ToUniversalTime()
-                .ToString("O"));
+            finalSample.LastObservedAtUtc is null
+                ? DBNull.Value
+                : finalSample.LastObservedAtUtc.Value
+                    .ToUniversalTime()
+                    .ToString("O"));
+        AddParameter(
+            command,
+            "@exact_sum_significand",
+            exactSum.Significand.ToString(
+                CultureInfo.InvariantCulture));
+        AddParameter(
+            command,
+            "@exact_sum_exponent",
+            exactSum.Exponent);
+        AddParameter(
+            command,
+            "@exact_sample_count",
+            exactCount.ToString(
+                CultureInfo.InvariantCulture));
+        AddParameter(
+            command,
+            "@exact_state",
+            exactState is null
+                ? DBNull.Value
+                : exactState);
 
         await command
             .ExecuteNonQueryAsync(cancellationToken)
@@ -1309,6 +2012,39 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
         await command
             .ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private static async Task<int?> ReadComponentSchemaVersionAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string component,
+        CancellationToken cancellationToken)
+    {
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT schema_version
+            FROM kafdeck_schema_info
+            WHERE component = @component
+            """;
+        AddParameter(
+            command,
+            "@component",
+            component);
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return value is null ||
+               value is DBNull
+            ? null
+            : Convert.ToInt32(
+                value,
+                CultureInfo.InvariantCulture);
     }
 
     private static async Task<int?> ReadSchemaVersionAsync(
