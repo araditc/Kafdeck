@@ -142,7 +142,8 @@ internal static class OperationalTelemetryObservation
             ReadViewFailureCategory category) =>
         category switch
         {
-            ReadViewFailureCategory.NotConfigured or
+            ReadViewFailureCategory.NotConfigured =>
+                KafdeckOperationalOutcome.Unconfigured,
             ReadViewFailureCategory.Unsupported =>
                 KafdeckOperationalOutcome.Unsupported,
             ReadViewFailureCategory.Unauthorized =>
@@ -166,7 +167,8 @@ internal static class OperationalTelemetryObservation
             RecordSchemaFailureCategory category) =>
         category switch
         {
-            RecordSchemaFailureCategory.RegistryNotConfigured or
+            RecordSchemaFailureCategory.RegistryNotConfigured =>
+                KafdeckOperationalOutcome.Unconfigured,
             RecordSchemaFailureCategory.ProviderUnsupported or
             RecordSchemaFailureCategory.UnsupportedFormat =>
                 KafdeckOperationalOutcome.Unsupported,
