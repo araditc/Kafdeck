@@ -75,9 +75,23 @@ public static class KafdeckConfigurationLoader
                 "Prometheus Enabled"),
             ParseOptionalSecret(prometheusSection["AccessToken"]));
 
+        var otlpSection = section.GetSection("Otlp");
+        var otlp = new OtlpObservabilityOptions(
+            ParseOptionalBoolean(
+                otlpSection["Enabled"],
+                false,
+                "OTLP Enabled"),
+            NullIfBlank(otlpSection["Endpoint"]),
+            ParseEnum(
+                otlpSection["Protocol"],
+                OtlpObservabilityProtocol.Grpc,
+                "OTLP protocol"),
+            ParseOptionalSecret(otlpSection["Headers"]));
+
         return new ObservabilityOptions(
             maxActiveSeries,
-            prometheus);
+            prometheus,
+            otlp);
     }
 
     private static DataGeneratorOptions? LoadDataGenerator(
