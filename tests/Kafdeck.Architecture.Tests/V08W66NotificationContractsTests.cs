@@ -57,28 +57,24 @@ public sealed class V08W66NotificationContractsTests
             endpoint.AbsolutePath);
     }
 
-    [Fact]
-    public void Credential_reference_rejects_raw_secret_values()
+    [Theory]
+    [InlineData("env:KAFDECK_DEPLOYMENT_TOKEN")]
+    [InlineData("file:/run/secrets/root-token")]
+    [InlineData("binding with spaces")]
+    public void Credential_binding_id_rejects_locator_or_unscoped_values(
+        string value)
     {
         Assert.Throws<ArgumentException>(
-            () => NotificationCredentialReference.Parse(
-                "super-secret-token"));
-
-        var environment =
-            NotificationCredentialReference.Parse(
-                "env:KAFDECK_WEBHOOK_TOKEN");
-
-        Assert.Equal(
-            NotificationCredentialReferenceKind.Environment,
-            environment.Kind);
-        Assert.Equal(
-            "[redacted-notification-credential-reference]",
-            environment.ToString());
+            () => new NotificationCredentialBindingId(
+                value));
     }
 
     [Fact]
-    public void Destination_accepts_typed_credential_reference_only()
+    public void Destination_uses_opaque_preprovisioned_credential_binding()
     {
+        var binding =
+            new NotificationCredentialBindingId(
+                "notifications.ops-webhook");
         var profile =
             new NotificationDestinationProfile(
                 "ops-webhook",
@@ -86,39 +82,241 @@ public sealed class V08W66NotificationContractsTests
                 "Operations",
                 [NotificationEventClass.Operational],
                 new Uri("https://hooks.example.com/events"),
-                NotificationCredentialReference.Parse(
-                    "env:KAFDECK_WEBHOOK_TOKEN"));
+                binding);
 
-        Assert.NotNull(
-            profile.CredentialReference);
-        Assert.IsType<NotificationCredentialReference>(
-            profile.CredentialReference);
+        Assert.Same(
+            binding,
+            profile.CredentialBindingId);
+
+        var request =
+            new NotificationCredentialResolutionRequest(
+                profile);
+
+        Assert.Equal(
+            "notifications.ops-webhook",
+            request.BindingId.Value);
+        Assert.Equal(
+            "ops-webhook",
+            request.DestinationId);
+        Assert.Equal(
+            NotificationProviderKind.Webhook,
+            request.Provider);
+        Assert.Equal(
+            profile.RevisionFingerprint,
+            request.ProfileRevisionFingerprint);
+
+        var changedEndpoint =
+            new NotificationDestinationProfile(
+                "ops-webhook",
+                NotificationProviderKind.Webhook,
+                "Operations",
+                [NotificationEventClass.Operational],
+                new Uri("https://hooks.example.com/changed"),
+                binding);
+
+        Assert.NotEqual(
+            profile.RevisionFingerprint,
+            changedEndpoint.RevisionFingerprint);
     }
 
     [Fact]
     public void Pinned_resolution_rejects_private_dns_answers()
     {
         Assert.Throws<ArgumentException>(
-            () => new NotificationPinnedEndpoint(
+            () => NotificationAddressPolicy
+                .NoConfiguredNat64
+                .ValidatePinnedEndpoint(
+                    new Uri("https://hooks.example.com/events"),
+                    [
+                        IPAddress.Parse("1.1.1.1"),
+                        IPAddress.Parse("127.0.0.1"),
+                    ],
+                    DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void Pinned_resolution_rejects_private_ipv4_embedded_in_configured_nat64_prefix()
+    {
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "2001:db8:1234:5678:9abc:def0::"),
+                        96),
+                ]);
+
+        Assert.Throws<ArgumentException>(
+            () => policy.ValidatePinnedEndpoint(
                 new Uri("https://hooks.example.com/events"),
                 [
-                    IPAddress.Parse("1.1.1.1"),
-                    IPAddress.Parse("127.0.0.1"),
+                    IPAddress.Parse(
+                        "2001:db8:1234:5678:9abc:def0:7f00:1"),
                 ],
                 DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void Configured_nat64_rejects_malformed_reserved_u_octet()
+    {
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "2001:db8:1234::"),
+                        48),
+                ]);
+
+        // Prefix bits match /48, but RFC6052's reserved u-octet
+        // (byte 8) is non-zero. This must be Malformed, not NoMatch.
+        Assert.Throws<ArgumentException>(
+            () => policy.ValidatePinnedEndpoint(
+                new Uri("https://hooks.example.com/events"),
+                [
+                    IPAddress.Parse(
+                        "2001:db8:1234:7f00:100::"),
+                ],
+                DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void Configured_specific_nat64_cannot_hide_prohibited_implicit_local_use_decoding()
+    {
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b:1:7f00:0:100::"),
+                        96),
+                ]);
+
+        Assert.Throws<ArgumentException>(
+            () => policy.ValidatePinnedEndpoint(
+                new Uri("https://hooks.example.com/events"),
+                [
+                    IPAddress.Parse(
+                        "64:ff9b:1:7f00:0:100:808:808"),
+                ],
+                DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void Configured_nat64_policy_rejects_overlapping_prefixes()
+    {
+        Assert.Throws<ArgumentException>(
+            () => new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b:1::"),
+                        48),
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b:1:808:800::"),
+                        96),
+                ]));
+
+        Assert.Throws<ArgumentException>(
+            () => new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b:1:808:800::"),
+                        96),
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b:1::"),
+                        48),
+                ]));
+    }
+
+    [Fact]
+    public void Configured_standard_nat64_allows_public_embedded_ipv4()
+    {
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b::"),
+                        96),
+                ]);
+
+        var pinned =
+            policy.ValidatePinnedEndpoint(
+                new Uri("https://hooks.example.com/events"),
+                [
+                    IPAddress.Parse(
+                        "64:ff9b::101:101"),
+                ],
+                DateTimeOffset.UtcNow);
+
+        Assert.Single(
+            pinned.Addresses);
+    }
+
+    [Fact]
+    public void Configured_standard_nat64_rejects_private_embedded_ipv4()
+    {
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "64:ff9b::"),
+                        96),
+                ]);
+
+        Assert.Throws<ArgumentException>(
+            () => policy.ValidatePinnedEndpoint(
+                new Uri("https://hooks.example.com/events"),
+                [
+                    IPAddress.Parse(
+                        "64:ff9b::7f00:1"),
+                ],
+                DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void Configured_nat64_prefix_allows_public_embedded_ipv4()
+    {
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "2001:db8:1234:5678:9abc:def0::"),
+                        96),
+                ]);
+
+        var pinned =
+            policy.ValidatePinnedEndpoint(
+                new Uri("https://hooks.example.com/events"),
+                [
+                    IPAddress.Parse(
+                        "2001:db8:1234:5678:9abc:def0:0101:0101"),
+                ],
+                DateTimeOffset.UtcNow);
+
+        Assert.Single(
+            pinned.Addresses);
     }
 
     [Fact]
     public void Pinned_resolution_retains_only_validated_connection_addresses()
     {
         var pinned =
-            new NotificationPinnedEndpoint(
-                new Uri("https://hooks.example.com/events"),
-                [
-                    IPAddress.Parse("1.1.1.1"),
-                    IPAddress.Parse("8.8.8.8"),
-                ],
-                DateTimeOffset.UtcNow);
+            NotificationAddressPolicy
+                .NoConfiguredNat64
+                .ValidatePinnedEndpoint(
+                    new Uri("https://hooks.example.com/events"),
+                    [
+                        IPAddress.Parse("1.1.1.1"),
+                        IPAddress.Parse("8.8.8.8"),
+                    ],
+                    DateTimeOffset.UtcNow);
 
         Assert.Equal(
             2,
@@ -133,22 +331,40 @@ public sealed class V08W66NotificationContractsTests
     }
 
     [Fact]
-    public void Credential_reference_exposes_locator_but_never_secret_value()
+    public void Pinned_resolution_binds_authoritative_policy_fingerprint()
     {
-        var reference =
-            NotificationCredentialReference.Parse(
-                "env:KAFDECK_WEBHOOK_TOKEN");
+        var policy =
+            new NotificationAddressPolicy(
+                [
+                    new NotificationNat64Prefix(
+                        IPAddress.Parse(
+                            "2001:db8:1234:5678:9abc:def0::"),
+                        96),
+                ]);
+
+        var pinned =
+            policy.ValidatePinnedEndpoint(
+                new Uri("https://hooks.example.com/events"),
+                [IPAddress.Parse("1.1.1.1")],
+                DateTimeOffset.UtcNow);
 
         Assert.Equal(
-            "KAFDECK_WEBHOOK_TOKEN",
-            reference.Locator);
-        Assert.Equal(
-            "[redacted-notification-credential-reference]",
-            reference.ToString());
+            policy.Fingerprint,
+            pinned.AddressPolicyFingerprint);
+        Assert.NotEqual(
+            NotificationAddressPolicy
+                .NoConfiguredNat64
+                .Fingerprint,
+            pinned.AddressPolicyFingerprint);
+    }
 
+    [Fact]
+    public void Credential_value_remains_separate_and_redacted()
+    {
         var value =
             new NotificationCredentialValue(
                 "secret");
+
         Assert.Equal(
             "secret",
             value.Reveal());

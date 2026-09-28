@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Kafdeck.Core.Notifications;
@@ -22,102 +24,38 @@ public enum NotificationEventClass
     DataQuality = 5,
 }
 
-public enum NotificationCredentialReferenceKind
+public sealed class NotificationCredentialBindingId
 {
-    Environment = 1,
-    File = 2,
-}
+    public const int MaxLength = 128;
 
-public sealed class NotificationCredentialReference
-{
-    private NotificationCredentialReference(
-        NotificationCredentialReferenceKind kind,
-        string locator)
-    {
-        Kind = kind;
-        Locator = locator;
-    }
-
-    public NotificationCredentialReferenceKind Kind { get; }
-
-    public string Locator { get; }
-
-    public static NotificationCredentialReference Parse(
+    public NotificationCredentialBindingId(
         string value)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        ArgumentNullException.ThrowIfNull(
+            value);
 
-        if (value.StartsWith(
-                "env:",
-                StringComparison.Ordinal))
+        if (value.Length is < 1 or > MaxLength ||
+            !string.Equals(
+                value,
+                value.Trim(),
+                StringComparison.Ordinal) ||
+            value.Any(char.IsControl) ||
+            value.Any(character =>
+                !(char.IsAsciiLetterOrDigit(character) ||
+                  character is '.' or '_' or '-')))
         {
-            var locator =
-                value[4..];
-            if (!IsValidEnvironmentVariableName(
-                    locator))
-            {
-                throw new ArgumentException(
-                    "Environment notification credential reference is invalid.",
-                    nameof(value));
-            }
-
-            return new NotificationCredentialReference(
-                NotificationCredentialReferenceKind.Environment,
-                locator);
+            throw new ArgumentException(
+                "Notification credential binding ID must be a bounded opaque ASCII identifier.",
+                nameof(value));
         }
 
-        if (value.StartsWith(
-                "file:",
-                StringComparison.Ordinal))
-        {
-            var locator =
-                value[5..];
-            if (string.IsNullOrWhiteSpace(locator) ||
-                !Path.IsPathFullyQualified(locator))
-            {
-                throw new ArgumentException(
-                    "File notification credential reference must use an absolute mounted path.",
-                    nameof(value));
-            }
-
-            return new NotificationCredentialReference(
-                NotificationCredentialReferenceKind.File,
-                locator);
-        }
-
-        throw new ArgumentException(
-            "Notification credential references must use the env: or file: scheme.",
-            nameof(value));
+        Value = value;
     }
+
+    public string Value { get; }
 
     public override string ToString() =>
-        "[redacted-notification-credential-reference]";
-
-    private static bool IsValidEnvironmentVariableName(
-        string value)
-    {
-        if (string.IsNullOrEmpty(value) ||
-            !(char.IsLetter(value[0]) ||
-              value[0] == '_'))
-        {
-            return false;
-        }
-
-        for (var index = 1;
-             index < value.Length;
-             index++)
-        {
-            var character =
-                value[index];
-            if (!(char.IsLetterOrDigit(character) ||
-                  character == '_'))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+        Value;
 }
 
 public sealed class NotificationCredentialValue
@@ -139,10 +77,44 @@ public sealed class NotificationCredentialValue
         "[redacted-notification-credential]";
 }
 
+public sealed record NotificationCredentialResolutionRequest
+{
+    public NotificationCredentialResolutionRequest(
+        NotificationDestinationProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(
+            profile);
+
+        if (profile.CredentialBindingId is null)
+        {
+            throw new ArgumentException(
+                "Notification destination does not have a credential binding.",
+                nameof(profile));
+        }
+
+        BindingId =
+            profile.CredentialBindingId;
+        DestinationId =
+            profile.DestinationId;
+        Provider =
+            profile.Provider;
+        ProfileRevisionFingerprint =
+            profile.RevisionFingerprint;
+    }
+
+    public NotificationCredentialBindingId BindingId { get; }
+
+    public string DestinationId { get; }
+
+    public NotificationProviderKind Provider { get; }
+
+    public string ProfileRevisionFingerprint { get; }
+}
+
 public interface INotificationCredentialResolver
 {
     ValueTask<NotificationCredentialValue> ResolveAsync(
-        NotificationCredentialReference reference,
+        NotificationCredentialResolutionRequest request,
         CancellationToken cancellationToken);
 }
 
@@ -188,7 +160,7 @@ public sealed record NotificationDestinationProfile
         string displayName,
         IReadOnlyList<NotificationEventClass> enabledEvents,
         Uri? configuredEndpoint = null,
-        NotificationCredentialReference? credentialReference = null)
+        NotificationCredentialBindingId? credentialBindingId = null)
     {
         var normalizedId =
             NormalizeDestinationId(
@@ -243,7 +215,14 @@ public sealed record NotificationDestinationProfile
         DisplayName = normalizedDisplayName;
         EnabledEvents = Array.AsReadOnly(events);
         ConfiguredEndpoint = normalizedEndpoint;
-        CredentialReference = credentialReference;
+        CredentialBindingId = credentialBindingId;
+        RevisionFingerprint =
+            ComputeRevisionFingerprint(
+                DestinationId,
+                Provider,
+                ConfiguredEndpoint,
+                CredentialBindingId,
+                EnabledEvents);
     }
 
     public string DestinationId { get; }
@@ -251,7 +230,40 @@ public sealed record NotificationDestinationProfile
     public string DisplayName { get; }
     public IReadOnlyList<NotificationEventClass> EnabledEvents { get; }
     public Uri? ConfiguredEndpoint { get; }
-    public NotificationCredentialReference? CredentialReference { get; }
+    public NotificationCredentialBindingId? CredentialBindingId { get; }
+
+    public string RevisionFingerprint { get; }
+
+    private static string ComputeRevisionFingerprint(
+        string destinationId,
+        NotificationProviderKind provider,
+        Uri? endpoint,
+        NotificationCredentialBindingId? bindingId,
+        IReadOnlyList<NotificationEventClass> enabledEvents)
+    {
+        var canonical =
+            string.Join(
+                "\n",
+                destinationId,
+                ((int)provider).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                endpoint?.AbsoluteUri ?? string.Empty,
+                bindingId?.Value ?? string.Empty,
+                string.Join(
+                    ",",
+                    enabledEvents
+                        .OrderBy(value => value)
+                        .Select(value =>
+                            ((int)value).ToString(
+                                System.Globalization.CultureInfo.InvariantCulture))));
+
+        return Convert
+            .ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        canonical)))
+            .ToLowerInvariant();
+    }
 }
 
 public sealed record NotificationDeliveryPolicy
@@ -445,19 +457,403 @@ public sealed record NotificationDeliverySnapshot
     }
 }
 
+public enum NotificationNat64DecodeResult
+{
+    NoMatch = 0,
+    Valid = 1,
+    Malformed = 2,
+}
+
+public sealed record NotificationNat64Prefix
+{
+    private static readonly HashSet<int> AllowedPrefixLengths =
+        [32, 40, 48, 56, 64, 96];
+
+    private readonly byte[] _prefixBytes;
+
+    public NotificationNat64Prefix(
+        IPAddress prefix,
+        int prefixLength)
+    {
+        ArgumentNullException.ThrowIfNull(
+            prefix);
+
+        if (prefix.AddressFamily !=
+                System.Net.Sockets.AddressFamily.InterNetworkV6 ||
+            !AllowedPrefixLengths.Contains(
+                prefixLength))
+        {
+            throw new ArgumentException(
+                "Configured NAT64 prefixes must be IPv6 RFC6052 prefixes with length /32, /40, /48, /56, /64 or /96.");
+        }
+
+        _prefixBytes =
+            prefix.GetAddressBytes();
+
+        for (var bit = prefixLength;
+             bit < 128;
+             bit++)
+        {
+            if (GetBit(
+                    _prefixBytes,
+                    bit))
+            {
+                throw new ArgumentException(
+                    "Configured NAT64 prefix host bits must be zero.",
+                    nameof(prefix));
+            }
+        }
+
+        Prefix =
+            prefix;
+        PrefixLength =
+            prefixLength;
+    }
+
+    public IPAddress Prefix { get; }
+
+    public int PrefixLength { get; }
+
+    public bool Overlaps(
+        NotificationNat64Prefix other)
+    {
+        ArgumentNullException.ThrowIfNull(
+            other);
+
+        var bits =
+            Math.Min(
+                PrefixLength,
+                other.PrefixLength);
+
+        for (var bit = 0;
+             bit < bits;
+             bit++)
+        {
+            if (GetBit(
+                    _prefixBytes,
+                    bit) !=
+                GetBit(
+                    other._prefixBytes,
+                    bit))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public NotificationNat64DecodeResult DecodeEmbeddedIpv4(
+        IPAddress address,
+        out IPAddress? embedded)
+    {
+        embedded = null;
+
+        if (address.AddressFamily !=
+            System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            return NotificationNat64DecodeResult.NoMatch;
+        }
+
+        var bytes =
+            address.GetAddressBytes();
+        for (var bit = 0;
+             bit < PrefixLength;
+             bit++)
+        {
+            if (GetBit(
+                    bytes,
+                    bit) !=
+                GetBit(
+                    _prefixBytes,
+                    bit))
+            {
+                return NotificationNat64DecodeResult.NoMatch;
+            }
+        }
+
+        if (PrefixLength <= 64 &&
+            bytes[8] != 0)
+        {
+            return NotificationNat64DecodeResult.Malformed;
+        }
+
+        var ipv4 =
+            new byte[4];
+        var sourceBit =
+            PrefixLength;
+
+        for (var targetBit = 0;
+             targetBit < 32;
+             targetBit++)
+        {
+            if (sourceBit == 64)
+            {
+                sourceBit = 72;
+            }
+
+            if (sourceBit >= 128)
+            {
+                return NotificationNat64DecodeResult.Malformed;
+            }
+
+            SetBit(
+                ipv4,
+                targetBit,
+                GetBit(
+                    bytes,
+                    sourceBit));
+            sourceBit++;
+        }
+
+        embedded =
+            new IPAddress(
+                ipv4);
+        return NotificationNat64DecodeResult.Valid;
+    }
+
+    private static bool GetBit(
+        byte[] bytes,
+        int bitIndex)
+    {
+        var byteIndex =
+            bitIndex / 8;
+        var offset =
+            7 -
+            bitIndex % 8;
+        return (bytes[byteIndex] &
+                (1 << offset)) != 0;
+    }
+
+    private static void SetBit(
+        byte[] bytes,
+        int bitIndex,
+        bool value)
+    {
+        if (!value)
+        {
+            return;
+        }
+
+        var byteIndex =
+            bitIndex / 8;
+        var offset =
+            7 -
+            bitIndex % 8;
+        bytes[byteIndex] |=
+            (byte)(1 << offset);
+    }
+}
+
+public sealed class NotificationAddressPolicy
+{
+    public const int HardMaxNat64Prefixes = 16;
+
+    private static readonly NotificationNat64Prefix
+        StandardWellKnownNat64 =
+        new(
+            IPAddress.Parse("64:ff9b::"),
+            96);
+
+    private static readonly NotificationNat64Prefix
+        StandardLocalUseNat64 =
+        new(
+            IPAddress.Parse("64:ff9b:1::"),
+            48);
+
+    private readonly IReadOnlyList<NotificationNat64Prefix>
+        _nat64Prefixes;
+
+    public NotificationAddressPolicy(
+        IReadOnlyList<NotificationNat64Prefix> nat64Prefixes)
+    {
+        ArgumentNullException.ThrowIfNull(
+            nat64Prefixes);
+
+        if (nat64Prefixes.Count >
+            HardMaxNat64Prefixes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(nat64Prefixes));
+        }
+
+        var prefixes =
+            nat64Prefixes.ToArray();
+        if (prefixes.Any(prefix =>
+                prefix is null))
+        {
+            throw new ArgumentException(
+                "Configured NAT64 prefixes cannot contain null entries.",
+                nameof(nat64Prefixes));
+        }
+
+        for (var left = 0;
+             left < prefixes.Length;
+             left++)
+        {
+            for (var right = left + 1;
+                 right < prefixes.Length;
+                 right++)
+            {
+                if (prefixes[left].Overlaps(
+                        prefixes[right]))
+                {
+                    throw new ArgumentException(
+                        "Configured NAT64 prefixes must not overlap; one authoritative decoding must exist for each address.",
+                        nameof(nat64Prefixes));
+                }
+            }
+        }
+
+        _nat64Prefixes =
+            Array.AsReadOnly(
+                prefixes);
+        Fingerprint =
+            ComputeFingerprint(
+                prefixes);
+    }
+
+    public string Fingerprint { get; }
+
+    public static NotificationAddressPolicy
+        NoConfiguredNat64 { get; } =
+        new(
+            Array.Empty<NotificationNat64Prefix>());
+
+    public NotificationPinnedEndpoint ValidatePinnedEndpoint(
+        Uri configuredEndpoint,
+        IReadOnlyList<IPAddress> addresses,
+        DateTimeOffset resolvedAtUtc) =>
+        new(
+            configuredEndpoint,
+            addresses,
+            resolvedAtUtc,
+            this);
+
+    public bool IsProhibited(
+        IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(
+            address);
+
+        if (NotificationHttpsEndpointPolicy
+                .IsAlwaysProhibitedAddress(
+                    address))
+        {
+            return true;
+        }
+
+        var configuredMatch =
+            false;
+
+        foreach (var implicitPrefix in
+                 new[]
+                 {
+                     StandardWellKnownNat64,
+                     StandardLocalUseNat64,
+                 })
+        {
+            var decode =
+                implicitPrefix
+                    .DecodeEmbeddedIpv4(
+                        address,
+                        out var embedded);
+
+            if (decode ==
+                NotificationNat64DecodeResult.Malformed)
+            {
+                return true;
+            }
+
+            if (decode ==
+                    NotificationNat64DecodeResult.Valid &&
+                (embedded is null ||
+                 NotificationHttpsEndpointPolicy
+                    .IsProhibitedAddress(
+                        embedded)))
+            {
+                return true;
+            }
+        }
+
+        foreach (var prefix in
+                 _nat64Prefixes)
+        {
+            var decode =
+                prefix.DecodeEmbeddedIpv4(
+                    address,
+                    out var embedded);
+
+            if (decode ==
+                NotificationNat64DecodeResult.NoMatch)
+            {
+                continue;
+            }
+
+            configuredMatch =
+                true;
+
+            if (decode ==
+                    NotificationNat64DecodeResult.Malformed ||
+                embedded is null ||
+                NotificationHttpsEndpointPolicy
+                    .IsProhibitedAddress(
+                        embedded))
+            {
+                return true;
+            }
+        }
+
+        if (configuredMatch)
+        {
+            return false;
+        }
+
+        return NotificationHttpsEndpointPolicy
+            .IsProhibitedAddress(
+                address);
+    }
+
+    private static string ComputeFingerprint(
+        IReadOnlyList<NotificationNat64Prefix> prefixes)
+    {
+        var canonical =
+            string.Join(
+                "\n",
+                prefixes
+                    .OrderBy(prefix =>
+                        prefix.Prefix.ToString(),
+                        StringComparer.Ordinal)
+                    .ThenBy(prefix =>
+                        prefix.PrefixLength)
+                    .Select(prefix =>
+                        $"{prefix.Prefix}/{prefix.PrefixLength}"));
+
+        return Convert
+            .ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        canonical)))
+            .ToLowerInvariant();
+    }
+}
+
 public sealed record NotificationPinnedEndpoint
 {
     public const int HardMaxAddresses = 16;
 
-    public NotificationPinnedEndpoint(
+    internal NotificationPinnedEndpoint(
         Uri endpoint,
         IReadOnlyList<IPAddress> addresses,
-        DateTimeOffset resolvedAtUtc)
+        DateTimeOffset resolvedAtUtc,
+        NotificationAddressPolicy addressPolicy)
     {
         ArgumentNullException.ThrowIfNull(
             endpoint);
         ArgumentNullException.ThrowIfNull(
             addresses);
+        ArgumentNullException.ThrowIfNull(
+            addressPolicy);
 
         Endpoint =
             NotificationHttpsEndpointPolicy
@@ -483,8 +879,7 @@ public sealed record NotificationPinnedEndpoint
                 .ToArray();
         if (admitted.Length != addresses.Count ||
             admitted.Any(
-                NotificationHttpsEndpointPolicy
-                    .IsProhibitedAddress))
+                addressPolicy.IsProhibited))
         {
             throw new ArgumentException(
                 "Notification endpoint resolution contains a prohibited, duplicate, or unsafe address.",
@@ -496,6 +891,8 @@ public sealed record NotificationPinnedEndpoint
                 admitted);
         ResolvedAtUtc =
             resolvedAtUtc.ToUniversalTime();
+        AddressPolicyFingerprint =
+            addressPolicy.Fingerprint;
     }
 
     public Uri Endpoint { get; }
@@ -503,6 +900,8 @@ public sealed record NotificationPinnedEndpoint
     public IReadOnlyList<IPAddress> Addresses { get; }
 
     public DateTimeOffset ResolvedAtUtc { get; }
+
+    public string AddressPolicyFingerprint { get; }
 }
 
 public interface INotificationEndpointResolutionPort
@@ -589,7 +988,7 @@ public static class NotificationHttpsEndpointPolicy
         return true;
     }
 
-    private static bool IsIpv4TransitionAddress(
+    private static bool IsAlwaysProhibitedTransitionAddress(
         IPAddress address)
     {
         if (address.AddressFamily !=
@@ -614,22 +1013,7 @@ public static class NotificationHttpsEndpointPolicy
             bytes[10] == 0 &&
             bytes[11] == 0;
 
-        // RFC 6052 well-known NAT64 prefix 64:ff9b::/96.
-        var nat64WellKnown =
-            HasPrefix(
-                bytes,
-                0x00, 0x64, 0xff, 0x9b,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00);
-
-        // RFC 8215 local-use NAT64 prefix 64:ff9b:1::/48.
-        var nat64LocalUse =
-            HasPrefix(
-                bytes,
-                0x00, 0x64, 0xff, 0x9b,
-                0x00, 0x01);
-
-        // 6to4 and Teredo are not admitted configured destination literals.
+        // 6to4 and Teredo are never admitted configured destination literals.
         var sixToFour =
             HasPrefix(
                 bytes,
@@ -641,22 +1025,54 @@ public static class NotificationHttpsEndpointPolicy
 
         return
             rfc6145 ||
-            nat64WellKnown ||
-            nat64LocalUse ||
             sixToFour ||
             teredo;
     }
 
-    public static bool IsProhibitedAddress(
+    private static bool IsStandardNat64Address(
         IPAddress address)
     {
+        if (address.AddressFamily !=
+            System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            return false;
+        }
+
+        var bytes =
+            address.GetAddressBytes();
+
+        var wellKnown =
+            HasPrefix(
+                bytes,
+                0x00, 0x64, 0xff, 0x9b,
+                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00);
+
+        var localUse =
+            HasPrefix(
+                bytes,
+                0x00, 0x64, 0xff, 0x9b,
+                0x00, 0x01);
+
+        return
+            wellKnown ||
+            localUse;
+    }
+
+    public static bool IsAlwaysProhibitedAddress(
+        IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(
+            address);
+
         if (IPAddress.IsLoopback(address) ||
             address.Equals(IPAddress.Any) ||
             address.Equals(IPAddress.IPv6Any) ||
             address.IsIPv6LinkLocal ||
             address.IsIPv6SiteLocal ||
             address.IsIPv6Multicast ||
-            IsIpv4TransitionAddress(address))
+            IsAlwaysProhibitedTransitionAddress(
+                address))
         {
             return true;
         }
@@ -684,4 +1100,11 @@ public static class NotificationHttpsEndpointPolicy
             bytes[0] == 0xff ||
             (bytes[0] & 0xfe) == 0xfc;
     }
+
+    public static bool IsProhibitedAddress(
+        IPAddress address) =>
+        IsAlwaysProhibitedAddress(
+            address) ||
+        IsStandardNat64Address(
+            address);
 }
