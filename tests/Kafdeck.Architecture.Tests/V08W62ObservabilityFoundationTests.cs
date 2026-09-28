@@ -357,6 +357,18 @@ public sealed class V08W62ObservabilityFoundationTests
             KafdeckObservabilityEndpoints
                 .IsPrometheusScrapePath(
                     new PathString("/METRICS")));
+        Assert.True(
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    new PathString("/metrics/")));
+        Assert.True(
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    new PathString("/METRICS/")));
+        Assert.False(
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    new PathString("/metrics//")));
         Assert.False(
             KafdeckObservabilityEndpoints
                 .IsPrometheusScrapePath(
