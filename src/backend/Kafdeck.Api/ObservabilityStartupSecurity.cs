@@ -25,6 +25,8 @@ public static class ObservabilityStartupSecurity
             return;
         }
 
+        ValidateResolvedHeaderMaterial(otlpHeaders);
+
         if (deploymentAccessToken is not null &&
             ContainsCredential(
                 otlpHeaders,
@@ -44,24 +46,30 @@ public static class ObservabilityStartupSecurity
         }
     }
 
-    internal static bool ContainsCredential(
-        string resolvedHeaders,
-        string credential)
+    internal static void ValidateResolvedHeaderMaterial(
+        string resolvedHeaders)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(
             resolvedHeaders);
-        ArgumentException.ThrowIfNullOrWhiteSpace(
-            credential);
 
         if (resolvedHeaders.Length > 16 * 1024)
         {
             throw new KafdeckConfigurationException(
                 "Resolved OTLP headers exceed the 16 KiB safety limit.");
         }
+    }
 
-        if (DeploymentAccessTokenValidator.Matches(
-                credential,
-                resolvedHeaders))
+    internal static bool ContainsCredential(
+        string resolvedHeaders,
+        string credential)
+    {
+        ValidateResolvedHeaderMaterial(resolvedHeaders);
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            credential);
+
+        if (MatchesCredentialCandidate(
+                resolvedHeaders,
+                credential))
         {
             return true;
         }
@@ -79,9 +87,9 @@ public static class ObservabilityStartupSecurity
             }
 
             var value = item[(separator + 1)..].Trim();
-            if (DeploymentAccessTokenValidator.Matches(
-                    credential,
-                    value))
+            if (MatchesCredentialCandidate(
+                    value,
+                    credential))
             {
                 return true;
             }
@@ -100,14 +108,50 @@ public static class ObservabilityStartupSecurity
                     decoded,
                     value,
                     StringComparison.Ordinal) &&
-                DeploymentAccessTokenValidator.Matches(
-                    credential,
-                    decoded))
+                MatchesCredentialCandidate(
+                    decoded,
+                    credential))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool MatchesCredentialCandidate(
+        string candidate,
+        string credential)
+    {
+        var normalized = candidate.Trim();
+        if (DeploymentAccessTokenValidator.Matches(
+                credential,
+                normalized))
+        {
+            return true;
+        }
+
+        var separator = normalized.IndexOf(' ');
+        if (separator <= 0 ||
+            separator == normalized.Length - 1)
+        {
+            return false;
+        }
+
+        var scheme = normalized[..separator];
+        if (!string.Equals(
+                scheme,
+                "Bearer",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var bearerValue =
+            normalized[(separator + 1)..].Trim();
+        return bearerValue.Length > 0 &&
+               DeploymentAccessTokenValidator.Matches(
+                   credential,
+                   bearerValue);
     }
 }
