@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Kafdeck.Infrastructure.Configuration;
 
 namespace Kafdeck.Api;
 
@@ -11,13 +12,21 @@ public sealed class ApiTelemetry : IDisposable
     private readonly Meter _meter = new(InstrumentationName);
     private readonly Counter<long> _requestCount;
     private readonly Histogram<double> _requestDurationMs;
+    private readonly Counter<long> _droppedMetricSeries;
+    private readonly ObservableGauge<int> _activeMetricSeries;
     private readonly PrometheusMetricsRegistry _prometheusMetrics;
+    private readonly int _maxTraceAttributes;
 
-    public ApiTelemetry(PrometheusMetricsRegistry prometheusMetrics)
+    public ApiTelemetry(
+        PrometheusMetricsRegistry prometheusMetrics,
+        ObservabilityOptions observabilityOptions)
     {
         _prometheusMetrics =
             prometheusMetrics ??
             throw new ArgumentNullException(nameof(prometheusMetrics));
+        ArgumentNullException.ThrowIfNull(observabilityOptions);
+        _maxTraceAttributes =
+            observabilityOptions.MaxTraceAttributes;
         _requestCount = _meter.CreateCounter<long>(
             "kafdeck.api.requests",
             unit: "{request}",
@@ -26,14 +35,51 @@ public sealed class ApiTelemetry : IDisposable
             "kafdeck.api.request.duration",
             unit: "ms",
             description: "Kafdeck API request duration.");
+        _droppedMetricSeries = _meter.CreateCounter<long>(
+            "kafdeck.telemetry.dropped.series",
+            unit: "{series}",
+            description:
+                "Number of Kafdeck metric series rejected by the cardinality limit.");
+        _activeMetricSeries = _meter.CreateObservableGauge(
+            "kafdeck.telemetry.active.series",
+            () => _prometheusMetrics.ActiveSeriesCount,
+            unit: "{series}",
+            description:
+                "Number of active bounded Kafdeck metric series.");
     }
 
     public Activity? StartRequest(string routeName, string method)
     {
-        var activity = _activitySource.StartActivity("kafdeck.api.request", ActivityKind.Internal);
-        activity?.SetTag("kafdeck.route", NormalizeRouteName(routeName));
-        activity?.SetTag("http.request.method", NormalizeMethod(method));
+        var activity = _activitySource.StartActivity(
+            "kafdeck.api.request",
+            ActivityKind.Internal);
+        if (_maxTraceAttributes >= 1)
+        {
+            activity?.SetTag(
+                "kafdeck.route",
+                NormalizeRouteName(routeName));
+        }
+
+        if (_maxTraceAttributes >= 2)
+        {
+            activity?.SetTag(
+                "http.request.method",
+                NormalizeMethod(method));
+        }
+
         return activity;
+    }
+
+    public void SetResponseStatus(
+        Activity? activity,
+        int statusCode)
+    {
+        if (_maxTraceAttributes >= 3)
+        {
+            activity?.SetTag(
+                "http.response.status_code",
+                NormalizeStatusClass(statusCode));
+        }
     }
 
     public void RecordRequest(
@@ -46,21 +92,27 @@ public sealed class ApiTelemetry : IDisposable
         var normalizedMethod = NormalizeMethod(method);
         var normalizedStatus = NormalizeStatusClass(statusCode);
 
+        var duration = Math.Max(0, elapsedMilliseconds);
+        if (!_prometheusMetrics.RecordApiRequest(
+                normalizedRoute,
+                normalizedMethod,
+                normalizedStatus,
+                duration,
+                out var admittedKey))
+        {
+            _droppedMetricSeries.Add(3);
+            return;
+        }
+
         var tags = new TagList
         {
-            { "kafdeck.route", normalizedRoute },
-            { "http.request.method", normalizedMethod },
-            { "http.response.status_code", normalizedStatus },
+            { "kafdeck.route", admittedKey.Route },
+            { "http.request.method", admittedKey.Method },
+            { "http.response.status_code", admittedKey.StatusClass },
         };
 
-        var duration = Math.Max(0, elapsedMilliseconds);
         _requestCount.Add(1, tags);
         _requestDurationMs.Record(duration, tags);
-        _prometheusMetrics.RecordApiRequest(
-            normalizedRoute,
-            normalizedMethod,
-            normalizedStatus,
-            duration);
     }
 
     public static string NormalizeRouteName(string? routeName)
@@ -149,10 +201,9 @@ public sealed class ApiTelemetryMiddleware
             var effectiveStatusCode = failed
                 ? StatusCodes.Status500InternalServerError
                 : context.Response.StatusCode;
-            activity?.SetTag(
-                "http.response.status_code",
-                ApiTelemetry.NormalizeStatusClass(
-                    effectiveStatusCode));
+            telemetry.SetResponseStatus(
+                activity,
+                effectiveStatusCode);
 
             var elapsed =
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds;
