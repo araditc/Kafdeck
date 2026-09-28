@@ -108,6 +108,9 @@ public static class KafdeckConfigurationLoader
                 "OTLP protocol"),
             ParseOptionalSecret(otlpSection["Headers"]));
 
+        var history = LoadHistoricalMetrics(
+            section.GetSection("History"));
+
         return new ObservabilityOptions(
             maxActiveSeries,
             prometheus,
@@ -116,7 +119,61 @@ public static class KafdeckConfigurationLoader
             maxMetricLabelValueBytes,
             maxTraceAttributes,
             maxLogAttributes,
-            maxDiagnosticStringBytes);
+            maxDiagnosticStringBytes,
+            history);
+    }
+
+    private static HistoricalMetricsOptions? LoadHistoricalMetrics(
+        IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        return new HistoricalMetricsOptions(
+            ParseOptionalBoolean(
+                section["Enabled"],
+                false,
+                "Historical metrics Enabled"),
+            ParseEnum(
+                section["Provider"],
+                HistoricalMetricsProvider.Sqlite,
+                "Historical metrics provider"),
+            ParseEnum(
+                section["ExecutionMode"],
+                HistoricalMetricsExecutionMode.Standalone,
+                "Historical metrics execution mode"),
+            NullIfBlank(section["SqliteDatabasePath"]),
+            ParseOptionalSecret(section["ConnectionString"]),
+            ParseOptionalInt(
+                section["RawRetentionHours"],
+                HistoricalMetricsOptions.DefaultRawRetentionHours,
+                "Historical metrics raw retention hours"),
+            ParseOptionalInt(
+                section["RollupRetentionDays"],
+                HistoricalMetricsOptions.DefaultRollupRetentionDays,
+                "Historical metrics rollup retention days"),
+            ParseOptionalInt(
+                section["MaxQueryRangeHours"],
+                HistoricalMetricsOptions.DefaultMaxQueryRangeHours,
+                "Historical metrics max query range hours"),
+            ParseOptionalInt(
+                section["MaxSeriesPerQuery"],
+                HistoricalMetricsOptions.DefaultMaxSeriesPerQuery,
+                "Historical metrics max series per query"),
+            ParseOptionalInt(
+                section["MaxPointsPerQuery"],
+                HistoricalMetricsOptions.DefaultMaxPointsPerQuery,
+                "Historical metrics max points per query"),
+            ParseOptionalInt(
+                section["MaxQueryDurationSeconds"],
+                HistoricalMetricsOptions.DefaultMaxQueryDurationSeconds,
+                "Historical metrics max query duration seconds"),
+            ParseOptionalInt(
+                section["MaxConcurrentQueries"],
+                HistoricalMetricsOptions.DefaultMaxConcurrentQueries,
+                "Historical metrics max concurrent queries"));
     }
 
     private static DataGeneratorOptions? LoadDataGenerator(

@@ -341,6 +341,129 @@ public static class KafdeckConfigurationValidator
             observability.Prometheus,
             deployment,
             errors);
+        ValidateHistoricalMetrics(
+            observability.History,
+            errors);
+    }
+
+    private static void ValidateHistoricalMetrics(
+        HistoricalMetricsOptions? history,
+        ICollection<string> errors)
+    {
+        if (history is null)
+        {
+            return;
+        }
+
+        if (history.RawRetentionHours is < 1 or >
+            HistoricalMetricsOptions.HardMaxRawRetentionHours)
+        {
+            errors.Add(
+                $"Historical metrics raw retention must be between 1 and {HistoricalMetricsOptions.HardMaxRawRetentionHours} hours.");
+        }
+
+        if (history.RollupRetentionDays is < 1 or >
+            HistoricalMetricsOptions.HardMaxRollupRetentionDays)
+        {
+            errors.Add(
+                $"Historical metrics rollup retention must be between 1 and {HistoricalMetricsOptions.HardMaxRollupRetentionDays} days.");
+        }
+
+        if (history.MaxQueryRangeHours is < 1 or >
+            HistoricalMetricsOptions.HardMaxQueryRangeHours)
+        {
+            errors.Add(
+                $"Historical metrics max query range must be between 1 and {HistoricalMetricsOptions.HardMaxQueryRangeHours} hours.");
+        }
+
+        if (history.MaxSeriesPerQuery is < 1 or >
+            HistoricalMetricsOptions.HardMaxSeriesPerQuery)
+        {
+            errors.Add(
+                $"Historical metrics max series per query must be between 1 and {HistoricalMetricsOptions.HardMaxSeriesPerQuery}.");
+        }
+
+        if (history.MaxPointsPerQuery is < 1 or >
+            HistoricalMetricsOptions.HardMaxPointsPerQuery)
+        {
+            errors.Add(
+                $"Historical metrics max points per query must be between 1 and {HistoricalMetricsOptions.HardMaxPointsPerQuery}.");
+        }
+
+        if (history.MaxQueryDurationSeconds is < 1 or >
+            HistoricalMetricsOptions.HardMaxQueryDurationSeconds)
+        {
+            errors.Add(
+                $"Historical metrics max query duration must be between 1 and {HistoricalMetricsOptions.HardMaxQueryDurationSeconds} seconds.");
+        }
+
+        if (history.MaxConcurrentQueries is < 1 or >
+            HistoricalMetricsOptions.HardMaxConcurrentQueries)
+        {
+            errors.Add(
+                $"Historical metrics max concurrent queries must be between 1 and {HistoricalMetricsOptions.HardMaxConcurrentQueries}.");
+        }
+
+        if (!history.Enabled)
+        {
+            if (!string.IsNullOrWhiteSpace(history.SqliteDatabasePath) ||
+                history.ConnectionString is not null)
+            {
+                errors.Add(
+                    "Historical metrics persistence credentials/path must not be configured while history is disabled.");
+            }
+
+            return;
+        }
+
+        switch (history.Provider)
+        {
+            case HistoricalMetricsProvider.Sqlite:
+                if (history.ExecutionMode !=
+                    HistoricalMetricsExecutionMode.Standalone)
+                {
+                    errors.Add(
+                        "SQLite historical metrics provider supports standalone execution only.");
+                }
+
+                if (string.IsNullOrWhiteSpace(
+                        history.SqliteDatabasePath) ||
+                    !Path.IsPathFullyQualified(
+                        history.SqliteDatabasePath))
+                {
+                    errors.Add(
+                        "SQLite historical metrics provider requires an absolute database path.");
+                }
+
+                if (history.ConnectionString is not null)
+                {
+                    errors.Add(
+                        "SQLite historical metrics provider must not configure a PostgreSQL connection-string secret.");
+                }
+
+                break;
+
+            case HistoricalMetricsProvider.PostgreSql:
+                if (!string.IsNullOrWhiteSpace(
+                        history.SqliteDatabasePath))
+                {
+                    errors.Add(
+                        "PostgreSQL historical metrics provider must not configure a SQLite database path.");
+                }
+
+                if (history.ConnectionString is null)
+                {
+                    errors.Add(
+                        "PostgreSQL historical metrics provider requires a connection-string secret reference.");
+                }
+
+                break;
+
+            default:
+                errors.Add(
+                    "Historical metrics provider is unsupported.");
+                break;
+        }
     }
 
     private static void ValidatePrometheus(
