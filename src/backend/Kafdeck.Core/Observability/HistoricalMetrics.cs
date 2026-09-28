@@ -75,13 +75,31 @@ public sealed record HistoricalMetricSample(
     long Count,
     int ResolutionSeconds,
     string Source,
-    string? State = null)
+    string? State = null,
+    DateTimeOffset? FirstObservedAtUtc = null,
+    DateTimeOffset? LastObservedAtUtc = null)
 {
     public const int MaxSourceLength = 128;
     public const int MaxStateLength = 64;
     public const int HardMaxResolutionSeconds = 86_400;
 
     public double Average => Count == 0 ? 0 : Sum / Count;
+
+    public DateTimeOffset? EffectiveFirstObservedAtUtc =>
+        FirstObservedAtUtc ??
+        (ResolutionSeconds == 0
+            ? ObservedAtUtc
+            : null);
+
+    public DateTimeOffset? EffectiveLastObservedAtUtc =>
+        LastObservedAtUtc ??
+        (ResolutionSeconds == 0
+            ? ObservedAtUtc
+            : null);
+
+    public bool HasKnownCoverage =>
+        EffectiveFirstObservedAtUtc is not null &&
+        EffectiveLastObservedAtUtc is not null;
 
     public static HistoricalMetricSample Gauge(
         HistoricalMetricIdentity identity,
@@ -138,6 +156,57 @@ public sealed record HistoricalMetricSample(
                 State,
                 MaxStateLength,
                 nameof(State));
+        }
+
+        if ((FirstObservedAtUtc is null) !=
+            (LastObservedAtUtc is null))
+        {
+            throw new ArgumentException(
+                "Explicit historical metric observation coverage must provide both first/last timestamps or neither.");
+        }
+
+        var firstObservedAtUtc =
+            EffectiveFirstObservedAtUtc;
+        var lastObservedAtUtc =
+            EffectiveLastObservedAtUtc;
+
+        if ((firstObservedAtUtc is null) !=
+            (lastObservedAtUtc is null))
+        {
+            throw new ArgumentException(
+                "Historical metric observation coverage must provide both first/last timestamps or neither.");
+        }
+
+        if (firstObservedAtUtc is not null &&
+            (firstObservedAtUtc.Value == default ||
+             lastObservedAtUtc!.Value == default ||
+             lastObservedAtUtc.Value <
+             firstObservedAtUtc.Value))
+        {
+            throw new ArgumentException(
+                "Historical metric observation coverage must contain a valid ordered first/last timestamp.");
+        }
+
+        if (ResolutionSeconds == 0 &&
+            firstObservedAtUtc is null)
+        {
+            throw new ArgumentException(
+                "Raw historical metric samples require known observation coverage.");
+        }
+
+        if (ResolutionSeconds > 0 &&
+            firstObservedAtUtc is null &&
+            !string.Equals(
+                State,
+                "Unknown",
+                StringComparison.Ordinal) &&
+            !string.Equals(
+                State,
+                "Partial",
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Historical rollups with unknown coverage must carry an explicit Unknown or Partial state.");
         }
     }
 

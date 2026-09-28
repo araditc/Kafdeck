@@ -9,9 +9,18 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoHistoricalMetricStore :
     IHistoricalMetricStore
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const string Component =
         "historical-metrics";
+    internal static readonly TimeSpan RawIdentityRetention =
+        TimeSpan.FromDays(90);
+
+    private readonly record struct RawSampleIdentity(
+        string MetricName,
+        string ClusterId,
+        string ResourceKind,
+        string ResourceId,
+        string ObservedAtUtc);
 
     private readonly IHistoricalMetricsDbConnectionFactory
         _connectionFactory;
@@ -85,13 +94,14 @@ public sealed class AdoHistoricalMetricStore :
                 .ConfigureAwait(false);
 
         if (existingVersion is not null &&
-            existingVersion.Value != SchemaVersion)
+            (existingVersion.Value < 1 ||
+             existingVersion.Value > SchemaVersion))
         {
             throw new InvalidOperationException(
-                $"Historical metrics schema version {existingVersion.Value} is unsupported by this binary (expected {SchemaVersion}).");
+                $"Historical metrics schema version {existingVersion.Value} is unsupported by this binary (expected 1..{SchemaVersion}).");
         }
 
-        string[] versionOneStatements =
+        string[] currentSchemaStatements =
         [
             """
             CREATE TABLE IF NOT EXISTS kafdeck_historical_metric_samples (
@@ -107,6 +117,8 @@ public sealed class AdoHistoricalMetricStore :
                 sample_count BIGINT NOT NULL,
                 source TEXT NOT NULL,
                 state TEXT NULL,
+                first_observed_at_utc TEXT NULL,
+                last_observed_at_utc TEXT NULL,
                 PRIMARY KEY (
                     metric_name,
                     cluster_id,
@@ -131,9 +143,30 @@ public sealed class AdoHistoricalMetricStore :
                 resolution_seconds,
                 observed_at_utc)
             """,
+            """
+            CREATE TABLE IF NOT EXISTS kafdeck_historical_metric_raw_identities (
+                metric_name TEXT NOT NULL,
+                cluster_id TEXT NOT NULL,
+                resource_kind TEXT NOT NULL,
+                resource_id TEXT NOT NULL,
+                observed_at_utc TEXT NOT NULL,
+                expires_at_utc TEXT NOT NULL,
+                PRIMARY KEY (
+                    metric_name,
+                    cluster_id,
+                    resource_kind,
+                    resource_id,
+                    observed_at_utc)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_kafdeck_history_raw_identity_expiry
+            ON kafdeck_historical_metric_raw_identities (
+                expires_at_utc)
+            """,
         ];
 
-        foreach (var statement in versionOneStatements)
+        foreach (var statement in currentSchemaStatements)
         {
             await ExecuteInitializationStatementAsync(
                     connection,
@@ -143,7 +176,74 @@ public sealed class AdoHistoricalMetricStore :
                 .ConfigureAwait(false);
         }
 
-        if (existingVersion is null)
+        if (existingVersion == 1)
+        {
+            string[] versionTwoMigrationStatements =
+            [
+                """
+                ALTER TABLE kafdeck_historical_metric_samples
+                ADD COLUMN first_observed_at_utc TEXT NULL
+                """,
+                """
+                ALTER TABLE kafdeck_historical_metric_samples
+                ADD COLUMN last_observed_at_utc TEXT NULL
+                """,
+                """
+                UPDATE kafdeck_historical_metric_samples
+                SET
+                    first_observed_at_utc = observed_at_utc,
+                    last_observed_at_utc = observed_at_utc
+                WHERE resolution_seconds = 0
+                  AND (
+                      first_observed_at_utc IS NULL
+                      OR last_observed_at_utc IS NULL)
+                """,
+                """
+                UPDATE kafdeck_historical_metric_samples
+                SET
+                    first_observed_at_utc = NULL,
+                    last_observed_at_utc = NULL,
+                    state = CASE
+                        WHEN state = 'Partial'
+                        THEN 'Partial'
+                        ELSE 'Unknown'
+                    END
+                WHERE resolution_seconds > 0
+                """,
+            ];
+
+            foreach (var statement in versionTwoMigrationStatements)
+            {
+                await ExecuteInitializationStatementAsync(
+                        connection,
+                        transaction,
+                        statement,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await using var versionUpdate =
+                connection.CreateCommand();
+            versionUpdate.Transaction = transaction;
+            versionUpdate.CommandText =
+                """
+                UPDATE kafdeck_schema_info
+                SET schema_version = @schema_version
+                WHERE component = @component
+                """;
+            AddParameter(
+                versionUpdate,
+                "@schema_version",
+                SchemaVersion);
+            AddParameter(
+                versionUpdate,
+                "@component",
+                Component);
+            await versionUpdate
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else if (existingVersion is null)
         {
             await using var versionInsert =
                 connection.CreateCommand();
@@ -170,6 +270,14 @@ public sealed class AdoHistoricalMetricStore :
                 .ConfigureAwait(false);
         }
 
+        await BackfillRawIdentitiesAsync(
+                connection,
+                transaction,
+                DateTimeOffset.UtcNow.Add(
+                    RawIdentityRetention),
+                cancellationToken)
+            .ConfigureAwait(false);
+
         await transaction
             .CommitAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -188,6 +296,50 @@ public sealed class AdoHistoricalMetricStore :
             connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = statement;
+        await command
+            .ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task BackfillRawIdentitiesAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            INSERT INTO kafdeck_historical_metric_raw_identities (
+                metric_name,
+                cluster_id,
+                resource_kind,
+                resource_id,
+                observed_at_utc,
+                expires_at_utc)
+            SELECT
+                metric_name,
+                cluster_id,
+                resource_kind,
+                resource_id,
+                observed_at_utc,
+                @expires_at_utc
+            FROM kafdeck_historical_metric_samples
+            WHERE resolution_seconds = 0
+            ON CONFLICT (
+                metric_name,
+                cluster_id,
+                resource_kind,
+                resource_id,
+                observed_at_utc)
+            DO NOTHING
+            """;
+        AddParameter(
+            command,
+            "@expires_at_utc",
+            expiresAtUtc.ToUniversalTime().ToString("O"));
         await command
             .ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -254,8 +406,25 @@ public sealed class AdoHistoricalMetricStore :
                     cancellationToken)
                 .ConfigureAwait(false);
 
+        var reservedRawIdentities =
+            await ReserveRawIdentitiesAsync(
+                    connection,
+                    transaction,
+                    samples,
+                    DateTimeOffset.UtcNow.Add(
+                        RawIdentityRetention),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
         foreach (var sample in samples)
         {
+            if (sample.ResolutionSeconds == 0 &&
+                !reservedRawIdentities.Contains(
+                    ToRawIdentity(sample)))
+            {
+                continue;
+            }
+
             await using var command =
                 connection.CreateCommand();
             command.Transaction =
@@ -274,7 +443,9 @@ public sealed class AdoHistoricalMetricStore :
                     sum_value,
                     sample_count,
                     source,
-                    state)
+                    state,
+                    first_observed_at_utc,
+                    last_observed_at_utc)
                 VALUES (
                     @metric_name,
                     @cluster_id,
@@ -287,7 +458,9 @@ public sealed class AdoHistoricalMetricStore :
                     @sum_value,
                     @sample_count,
                     @source,
-                    @state)
+                    @state,
+                    @first_observed_at_utc,
+                    @last_observed_at_utc)
                 ON CONFLICT (
                     metric_name,
                     cluster_id,
@@ -312,6 +485,132 @@ public sealed class AdoHistoricalMetricStore :
             .CommitAsync(cancellationToken)
             .ConfigureAwait(false);
     }
+
+    private static async Task<HashSet<RawSampleIdentity>>
+        ReserveRawIdentitiesAsync(
+            DbConnection connection,
+            DbTransaction transaction,
+            IReadOnlyList<HistoricalMetricSample> samples,
+            DateTimeOffset expiresAtUtc,
+            CancellationToken cancellationToken)
+    {
+        var rawSamples =
+            samples
+                .Where(sample =>
+                    sample.ResolutionSeconds == 0)
+                .ToArray();
+        if (rawSamples.Length == 0)
+        {
+            return [];
+        }
+
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction = transaction;
+
+        var values =
+            new List<string>(
+                rawSamples.Length);
+        for (var index = 0;
+             index < rawSamples.Length;
+             index++)
+        {
+            var sample =
+                rawSamples[index];
+            var suffix =
+                index.ToString(
+                    CultureInfo.InvariantCulture);
+            values.Add(
+                $"(@metric_name_{suffix}, @cluster_id_{suffix}, @resource_kind_{suffix}, @resource_id_{suffix}, @observed_at_utc_{suffix}, @expires_at_utc)");
+
+            AddParameter(
+                command,
+                $"@metric_name_{suffix}",
+                sample.Identity.MetricName);
+            AddParameter(
+                command,
+                $"@cluster_id_{suffix}",
+                sample.Identity.ClusterId);
+            AddParameter(
+                command,
+                $"@resource_kind_{suffix}",
+                sample.Identity.ResourceKind);
+            AddParameter(
+                command,
+                $"@resource_id_{suffix}",
+                sample.Identity.ResourceId);
+            AddParameter(
+                command,
+                $"@observed_at_utc_{suffix}",
+                sample.ObservedAtUtc
+                    .ToUniversalTime()
+                    .ToString("O"));
+        }
+
+        AddParameter(
+            command,
+            "@expires_at_utc",
+            expiresAtUtc
+                .ToUniversalTime()
+                .ToString("O"));
+
+        command.CommandText =
+            $"""
+             INSERT INTO kafdeck_historical_metric_raw_identities (
+                 metric_name,
+                 cluster_id,
+                 resource_kind,
+                 resource_id,
+                 observed_at_utc,
+                 expires_at_utc)
+             VALUES {string.Join(", ", values)}
+             ON CONFLICT (
+                 metric_name,
+                 cluster_id,
+                 resource_kind,
+                 resource_id,
+                 observed_at_utc)
+             DO NOTHING
+             RETURNING
+                 metric_name,
+                 cluster_id,
+                 resource_kind,
+                 resource_id,
+                 observed_at_utc
+             """;
+
+        var reserved =
+            new HashSet<RawSampleIdentity>();
+        await using var reader =
+            await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+        while (await reader
+                   .ReadAsync(cancellationToken)
+                   .ConfigureAwait(false))
+        {
+            reserved.Add(
+                new RawSampleIdentity(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4)));
+        }
+
+        return reserved;
+    }
+
+    private static RawSampleIdentity ToRawIdentity(
+        HistoricalMetricSample sample) =>
+        new(
+            sample.Identity.MetricName,
+            sample.Identity.ClusterId,
+            sample.Identity.ResourceKind,
+            sample.Identity.ResourceId,
+            sample.ObservedAtUtc
+                .ToUniversalTime()
+                .ToString("O"));
 
     public async Task<HistoricalMetricQueryResult>
         QueryAsync(
@@ -363,7 +662,9 @@ public sealed class AdoHistoricalMetricStore :
                           sum_value,
                           sample_count,
                           source,
-                          state
+                          state,
+                          first_observed_at_utc,
+                          last_observed_at_utc
                       FROM kafdeck_historical_metric_samples
                       WHERE metric_name = @metric_name
                         AND cluster_id = @cluster_id
@@ -386,7 +687,9 @@ public sealed class AdoHistoricalMetricStore :
                           sum_value,
                           sample_count,
                           source,
-                          state
+                          state,
+                          first_observed_at_utc,
+                          last_observed_at_utc
                       FROM kafdeck_historical_metric_samples
                       WHERE metric_name = @metric_name
                         AND cluster_id = @cluster_id
@@ -519,7 +822,33 @@ public sealed class AdoHistoricalMetricStore :
                         reader.GetString(7),
                         reader.IsDBNull(8)
                             ? null
-                            : reader.GetString(8)));
+                            : reader.GetString(8),
+                        reader.IsDBNull(9)
+                            ? (Convert.ToInt32(
+                                   reader.GetValue(2),
+                                   CultureInfo.InvariantCulture) == 0
+                                ? DateTimeOffset.Parse(
+                                    reader.GetString(1),
+                                    CultureInfo.InvariantCulture,
+                                    DateTimeStyles.RoundtripKind)
+                                : null)
+                            : DateTimeOffset.Parse(
+                                reader.GetString(9),
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.RoundtripKind),
+                        reader.IsDBNull(10)
+                            ? (Convert.ToInt32(
+                                   reader.GetValue(2),
+                                   CultureInfo.InvariantCulture) == 0
+                                ? DateTimeOffset.Parse(
+                                    reader.GetString(1),
+                                    CultureInfo.InvariantCulture,
+                                    DateTimeStyles.RoundtripKind)
+                                : null)
+                            : DateTimeOffset.Parse(
+                                reader.GetString(10),
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.RoundtripKind)));
 
                 totalPoints++;
             }
@@ -740,6 +1069,22 @@ public sealed class AdoHistoricalMetricStore :
             sample.State is null
                 ? DBNull.Value
                 : sample.State);
+        AddParameter(
+            command,
+            "@first_observed_at_utc",
+            sample.EffectiveFirstObservedAtUtc is { } firstObservedAtUtc
+                ? firstObservedAtUtc
+                    .ToUniversalTime()
+                    .ToString("O")
+                : DBNull.Value);
+        AddParameter(
+            command,
+            "@last_observed_at_utc",
+            sample.EffectiveLastObservedAtUtc is { } lastObservedAtUtc
+                ? lastObservedAtUtc
+                    .ToUniversalTime()
+                    .ToString("O")
+                : DBNull.Value);
     }
 
     private static string ProviderName(
