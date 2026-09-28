@@ -1,3 +1,4 @@
+using Kafdeck.Core;
 using Kafdeck.Core.Records;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Generator;
@@ -172,6 +173,9 @@ public sealed class DataGeneratorWorker
         {
             return;
         }
+
+        using var activity =
+            KafdeckRuntimeTelemetry.StartDataGeneratorCycle();
 
         DataGeneratorPlan plan;
         try
