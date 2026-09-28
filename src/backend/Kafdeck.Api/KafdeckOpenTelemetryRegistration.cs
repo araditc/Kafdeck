@@ -2,9 +2,11 @@ using System.Diagnostics;
 using Kafdeck.Infrastructure.Configuration;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Microsoft.Extensions.Logging;
 
 namespace Kafdeck.Api;
 
@@ -66,6 +68,41 @@ public static class KafdeckOpenTelemetryRegistration
                                 health)));
                 }
             });
+
+        services.AddLogging(logging =>
+        {
+            logging.AddFilter<OpenTelemetryLoggerProvider>(
+                (category, level) =>
+                    string.Equals(
+                        category,
+                        typeof(ApiTelemetry).FullName,
+                        StringComparison.Ordinal) &&
+                    level >= LogLevel.Information);
+
+            logging.AddOpenTelemetry(options =>
+            {
+                options.IncludeScopes = false;
+                options.IncludeFormattedMessage = true;
+                options.ParseStateValues = true;
+
+                if (observability.Otlp.Enabled)
+                {
+                    var exporterOptions =
+                        new OtlpExporterOptions();
+                    ConfigureExporter(
+                        exporterOptions,
+                        observability.Otlp,
+                        resolvedOtlpHeaders,
+                        OtlpSignalKind.Logs);
+
+                    options.AddProcessor(
+                        new BatchLogRecordExportProcessor(
+                            new HealthTrackingOtlpLogExporter(
+                                exporterOptions,
+                                health)));
+                }
+            });
+        });
 
         return services;
     }
@@ -137,6 +174,7 @@ public static class KafdeckOpenTelemetryRegistration
         {
             OtlpSignalKind.Traces => "v1/traces",
             OtlpSignalKind.Metrics => "v1/metrics",
+            OtlpSignalKind.Logs => "v1/logs",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(signal)),
         };
@@ -173,6 +211,7 @@ public sealed class OtlpExporterHealthState
     // 0 = no evidence, 1 = latest export succeeded, -1 = latest export failed.
     private int _traceState;
     private int _metricState;
+    private int _logState;
 
     public OtlpRuntimeHealth Current
     {
@@ -180,13 +219,16 @@ public sealed class OtlpExporterHealthState
         {
             var trace = Volatile.Read(ref _traceState);
             var metric = Volatile.Read(ref _metricState);
+            var log = Volatile.Read(ref _logState);
 
-            if (trace < 0 || metric < 0)
+            if (trace < 0 || metric < 0 || log < 0)
             {
                 return OtlpRuntimeHealth.Unavailable;
             }
 
-            return trace > 0 && metric > 0
+            return trace > 0 &&
+                   metric > 0 &&
+                   log > 0
                 ? OtlpRuntimeHealth.Supported
                 : OtlpRuntimeHealth.Unknown;
         }
@@ -208,6 +250,9 @@ public sealed class OtlpExporterHealthState
                 break;
             case OtlpSignalKind.Metrics:
                 Volatile.Write(ref _metricState, value);
+                break;
+            case OtlpSignalKind.Logs:
+                Volatile.Write(ref _logState, value);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(
@@ -268,8 +313,35 @@ internal sealed class HealthTrackingOtlpMetricExporter
     }
 }
 
+internal sealed class HealthTrackingOtlpLogExporter
+    : OtlpLogExporter
+{
+    private readonly OtlpExporterHealthState _health;
+
+    public HealthTrackingOtlpLogExporter(
+        OtlpExporterOptions options,
+        OtlpExporterHealthState health)
+        : base(options)
+    {
+        _health =
+            health ??
+            throw new ArgumentNullException(nameof(health));
+    }
+
+    public override ExportResult Export(
+        in Batch<LogRecord> batch)
+    {
+        var result = base.Export(in batch);
+        _health.Record(
+            OtlpSignalKind.Logs,
+            result);
+        return result;
+    }
+}
+
 internal enum OtlpSignalKind
 {
     Traces = 1,
     Metrics = 2,
+    Logs = 3,
 }
