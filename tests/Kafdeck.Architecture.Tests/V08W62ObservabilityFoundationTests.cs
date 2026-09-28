@@ -1,4 +1,3 @@
-using System.Net;
 using Kafdeck.Api;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
@@ -41,8 +40,11 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Theory]
+    [InlineData("MaxActiveMetricSeries", "1")]
     [InlineData("MaxActiveMetricSeries", "50001")]
+    [InlineData("MaxMetricLabelsPerSeries", "2")]
     [InlineData("MaxMetricLabelsPerSeries", "13")]
+    [InlineData("MaxMetricLabelValueBytes", "4")]
     [InlineData("MaxMetricLabelValueBytes", "129")]
     [InlineData("MaxTraceAttributes", "49")]
     [InlineData("MaxLogAttributes", "49")]
@@ -73,6 +75,8 @@ public sealed class V08W62ObservabilityFoundationTests
         {
             ["Kafdeck:Observability:Prometheus:Enabled"] = "true",
             ["Kafdeck:Observability:Prometheus:Path"] = path,
+            ["Kafdeck:Observability:Prometheus:ScrapeToken"] =
+                "env:KAFDECK_METRICS_TOKEN",
         });
 
         Assert.Throws<KafdeckConfigurationException>(
@@ -80,28 +84,26 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
-    public void Prometheus_registry_enforces_active_series_hard_boundary()
+    public void Prometheus_registry_counts_each_emitted_series_against_the_limit()
     {
-        var registry = new PrometheusMetricsRegistry(maxActiveSeries: 2);
+        var registry = new PrometheusMetricsRegistry(
+            maxActiveSeries: 5,
+            maxLabelsPerSeries: 8,
+            maxLabelValueBytes: 64);
 
         Assert.True(registry.RecordApiRequest(
             "route-a",
             "GET",
             "2xx",
             10));
-        Assert.True(registry.RecordApiRequest(
+        Assert.False(registry.RecordApiRequest(
             "route-b",
             "GET",
             "2xx",
             20));
-        Assert.False(registry.RecordApiRequest(
-            "route-c",
-            "GET",
-            "2xx",
-            30));
 
-        Assert.Equal(2, registry.ActiveSeriesCount);
-        Assert.Equal(1, registry.DroppedSeriesCount);
+        Assert.Equal(5, registry.ActiveSeriesCount);
+        Assert.Equal(3, registry.DroppedSeriesCount);
 
         var output = registry.Render();
         Assert.Contains(
@@ -109,15 +111,15 @@ public sealed class V08W62ObservabilityFoundationTests
             output,
             StringComparison.Ordinal);
         Assert.Contains(
-            "kafdeck_telemetry_active_series 2",
+            "kafdeck_telemetry_active_series 5",
             output,
             StringComparison.Ordinal);
         Assert.Contains(
-            "kafdeck_telemetry_dropped_series_total 1",
+            "kafdeck_telemetry_dropped_series_total 3",
             output,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "route-c",
+            "route-b",
             output,
             StringComparison.Ordinal);
     }
@@ -137,35 +139,62 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
-    public void Prometheus_scrape_is_loopback_only_without_a_token()
+    public void Enabled_prometheus_requires_an_explicit_scrape_token()
     {
-        Assert.True(
-            PrometheusScrapeAccessPolicy.IsAllowed(
-                IPAddress.Loopback,
-                expectedToken: null,
-                providedToken: null));
+        var options = Load(new Dictionary<string, string?>
+        {
+            ["Kafdeck:Observability:Prometheus:Enabled"] = "true",
+        });
+
+        Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(options));
+    }
+
+    [Fact]
+    public void Prometheus_scrape_never_trusts_source_address_as_authentication()
+    {
         Assert.False(
             PrometheusScrapeAccessPolicy.IsAllowed(
-                IPAddress.Parse("192.0.2.10"),
                 expectedToken: null,
                 providedToken: null));
     }
 
     [Fact]
-    public void Prometheus_scrape_token_allows_remote_access_by_fixed_time_check()
+    public void Prometheus_scrape_token_uses_fixed_time_validation()
     {
-        var remote = IPAddress.Parse("192.0.2.10");
-
         Assert.True(
             PrometheusScrapeAccessPolicy.IsAllowed(
-                remote,
                 expectedToken: "metrics-secret",
                 providedToken: "metrics-secret"));
         Assert.False(
             PrometheusScrapeAccessPolicy.IsAllowed(
-                remote,
                 expectedToken: "metrics-secret",
                 providedToken: "wrong"));
+    }
+
+    [Fact]
+    public void Prometheus_registry_enforces_label_value_byte_budget()
+    {
+        var registry = new PrometheusMetricsRegistry(
+            maxActiveSeries: 5,
+            maxLabelsPerSeries: 3,
+            maxLabelValueBytes: 8);
+
+        Assert.True(registry.RecordApiRequest(
+            "this-route-is-too-long",
+            "GET",
+            "2xx",
+            1));
+
+        var output = registry.Render();
+        Assert.Contains(
+            "route=\"other\"",
+            output,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "this-route-is-too-long",
+            output,
+            StringComparison.Ordinal);
     }
 
     private static KafdeckOptions Load(
