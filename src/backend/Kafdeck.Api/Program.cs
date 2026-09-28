@@ -215,11 +215,33 @@ if (historicalMetricsOptions?.Enabled == true)
 
     builder.Services.AddHostedService<
         HistoricalMetricMaintenanceHostedService>();
+
+    builder.Services.AddSingleton<IHistoryObservationPort,
+        HistoricalConsumerHistoryObservationPort>();
+    builder.Services.AddSingleton(
+        ConsumerLagHistorySamplingPolicy.Default);
+    builder.Services.AddHostedService<
+        ConsumerLagHistorySamplingHostedService>();
+}
+else
+{
+    builder.Services.AddSingleton<IHistoryObservationPort,
+        UnavailableHistoryObservationPort>();
 }
 
-builder.Services.AddSingleton<IMetricsObservationPort, UnavailableMetricsObservationPort>();
-builder.Services.AddSingleton<IHistoryObservationPort, UnavailableHistoryObservationPort>();
+builder.Services.AddSingleton<IMetricsObservationPort,
+    UnavailableMetricsObservationPort>();
 builder.Services.AddSingleton<ConsumerDiagnosticsService>();
+builder.Services.AddSingleton<OperationalAnalyticsRuntimeService>();
+builder.Services.AddSingleton<IOperationalAnalyticsObservationPort>(
+    services =>
+        services.GetRequiredService<
+            OperationalAnalyticsRuntimeService>());
+builder.Services.AddSingleton<OperationalTrendService>(
+    services =>
+        new OperationalTrendService(
+            services.GetService<
+                IHistoricalMetricStore>()));
 builder.Services.AddSingleton<IRecordSchemaReadPort>(services =>
     new TelemetryRecordSchemaReadPort(
         new ConfluentSchemaRegistryReadAdapter(
@@ -595,6 +617,7 @@ app.MapKafdeckV07SchemaDeveloperTools(kafdeckOptions);
 app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckV08Observability(kafdeckOptions);
+app.MapKafdeckV08OperationalAnalytics(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
