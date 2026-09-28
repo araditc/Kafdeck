@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Kafdeck.Api;
 using Kafdeck.Core.Security;
