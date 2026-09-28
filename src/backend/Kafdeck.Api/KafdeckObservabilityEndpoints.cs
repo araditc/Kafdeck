@@ -66,8 +66,12 @@ public static class KafdeckObservabilityEndpoints
                                 ? null
                                 : "prometheus_not_enabled"),
                         new ObservabilityCapabilityValue(
-                            "unsupported",
-                            "otlp_export_not_implemented_in_current_w62_slice"),
+                            observability.Otlp.Enabled
+                                ? "blocked"
+                                : "unconfigured",
+                            observability.Otlp.Enabled
+                                ? "otlp_exporter_runtime_not_wired"
+                                : "otlp_not_enabled"),
                         PrometheusObservabilityOptions.Path,
                         observability.MaxActiveSeries,
                         ObservabilityOptions.HardMaxActiveSeries)))
