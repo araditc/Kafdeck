@@ -314,7 +314,17 @@ public sealed class V08W62ObservabilityFoundationTests
     [InlineData(
         "deployment-token",
         "metrics-token",
+        "Authorization=Basic%20ZGVwbG95bWVudC10b2tlbjpwYXNzd29yZA",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
         "Authorization=Basic%20bWV0cmljcy10b2tlbjpwYXNzd29yZA==",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20bWV0cmljcy10b2tlbjpwYXNzd29yZA",
         "Prometheus scrape token")]
     [InlineData(
         "deployment-token",
@@ -338,6 +348,48 @@ public sealed class V08W62ObservabilityFoundationTests
 
         Assert.Contains(
             expectedMessage,
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolved_otlp_headers_must_not_reuse_oidc_client_secret()
+    {
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentAccessToken: null,
+                            prometheusScrapeToken: "metrics-token",
+                            otlpHeaders:
+                                "Authorization=Bearer%20oidc-client-secret",
+                            oidcClientSecret:
+                                "oidc-client-secret"));
+
+        Assert.Contains(
+            "OIDC client secret",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prometheus_token_must_not_reuse_oidc_client_secret()
+    {
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentAccessToken: null,
+                            prometheusScrapeToken:
+                                "same-client-secret",
+                            otlpHeaders: null,
+                            oidcClientSecret:
+                                "same-client-secret"));
+
+        Assert.Contains(
+            "OIDC client secret",
             exception.Message,
             StringComparison.OrdinalIgnoreCase);
     }
