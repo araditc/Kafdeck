@@ -20,6 +20,11 @@ public static class KafdeckOpenTelemetryRegistration
 
         var health = new OtlpExporterHealthState();
         services.AddSingleton(health);
+        services.AddSingleton(
+            new SafeRuntimeTelemetryLoggerFactory(
+                observability,
+                resolvedOtlpHeaders));
+        services.AddSingleton<RuntimeTelemetry>();
 
         services
             .AddOpenTelemetry()
@@ -29,6 +34,7 @@ public static class KafdeckOpenTelemetryRegistration
             .WithTracing(tracing =>
             {
                 tracing.AddSource(ApiTelemetry.InstrumentationName);
+                tracing.AddSource(RuntimeTelemetry.InstrumentationName);
 
                 if (observability.Otlp.Enabled)
                 {
