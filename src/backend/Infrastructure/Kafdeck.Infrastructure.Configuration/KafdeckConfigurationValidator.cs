@@ -559,18 +559,6 @@ public static class KafdeckConfigurationValidator
                 "Observability max trace attributes must be between 1 and 48.");
         }
 
-        if (observability.MaxLogAttributes is < 1 or > 48)
-        {
-            errors.Add(
-                "Observability max log attributes must be between 1 and 48.");
-        }
-
-        if (observability.MaxDiagnosticStringBytes is < 1 or > 2048)
-        {
-            errors.Add(
-                "Observability max diagnostic string bytes must be between 1 and 2048.");
-        }
-
         var prometheus = observability.Prometheus;
         if (!string.Equals(
                 prometheus.Path,
