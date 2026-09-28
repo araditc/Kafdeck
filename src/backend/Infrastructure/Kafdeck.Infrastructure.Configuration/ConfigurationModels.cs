@@ -89,9 +89,7 @@ public sealed record ObservabilityOptions(
     int MaxActiveMetricSeries,
     int MaxMetricLabelsPerSeries,
     int MaxMetricLabelValueBytes,
-    int MaxTraceAttributes,
-    int MaxLogAttributes,
-    int MaxDiagnosticStringBytes)
+    int MaxTraceAttributes)
 {
     public static ObservabilityOptions Default { get; } =
         new(
@@ -102,9 +100,7 @@ public sealed record ObservabilityOptions(
             MaxActiveMetricSeries: 10_000,
             MaxMetricLabelsPerSeries: 8,
             MaxMetricLabelValueBytes: 64,
-            MaxTraceAttributes: 24,
-            MaxLogAttributes: 24,
-            MaxDiagnosticStringBytes: 512);
+            MaxTraceAttributes: 24);
 }
 
 public sealed record PrometheusMetricsOptions(
