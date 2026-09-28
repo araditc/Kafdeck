@@ -168,7 +168,8 @@ public sealed class ApiContractTests
         Assert.Equal("v01-topics-list", ApiTelemetry.NormalizeRouteName("v01-topics-list"));
         Assert.Equal("other", ApiTelemetry.NormalizeRouteName("payments-prod/customer-secret-topic"));
         Assert.Equal("GET", ApiTelemetry.NormalizeMethod("get"));
-        Assert.Equal("OTHER", ApiTelemetry.NormalizeMethod("POST"));
+        Assert.Equal("POST", ApiTelemetry.NormalizeMethod("POST"));
+        Assert.Equal("OTHER", ApiTelemetry.NormalizeMethod("TRACE"));
         Assert.Equal("2xx", ApiTelemetry.NormalizeStatusClass(200));
         Assert.Equal("5xx", ApiTelemetry.NormalizeStatusClass(503));
     }
