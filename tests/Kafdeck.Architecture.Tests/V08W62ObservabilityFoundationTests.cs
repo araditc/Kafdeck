@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -288,6 +289,16 @@ public sealed class V08W62ObservabilityFoundationTests
     [InlineData(
         "deployment-token",
         "metrics-token",
+        "Authorization=Token%20deployment-token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Custom%20metrics-token",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
         "Authorization=Bearer metrics-token",
         "Prometheus scrape token")]
     public void Resolved_otlp_header_values_must_not_reuse_local_credentials(
@@ -341,6 +352,103 @@ public sealed class V08W62ObservabilityFoundationTests
                 "deployment-token",
                 "metrics-token",
                 "x-api-key=collector-token");
+    }
+
+    [Fact]
+    public void Otlp_runtime_health_requires_real_success_from_both_signals()
+    {
+        var health = new OtlpExporterHealthState();
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Unknown,
+            health.Current);
+        Assert.Equal(
+            "unknown",
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: true,
+                    health.Current)
+                .State);
+
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Success);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Unknown,
+            health.Current);
+
+        health.Record(
+            OtlpSignalKind.Metrics,
+            ExportResult.Success);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Supported,
+            health.Current);
+        Assert.Equal(
+            "supported",
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: true,
+                    health.Current)
+                .State);
+    }
+
+    [Fact]
+    public void Otlp_runtime_health_reports_latest_export_failure_as_unavailable()
+    {
+        var health = new OtlpExporterHealthState();
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Success);
+        health.Record(
+            OtlpSignalKind.Metrics,
+            ExportResult.Success);
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Failure);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Unavailable,
+            health.Current);
+
+        var capability =
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: true,
+                    health.Current);
+
+        Assert.Equal(
+            "unavailable",
+            capability.State);
+        Assert.Equal(
+            "otlp_export_failed",
+            capability.ReasonCode);
+
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Success);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Supported,
+            health.Current);
+    }
+
+    [Fact]
+    public void Disabled_otlp_remains_unconfigured_regardless_of_runtime_health()
+    {
+        var capability =
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: false,
+                    OtlpRuntimeHealth.Unavailable);
+
+        Assert.Equal(
+            "unconfigured",
+            capability.State);
+        Assert.Equal(
+            "otlp_not_enabled",
+            capability.ReasonCode);
     }
 
     [Fact]
