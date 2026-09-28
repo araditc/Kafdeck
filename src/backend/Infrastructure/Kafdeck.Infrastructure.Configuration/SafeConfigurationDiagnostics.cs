@@ -13,6 +13,9 @@ public sealed record SafeConfigurationDiagnostic(
     bool MutationModeEnabled,
     MutationPersistenceProvider? MutationPersistenceProvider,
     MutationExecutionMode? MutationExecutionMode,
+    bool PrometheusEnabled,
+    bool PrometheusScrapeTokenConfigured,
+    int MaxActiveMetricSeries,
     IReadOnlyList<SafeClusterDiagnostic> Clusters);
 
 public sealed record SafeClusterDiagnostic(
@@ -61,6 +64,9 @@ public static class SafeConfigurationDiagnostics
             options.Administration?.Mutations.Enabled ?? false,
             options.Administration?.Mutations.Persistence?.Provider,
             options.Administration?.Mutations.Persistence?.ExecutionMode,
+            (options.Observability ?? ObservabilityOptions.Default).Prometheus.Enabled,
+            (options.Observability ?? ObservabilityOptions.Default).Prometheus.ScrapeToken is not null,
+            (options.Observability ?? ObservabilityOptions.Default).MaxActiveMetricSeries,
             Array.AsReadOnly(clusterDiagnostics));
     }
 }
