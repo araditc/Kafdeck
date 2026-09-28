@@ -25,6 +25,33 @@ public static class KafdeckObservabilityEndpoints
     public const string CapabilitiesRoute =
         "/api/v1/observability/capabilities";
 
+    internal static ObservabilityCapabilityValue OtlpCapability(
+        bool enabled,
+        OtlpRuntimeHealth health)
+    {
+        if (!enabled)
+        {
+            return new ObservabilityCapabilityValue(
+                "unconfigured",
+                "otlp_not_enabled");
+        }
+
+        return health switch
+        {
+            OtlpRuntimeHealth.Supported =>
+                new ObservabilityCapabilityValue(
+                    "supported"),
+            OtlpRuntimeHealth.Unavailable =>
+                new ObservabilityCapabilityValue(
+                    "unavailable",
+                    "otlp_export_failed"),
+            _ =>
+                new ObservabilityCapabilityValue(
+                    "unknown",
+                    "otlp_export_not_observed"),
+        };
+    }
+
     public static bool IsPrometheusScrapePath(
         PathString path)
     {
@@ -57,30 +84,27 @@ public static class KafdeckObservabilityEndpoints
 
         endpoints.MapGet(
                 CapabilitiesRoute,
-                () => Results.Ok(
-                    new ObservabilityCapabilitiesData(
-                        new ObservabilityCapabilityValue(
-                            "supported"),
-                        new ObservabilityCapabilityValue(
-                            observability.Prometheus.Enabled
-                                ? "supported"
-                                : "unconfigured",
-                            observability.Prometheus.Enabled
-                                ? null
-                                : "prometheus_not_enabled"),
-                        new ObservabilityCapabilityValue(
-                            observability.Otlp.Enabled
-                                ? "supported"
-                                : "unconfigured",
-                            observability.Otlp.Enabled
-                                ? null
-                                : "otlp_not_enabled"),
-                        PrometheusObservabilityOptions.Path,
-                        observability.MaxActiveSeries,
-                        ObservabilityOptions.HardMaxActiveSeries,
-                        observability.MaxMetricLabelsPerSeries,
-                        observability.MaxMetricLabelValueBytes,
-                        observability.MaxTraceAttributes)))
+                (OtlpExporterHealthState otlpHealth) =>
+                    Results.Ok(
+                        new ObservabilityCapabilitiesData(
+                            new ObservabilityCapabilityValue(
+                                "supported"),
+                            new ObservabilityCapabilityValue(
+                                observability.Prometheus.Enabled
+                                    ? "supported"
+                                    : "unconfigured",
+                                observability.Prometheus.Enabled
+                                    ? null
+                                    : "prometheus_not_enabled"),
+                            OtlpCapability(
+                                observability.Otlp.Enabled,
+                                otlpHealth.Current),
+                            PrometheusObservabilityOptions.Path,
+                            observability.MaxActiveSeries,
+                            ObservabilityOptions.HardMaxActiveSeries,
+                            observability.MaxMetricLabelsPerSeries,
+                            observability.MaxMetricLabelValueBytes,
+                            observability.MaxTraceAttributes)))
             .WithName("v08-observability-capabilities");
 
         if (observability.Prometheus.Enabled)
