@@ -572,7 +572,7 @@ public static class KafdeckConfigurationValidator
         }
 
         var prometheus = observability.Prometheus;
-        if (!prometheus.Path.StartsWith('/', StringComparison.Ordinal) ||
+        if (!prometheus.Path.StartsWith("/", StringComparison.Ordinal) ||
             prometheus.Path.Length > 128 ||
             prometheus.Path.Any(char.IsControl) ||
             prometheus.Path.Contains('?') ||
