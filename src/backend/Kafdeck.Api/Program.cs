@@ -86,7 +86,10 @@ ObservabilityStartupSecurity
 
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
-    builder.Services.AddKafdeckOidc(kafdeckOptions.Deployment, secretResolver);
+    builder.Services.AddKafdeckOidc(
+        kafdeckOptions.Deployment,
+        secretResolver,
+        oidcClientSecret);
     builder.Services.AddKafdeckAntiforgery(kafdeckOptions.Deployment.ListenUrl);
 }
 
