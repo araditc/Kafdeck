@@ -43,6 +43,8 @@ public sealed class RuntimeTelemetry : IDisposable
         new(InstrumentationName);
     private readonly ILogger _logger;
     private readonly int _maxTraceAttributes;
+    private readonly int _maxLogAttributes;
+    private readonly int _maxDiagnosticStringBytes;
 
     public RuntimeTelemetry(
         KafdeckOptions options,
@@ -51,12 +53,20 @@ public sealed class RuntimeTelemetry : IDisposable
             ObservabilityOptions
                 .Effective(options)
                 .MaxTraceAttributes,
+            ObservabilityOptions
+                .Effective(options)
+                .MaxLogAttributes,
+            ObservabilityOptions
+                .Effective(options)
+                .MaxDiagnosticStringBytes,
             loggerFactory.CreateLogger())
     {
     }
 
     public RuntimeTelemetry(
         int maxTraceAttributes = ObservabilityOptions.DefaultMaxTraceAttributes,
+        int maxLogAttributes = ObservabilityOptions.DefaultMaxLogAttributes,
+        int maxDiagnosticStringBytes = ObservabilityOptions.DefaultMaxDiagnosticStringBytes,
         ILogger? logger = null)
     {
         if (maxTraceAttributes <
@@ -68,7 +78,27 @@ public sealed class RuntimeTelemetry : IDisposable
                 nameof(maxTraceAttributes));
         }
 
+        if (maxLogAttributes <
+                ObservabilityOptions.MinimumMaxLogAttributes ||
+            maxLogAttributes >
+                ObservabilityOptions.HardMaxLogAttributes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxLogAttributes));
+        }
+
+        if (maxDiagnosticStringBytes <
+                ObservabilityOptions.MinimumMaxDiagnosticStringBytes ||
+            maxDiagnosticStringBytes >
+                ObservabilityOptions.HardMaxDiagnosticStringBytes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxDiagnosticStringBytes));
+        }
+
         _maxTraceAttributes = maxTraceAttributes;
+        _maxLogAttributes = maxLogAttributes;
+        _maxDiagnosticStringBytes = maxDiagnosticStringBytes;
         _logger = logger ?? NullLogger.Instance;
     }
 
@@ -159,6 +189,14 @@ public sealed class RuntimeTelemetry : IDisposable
         // accepts only bounded enums and numeric measurements: no resource
         // names, operation IDs, principals, provider bodies, payloads,
         // query text, exception text or credentials enter the log event.
+        // Configuration validation guarantees at least four attributes and
+        // a diagnostic-string budget large enough for this fixed template.
+        if (_maxLogAttributes < 4 ||
+            _maxDiagnosticStringBytes < 64)
+        {
+            return;
+        }
+
         if (workItems is null)
         {
             _logger.LogInformation(
