@@ -37,6 +37,7 @@ public static class KafdeckConfigurationLoader
         var catalog = LoadTopicCatalog(configuration.GetSection("Kafdeck:Catalog"));
         var administration = LoadAdministration(configuration.GetSection("Kafdeck:Administration"));
         var generator = LoadDataGenerator(configuration.GetSection("Kafdeck:Generator"));
+        var observability = LoadObservability(configuration.GetSection("Kafdeck:Observability"));
 
         return new KafdeckOptions(
             new DeploymentOptions(
@@ -49,7 +50,63 @@ public static class KafdeckConfigurationLoader
             records,
             catalog,
             administration,
-            generator);
+            generator,
+            observability);
+    }
+
+    private static ObservabilityOptions? LoadObservability(
+        IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        var maxActiveSeries = ParseOptionalInt(
+            section["MaxActiveSeries"],
+            ObservabilityOptions.DefaultMaxActiveSeries,
+            "Observability max active series");
+        var maxMetricLabelsPerSeries = ParseOptionalInt(
+            section["MaxMetricLabelsPerSeries"],
+            ObservabilityOptions.DefaultMaxMetricLabelsPerSeries,
+            "Observability max metric labels per series");
+        var maxMetricLabelValueBytes = ParseOptionalInt(
+            section["MaxMetricLabelValueBytes"],
+            ObservabilityOptions.DefaultMaxMetricLabelValueBytes,
+            "Observability max metric label value bytes");
+        var maxTraceAttributes = ParseOptionalInt(
+            section["MaxTraceAttributes"],
+            ObservabilityOptions.DefaultMaxTraceAttributes,
+            "Observability max trace attributes");
+
+        var prometheusSection = section.GetSection("Prometheus");
+        var prometheus = new PrometheusObservabilityOptions(
+            ParseOptionalBoolean(
+                prometheusSection["Enabled"],
+                false,
+                "Prometheus Enabled"),
+            ParseOptionalSecret(prometheusSection["AccessToken"]));
+
+        var otlpSection = section.GetSection("Otlp");
+        var otlp = new OtlpObservabilityOptions(
+            ParseOptionalBoolean(
+                otlpSection["Enabled"],
+                false,
+                "OTLP Enabled"),
+            NullIfBlank(otlpSection["Endpoint"]),
+            ParseEnum(
+                otlpSection["Protocol"],
+                OtlpObservabilityProtocol.Grpc,
+                "OTLP protocol"),
+            ParseOptionalSecret(otlpSection["Headers"]));
+
+        return new ObservabilityOptions(
+            maxActiveSeries,
+            prometheus,
+            otlp,
+            maxMetricLabelsPerSeries,
+            maxMetricLabelValueBytes,
+            maxTraceAttributes);
     }
 
     private static DataGeneratorOptions? LoadDataGenerator(
