@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -1333,6 +1334,205 @@ public sealed class V08W62ObservabilityFoundationTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("MaxLogAttributes", "3")]
+    [InlineData("MaxLogAttributes", "49")]
+    [InlineData("MaxDiagnosticStringBytes", "63")]
+    [InlineData("MaxDiagnosticStringBytes", "2049")]
+    public void Log_budget_invalid_values_fail_closed(
+        string key,
+        string value)
+    {
+        var options = Load(
+            new Dictionary<string, string?>
+            {
+                [$"Kafdeck:Observability:{key}"] = value,
+            });
+
+        Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator
+                .ValidateAndThrow(options));
+    }
+
+    [Fact]
+    public void Runtime_telemetry_trace_uses_only_closed_family_and_outcome_dimensions()
+    {
+        Activity? stopped = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source =>
+                string.Equals(
+                    source.Name,
+                    RuntimeTelemetry.InstrumentationName,
+                    StringComparison.Ordinal),
+            Sample = static (
+                ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
+            ActivityStopped = activity => stopped = activity,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var telemetry =
+            new RuntimeTelemetry(
+                maxTraceAttributes: 2,
+                maxLogAttributes: 4,
+                maxDiagnosticStringBytes: 64);
+
+        using (var scope =
+            telemetry.Start(
+                RuntimeTelemetryFamily.MutationDispatch))
+        {
+            scope.Complete(
+                RuntimeTelemetryOutcome.ExecutionUnknown);
+        }
+
+        Assert.NotNull(stopped);
+        var tags = stopped!.Tags.ToArray();
+        Assert.Equal(2, tags.Length);
+        Assert.Contains(
+            tags,
+            item =>
+                item.Key == "kafdeck.runtime.family" &&
+                item.Value == "mutation-dispatch");
+        Assert.Contains(
+            tags,
+            item =>
+                item.Key == "kafdeck.runtime.outcome" &&
+                item.Value == "execution-unknown");
+        Assert.DoesNotContain(
+            tags,
+            item =>
+                item.Key.Contains(
+                    "operation",
+                    StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Contains(
+                    "resource",
+                    StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Contains(
+                    "principal",
+                    StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Runtime_telemetry_log_is_fixed_and_contains_no_external_material()
+    {
+        const string secretSentinel =
+            "DO-NOT-EXPORT-THIS-SECRET";
+        var logger = new CapturingLogger();
+
+        using var telemetry =
+            new RuntimeTelemetry(
+                maxTraceAttributes: 2,
+                maxLogAttributes: 4,
+                maxDiagnosticStringBytes: 64,
+                logger: logger);
+
+        using (var scope =
+            telemetry.Start(
+                RuntimeTelemetryFamily.DataJobProvider))
+        {
+            scope.Complete(
+                RuntimeTelemetryOutcome.FailedDefinitive);
+        }
+
+        var message = Assert.Single(logger.Messages);
+        Assert.Contains(
+            "data-job-provider",
+            message,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "failed-definitive",
+            message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            secretSentinel,
+            message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "operationId",
+            message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "principal",
+            message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "payload",
+            message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Otlp_http_log_endpoint_is_signal_specific_and_redirect_free()
+    {
+        var endpoint =
+            KafdeckOpenTelemetryRegistration
+                .BuildHttpSignalEndpoint(
+                    new Uri(
+                        "https://collector.example/private/"),
+                    OtlpSignalKind.Logs);
+
+        Assert.Equal(
+            "https://collector.example/private/v1/logs",
+            endpoint.AbsoluteUri);
+
+        using var handler =
+            KafdeckOpenTelemetryRegistration
+                .CreateNoRedirectHttpHandler();
+        Assert.False(handler.AllowAutoRedirect);
+    }
+
+    [Fact]
+    public void Otlp_log_capability_never_infers_success_from_trace_metric_health()
+    {
+        var enabled =
+            KafdeckObservabilityEndpoints
+                .OtlpLogsCapability(
+                    enabled: true);
+        Assert.Equal(
+            "unknown",
+            enabled.State);
+        Assert.Equal(
+            "otlp_log_export_not_observed",
+            enabled.ReasonCode);
+
+        var disabled =
+            KafdeckObservabilityEndpoints
+                .OtlpLogsCapability(
+                    enabled: false);
+        Assert.Equal(
+            "unconfigured",
+            disabled.State);
+    }
+
+    [Fact]
+    public void OpenTelemetry_registration_owns_runtime_telemetry_services()
+    {
+        var observability =
+            ObservabilityOptions.Default;
+
+        var services = new ServiceCollection();
+        services.AddSingleton(
+            new KafdeckOptions(
+                new DeploymentOptions(
+                    "http://127.0.0.1:8080",
+                    null),
+                Array.Empty<ClusterProfile>()));
+        services.AddKafdeckOpenTelemetry(
+            observability,
+            resolvedOtlpHeaders: null);
+
+        using var provider =
+            services.BuildServiceProvider();
+
+        Assert.NotNull(
+            provider.GetRequiredService<
+                SafeRuntimeTelemetryLoggerFactory>());
+        Assert.NotNull(
+            provider.GetRequiredService<
+                RuntimeTelemetry>());
+    }
+
     private static string? RouteTag(
         ReadOnlySpan<KeyValuePair<string, object?>> tags)
     {
@@ -1379,6 +1579,34 @@ public sealed class V08W62ObservabilityFoundationTests
             new ConfigurationBuilder()
                 .AddInMemoryCollection(values)
                 .Build());
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<string> Messages { get; } =
+            new();
+
+        public IDisposable? BeginScope<TState>(
+            TState state)
+            where TState : notnull =>
+            null;
+
+        public bool IsEnabled(
+            LogLevel logLevel) =>
+            true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(
+                formatter(
+                    state,
+                    exception));
+        }
+    }
 
     private sealed class CapturingAuditSink
         : ISecurityAuditSink
