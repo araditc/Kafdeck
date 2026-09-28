@@ -13,12 +13,15 @@ public sealed record ObservabilityCapabilitiesData(
     ObservabilityCapabilityValue Instrumentation,
     ObservabilityCapabilityValue Prometheus,
     ObservabilityCapabilityValue Otlp,
+    ObservabilityCapabilityValue OtlpLogs,
     string PrometheusPath,
     int MaxActiveSeries,
     int HardMaxActiveSeries,
     int MaxMetricLabelsPerSeries,
     int MaxMetricLabelValueBytes,
-    int MaxTraceAttributes);
+    int MaxTraceAttributes,
+    int MaxLogAttributes,
+    int MaxDiagnosticStringBytes);
 
 public static class KafdeckObservabilityEndpoints
 {
@@ -51,6 +54,16 @@ public static class KafdeckObservabilityEndpoints
                     "otlp_export_not_observed"),
         };
     }
+
+    internal static ObservabilityCapabilityValue OtlpLogsCapability(
+        bool enabled) =>
+        enabled
+            ? new ObservabilityCapabilityValue(
+                "unknown",
+                "otlp_log_export_not_observed")
+            : new ObservabilityCapabilityValue(
+                "unconfigured",
+                "otlp_not_enabled");
 
     public static bool IsPrometheusScrapePath(
         PathString path)
@@ -105,12 +118,16 @@ public static class KafdeckObservabilityEndpoints
                             OtlpCapability(
                                 observability.Otlp.Enabled,
                                 otlpHealth.Current),
+                            OtlpLogsCapability(
+                                observability.Otlp.Enabled),
                             PrometheusObservabilityOptions.Path,
                             observability.MaxActiveSeries,
                             ObservabilityOptions.HardMaxActiveSeries,
                             observability.MaxMetricLabelsPerSeries,
                             observability.MaxMetricLabelValueBytes,
-                            observability.MaxTraceAttributes));
+                            observability.MaxTraceAttributes,
+                            observability.MaxLogAttributes,
+                            observability.MaxDiagnosticStringBytes));
                 })
             .WithName("v08-observability-capabilities");
 
