@@ -35,6 +35,9 @@ var builder = WebApplication.CreateBuilder(args);
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
 var mutationOptions = kafdeckOptions.Administration?.Mutations;
+var observabilityOptions =
+    kafdeckOptions.Observability ??
+    ObservabilityOptions.Default;
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -49,6 +52,13 @@ var deploymentAccessToken =
     DeploymentAccessModePolicy.UsesDeploymentToken(kafdeckOptions.Deployment.Mode) &&
     kafdeckOptions.Deployment.AccessToken is not null
         ? secretResolver.Resolve(kafdeckOptions.Deployment.AccessToken).Reveal()
+        : null;
+
+var prometheusScrapeToken =
+    observabilityOptions.Prometheus.ScrapeToken is not null
+        ? secretResolver.Resolve(
+                observabilityOptions.Prometheus.ScrapeToken)
+            .Reveal()
         : null;
 
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
@@ -113,6 +123,10 @@ builder.Services.AddSingleton<IStreamsTelemetryReadPort>(_ =>
 builder.Services.AddSingleton<ILineageReadPort, StreamsLineageReadService>();
 builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
     new ConfigurationTopicCatalogProvider(kafdeckOptions));
+builder.Services.AddSingleton(observabilityOptions);
+builder.Services.AddSingleton(
+    new PrometheusMetricsRegistry(
+        observabilityOptions.MaxActiveMetricSeries));
 builder.Services.AddSingleton<ApiTelemetry>();
 
 if (mutationOptions?.Enabled == true)
@@ -405,6 +419,10 @@ app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
+app.MapKafdeckPrometheusMetrics(
+    observabilityOptions.Prometheus,
+    app.Services.GetRequiredService<PrometheusMetricsRegistry>(),
+    prometheusScrapeToken);
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();
