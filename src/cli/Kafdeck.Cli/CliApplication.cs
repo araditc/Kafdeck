@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Kafdeck.Cli;
 
 public static class CliApplication
@@ -137,14 +135,6 @@ public static class CliApplication
                 client.GetAsync(
                     $"/api/v1/clusters/{Uri.EscapeDataString(invocation.ResourceId!)}",
                     cancellationToken),
-            CliCommand.OperationGet =>
-                client.GetAsync(
-                    $"/api/v1/mutations/{invocation.OperationId!.Value:D}",
-                    cancellationToken),
-            CliCommand.ApprovalsList =>
-                client.GetAsync(
-                    $"/api/v1/mutations/approvals?limit={invocation.Limit!.Value.ToString(CultureInfo.InvariantCulture)}",
-                    cancellationToken),
             _ => throw new InvalidOperationException(
                 "CLI invocation contains an unsupported command."),
         };
@@ -156,8 +146,6 @@ public enum CliCommand
     SystemInfo = 1,
     ClustersList = 2,
     ClusterGet = 3,
-    OperationGet = 4,
-    ApprovalsList = 5,
 }
 
 public sealed record CliInvocation(
@@ -165,8 +153,6 @@ public sealed record CliInvocation(
     string? TokenFile,
     CliCommand Command,
     string? ResourceId,
-    Guid? OperationId,
-    int? Limit,
     bool ShowHelp);
 
 public sealed class CliUsageException : Exception
@@ -192,8 +178,6 @@ public static class CliParser
           kafdeck [--url <base-url>] [--token-file <path>] system info
           kafdeck [--url <base-url>] [--token-file <path>] clusters list
           kafdeck [--url <base-url>] [--token-file <path>] clusters get <cluster-id>
-          kafdeck [--url <base-url>] [--token-file <path>] operations get <operation-id>
-          kafdeck [--url <base-url>] [--token-file <path>] approvals list [--limit <1-100>]
           kafdeck --help
 
         Environment:
@@ -203,6 +187,8 @@ public static class CliParser
         Security:
           Access tokens are intentionally not accepted as command-line arguments.
           Use KAFDECK_ACCESS_TOKEN or --token-file.
+          Mutation status and approval commands are withheld until the CLI has a
+          governed non-browser OIDC authentication flow compatible with mutation mode.
         """;
 
     public static CliInvocation Parse(
@@ -222,15 +208,12 @@ public static class CliParser
                 null,
                 CliCommand.None,
                 null,
-                null,
-                null,
                 ShowHelp: true);
         }
 
         string? url = null;
         string? tokenFile = null;
         var positionals = new List<string>();
-        int? limit = null;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -239,7 +222,10 @@ public static class CliParser
             switch (value)
             {
                 case "--url":
-                    url = RequireValue(args, ref index, "--url");
+                    url = RequireValue(
+                        args,
+                        ref index,
+                        "--url");
                     break;
                 case "--token-file":
                     tokenFile = RequireValue(
@@ -257,25 +243,6 @@ public static class CliParser
                 case "--token":
                     throw new CliUsageException(
                         "Access tokens are not accepted on the command line. Use KAFDECK_ACCESS_TOKEN or --token-file.");
-                case "--limit":
-                    var rawLimit =
-                        RequireValue(
-                            args,
-                            ref index,
-                            "--limit");
-                    if (!int.TryParse(
-                            rawLimit,
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out var parsedLimit) ||
-                        parsedLimit is < 1 or > 100)
-                    {
-                        throw new CliUsageException(
-                            "--limit must be an integer between 1 and 100.");
-                    }
-
-                    limit = parsedLimit;
-                    break;
                 default:
                     if (value.StartsWith(
                             "--",
@@ -296,7 +263,6 @@ public static class CliParser
                 new[] { "system", "info" },
                 StringComparer.Ordinal))
         {
-            EnsureNoLimit(limit);
             return Create(
                 baseUri,
                 tokenFile,
@@ -307,7 +273,6 @@ public static class CliParser
                 new[] { "clusters", "list" },
                 StringComparer.Ordinal))
         {
-            EnsureNoLimit(limit);
             return Create(
                 baseUri,
                 tokenFile,
@@ -318,7 +283,6 @@ public static class CliParser
             positionals[0] == "clusters" &&
             positionals[1] == "get")
         {
-            EnsureNoLimit(limit);
             ValidateIdentifier(
                 positionals[2],
                 "cluster ID");
@@ -329,55 +293,20 @@ public static class CliParser
                 resourceId: positionals[2]);
         }
 
-        if (positionals.Count == 3 &&
-            positionals[0] == "operations" &&
-            positionals[1] == "get")
-        {
-            EnsureNoLimit(limit);
-            if (!Guid.TryParse(
-                    positionals[2],
-                    out var operationId))
-            {
-                throw new CliUsageException(
-                    "Operation ID must be a GUID.");
-            }
-
-            return Create(
-                baseUri,
-                tokenFile,
-                CliCommand.OperationGet,
-                operationId: operationId);
-        }
-
-        if (positionals.SequenceEqual(
-                new[] { "approvals", "list" },
-                StringComparer.Ordinal))
-        {
-            return Create(
-                baseUri,
-                tokenFile,
-                CliCommand.ApprovalsList,
-                limit: limit ?? 50);
-        }
-
         throw new CliUsageException(
-            "Unknown or incomplete command.");
+            "Unknown, incomplete, or unavailable command.");
     }
 
     private static CliInvocation Create(
         Uri baseUri,
         string? tokenFile,
         CliCommand command,
-        string? resourceId = null,
-        Guid? operationId = null,
-        int? limit = null) =>
+        string? resourceId = null) =>
         new(
             baseUri,
             tokenFile,
             command,
             resourceId,
-            operationId,
-            limit,
             ShowHelp: false);
 
     private static string RequireValue(
@@ -435,15 +364,6 @@ public static class CliParser
         {
             throw new CliUsageException(
                 $"{field} must be non-empty, at most 256 characters, and contain no control characters.");
-        }
-    }
-
-    private static void EnsureNoLimit(int? limit)
-    {
-        if (limit is not null)
-        {
-            throw new CliUsageException(
-                "--limit is only valid for approvals list.");
         }
     }
 }
