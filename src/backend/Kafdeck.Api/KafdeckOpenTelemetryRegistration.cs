@@ -137,6 +137,7 @@ public static class KafdeckOpenTelemetryRegistration
         {
             OtlpSignalKind.Traces => "v1/traces",
             OtlpSignalKind.Metrics => "v1/metrics",
+            OtlpSignalKind.Logs => "v1/logs",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(signal)),
         };
@@ -272,4 +273,5 @@ internal enum OtlpSignalKind
 {
     Traces = 1,
     Metrics = 2,
+    Logs = 3,
 }
