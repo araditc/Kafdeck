@@ -575,10 +575,10 @@ public static class KafdeckConfigurationValidator
         if (!prometheus.Path.StartsWith('/', StringComparison.Ordinal) ||
             prometheus.Path.Length > 128 ||
             prometheus.Path.Any(char.IsControl) ||
-            prometheus.Path.Contains('?', StringComparison.Ordinal) ||
-            prometheus.Path.Contains('#', StringComparison.Ordinal) ||
-            prometheus.Path.Contains('{', StringComparison.Ordinal) ||
-            prometheus.Path.Contains('}', StringComparison.Ordinal) ||
+            prometheus.Path.Contains('?') ||
+            prometheus.Path.Contains('#') ||
+            prometheus.Path.Contains('{') ||
+            prometheus.Path.Contains('}') ||
             string.Equals(prometheus.Path, "/", StringComparison.Ordinal) ||
             string.Equals(prometheus.Path, "/healthz", StringComparison.OrdinalIgnoreCase) ||
             prometheus.Path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
