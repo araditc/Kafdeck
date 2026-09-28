@@ -86,7 +86,8 @@ public sealed record DataGeneratorOptions(
 
 public sealed record ObservabilityOptions(
     int MaxActiveSeries,
-    PrometheusObservabilityOptions Prometheus)
+    PrometheusObservabilityOptions Prometheus,
+    OtlpObservabilityOptions Otlp)
 {
     public const int MinimumMaxActiveSeries = 2;
     public const int DefaultMaxActiveSeries = 10_000;
@@ -95,7 +96,18 @@ public sealed record ObservabilityOptions(
     public static ObservabilityOptions Default { get; } =
         new(
             DefaultMaxActiveSeries,
-            PrometheusObservabilityOptions.Disabled);
+            PrometheusObservabilityOptions.Disabled,
+            OtlpObservabilityOptions.Disabled);
+
+    public ObservabilityOptions(
+        int maxActiveSeries,
+        PrometheusObservabilityOptions prometheus)
+        : this(
+            maxActiveSeries,
+            prometheus,
+            OtlpObservabilityOptions.Disabled)
+    {
+    }
 
     public static ObservabilityOptions Effective(KafdeckOptions options)
     {
@@ -112,6 +124,26 @@ public sealed record PrometheusObservabilityOptions(
 
     public static PrometheusObservabilityOptions Disabled { get; } =
         new(false, null);
+}
+
+public enum OtlpObservabilityProtocol
+{
+    Grpc = 1,
+    HttpProtobuf = 2,
+}
+
+public sealed record OtlpObservabilityOptions(
+    bool Enabled,
+    string? Endpoint,
+    OtlpObservabilityProtocol Protocol,
+    SecretReference? Headers)
+{
+    public static OtlpObservabilityOptions Disabled { get; } =
+        new(
+            false,
+            null,
+            OtlpObservabilityProtocol.Grpc,
+            null);
 }
 
 public sealed record TopicCatalogOptions(
