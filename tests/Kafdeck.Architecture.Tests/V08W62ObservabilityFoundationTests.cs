@@ -22,8 +22,6 @@ public sealed class V08W62ObservabilityFoundationTests
             ["Kafdeck:Observability:MaxMetricLabelsPerSeries"] = "8",
             ["Kafdeck:Observability:MaxMetricLabelValueBytes"] = "64",
             ["Kafdeck:Observability:MaxTraceAttributes"] = "24",
-            ["Kafdeck:Observability:MaxLogAttributes"] = "24",
-            ["Kafdeck:Observability:MaxDiagnosticStringBytes"] = "512",
         });
 
         KafdeckConfigurationValidator.ValidateAndThrow(options);
@@ -37,8 +35,6 @@ public sealed class V08W62ObservabilityFoundationTests
         Assert.Equal(8, observability.MaxMetricLabelsPerSeries);
         Assert.Equal(64, observability.MaxMetricLabelValueBytes);
         Assert.Equal(24, observability.MaxTraceAttributes);
-        Assert.Equal(24, observability.MaxLogAttributes);
-        Assert.Equal(512, observability.MaxDiagnosticStringBytes);
     }
 
     [Theory]
@@ -49,8 +45,6 @@ public sealed class V08W62ObservabilityFoundationTests
     [InlineData("MaxMetricLabelValueBytes", "4")]
     [InlineData("MaxMetricLabelValueBytes", "129")]
     [InlineData("MaxTraceAttributes", "49")]
-    [InlineData("MaxLogAttributes", "49")]
-    [InlineData("MaxDiagnosticStringBytes", "2049")]
     public void Observability_cap_plus_one_values_fail_closed(
         string key,
         string value)
