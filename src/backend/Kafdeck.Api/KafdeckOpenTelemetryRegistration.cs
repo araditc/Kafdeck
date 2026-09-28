@@ -24,7 +24,12 @@ public static class KafdeckOpenTelemetryRegistration
             _ => new SafeRuntimeTelemetryLoggerFactory(
                 observability,
                 resolvedOtlpHeaders));
-        services.AddSingleton<RuntimeTelemetry>();
+        services.AddSingleton<RuntimeTelemetry>(
+            serviceProvider =>
+                new RuntimeTelemetry(
+                    serviceProvider.GetRequiredService<KafdeckOptions>(),
+                    serviceProvider.GetRequiredService<
+                        SafeRuntimeTelemetryLoggerFactory>()));
 
         services
             .AddOpenTelemetry()
