@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Kafdeck.Api;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
@@ -195,6 +197,134 @@ public sealed class V08W62ObservabilityFoundationTests
             "this-route-is-too-long",
             output,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Meter_exports_only_admitted_normalized_dimensions()
+    {
+        var registry = new PrometheusMetricsRegistry(
+            maxActiveSeries: 5,
+            maxLabelsPerSeries: 3,
+            maxLabelValueBytes: 8);
+        var options = ObservabilityOptions.Default with
+        {
+            MaxActiveMetricSeries = 5,
+            MaxMetricLabelsPerSeries = 3,
+            MaxMetricLabelValueBytes = 8,
+        };
+
+        using var telemetry = new ApiTelemetry(
+            registry,
+            options);
+        using var listener = new MeterListener();
+
+        var requestMeasurements =
+            new List<IReadOnlyDictionary<string, object?>>();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (string.Equals(
+                    instrument.Meter.Name,
+                    ApiTelemetry.InstrumentationName,
+                    StringComparison.Ordinal))
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>(
+            (instrument, _, tags, _) =>
+            {
+                if (!string.Equals(
+                        instrument.Name,
+                        "kafdeck.api.requests",
+                        StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                requestMeasurements.Add(
+                    tags.ToArray().ToDictionary(
+                        item => item.Key,
+                        item => item.Value,
+                        StringComparer.Ordinal));
+            });
+        listener.Start();
+
+        telemetry.RecordRequest(
+            "route-name-is-over-eight-bytes",
+            "POST",
+            204,
+            5);
+
+        var tags = Assert.Single(requestMeasurements);
+        Assert.Equal("other", tags["kafdeck.route"]);
+        Assert.Equal("POST", tags["http.request.method"]);
+        Assert.Equal("2xx", tags["http.response.status_code"]);
+
+        telemetry.RecordRequest(
+            "second",
+            "GET",
+            200,
+            5);
+
+        Assert.Single(requestMeasurements);
+        Assert.Equal(3, registry.DroppedSeriesCount);
+    }
+
+    [Theory]
+    [InlineData(1, false, false)]
+    [InlineData(2, true, false)]
+    [InlineData(3, true, true)]
+    public void Trace_attributes_honor_configured_limit(
+        int maxTraceAttributes,
+        bool expectMethod,
+        bool expectStatus)
+    {
+        var registry = new PrometheusMetricsRegistry(
+            maxActiveSeries: 5,
+            maxLabelsPerSeries: 3,
+            maxLabelValueBytes: 64);
+        var options = ObservabilityOptions.Default with
+        {
+            MaxTraceAttributes = maxTraceAttributes,
+        };
+
+        using var telemetry = new ApiTelemetry(
+            registry,
+            options);
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source =>
+                string.Equals(
+                    source.Name,
+                    ApiTelemetry.InstrumentationName,
+                    StringComparison.Ordinal),
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = telemetry.StartRequest(
+            "v01-topics-list",
+            "GET");
+        Assert.NotNull(activity);
+
+        telemetry.SetResponseStatus(activity, 200);
+
+        var tags = activity!.TagObjects.ToDictionary(
+            item => item.Key,
+            item => item.Value,
+            StringComparer.Ordinal);
+
+        Assert.True(tags.Count <= maxTraceAttributes);
+        Assert.Equal(
+            "v01-topics-list",
+            tags["kafdeck.route"]);
+        Assert.Equal(
+            expectMethod,
+            tags.ContainsKey("http.request.method"));
+        Assert.Equal(
+            expectStatus,
+            tags.ContainsKey("http.response.status_code"));
     }
 
     private static KafdeckOptions Load(
