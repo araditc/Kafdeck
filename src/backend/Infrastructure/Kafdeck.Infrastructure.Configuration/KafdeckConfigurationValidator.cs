@@ -28,6 +28,7 @@ public static class KafdeckConfigurationValidator
         ValidateCatalog(options.Catalog, options.Clusters, errors);
         ValidateAdministration(options.Administration, options.Deployment, errors);
         ValidateGenerator(options.Generator, options.Clusters, errors);
+        ValidateObservability(options.Observability, errors);
         ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
@@ -523,6 +524,68 @@ public static class KafdeckConfigurationValidator
             .TrimEnd('/')
             .ToLowerInvariant();
         return true;
+    }
+
+    private static void ValidateObservability(
+        ObservabilityOptions? observability,
+        ICollection<string> errors)
+    {
+        if (observability is null)
+        {
+            return;
+        }
+
+        if (observability.MaxActiveMetricSeries is < 1 or > 50_000)
+        {
+            errors.Add(
+                "Observability max active metric series must be between 1 and 50000.");
+        }
+
+        if (observability.MaxMetricLabelsPerSeries is < 1 or > 12)
+        {
+            errors.Add(
+                "Observability max metric labels per series must be between 1 and 12.");
+        }
+
+        if (observability.MaxMetricLabelValueBytes is < 1 or > 128)
+        {
+            errors.Add(
+                "Observability max metric label value bytes must be between 1 and 128.");
+        }
+
+        if (observability.MaxTraceAttributes is < 1 or > 48)
+        {
+            errors.Add(
+                "Observability max trace attributes must be between 1 and 48.");
+        }
+
+        if (observability.MaxLogAttributes is < 1 or > 48)
+        {
+            errors.Add(
+                "Observability max log attributes must be between 1 and 48.");
+        }
+
+        if (observability.MaxDiagnosticStringBytes is < 1 or > 2048)
+        {
+            errors.Add(
+                "Observability max diagnostic string bytes must be between 1 and 2048.");
+        }
+
+        var prometheus = observability.Prometheus;
+        if (!prometheus.Path.StartsWith('/', StringComparison.Ordinal) ||
+            prometheus.Path.Length > 128 ||
+            prometheus.Path.Any(char.IsControl) ||
+            prometheus.Path.Contains('?', StringComparison.Ordinal) ||
+            prometheus.Path.Contains('#', StringComparison.Ordinal) ||
+            prometheus.Path.Contains('{', StringComparison.Ordinal) ||
+            prometheus.Path.Contains('}', StringComparison.Ordinal) ||
+            string.Equals(prometheus.Path, "/", StringComparison.Ordinal) ||
+            string.Equals(prometheus.Path, "/healthz", StringComparison.OrdinalIgnoreCase) ||
+            prometheus.Path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(
+                "Prometheus metrics path must be a dedicated absolute path of at most 128 characters outside '/', '/healthz' and '/api'.");
+        }
     }
 
     private static void ValidateGenerator(
