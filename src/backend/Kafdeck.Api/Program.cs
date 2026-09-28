@@ -7,6 +7,7 @@ using Kafdeck.Core.Catalog;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Observability;
 using Kafdeck.Core.ReadViews;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Schemas;
@@ -112,23 +113,47 @@ builder.Services.AddSingleton(authorizationPolicy);
 builder.Services.AddSingleton<AuthorizationPolicyEvaluator>();
 builder.Services.AddSingleton<KafdeckAuthorizationService>();
 builder.Services.AddSingleton<ISecurityAuditSink, LoggingSecurityAuditSink>();
+builder.Services.AddSingleton<ApiTelemetry>();
+builder.Services.AddSingleton<IKafdeckOperationalTelemetry>(
+    services =>
+        services.GetRequiredService<ApiTelemetry>());
 builder.Services.AddSingleton<KafkaSnapshotPolicy>();
 builder.Services.AddSingleton<KafkaSnapshotCoordinator>(services =>
     new KafkaSnapshotCoordinator(services.GetRequiredService<KafkaSnapshotPolicy>()));
-builder.Services.AddSingleton<IKafkaAdministrationPort>(_ =>
-    new ConfluentKafkaAdministrationAdapter(kafdeckOptions.Clusters, secretResolver));
-builder.Services.AddSingleton<IKafkaRecordReadPort>(_ =>
-    new ConfluentKafkaRecordReadAdapter(kafdeckOptions.Clusters, secretResolver));
-builder.Services.AddSingleton<IConsumerGroupReadPort>(_ =>
-    new ConfluentKafkaConsumerGroupReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IKafkaAdministrationPort>(services =>
+    new TelemetryKafkaAdministrationPort(
+        new ConfluentKafkaAdministrationAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
+builder.Services.AddSingleton<IKafkaRecordReadPort>(services =>
+    new TelemetryKafkaRecordReadPort(
+        new ConfluentKafkaRecordReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
+builder.Services.AddSingleton<IConsumerGroupReadPort>(services =>
+    new TelemetryConsumerGroupReadPort(
+        new ConfluentKafkaConsumerGroupReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<ConsumerExplorerService>();
 builder.Services.AddSingleton<IMetricsObservationPort, UnavailableMetricsObservationPort>();
 builder.Services.AddSingleton<IHistoryObservationPort, UnavailableHistoryObservationPort>();
 builder.Services.AddSingleton<ConsumerDiagnosticsService>();
-builder.Services.AddSingleton<IRecordSchemaReadPort>(_ =>
-    new ConfluentSchemaRegistryReadAdapter(kafdeckOptions.Clusters, secretResolver));
-builder.Services.AddSingleton<ISchemaCatalogReadPort>(_ =>
-    new ConfluentSchemaCatalogReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IRecordSchemaReadPort>(services =>
+    new TelemetryRecordSchemaReadPort(
+        new ConfluentSchemaRegistryReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
+builder.Services.AddSingleton<ISchemaCatalogReadPort>(services =>
+    new TelemetrySchemaCatalogReadPort(
+        new ConfluentSchemaCatalogReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<SchemaDiffService>();
 builder.Services.AddSingleton<SchemaExplorerService>();
 builder.Services.AddSingleton<SchemaDeveloperService>();
@@ -141,18 +166,33 @@ builder.Services.AddSingleton<RecordExportService>();
 builder.Services.AddSingleton<IControlledSerdePort, ControlledSerdeService>();
 builder.Services.AddSingleton<ClusterExplorerService>();
 builder.Services.AddSingleton<TopicExplorerService>();
-builder.Services.AddSingleton<IConnectReadPort>(_ =>
-    new KafkaConnectReadAdapter(kafdeckOptions.Clusters, secretResolver));
-builder.Services.AddSingleton<IKsqlMetadataReadPort>(_ =>
-    new KsqlDbMetadataReadAdapter(kafdeckOptions.Clusters, secretResolver));
-builder.Services.AddSingleton<IKsqlQueryPort>(_ =>
-    new KsqlDbQueryAdapter(kafdeckOptions.Clusters, secretResolver));
-builder.Services.AddSingleton<IStreamsTelemetryReadPort>(_ =>
-    new StreamsTelemetryReadAdapter(kafdeckOptions.Clusters, secretResolver));
+builder.Services.AddSingleton<IConnectReadPort>(services =>
+    new TelemetryConnectReadPort(
+        new KafkaConnectReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
+builder.Services.AddSingleton<IKsqlMetadataReadPort>(services =>
+    new TelemetryKsqlMetadataReadPort(
+        new KsqlDbMetadataReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
+builder.Services.AddSingleton<IKsqlQueryPort>(services =>
+    new TelemetryKsqlQueryPort(
+        new KsqlDbQueryAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
+builder.Services.AddSingleton<IStreamsTelemetryReadPort>(services =>
+    new TelemetryStreamsTelemetryReadPort(
+        new StreamsTelemetryReadAdapter(
+            kafdeckOptions.Clusters,
+            secretResolver),
+        services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<ILineageReadPort, StreamsLineageReadService>();
 builder.Services.AddSingleton<ITopicCatalogProvider>(_ =>
     new ConfigurationTopicCatalogProvider(kafdeckOptions));
-builder.Services.AddSingleton<ApiTelemetry>();
 
 if (mutationOptions?.Enabled == true)
 {
