@@ -1436,6 +1436,13 @@ public sealed class V08W62ObservabilityFoundationTests
         }
 
         var message = Assert.Single(logger.Messages);
+        Assert.True(
+            System.Text.Encoding.UTF8.GetByteCount(
+                message) <= 64);
+        Assert.Equal(
+            3,
+            Assert.Single(
+                logger.AttributeCounts));
         Assert.Contains(
             "data-job-provider",
             message,
@@ -1585,6 +1592,9 @@ public sealed class V08W62ObservabilityFoundationTests
         public List<string> Messages { get; } =
             new();
 
+        public List<int> AttributeCounts { get; } =
+            new();
+
         public IDisposable? BeginScope<TState>(
             TState state)
             where TState : notnull =>
@@ -1605,6 +1615,12 @@ public sealed class V08W62ObservabilityFoundationTests
                 formatter(
                     state,
                     exception));
+            AttributeCounts.Add(
+                state is IReadOnlyCollection<
+                    KeyValuePair<string, object?>>
+                    attributes
+                    ? attributes.Count
+                    : 0);
         }
     }
 
