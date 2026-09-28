@@ -126,7 +126,7 @@ public sealed class V08W62ObservabilityFoundationTests
                 () => KafdeckConfigurationValidator
                     .ValidateAndThrow(missingToken));
         Assert.Contains(
-            "requires a dedicated access-token",
+            "require a dedicated access-token secret reference",
             missingTokenException.Message,
             StringComparison.Ordinal);
 
