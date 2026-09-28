@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Kafdeck.Infrastructure.Configuration;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -16,7 +18,10 @@ public static class KafdeckOpenTelemetryRegistration
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(observability);
 
-        var builder = services
+        var health = new OtlpExporterHealthState();
+        services.AddSingleton(health);
+
+        services
             .AddOpenTelemetry()
             .ConfigureResource(resource =>
                 resource.AddService(
@@ -27,12 +32,18 @@ public static class KafdeckOpenTelemetryRegistration
 
                 if (observability.Otlp.Enabled)
                 {
-                    tracing.AddOtlpExporter(options =>
-                        ConfigureExporter(
-                            options,
-                            observability.Otlp,
-                            resolvedOtlpHeaders,
-                            OtlpSignalKind.Traces));
+                    var options = new OtlpExporterOptions();
+                    ConfigureExporter(
+                        options,
+                        observability.Otlp,
+                        resolvedOtlpHeaders,
+                        OtlpSignalKind.Traces);
+
+                    tracing.AddProcessor(
+                        new BatchActivityExportProcessor(
+                            new HealthTrackingOtlpTraceExporter(
+                                options,
+                                health)));
                 }
             })
             .WithMetrics(metrics =>
@@ -41,12 +52,18 @@ public static class KafdeckOpenTelemetryRegistration
 
                 if (observability.Otlp.Enabled)
                 {
-                    metrics.AddOtlpExporter(options =>
-                        ConfigureExporter(
-                            options,
-                            observability.Otlp,
-                            resolvedOtlpHeaders,
-                            OtlpSignalKind.Metrics));
+                    var options = new OtlpExporterOptions();
+                    ConfigureExporter(
+                        options,
+                        observability.Otlp,
+                        resolvedOtlpHeaders,
+                        OtlpSignalKind.Metrics);
+
+                    metrics.AddReader(
+                        new PeriodicExportingMetricReader(
+                            new HealthTrackingOtlpMetricExporter(
+                                options,
+                                health)));
                 }
             });
 
@@ -142,6 +159,113 @@ public static class KafdeckOpenTelemetryRegistration
         {
             AllowAutoRedirect = false,
         };
+}
+
+public enum OtlpRuntimeHealth
+{
+    Unknown = 0,
+    Supported = 1,
+    Unavailable = 2,
+}
+
+public sealed class OtlpExporterHealthState
+{
+    // 0 = no evidence, 1 = latest export succeeded, -1 = latest export failed.
+    private int _traceState;
+    private int _metricState;
+
+    public OtlpRuntimeHealth Current
+    {
+        get
+        {
+            var trace = Volatile.Read(ref _traceState);
+            var metric = Volatile.Read(ref _metricState);
+
+            if (trace < 0 || metric < 0)
+            {
+                return OtlpRuntimeHealth.Unavailable;
+            }
+
+            return trace > 0 && metric > 0
+                ? OtlpRuntimeHealth.Supported
+                : OtlpRuntimeHealth.Unknown;
+        }
+    }
+
+    internal void Record(
+        OtlpSignalKind signal,
+        ExportResult result)
+    {
+        var value =
+            result == ExportResult.Success
+                ? 1
+                : -1;
+
+        switch (signal)
+        {
+            case OtlpSignalKind.Traces:
+                Volatile.Write(ref _traceState, value);
+                break;
+            case OtlpSignalKind.Metrics:
+                Volatile.Write(ref _metricState, value);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(signal));
+        }
+    }
+}
+
+internal sealed class HealthTrackingOtlpTraceExporter
+    : OtlpTraceExporter
+{
+    private readonly OtlpExporterHealthState _health;
+
+    public HealthTrackingOtlpTraceExporter(
+        OtlpExporterOptions options,
+        OtlpExporterHealthState health)
+        : base(options)
+    {
+        _health =
+            health ??
+            throw new ArgumentNullException(nameof(health));
+    }
+
+    public override ExportResult Export(
+        in Batch<Activity> batch)
+    {
+        var result = base.Export(in batch);
+        _health.Record(
+            OtlpSignalKind.Traces,
+            result);
+        return result;
+    }
+}
+
+internal sealed class HealthTrackingOtlpMetricExporter
+    : OtlpMetricExporter
+{
+    private readonly OtlpExporterHealthState _health;
+
+    public HealthTrackingOtlpMetricExporter(
+        OtlpExporterOptions options,
+        OtlpExporterHealthState health)
+        : base(options)
+    {
+        _health =
+            health ??
+            throw new ArgumentNullException(nameof(health));
+    }
+
+    public override ExportResult Export(
+        in Batch<Metric> batch)
+    {
+        var result = base.Export(in batch);
+        _health.Record(
+            OtlpSignalKind.Metrics,
+            result);
+        return result;
+    }
 }
 
 internal enum OtlpSignalKind
