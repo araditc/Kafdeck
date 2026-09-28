@@ -37,6 +37,7 @@ public static class KafdeckConfigurationLoader
         var catalog = LoadTopicCatalog(configuration.GetSection("Kafdeck:Catalog"));
         var administration = LoadAdministration(configuration.GetSection("Kafdeck:Administration"));
         var generator = LoadDataGenerator(configuration.GetSection("Kafdeck:Generator"));
+        var observability = LoadObservability(configuration.GetSection("Kafdeck:Observability"));
 
         return new KafdeckOptions(
             new DeploymentOptions(
@@ -49,7 +50,56 @@ public static class KafdeckConfigurationLoader
             records,
             catalog,
             administration,
-            generator);
+            generator,
+            observability);
+    }
+
+    private static ObservabilityOptions? LoadObservability(
+        IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        var defaults = ObservabilityOptions.Default;
+        var prometheusSection = section.GetSection("Prometheus");
+        var prometheus = new PrometheusMetricsOptions(
+            ParseOptionalBoolean(
+                prometheusSection["Enabled"],
+                defaults.Prometheus.Enabled,
+                "Prometheus metrics Enabled"),
+            string.IsNullOrWhiteSpace(prometheusSection["Path"])
+                ? defaults.Prometheus.Path
+                : prometheusSection["Path"]!.Trim(),
+            ParseOptionalSecret(prometheusSection["ScrapeToken"]));
+
+        return new ObservabilityOptions(
+            prometheus,
+            ParseOptionalInt(
+                section["MaxActiveMetricSeries"],
+                defaults.MaxActiveMetricSeries,
+                "Observability max active metric series"),
+            ParseOptionalInt(
+                section["MaxMetricLabelsPerSeries"],
+                defaults.MaxMetricLabelsPerSeries,
+                "Observability max metric labels per series"),
+            ParseOptionalInt(
+                section["MaxMetricLabelValueBytes"],
+                defaults.MaxMetricLabelValueBytes,
+                "Observability max metric label value bytes"),
+            ParseOptionalInt(
+                section["MaxTraceAttributes"],
+                defaults.MaxTraceAttributes,
+                "Observability max trace attributes"),
+            ParseOptionalInt(
+                section["MaxLogAttributes"],
+                defaults.MaxLogAttributes,
+                "Observability max log attributes"),
+            ParseOptionalInt(
+                section["MaxDiagnosticStringBytes"],
+                defaults.MaxDiagnosticStringBytes,
+                "Observability max diagnostic string bytes"));
     }
 
     private static DataGeneratorOptions? LoadDataGenerator(
