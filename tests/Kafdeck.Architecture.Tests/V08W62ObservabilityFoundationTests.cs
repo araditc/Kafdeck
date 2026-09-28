@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Xunit;
@@ -173,6 +174,118 @@ public sealed class V08W62ObservabilityFoundationTests
 
         KafdeckConfigurationValidator
             .ValidateAndThrow(valid);
+    }
+
+    [Fact]
+    public void Http_protobuf_uses_signal_specific_otlp_endpoints()
+    {
+        var options = new OtlpObservabilityOptions(
+            true,
+            "https://collector.example:4318/base",
+            OtlpObservabilityProtocol.HttpProtobuf,
+            null);
+
+        var traces = new OtlpExporterOptions();
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            traces,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Traces);
+
+        var metrics = new OtlpExporterOptions();
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            metrics,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Metrics);
+
+        Assert.Equal(
+            "https://collector.example:4318/base/v1/traces",
+            traces.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(
+            "https://collector.example:4318/base/v1/metrics",
+            metrics.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, traces.Protocol);
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, metrics.Protocol);
+    }
+
+    [Fact]
+    public void Grpc_keeps_the_configured_base_endpoint()
+    {
+        var options = new OtlpObservabilityOptions(
+            true,
+            "https://collector.example:4317/base",
+            OtlpObservabilityProtocol.Grpc,
+            null);
+        var exporter = new OtlpExporterOptions();
+
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            exporter,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Traces);
+
+        Assert.Equal(
+            "https://collector.example:4317/base",
+            exporter.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(OtlpExportProtocol.Grpc, exporter.Protocol);
+    }
+
+    [Fact]
+    public void Http_protobuf_client_disables_redirects()
+    {
+        using var handler =
+            KafdeckOpenTelemetryRegistration
+                .CreateNoRedirectHttpHandler();
+
+        Assert.False(handler.AllowAutoRedirect);
+    }
+
+    [Theory]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "x-api-key=deployment-token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "x-api-key=metrics-token",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment token",
+        "metrics-token",
+        "x-api-key=deployment%20token",
+        "deployment access token")]
+    public void Resolved_otlp_header_values_must_not_reuse_local_credentials(
+        string deploymentToken,
+        string prometheusToken,
+        string otlpHeaders,
+        string expectedMessage)
+    {
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentToken,
+                            prometheusToken,
+                            otlpHeaders));
+
+        Assert.Contains(
+            expectedMessage,
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Distinct_resolved_otlp_header_value_is_admitted()
+    {
+        ObservabilityStartupSecurity
+            .ValidateResolvedCredentialIsolation(
+                "deployment-token",
+                "metrics-token",
+                "x-api-key=collector-token");
     }
 
     [Fact]
