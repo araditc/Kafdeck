@@ -10,7 +10,8 @@ public static class ObservabilityStartupSecurity
     public static void ValidateResolvedCredentialIsolation(
         string? deploymentAccessToken,
         string? prometheusScrapeToken,
-        string? otlpHeaders = null)
+        string? otlpHeaders = null,
+        string? oidcClientSecret = null)
     {
         if (deploymentAccessToken is not null &&
             prometheusScrapeToken is not null &&
@@ -20,6 +21,16 @@ public static class ObservabilityStartupSecurity
         {
             throw new KafdeckConfigurationException(
                 "Prometheus scrape token must resolve to credential material distinct from the deployment access token.");
+        }
+
+        if (oidcClientSecret is not null &&
+            prometheusScrapeToken is not null &&
+            DeploymentAccessTokenValidator.Matches(
+                oidcClientSecret,
+                prometheusScrapeToken))
+        {
+            throw new KafdeckConfigurationException(
+                "Prometheus scrape token must resolve to credential material distinct from the OIDC client secret.");
         }
 
         if (otlpHeaders is null)
@@ -45,6 +56,15 @@ public static class ObservabilityStartupSecurity
         {
             throw new KafdeckConfigurationException(
                 "OTLP headers must resolve to credential material distinct from the Prometheus scrape token.");
+        }
+
+        if (oidcClientSecret is not null &&
+            ContainsCredential(
+                otlpHeaders,
+                oidcClientSecret))
+        {
+            throw new KafdeckConfigurationException(
+                "OTLP headers must resolve to credential material distinct from the OIDC client secret.");
         }
     }
 
@@ -170,14 +190,9 @@ public static class ObservabilityStartupSecurity
             return false;
         }
 
-        byte[] decodedBytes;
-        try
-        {
-            decodedBytes =
-                Convert.FromBase64String(
-                    wrappedValue);
-        }
-        catch (FormatException)
+        if (!TryDecodeBasicCredential(
+                wrappedValue,
+                out var decodedBytes))
         {
             return false;
         }
@@ -216,6 +231,39 @@ public static class ObservabilityStartupSecurity
         {
             CryptographicOperations.ZeroMemory(
                 decodedBytes);
+        }
+    }
+
+    private static bool TryDecodeBasicCredential(
+        string wrappedValue,
+        out byte[] decodedBytes)
+    {
+        decodedBytes = Array.Empty<byte>();
+
+        var normalized = wrappedValue.Trim();
+        var remainder = normalized.Length % 4;
+        if (remainder == 1)
+        {
+            return false;
+        }
+
+        if (remainder == 2)
+        {
+            normalized += "==";
+        }
+        else if (remainder == 3)
+        {
+            normalized += "=";
+        }
+
+        try
+        {
+            decodedBytes = Convert.FromBase64String(normalized);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
         }
     }
 }
