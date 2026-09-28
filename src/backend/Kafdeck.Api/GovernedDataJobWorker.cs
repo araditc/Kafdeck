@@ -1,3 +1,4 @@
+using Kafdeck.Core;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Records;
@@ -156,6 +157,9 @@ public sealed class GovernedDataJobWorker
         {
             return;
         }
+
+        using var activity =
+            KafdeckRuntimeTelemetry.StartDataJobCycle();
 
         GovernedDataJobPlan plan;
         try
