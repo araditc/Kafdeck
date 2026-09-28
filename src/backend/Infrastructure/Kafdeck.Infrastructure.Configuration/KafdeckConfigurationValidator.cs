@@ -547,10 +547,10 @@ public static class KafdeckConfigurationValidator
                 "Observability max metric labels per series must be between 3 and 12 because the admitted API metric schema uses three bounded labels.");
         }
 
-        if (observability.MaxMetricLabelValueBytes is < 1 or > 128)
+        if (observability.MaxMetricLabelValueBytes is < 5 or > 128)
         {
             errors.Add(
-                "Observability max metric label value bytes must be between 1 and 128.");
+                "Observability max metric label value bytes must be between 5 and 128 so the bounded 'other' sentinel always fits.");
         }
 
         if (observability.MaxTraceAttributes is < 1 or > 48)
