@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Kafdeck.Api;
+using Kafdeck.Core.Observability;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Security;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -44,6 +46,12 @@ public sealed class V08W62ObservabilityFoundationTests
         Assert.Equal(
             ObservabilityOptions.DefaultMaxTraceAttributes,
             observability.MaxTraceAttributes);
+        Assert.Equal(
+            ObservabilityOptions.DefaultMaxLogAttributes,
+            observability.MaxLogAttributes);
+        Assert.Equal(
+            ObservabilityOptions.DefaultMaxDiagnosticStringBytes,
+            observability.MaxDiagnosticStringBytes);
         Assert.False(observability.Prometheus.Enabled);
         Assert.Null(observability.Prometheus.AccessToken);
         Assert.False(observability.Otlp.Enabled);
@@ -223,14 +231,25 @@ public sealed class V08W62ObservabilityFoundationTests
             resolvedHeaders: null,
             OtlpSignalKind.Metrics);
 
+        var logs = new OtlpExporterOptions();
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            logs,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Logs);
+
         Assert.Equal(
             "https://collector.example:4318/base/v1/traces",
             traces.Endpoint.AbsoluteUri.TrimEnd('/'));
         Assert.Equal(
             "https://collector.example:4318/base/v1/metrics",
             metrics.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(
+            "https://collector.example:4318/base/v1/logs",
+            logs.Endpoint.AbsoluteUri.TrimEnd('/'));
         Assert.Equal(OtlpExportProtocol.HttpProtobuf, traces.Protocol);
         Assert.Equal(OtlpExportProtocol.HttpProtobuf, metrics.Protocol);
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, logs.Protocol);
     }
 
     [Fact]
@@ -442,7 +461,7 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
-    public void Otlp_runtime_health_requires_real_success_from_both_signals()
+    public void Otlp_runtime_health_requires_real_success_from_all_three_signals()
     {
         var health = new OtlpExporterHealthState();
 
@@ -470,6 +489,14 @@ public sealed class V08W62ObservabilityFoundationTests
             ExportResult.Success);
 
         Assert.Equal(
+            OtlpRuntimeHealth.Unknown,
+            health.Current);
+
+        health.Record(
+            OtlpSignalKind.Logs,
+            ExportResult.Success);
+
+        Assert.Equal(
             OtlpRuntimeHealth.Supported,
             health.Current);
         Assert.Equal(
@@ -490,6 +517,9 @@ public sealed class V08W62ObservabilityFoundationTests
             ExportResult.Success);
         health.Record(
             OtlpSignalKind.Metrics,
+            ExportResult.Success);
+        health.Record(
+            OtlpSignalKind.Logs,
             ExportResult.Success);
         health.Record(
             OtlpSignalKind.Traces,
@@ -539,7 +569,7 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
-    public void Stable_otlp_runtime_registers_trace_and_metric_providers()
+    public void Stable_otlp_runtime_registers_trace_metric_and_log_providers()
     {
         var observability = new ObservabilityOptions(
             100,
@@ -558,6 +588,7 @@ public sealed class V08W62ObservabilityFoundationTests
         using var provider = services.BuildServiceProvider();
         Assert.NotNull(provider.GetService<TracerProvider>());
         Assert.NotNull(provider.GetService<MeterProvider>());
+        Assert.NotNull(provider.GetService<ILoggerFactory>());
     }
 
     [Fact]
@@ -808,7 +839,11 @@ public sealed class V08W62ObservabilityFoundationTests
     [InlineData("MaxMetricLabelValueBytes", "129")]
     [InlineData("MaxTraceAttributes", "0")]
     [InlineData("MaxTraceAttributes", "49")]
-    public void Metric_and_trace_budget_invalid_values_fail_closed(
+    [InlineData("MaxLogAttributes", "0")]
+    [InlineData("MaxLogAttributes", "49")]
+    [InlineData("MaxDiagnosticStringBytes", "63")]
+    [InlineData("MaxDiagnosticStringBytes", "2049")]
+    public void Metric_trace_and_log_budget_invalid_values_fail_closed(
         string key,
         string value)
     {
@@ -1096,6 +1131,109 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
+    public void Operational_metrics_share_the_process_series_budget()
+    {
+        using var telemetry =
+            new ApiTelemetry(maxActiveSeries: 8);
+
+        telemetry.RecordRequest(
+            "route-one",
+            "GET",
+            200,
+            1);
+
+        using (var scope = telemetry.Start(
+                   KafdeckOperationalKind.Provider,
+                   KafdeckOperationalFamily.KafkaMetadataRead))
+        {
+            scope.Complete(
+                KafdeckOperationalOutcome.Success);
+        }
+
+        var snapshot = telemetry.Snapshot();
+
+        Assert.Equal(8, snapshot.ActiveSeries);
+        Assert.Single(snapshot.Series);
+        var operational =
+            Assert.Single(snapshot.OperationalSeries);
+        Assert.Equal("provider", operational.Kind);
+        Assert.Equal(
+            "kafka_metadata_read",
+            operational.Family);
+        Assert.Equal(
+            "success",
+            operational.Outcome);
+
+        using (var rejected = telemetry.Start(
+                   KafdeckOperationalKind.Worker,
+                   KafdeckOperationalFamily.DataGeneratorWorker))
+        {
+            rejected.Complete(
+                KafdeckOperationalOutcome.Failed);
+        }
+
+        Assert.Equal(
+            3,
+            telemetry.Snapshot().DroppedSeries);
+
+        var text = telemetry.RenderPrometheus();
+        Assert.Contains(
+            "kafdeck_operational_operations_total",
+            text,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "cluster",
+            text,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "topic",
+            text,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Operational_logging_enforces_attribute_and_utf8_text_budgets()
+    {
+        var logger =
+            new CapturingLogger<ApiTelemetry>();
+
+        using var telemetry =
+            new ApiTelemetry(
+                maxActiveSeries: 10,
+                maxMetricLabelValueBytes: 64,
+                maxTraceAttributes: 3,
+                maxLogAttributes: 1,
+                maxDiagnosticStringBytes: 64,
+                logger);
+
+        using (var scope = telemetry.Start(
+                   KafdeckOperationalKind.GovernedOperation,
+                   KafdeckOperationalFamily.MutationExecution))
+        {
+            scope.Complete(
+                KafdeckOperationalOutcome.UnknownExternalEffect);
+        }
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.True(entry.Attributes.Count <= 1);
+        Assert.True(
+            System.Text.Encoding.UTF8.GetByteCount(
+                entry.Message) <= 64);
+        Assert.DoesNotContain(
+            "operationId",
+            entry.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "principal",
+            entry.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "payload",
+            entry.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Prometheus_text_contains_only_safe_bounded_dimensions()
     {
         using var telemetry =
@@ -1288,6 +1426,14 @@ public sealed class V08W62ObservabilityFoundationTests
             "\"otlpHeadersConfigured\":true",
             json,
             StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "\"observabilityMaxLogAttributes\":24",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "\"observabilityMaxDiagnosticStringBytes\":512",
+            json,
+            StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             headerVariable,
             json,
@@ -1379,6 +1525,48 @@ public sealed class V08W62ObservabilityFoundationTests
             new ConfigurationBuilder()
                 .AddInMemoryCollection(values)
                 .Build());
+
+    private sealed record CapturedLogEntry(
+        string Message,
+        IReadOnlyList<KeyValuePair<string, object?>> Attributes);
+
+    private sealed class CapturingLogger<T>
+        : ILogger<T>
+    {
+        public List<CapturedLogEntry> Entries { get; } =
+            new();
+
+        public IDisposable? BeginScope<TState>(
+            TState state)
+            where TState : notnull =>
+            null;
+
+        public bool IsEnabled(
+            LogLevel logLevel) =>
+            true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            _ = logLevel;
+            _ = eventId;
+            _ = exception;
+
+            var attributes =
+                state is IEnumerable<KeyValuePair<string, object?>> values
+                    ? values.ToArray()
+                    : Array.Empty<KeyValuePair<string, object?>>();
+
+            Entries.Add(
+                new CapturedLogEntry(
+                    formatter(state, exception),
+                    attributes));
+        }
+    }
 
     private sealed class CapturingAuditSink
         : ISecurityAuditSink
