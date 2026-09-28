@@ -61,6 +61,14 @@ var prometheusScrapeToken =
             .Reveal()
         : null;
 
+var oidcClientSecret =
+    kafdeckOptions.Deployment.Mode == AccessMode.Oidc &&
+    kafdeckOptions.Deployment.Oidc?.ClientSecret is not null
+        ? secretResolver
+            .Resolve(kafdeckOptions.Deployment.Oidc.ClientSecret)
+            .Reveal()
+        : null;
+
 var otlpHeaders =
     observabilityOptions.Otlp.Enabled &&
     observabilityOptions.Otlp.Headers is not null
@@ -73,7 +81,8 @@ ObservabilityStartupSecurity
     .ValidateResolvedCredentialIsolation(
         deploymentAccessToken,
         prometheusScrapeToken,
-        otlpHeaders);
+        otlpHeaders,
+        oidcClientSecret);
 
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
