@@ -535,16 +535,16 @@ public static class KafdeckConfigurationValidator
             return;
         }
 
-        if (observability.MaxActiveMetricSeries is < 1 or > 50_000)
+        if (observability.MaxActiveMetricSeries is < 2 or > 50_000)
         {
             errors.Add(
-                "Observability max active metric series must be between 1 and 50000.");
+                "Observability max active metric series must be between 2 and 50000.");
         }
 
-        if (observability.MaxMetricLabelsPerSeries is < 1 or > 12)
+        if (observability.MaxMetricLabelsPerSeries is < 3 or > 12)
         {
             errors.Add(
-                "Observability max metric labels per series must be between 1 and 12.");
+                "Observability max metric labels per series must be between 3 and 12 because the admitted API metric schema uses three bounded labels.");
         }
 
         if (observability.MaxMetricLabelValueBytes is < 1 or > 128)
@@ -572,19 +572,20 @@ public static class KafdeckConfigurationValidator
         }
 
         var prometheus = observability.Prometheus;
-        if (!prometheus.Path.StartsWith("/", StringComparison.Ordinal) ||
-            prometheus.Path.Length > 128 ||
-            prometheus.Path.Any(char.IsControl) ||
-            prometheus.Path.Contains('?') ||
-            prometheus.Path.Contains('#') ||
-            prometheus.Path.Contains('{') ||
-            prometheus.Path.Contains('}') ||
-            string.Equals(prometheus.Path, "/", StringComparison.Ordinal) ||
-            string.Equals(prometheus.Path, "/healthz", StringComparison.OrdinalIgnoreCase) ||
-            prometheus.Path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                prometheus.Path,
+                "/metrics",
+                StringComparison.Ordinal))
         {
             errors.Add(
-                "Prometheus metrics path must be a dedicated absolute path of at most 128 characters outside '/', '/healthz' and '/api'.");
+                "Prometheus metrics path is fixed to '/metrics' in v0.8 W62 to prevent collisions with product/OpenAPI routes.");
+        }
+
+        if (prometheus.Enabled &&
+            prometheus.ScrapeToken is null)
+        {
+            errors.Add(
+                "Enabled Prometheus metrics require a scrape-token secret reference. Loopback source address is not accepted as authentication because reverse proxies can obscure the original client.");
         }
     }
 
