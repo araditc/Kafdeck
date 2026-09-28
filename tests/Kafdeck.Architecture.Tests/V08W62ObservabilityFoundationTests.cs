@@ -257,6 +257,16 @@ public sealed class V08W62ObservabilityFoundationTests
         "metrics-token",
         "x-api-key=deployment%20token",
         "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Bearer%20deployment-token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Bearer metrics-token",
+        "Prometheus scrape token")]
     public void Resolved_otlp_header_values_must_not_reuse_local_credentials(
         string deploymentToken,
         string prometheusToken,
@@ -276,6 +286,28 @@ public sealed class V08W62ObservabilityFoundationTests
             expectedMessage,
             exception.Message,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Otlp_header_size_limit_is_enforced_without_local_credentials()
+    {
+        var oversized =
+            "x-api-key=" +
+            new string('x', (16 * 1024) + 1);
+
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentAccessToken: null,
+                            prometheusScrapeToken: null,
+                            otlpHeaders: oversized));
+
+        Assert.Contains(
+            "16 KiB safety limit",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
