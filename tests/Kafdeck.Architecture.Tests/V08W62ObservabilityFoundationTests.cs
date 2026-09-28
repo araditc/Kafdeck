@@ -299,6 +299,26 @@ public sealed class V08W62ObservabilityFoundationTests
     [InlineData(
         "deployment-token",
         "metrics-token",
+        "Authorization=Basic%20dXNlcjpkZXBsb3ltZW50LXRva2Vu",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjptZXRyaWNzLXRva2Vu",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20ZGVwbG95bWVudC10b2tlbjpwYXNzd29yZA==",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20bWV0cmljcy10b2tlbjpwYXNzd29yZA==",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
         "Authorization=Bearer metrics-token",
         "Prometheus scrape token")]
     public void Resolved_otlp_header_values_must_not_reuse_local_credentials(
