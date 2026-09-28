@@ -32,6 +32,7 @@ public sealed class MutationDispatchService
     private readonly IMutationMaterialDigestService _materialDigestService;
     private readonly MutationExecutor _executor;
     private readonly TimeProvider _timeProvider;
+    private readonly RuntimeTelemetry? _telemetry;
 
     public MutationDispatchService(
         IMutationOperationRepository repository,
@@ -39,7 +40,8 @@ public sealed class MutationDispatchService
         MutationExecutionRequestContextAccessor requestContext,
         IMutationMaterialDigestService materialDigestService,
         MutationExecutor executor,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        RuntimeTelemetry? telemetry = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -48,6 +50,7 @@ public sealed class MutationDispatchService
             throw new ArgumentNullException(nameof(materialDigestService));
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _telemetry = telemetry;
     }
 
     public Task<MutationDispatchResult> ExecuteTopicAsync(
@@ -390,15 +393,38 @@ public sealed class MutationDispatchService
         CancellationToken cancellationToken)
     {
         using var requestScope = _requestContext.Push(principal);
-        var executed = executionMaterial is null
-            ? await _executor
-                .ExecuteAsync(operationId, cancellationToken)
-                .ConfigureAwait(false)
-            : await _executor
-                .ExecuteAsync(operationId, executionMaterial, cancellationToken)
-                .ConfigureAwait(false);
+        using var telemetryScope =
+            _telemetry?.Start(
+                RuntimeTelemetryFamily.MutationDispatch);
 
-        return Executed(executed);
+        try
+        {
+            var executed = executionMaterial is null
+                ? await _executor
+                    .ExecuteAsync(operationId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await _executor
+                    .ExecuteAsync(operationId, executionMaterial, cancellationToken)
+                    .ConfigureAwait(false);
+
+            telemetryScope?.Complete(
+                RuntimeTelemetry.FromMutationState(
+                    executed.State));
+
+            return Executed(executed);
+        }
+        catch (OperationCanceledException)
+        {
+            telemetryScope?.Complete(
+                RuntimeTelemetryOutcome.Cancelled);
+            throw;
+        }
+        catch
+        {
+            telemetryScope?.Complete(
+                RuntimeTelemetryOutcome.Exception);
+            throw;
+        }
     }
 
     private async Task<(
