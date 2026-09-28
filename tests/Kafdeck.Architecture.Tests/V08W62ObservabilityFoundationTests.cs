@@ -31,6 +31,12 @@ public sealed class V08W62ObservabilityFoundationTests
             observability.MaxActiveSeries);
         Assert.False(observability.Prometheus.Enabled);
         Assert.Null(observability.Prometheus.AccessToken);
+        Assert.False(observability.Otlp.Enabled);
+        Assert.Null(observability.Otlp.Endpoint);
+        Assert.Equal(
+            OtlpObservabilityProtocol.Grpc,
+            observability.Otlp.Protocol);
+        Assert.Null(observability.Otlp.Headers);
 
         KafdeckConfigurationValidator
             .ValidateAndThrow(options);
@@ -154,6 +160,207 @@ public sealed class V08W62ObservabilityFoundationTests
 
         KafdeckConfigurationValidator
             .ValidateAndThrow(valid);
+    }
+
+    [Fact]
+    public void Otlp_loopback_http_and_remote_https_are_admitted()
+    {
+        var loopback = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "http://127.0.0.1:8080",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    "http://127.0.0.1:4317",
+                ["Kafdeck:Observability:Otlp:Protocol"] =
+                    "Grpc",
+            });
+
+        KafdeckConfigurationValidator
+            .ValidateAndThrow(loopback);
+
+        Assert.True(loopback.Observability!.Otlp.Enabled);
+        Assert.Equal(
+            OtlpObservabilityProtocol.Grpc,
+            loopback.Observability.Otlp.Protocol);
+
+        var remote = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "https://0.0.0.0:8443",
+                ["Kafdeck:Deployment:AccessMode"] =
+                    "Token",
+                ["Kafdeck:Deployment:AccessToken"] =
+                    "env:KAFDECK_DEPLOYMENT_TOKEN",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    "https://otel.internal.example:4318",
+                ["Kafdeck:Observability:Otlp:Protocol"] =
+                    "HttpProtobuf",
+                ["Kafdeck:Observability:Otlp:Headers"] =
+                    "env:KAFDECK_OTLP_HEADERS",
+            });
+
+        KafdeckConfigurationValidator
+            .ValidateAndThrow(remote);
+
+        Assert.Equal(
+            OtlpObservabilityProtocol.HttpProtobuf,
+            remote.Observability!.Otlp.Protocol);
+    }
+
+    [Fact]
+    public void Remote_otlp_http_fails_closed()
+    {
+        var options = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "https://0.0.0.0:8443",
+                ["Kafdeck:Deployment:AccessMode"] =
+                    "Token",
+                ["Kafdeck:Deployment:AccessToken"] =
+                    "env:KAFDECK_DEPLOYMENT_TOKEN",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    "http://otel.internal.example:4317",
+            });
+
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () => KafdeckConfigurationValidator
+                    .ValidateAndThrow(options));
+
+        Assert.Contains(
+            "Remote OTLP export requires HTTPS",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://user:secret@otel.example:4317")]
+    [InlineData("https://otel.example:4317?token=secret")]
+    [InlineData("https://otel.example:4317#fragment")]
+    public void Otlp_endpoint_rejects_credential_query_and_fragment_components(
+        string endpoint)
+    {
+        var options = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "http://127.0.0.1:8080",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    endpoint,
+            });
+
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () => KafdeckConfigurationValidator
+                    .ValidateAndThrow(options));
+
+        Assert.Contains(
+            "must not contain user-info, query-string, or fragment",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Otlp_headers_must_not_reuse_deployment_or_prometheus_secret()
+    {
+        var deploymentReuse = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "https://0.0.0.0:8443",
+                ["Kafdeck:Deployment:AccessMode"] =
+                    "Token",
+                ["Kafdeck:Deployment:AccessToken"] =
+                    "env:SHARED_TOKEN",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    "https://otel.example:4317",
+                ["Kafdeck:Observability:Otlp:Headers"] =
+                    "env:SHARED_TOKEN",
+            });
+
+        var deploymentException =
+            Assert.Throws<KafdeckConfigurationException>(
+                () => KafdeckConfigurationValidator
+                    .ValidateAndThrow(deploymentReuse));
+
+        Assert.Contains(
+            "distinct secret reference from the deployment access token",
+            deploymentException.Message,
+            StringComparison.Ordinal);
+
+        var prometheusReuse = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "https://0.0.0.0:8443",
+                ["Kafdeck:Deployment:AccessMode"] =
+                    "Token",
+                ["Kafdeck:Deployment:AccessToken"] =
+                    "env:KAFDECK_DEPLOYMENT_TOKEN",
+                ["Kafdeck:Observability:Prometheus:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Prometheus:AccessToken"] =
+                    "env:SHARED_METRICS_SECRET",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    "https://otel.example:4317",
+                ["Kafdeck:Observability:Otlp:Headers"] =
+                    "env:SHARED_METRICS_SECRET",
+            });
+
+        var prometheusException =
+            Assert.Throws<KafdeckConfigurationException>(
+                () => KafdeckConfigurationValidator
+                    .ValidateAndThrow(prometheusReuse));
+
+        Assert.Contains(
+            "distinct secret reference from the Prometheus scrape token",
+            prometheusException.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Disabled_otlp_rejects_dangling_endpoint_or_headers()
+    {
+        var endpoint = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "http://127.0.0.1:8080",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    "http://127.0.0.1:4317",
+            });
+
+        Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator
+                .ValidateAndThrow(endpoint));
+
+        var headers = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "http://127.0.0.1:8080",
+                ["Kafdeck:Observability:Otlp:Headers"] =
+                    "env:KAFDECK_OTLP_HEADERS",
+            });
+
+        Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator
+                .ValidateAndThrow(headers));
     }
 
     [Theory]
@@ -396,6 +603,55 @@ public sealed class V08W62ObservabilityFoundationTests
         Assert.Contains(
             PrometheusObservabilityOptions.Path,
             enabledRoutes);
+    }
+
+    [Fact]
+    public void Safe_diagnostics_never_expose_otlp_endpoint_or_header_reference()
+    {
+        const string headerVariable =
+            "KAFDECK_OTLP_SECRET_HEADERS";
+        const string endpointHost =
+            "collector.secret.internal.example";
+
+        var options = Load(
+            new Dictionary<string, string?>
+            {
+                ["Kafdeck:Deployment:ListenUrl"] =
+                    "http://127.0.0.1:8080",
+                ["Kafdeck:Observability:Otlp:Enabled"] =
+                    "true",
+                ["Kafdeck:Observability:Otlp:Endpoint"] =
+                    $"https://{endpointHost}:4318",
+                ["Kafdeck:Observability:Otlp:Protocol"] =
+                    "HttpProtobuf",
+                ["Kafdeck:Observability:Otlp:Headers"] =
+                    $"env:{headerVariable}",
+            });
+
+        KafdeckConfigurationValidator
+            .ValidateAndThrow(options);
+
+        var json =
+            System.Text.Json.JsonSerializer.Serialize(
+                SafeConfigurationDiagnostics.Create(
+                    options));
+
+        Assert.Contains(
+            "\"otlpEnabled\":true",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "\"otlpHeadersConfigured\":true",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            headerVariable,
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            endpointHost,
+            json,
+            StringComparison.Ordinal);
     }
 
     [Fact]
