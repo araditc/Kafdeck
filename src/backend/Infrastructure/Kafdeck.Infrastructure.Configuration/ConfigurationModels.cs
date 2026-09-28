@@ -88,9 +88,9 @@ public sealed record ObservabilityOptions(
     int MaxActiveSeries,
     PrometheusObservabilityOptions Prometheus,
     OtlpObservabilityOptions Otlp,
-    int MaxMetricLabelsPerSeries = DefaultMaxMetricLabelsPerSeries,
-    int MaxMetricLabelValueBytes = DefaultMaxMetricLabelValueBytes,
-    int MaxTraceAttributes = DefaultMaxTraceAttributes)
+    int MaxMetricLabelsPerSeries,
+    int MaxMetricLabelValueBytes,
+    int MaxTraceAttributes)
 {
     public const int MinimumMaxActiveSeries = 2;
     public const int DefaultMaxActiveSeries = 10_000;
@@ -113,7 +113,10 @@ public sealed record ObservabilityOptions(
         new(
             DefaultMaxActiveSeries,
             PrometheusObservabilityOptions.Disabled,
-            OtlpObservabilityOptions.Disabled);
+            OtlpObservabilityOptions.Disabled,
+            DefaultMaxMetricLabelsPerSeries,
+            DefaultMaxMetricLabelValueBytes,
+            DefaultMaxTraceAttributes);
 
     public ObservabilityOptions(
         int maxActiveSeries,
@@ -121,7 +124,24 @@ public sealed record ObservabilityOptions(
         : this(
             maxActiveSeries,
             prometheus,
-            OtlpObservabilityOptions.Disabled)
+            OtlpObservabilityOptions.Disabled,
+            DefaultMaxMetricLabelsPerSeries,
+            DefaultMaxMetricLabelValueBytes,
+            DefaultMaxTraceAttributes)
+    {
+    }
+
+    public ObservabilityOptions(
+        int maxActiveSeries,
+        PrometheusObservabilityOptions prometheus,
+        OtlpObservabilityOptions otlp)
+        : this(
+            maxActiveSeries,
+            prometheus,
+            otlp,
+            DefaultMaxMetricLabelsPerSeries,
+            DefaultMaxMetricLabelValueBytes,
+            DefaultMaxTraceAttributes)
     {
     }
 
