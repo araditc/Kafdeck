@@ -23,11 +23,23 @@ public static class KafdeckObservabilityEndpoints
         "/api/v1/observability/capabilities";
 
     public static bool IsPrometheusScrapePath(
-        PathString path) =>
-        string.Equals(
-            path.Value,
-            PrometheusObservabilityOptions.Path,
-            StringComparison.OrdinalIgnoreCase);
+        PathString path)
+    {
+        var value = path.Value;
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        return string.Equals(
+                   value,
+                   PrometheusObservabilityOptions.Path,
+                   StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(
+                   value,
+                   PrometheusObservabilityOptions.Path + "/",
+                   StringComparison.OrdinalIgnoreCase);
+    }
 
     public static IEndpointRouteBuilder
         MapKafdeckV08Observability(
