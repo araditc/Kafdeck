@@ -9,7 +9,13 @@ fi
 
 solution="$(find . -maxdepth 2 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
 if [[ -n "$solution" ]]; then
-  dotnet restore "$solution" --locked-mode
+  dotnet restore "$solution" --force-evaluate
+  for lock in src/backend/Kafdeck.Api/packages.lock.json tests/Kafdeck.Architecture.Tests/packages.lock.json; do
+    echo "KAFDECK_LOCK_BEGIN:$lock"
+    base64 -w0 "$lock"
+    echo
+    echo "KAFDECK_LOCK_END:$lock"
+  done
   dotnet build "$solution" --configuration Release --no-restore -warnaserror
   dotnet test "$solution" --configuration Release --no-build --no-restore
 else
