@@ -61,6 +61,14 @@ var prometheusScrapeToken =
             .Reveal()
         : null;
 
+var otlpHeaders =
+    observabilityOptions.Otlp.Enabled &&
+    observabilityOptions.Otlp.Headers is not null
+        ? secretResolver
+            .Resolve(observabilityOptions.Otlp.Headers)
+            .Reveal()
+        : null;
+
 ObservabilityStartupSecurity
     .ValidateResolvedCredentialIsolation(
         deploymentAccessToken,
@@ -73,6 +81,9 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 }
 
 builder.Services.AddProblemDetails();
+builder.Services.AddKafdeckOpenTelemetry(
+    observabilityOptions,
+    otlpHeaders);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
