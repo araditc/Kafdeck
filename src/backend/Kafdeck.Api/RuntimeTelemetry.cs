@@ -39,6 +39,65 @@ public sealed class RuntimeTelemetry : IDisposable
     private static readonly EventId CompletionEvent =
         new(8201, "RuntimeOperationCompleted");
 
+    private sealed class RuntimeLogState
+        : IReadOnlyList<KeyValuePair<string, object?>>
+    {
+        private readonly KeyValuePair<string, object?>[] _attributes;
+
+        public RuntimeLogState(
+            string family,
+            string outcome,
+            double durationMilliseconds,
+            int? workItems)
+        {
+            Message =
+                $"runtime {family} {outcome}";
+            _attributes = workItems is null
+                ?
+                [
+                    new("family", family),
+                    new("outcome", outcome),
+                    new(
+                        "duration_ms",
+                        Math.Max(
+                            0,
+                            durationMilliseconds)),
+                ]
+                :
+                [
+                    new("family", family),
+                    new("outcome", outcome),
+                    new(
+                        "duration_ms",
+                        Math.Max(
+                            0,
+                            durationMilliseconds)),
+                    new(
+                        "work_items",
+                        Math.Max(
+                            0,
+                            workItems.Value)),
+                ];
+        }
+
+        public string Message { get; }
+
+        public int Count =>
+            _attributes.Length;
+
+        public KeyValuePair<string, object?> this[int index] =>
+            _attributes[index];
+
+        public IEnumerator<KeyValuePair<string, object?>>
+            GetEnumerator() =>
+            ((IEnumerable<KeyValuePair<string, object?>>)
+                _attributes).GetEnumerator();
+
+        System.Collections.IEnumerator
+            System.Collections.IEnumerable.GetEnumerator() =>
+            _attributes.GetEnumerator();
+    }
+
     private readonly ActivitySource _activitySource =
         new(InstrumentationName);
     private readonly ILogger _logger;
@@ -197,24 +256,27 @@ public sealed class RuntimeTelemetry : IDisposable
             return;
         }
 
-        if (workItems is null)
+        var state = new RuntimeLogState(
+            FamilyName(family),
+            OutcomeName(outcome),
+            elapsedMilliseconds,
+            workItems);
+
+        if (state.Count > _maxLogAttributes ||
+            System.Text.Encoding.UTF8.GetByteCount(
+                state.Message) >
+            _maxDiagnosticStringBytes)
         {
-            _logger.LogInformation(
-                CompletionEvent,
-                "Kafdeck runtime telemetry event. Family={Family} Outcome={Outcome} DurationMs={DurationMs}",
-                FamilyName(family),
-                OutcomeName(outcome),
-                Math.Max(0, elapsedMilliseconds));
             return;
         }
 
-        _logger.LogInformation(
+        _logger.Log(
+            LogLevel.Information,
             CompletionEvent,
-            "Kafdeck runtime telemetry event. Family={Family} Outcome={Outcome} DurationMs={DurationMs} WorkItems={WorkItems}",
-            FamilyName(family),
-            OutcomeName(outcome),
-            Math.Max(0, elapsedMilliseconds),
-            Math.Max(0, workItems.Value));
+            state,
+            exception: null,
+            static (logState, _) =>
+                logState.Message);
     }
 
     public static RuntimeTelemetryOutcome FromMutationResult(
