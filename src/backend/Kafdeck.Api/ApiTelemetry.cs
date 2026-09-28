@@ -1038,38 +1038,38 @@ public sealed class ApiTelemetry :
         StringBuilder builder,
         ApiTelemetrySeriesSnapshot item)
     {
-        builder.Append("{route="")
+        builder.Append("{route=\"")
             .Append(
                 EscapeLabel(
                     item.Route))
-            .Append("",method="")
+            .Append("\",method=\"")
             .Append(
                 EscapeLabel(
                     item.Method))
-            .Append("",status_class="")
+            .Append("\",status_class=\"")
             .Append(
                 EscapeLabel(
                     item.StatusClass))
-            .Append(""}");
+            .Append("\"}");
     }
 
     private static void AppendOperationalLabelSet(
         StringBuilder builder,
         OperationalTelemetrySeriesSnapshot item)
     {
-        builder.Append("{kind="")
+        builder.Append("{kind=\"")
             .Append(
                 EscapeLabel(
                     item.Kind))
-            .Append("",family="")
+            .Append("\",family=\"")
             .Append(
                 EscapeLabel(
                     item.Family))
-            .Append("",outcome="")
+            .Append("\",outcome=\"")
             .Append(
                 EscapeLabel(
                     item.Outcome))
-            .Append(""}");
+            .Append("\"}");
     }
 
     private static string KindLabel(
@@ -1149,8 +1149,8 @@ public sealed class ApiTelemetry :
                 "\\\\",
                 StringComparison.Ordinal)
             .Replace(
-                """,
                 "\"",
+                "\\\"",
                 StringComparison.Ordinal)
             .Replace(
                 "\n",
