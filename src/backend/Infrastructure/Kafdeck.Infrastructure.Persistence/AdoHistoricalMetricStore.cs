@@ -9,7 +9,7 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoHistoricalMetricStore :
     IHistoricalMetricStore
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     private const string Component =
         "historical-metrics";
     internal static readonly TimeSpan RawIdentityRetention =
@@ -119,6 +119,10 @@ public sealed class AdoHistoricalMetricStore :
                 state TEXT NULL,
                 first_observed_at_utc TEXT NULL,
                 last_observed_at_utc TEXT NULL,
+                exact_sum_significand TEXT NULL,
+                exact_sum_exponent INTEGER NULL,
+                exact_sample_count TEXT NULL,
+                exact_state TEXT NULL,
                 PRIMARY KEY (
                     metric_name,
                     cluster_id,
@@ -213,6 +217,39 @@ public sealed class AdoHistoricalMetricStore :
             ];
 
             foreach (var statement in versionTwoMigrationStatements)
+            {
+                await ExecuteInitializationStatementAsync(
+                        connection,
+                        transaction,
+                        statement,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (existingVersion is 1 or 2)
+        {
+            string[] versionThreeMigrationStatements =
+            [
+                """
+                ALTER TABLE kafdeck_historical_metric_samples
+                ADD COLUMN exact_sum_significand TEXT NULL
+                """,
+                """
+                ALTER TABLE kafdeck_historical_metric_samples
+                ADD COLUMN exact_sum_exponent INTEGER NULL
+                """,
+                """
+                ALTER TABLE kafdeck_historical_metric_samples
+                ADD COLUMN exact_sample_count TEXT NULL
+                """,
+                """
+                ALTER TABLE kafdeck_historical_metric_samples
+                ADD COLUMN exact_state TEXT NULL
+                """,
+            ];
+
+            foreach (var statement in versionThreeMigrationStatements)
             {
                 await ExecuteInitializationStatementAsync(
                         connection,
