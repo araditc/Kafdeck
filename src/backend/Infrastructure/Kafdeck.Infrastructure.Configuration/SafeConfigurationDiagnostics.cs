@@ -20,7 +20,9 @@ public sealed record SafeConfigurationDiagnostic(
     bool PrometheusAccessTokenConfigured = false,
     bool OtlpEnabled = false,
     OtlpObservabilityProtocol OtlpProtocol = OtlpObservabilityProtocol.Grpc,
-    bool OtlpHeadersConfigured = false);
+    bool OtlpHeadersConfigured = false,
+    int ObservabilityMaxLogAttributes = ObservabilityOptions.DefaultMaxLogAttributes,
+    int ObservabilityMaxDiagnosticStringBytes = ObservabilityOptions.DefaultMaxDiagnosticStringBytes);
 
 public sealed record SafeClusterDiagnostic(
     string ClusterId,
@@ -75,6 +77,8 @@ public static class SafeConfigurationDiagnostics
             ObservabilityOptions.Effective(options).Prometheus.AccessToken is not null,
             ObservabilityOptions.Effective(options).Otlp.Enabled,
             ObservabilityOptions.Effective(options).Otlp.Protocol,
-            ObservabilityOptions.Effective(options).Otlp.Headers is not null);
+            ObservabilityOptions.Effective(options).Otlp.Headers is not null,
+            ObservabilityOptions.Effective(options).MaxLogAttributes,
+            ObservabilityOptions.Effective(options).MaxDiagnosticStringBytes);
     }
 }
