@@ -11,9 +11,13 @@ public sealed class ApiTelemetry : IDisposable
     private readonly Meter _meter = new(InstrumentationName);
     private readonly Counter<long> _requestCount;
     private readonly Histogram<double> _requestDurationMs;
+    private readonly PrometheusMetricsRegistry _prometheusMetrics;
 
-    public ApiTelemetry()
+    public ApiTelemetry(PrometheusMetricsRegistry prometheusMetrics)
     {
+        _prometheusMetrics =
+            prometheusMetrics ??
+            throw new ArgumentNullException(nameof(prometheusMetrics));
         _requestCount = _meter.CreateCounter<long>(
             "kafdeck.api.requests",
             unit: "{request}",
@@ -32,17 +36,31 @@ public sealed class ApiTelemetry : IDisposable
         return activity;
     }
 
-    public void RecordRequest(string routeName, string method, int statusCode, double elapsedMilliseconds)
+    public void RecordRequest(
+        string routeName,
+        string method,
+        int statusCode,
+        double elapsedMilliseconds)
     {
+        var normalizedRoute = NormalizeRouteName(routeName);
+        var normalizedMethod = NormalizeMethod(method);
+        var normalizedStatus = NormalizeStatusClass(statusCode);
+
         var tags = new TagList
         {
-            { "kafdeck.route", NormalizeRouteName(routeName) },
-            { "http.request.method", NormalizeMethod(method) },
-            { "http.response.status_code", NormalizeStatusClass(statusCode) },
+            { "kafdeck.route", normalizedRoute },
+            { "http.request.method", normalizedMethod },
+            { "http.response.status_code", normalizedStatus },
         };
 
+        var duration = Math.Max(0, elapsedMilliseconds);
         _requestCount.Add(1, tags);
-        _requestDurationMs.Record(Math.Max(0, elapsedMilliseconds), tags);
+        _requestDurationMs.Record(duration, tags);
+        _prometheusMetrics.RecordApiRequest(
+            normalizedRoute,
+            normalizedMethod,
+            normalizedStatus,
+            duration);
     }
 
     public static string NormalizeRouteName(string? routeName)
@@ -52,15 +70,30 @@ public sealed class ApiTelemetry : IDisposable
             return "unmatched";
         }
 
-        return V01ApiContract.ProductRoutes.Any(route => string.Equals(route.Name, routeName, StringComparison.Ordinal))
-            || string.Equals(routeName, "openapi-v01", StringComparison.Ordinal)
-            || string.Equals(routeName, "healthz", StringComparison.Ordinal)
-            ? routeName
+        var value = routeName.Trim();
+        return value.Length <= 128 &&
+               value.All(character =>
+                   char.IsAsciiLetterOrDigit(character) ||
+                   character is '.' or '_' or '-')
+            ? value
             : "other";
     }
 
-    public static string NormalizeMethod(string? method) =>
-        string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) ? "GET" : "OTHER";
+    public static string NormalizeMethod(string? method)
+    {
+        var value = method?.Trim().ToUpperInvariant();
+        return value switch
+        {
+            "GET" => "GET",
+            "POST" => "POST",
+            "PUT" => "PUT",
+            "PATCH" => "PATCH",
+            "DELETE" => "DELETE",
+            "HEAD" => "HEAD",
+            "OPTIONS" => "OPTIONS",
+            _ => "OTHER",
+        };
+    }
 
     public static string NormalizeStatusClass(int statusCode) => statusCode switch
     {
@@ -96,15 +129,38 @@ public sealed class ApiTelemetryMiddleware
         var routeName = context.GetEndpoint()?.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.RouteNameMetadata>()?.RouteName
             ?? "unmatched";
 
-        using var activity = telemetry.StartRequest(routeName, context.Request.Method);
+        using var activity =
+            telemetry.StartRequest(routeName, context.Request.Method);
+        var failed = false;
         try
         {
             await _next(context).ConfigureAwait(false);
         }
+        catch
+        {
+            failed = true;
+            activity?.SetStatus(
+                ActivityStatusCode.Error,
+                "unhandled_request_exception");
+            throw;
+        }
         finally
         {
-            var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-            telemetry.RecordRequest(routeName, context.Request.Method, context.Response.StatusCode, elapsed);
+            var effectiveStatusCode = failed
+                ? StatusCodes.Status500InternalServerError
+                : context.Response.StatusCode;
+            activity?.SetTag(
+                "http.response.status_code",
+                ApiTelemetry.NormalizeStatusClass(
+                    effectiveStatusCode));
+
+            var elapsed =
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            telemetry.RecordRequest(
+                routeName,
+                context.Request.Method,
+                effectiveStatusCode,
+                elapsed);
         }
     }
 }
