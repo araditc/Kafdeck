@@ -81,6 +81,58 @@ public sealed record OperationalResourceIdentity(
     }
 }
 
+public static class OperationalMetricCompatibility
+{
+    public static OperationalResourceKind ResourceKindFor(
+        OperationalMetricKind metric) =>
+        metric switch
+        {
+            OperationalMetricKind.BrokerBytesInPerSecond or
+            OperationalMetricKind.BrokerBytesOutPerSecond =>
+                OperationalResourceKind.Broker,
+            OperationalMetricKind.TopicRecordsInPerSecond or
+            OperationalMetricKind.TopicRecordsOutPerSecond =>
+                OperationalResourceKind.Topic,
+            OperationalMetricKind.ConsumerLagTotal or
+            OperationalMetricKind.ConsumerConsumeRecordsPerSecond =>
+                OperationalResourceKind.ConsumerGroup,
+            OperationalMetricKind.OperationDurationMilliseconds =>
+                OperationalResourceKind.Operation,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(metric)),
+        };
+
+    public static void Validate(
+        OperationalMetricKind metric,
+        OperationalResourceKind resourceKind)
+    {
+        if (!Enum.IsDefined(
+                typeof(OperationalMetricKind),
+                metric))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(metric));
+        }
+
+        if (!Enum.IsDefined(
+                typeof(OperationalResourceKind),
+                resourceKind))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(resourceKind));
+        }
+
+        var expected =
+            ResourceKindFor(metric);
+        if (expected != resourceKind)
+        {
+            throw new ArgumentException(
+                $"Operational metric '{metric}' is valid only for resource kind '{expected}', not '{resourceKind}'.",
+                nameof(resourceKind));
+        }
+    }
+}
+
 public sealed record OperationalMetricEvidence(
     OperationalMetricKind Metric,
     OperationalResourceIdentity Resource,
@@ -107,6 +159,9 @@ public sealed record OperationalMetricEvidence(
         ArgumentNullException.ThrowIfNull(
             Resource);
         Resource.Validate();
+        OperationalMetricCompatibility.Validate(
+            Metric,
+            Resource.Kind);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(
             Source);
@@ -279,6 +334,16 @@ public sealed record OperationalAnalyticsQuery(
                 nameof(Metrics));
         }
 
+        if (ResourceKind is not null)
+        {
+            foreach (var metric in Metrics)
+            {
+                OperationalMetricCompatibility.Validate(
+                    metric,
+                    ResourceKind.Value);
+            }
+        }
+
         if (MaxItems is < 1 or > HardMaxItems)
         {
             throw new ArgumentOutOfRangeException(
@@ -287,9 +352,116 @@ public sealed record OperationalAnalyticsQuery(
     }
 }
 
+public sealed record OperationalAnalyticsResult(
+    IReadOnlyList<OperationalMetricEvidence> Items,
+    bool Truncated,
+    string? LimitReason,
+    IReadOnlyList<OperationalMetricKind> RequestedMetrics)
+{
+    public void Validate(
+        OperationalAnalyticsQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        query.Validate();
+        ArgumentNullException.ThrowIfNull(Items);
+        ArgumentNullException.ThrowIfNull(RequestedMetrics);
+
+        if (Items.Count > query.MaxItems)
+        {
+            throw new ArgumentException(
+                "Operational analytics result exceeds the requested item cap.",
+                nameof(Items));
+        }
+
+        if (Truncated !=
+            !string.IsNullOrWhiteSpace(
+                LimitReason))
+        {
+            throw new ArgumentException(
+                "Operational analytics truncation requires exactly one explicit limit reason.",
+                nameof(LimitReason));
+        }
+
+        if (RequestedMetrics.Count != query.Metrics.Count ||
+            !RequestedMetrics.SequenceEqual(
+                query.Metrics))
+        {
+            throw new ArgumentException(
+                "Operational analytics result must identify the exact requested metric coverage.",
+                nameof(RequestedMetrics));
+        }
+
+        foreach (var item in Items)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+            item.Validate();
+
+            if (!string.Equals(
+                    item.Resource.ClusterId,
+                    query.ClusterId,
+                    StringComparison.Ordinal) ||
+                (query.ResourceKind is not null &&
+                 item.Resource.Kind !=
+                 query.ResourceKind.Value) ||
+                (query.ResourceId is not null &&
+                 !string.Equals(
+                     item.Resource.ResourceId,
+                     query.ResourceId,
+                     StringComparison.Ordinal)) ||
+                !query.Metrics.Contains(
+                    item.Metric))
+            {
+                throw new ArgumentException(
+                    "Operational analytics result contains evidence outside the requested scope.",
+                    nameof(Items));
+            }
+        }
+
+        if (!Truncated)
+        {
+            var representedResources =
+                Items
+                    .Select(item => item.Resource)
+                    .Distinct()
+                    .ToArray();
+
+            if (query.ResourceId is not null &&
+                representedResources.Length == 0)
+            {
+                throw new ArgumentException(
+                    "Operational analytics complete targeted result must include explicit evidence for the requested resource.",
+                    nameof(Items));
+            }
+
+            foreach (var resource in representedResources)
+            {
+                foreach (var metric in query.Metrics)
+                {
+                    if (OperationalMetricCompatibility
+                            .ResourceKindFor(metric) !=
+                        resource.Kind)
+                    {
+                        continue;
+                    }
+
+                    if (!Items.Any(
+                            item =>
+                                item.Resource == resource &&
+                                item.Metric == metric))
+                    {
+                        throw new ArgumentException(
+                            $"Operational analytics complete result is missing explicit evidence for requested metric '{metric}' on resource '{resource.ResourceId}'.",
+                            nameof(Items));
+                    }
+                }
+            }
+        }
+    }
+}
+
 public interface IOperationalAnalyticsObservationPort
 {
-    Task<ReadViewResult<IReadOnlyList<OperationalMetricEvidence>>>
+    Task<ReadViewResult<OperationalAnalyticsResult>>
         QueryAsync(
             OperationalAnalyticsQuery query,
             ReadViewOperationContext operation,

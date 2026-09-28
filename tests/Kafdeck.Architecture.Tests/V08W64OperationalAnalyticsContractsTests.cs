@@ -139,6 +139,165 @@ public sealed class V08W64OperationalAnalyticsContractsTests
     }
 
     [Fact]
+    public void Evidence_rejects_metric_resource_mismatch()
+    {
+        var evidence =
+            new OperationalMetricEvidence(
+                OperationalMetricKind.BrokerBytesInPerSecond,
+                new OperationalResourceIdentity(
+                    "prod",
+                    OperationalResourceKind.Topic,
+                    "orders"),
+                Value: 10,
+                ObservedAtUtc:
+                    DateTimeOffset.UtcNow,
+                Window:
+                    TimeSpan.FromMinutes(1),
+                Source: "broker-metrics",
+                State:
+                    OperationalEvidenceState.Available);
+
+        Assert.Throws<ArgumentException>(
+            evidence.Validate);
+    }
+
+    [Fact]
+    public void Query_rejects_metric_resource_mismatch()
+    {
+        var query =
+            new OperationalAnalyticsQuery(
+                "prod",
+                OperationalResourceKind.Topic,
+                "orders",
+                [
+                    OperationalMetricKind.ConsumerLagTotal,
+                ],
+                MaxItems: 100);
+
+        Assert.Throws<ArgumentException>(
+            query.Validate);
+    }
+
+    [Fact]
+    public void Complete_targeted_result_requires_explicit_metric_coverage()
+    {
+        var query =
+            new OperationalAnalyticsQuery(
+                "prod",
+                OperationalResourceKind.ConsumerGroup,
+                "group-a",
+                [
+                    OperationalMetricKind.ConsumerLagTotal,
+                ],
+                MaxItems: 100);
+
+        var result =
+            new OperationalAnalyticsResult(
+                Items: Array.Empty<OperationalMetricEvidence>(),
+                Truncated: false,
+                LimitReason: null,
+                RequestedMetrics:
+                    query.Metrics);
+
+        Assert.Throws<ArgumentException>(
+            () => result.Validate(query));
+    }
+
+    [Fact]
+    public void Complete_untargeted_result_requires_metric_coverage_per_resource()
+    {
+        var query =
+            new OperationalAnalyticsQuery(
+                "prod",
+                OperationalResourceKind.ConsumerGroup,
+                ResourceId: null,
+                [
+                    OperationalMetricKind.ConsumerLagTotal,
+                    OperationalMetricKind.ConsumerConsumeRecordsPerSecond,
+                ],
+                MaxItems: 100);
+
+        var resource =
+            new OperationalResourceIdentity(
+                "prod",
+                OperationalResourceKind.ConsumerGroup,
+                "group-a");
+        var lag =
+            new OperationalMetricEvidence(
+                OperationalMetricKind.ConsumerLagTotal,
+                resource,
+                Value: 10,
+                ObservedAtUtc:
+                    DateTimeOffset.UtcNow,
+                Window: null,
+                Source: "kafka-admin",
+                State:
+                    OperationalEvidenceState.Available);
+
+        var result =
+            new OperationalAnalyticsResult(
+                Items: [lag],
+                Truncated: false,
+                LimitReason: null,
+                RequestedMetrics:
+                    query.Metrics);
+
+        Assert.Throws<ArgumentException>(
+            () => result.Validate(query));
+    }
+
+    [Fact]
+    public void Result_rejects_silent_truncation_or_cap_overrun()
+    {
+        var query =
+            new OperationalAnalyticsQuery(
+                "prod",
+                OperationalResourceKind.ConsumerGroup,
+                ResourceId: null,
+                [
+                    OperationalMetricKind.ConsumerLagTotal,
+                ],
+                MaxItems: 1);
+
+        var evidence =
+            new OperationalMetricEvidence(
+                OperationalMetricKind.ConsumerLagTotal,
+                new OperationalResourceIdentity(
+                    "prod",
+                    OperationalResourceKind.ConsumerGroup,
+                    "group-a"),
+                Value: 1,
+                ObservedAtUtc:
+                    DateTimeOffset.UtcNow,
+                Window: null,
+                Source: "kafka-admin",
+                State:
+                    OperationalEvidenceState.Available);
+
+        var overCap =
+            new OperationalAnalyticsResult(
+                Items: [evidence, evidence],
+                Truncated: true,
+                LimitReason: "max_items",
+                RequestedMetrics:
+                    query.Metrics);
+
+        Assert.Throws<ArgumentException>(
+            () => overCap.Validate(query));
+
+        var silentTruncation =
+            new OperationalAnalyticsResult(
+                Items: [evidence],
+                Truncated: true,
+                LimitReason: null,
+                RequestedMetrics:
+                    query.Metrics);
+
+        Assert.Throws<ArgumentException>(
+            () => silentTruncation.Validate(query));
+    }
+
+    [Fact]
     public void Query_enforces_hard_item_cap()
     {
         var query =
