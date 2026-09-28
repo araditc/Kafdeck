@@ -39,6 +39,8 @@ public sealed class ApiTelemetry :
     private const int FixedPrometheusSeriesCount = 2;
     private const int PrometheusSeriesPerKey = 3;
     private const int OperationalLogEventId = 8001;
+    private const int TelemetryLimitLogEventId = 8002;
+    private const long DroppedDiagnosticIntervalMilliseconds = 60_000;
 
     private readonly record struct SeriesKey(
         string Route,
@@ -110,15 +112,41 @@ public sealed class ApiTelemetry :
                 Stopwatch.GetElapsedTime(_started)
                     .TotalMilliseconds;
 
-            _owner.CompleteOperational(
-                _kind,
-                _family,
-                outcome,
-                elapsed,
-                _activity);
+            try
+            {
+                _owner.CompleteOperational(
+                    _kind,
+                    _family,
+                    outcome,
+                    elapsed,
+                    _activity);
+            }
+            catch
+            {
+                try
+                {
+                    _activity?.SetStatus(
+                        ActivityStatusCode.Error,
+                        "telemetry_recording_failed");
+                }
+                catch
+                {
+                    // Telemetry must never change the instrumented outcome.
+                }
+            }
+            finally
+            {
+                try
+                {
+                    _activity?.Dispose();
+                }
+                catch
+                {
+                    // Activity listeners are observational only.
+                }
 
-            _activity?.Dispose();
-            _activity = null;
+                _activity = null;
+            }
         }
 
         public void Dispose()
@@ -189,6 +217,50 @@ public sealed class ApiTelemetry :
             _items.GetEnumerator();
     }
 
+    private sealed class SafeDiagnosticLogState :
+        IReadOnlyList<KeyValuePair<string, object?>>
+    {
+        private readonly KeyValuePair<string, object?>[] _items;
+
+        public SafeDiagnosticLogState(
+            int maxAttributes,
+            string message,
+            long droppedSeries)
+        {
+            Message = message;
+
+            var all =
+                new[]
+                {
+                    new KeyValuePair<string, object?>(
+                        "kafdeck.telemetry.dropped_series",
+                        droppedSeries),
+                };
+
+            _items = all
+                .Take(
+                    Math.Min(
+                        maxAttributes,
+                        all.Length))
+                .ToArray();
+        }
+
+        public string Message { get; }
+
+        public int Count => _items.Length;
+
+        public KeyValuePair<string, object?> this[int index] =>
+            _items[index];
+
+        public IEnumerator<KeyValuePair<string, object?>>
+            GetEnumerator() =>
+            ((IEnumerable<KeyValuePair<string, object?>>)
+                _items).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() =>
+            _items.GetEnumerator();
+    }
+
     private readonly ActivitySource _activitySource =
         new(InstrumentationName);
     private readonly Meter _meter =
@@ -214,6 +286,7 @@ public sealed class ApiTelemetry :
     private readonly ILogger<ApiTelemetry>? _logger;
 
     private long _droppedSeries;
+    private long _lastDroppedDiagnosticTick;
 
     public ApiTelemetry()
         : this(
@@ -822,6 +895,7 @@ public sealed class ApiTelemetry :
             KafdeckOperationalOutcome.Failed or
             KafdeckOperationalOutcome.Timeout or
             KafdeckOperationalOutcome.Unavailable or
+            KafdeckOperationalOutcome.Invalid or
             KafdeckOperationalOutcome.UnknownExternalEffect)
         {
             activity?.SetStatus(
@@ -879,16 +953,24 @@ public sealed class ApiTelemetry :
                 },
             };
 
-        _operationalCount.Add(
-            1,
-            tags);
-        _operationalDurationMs.Record(
-            Math.Max(
-                0,
-                elapsedMilliseconds),
-            tags);
         state.Record(
             elapsedMilliseconds);
+
+        try
+        {
+            _operationalCount.Add(
+                1,
+                tags);
+            _operationalDurationMs.Record(
+                Math.Max(
+                    0,
+                    elapsedMilliseconds),
+                tags);
+        }
+        catch
+        {
+            // Metric listeners/exporters are observational only.
+        }
     }
 
     private void WriteOperationalLog(
@@ -918,17 +1000,24 @@ public sealed class ApiTelemetry :
                 outcome,
                 elapsedMilliseconds);
 
-        _logger.Log(
-            LogLevel.Information,
-            new EventId(
-                OperationalLogEventId,
-                "KafdeckOperational"),
-            state,
-            exception: null,
-            static (
-                logState,
-                _) =>
-                logState.DiagnosticMessage);
+        try
+        {
+            _logger.Log(
+                LogLevel.Information,
+                new EventId(
+                    OperationalLogEventId,
+                    "KafdeckOperational"),
+                state,
+                exception: null,
+                static (
+                    logState,
+                    _) =>
+                    logState.DiagnosticMessage);
+        }
+        catch
+        {
+            // Logging providers are observational only.
+        }
     }
 
     private string NormalizeMetricLabel(
@@ -1030,8 +1119,81 @@ public sealed class ApiTelemetry :
         Interlocked.Add(
             ref _droppedSeries,
             count);
-        _droppedSeriesCounter.Add(
+
+        try
+        {
+            _droppedSeriesCounter.Add(
+                count);
+        }
+        catch
+        {
+            // Metric listeners/exporters are observational only.
+        }
+
+        TryWriteDroppedSeriesDiagnostic(
             count);
+    }
+
+    private void TryWriteDroppedSeriesDiagnostic(
+        int count)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        while (true)
+        {
+            var previous =
+                Volatile.Read(
+                    ref _lastDroppedDiagnosticTick);
+
+            if (previous != 0 &&
+                now - previous <
+                    DroppedDiagnosticIntervalMilliseconds)
+            {
+                return;
+            }
+
+            if (Interlocked.CompareExchange(
+                    ref _lastDroppedDiagnosticTick,
+                    now,
+                    previous) ==
+                previous)
+            {
+                break;
+            }
+        }
+
+        var message =
+            TruncateUtf8(
+                "Kafdeck telemetry series budget exhausted; additional metric series were dropped.",
+                _maxDiagnosticStringBytes);
+        var state =
+            new SafeDiagnosticLogState(
+                _maxLogAttributes,
+                message,
+                count);
+
+        try
+        {
+            _logger.Log(
+                LogLevel.Warning,
+                new EventId(
+                    TelemetryLimitLogEventId,
+                    "KafdeckTelemetrySeriesDropped"),
+                state,
+                exception: null,
+                static (
+                    logState,
+                    _) =>
+                    logState.Message);
+        }
+        catch
+        {
+            // Logging providers are observational only.
+        }
     }
 
     private static void AppendApiLabelSet(
@@ -1138,6 +1300,8 @@ public sealed class ApiTelemetry :
                 "unknown_external_effect",
             KafdeckOperationalOutcome.Blocked =>
                 "blocked",
+            KafdeckOperationalOutcome.Unconfigured =>
+                "unconfigured",
             _ => "unknown",
         };
 
