@@ -84,17 +84,22 @@ public sealed class PrometheusMetricsRegistry
         string route,
         string method,
         string statusClass,
-        double durationMilliseconds)
-    {
-        if (_maxLabelsPerSeries < 3)
-        {
-            Interlocked.Add(
-                ref _droppedSeries,
-                ApiSeriesPerDimension);
-            return false;
-        }
+        double durationMilliseconds) =>
+        RecordApiRequest(
+            route,
+            method,
+            statusClass,
+            durationMilliseconds,
+            out _);
 
-        var key = new ApiMetricSeriesKey(
+    public bool RecordApiRequest(
+        string route,
+        string method,
+        string statusClass,
+        double durationMilliseconds,
+        out ApiMetricSeriesKey admittedKey)
+    {
+        admittedKey = new ApiMetricSeriesKey(
             NormalizeLabelValue(route),
             NormalizeLabelValue(method),
             NormalizeLabelValue(statusClass));
@@ -102,7 +107,7 @@ public sealed class PrometheusMetricsRegistry
 
         lock (_seriesGate)
         {
-            if (!_apiSeries.TryGetValue(key, out series!))
+            if (!_apiSeries.TryGetValue(admittedKey, out series!))
             {
                 var projectedSeries =
                     FixedSeriesCount +
@@ -117,7 +122,7 @@ public sealed class PrometheusMetricsRegistry
                 }
 
                 series = new ApiSeries();
-                _apiSeries.Add(key, series);
+                _apiSeries.Add(admittedKey, series);
             }
         }
 
