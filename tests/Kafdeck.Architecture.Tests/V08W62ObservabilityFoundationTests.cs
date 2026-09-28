@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -171,6 +173,46 @@ public sealed class V08W62ObservabilityFoundationTests
 
         KafdeckConfigurationValidator
             .ValidateAndThrow(valid);
+    }
+
+    [Fact]
+    public void Stable_otlp_runtime_registers_trace_and_metric_providers()
+    {
+        var observability = new ObservabilityOptions(
+            100,
+            PrometheusObservabilityOptions.Disabled,
+            new OtlpObservabilityOptions(
+                true,
+                "http://127.0.0.1:4317",
+                OtlpObservabilityProtocol.Grpc,
+                null));
+
+        var services = new ServiceCollection();
+        services.AddKafdeckOpenTelemetry(
+            observability,
+            resolvedOtlpHeaders: null);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<TracerProvider>());
+        Assert.NotNull(provider.GetService<MeterProvider>());
+    }
+
+    [Fact]
+    public void Disabled_otlp_does_not_require_header_secret_resolution()
+    {
+        var observability = new ObservabilityOptions(
+            100,
+            PrometheusObservabilityOptions.Disabled,
+            OtlpObservabilityOptions.Disabled);
+
+        var services = new ServiceCollection();
+        services.AddKafdeckOpenTelemetry(
+            observability,
+            resolvedOtlpHeaders: null);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<TracerProvider>());
+        Assert.NotNull(provider.GetService<MeterProvider>());
     }
 
     [Fact]
