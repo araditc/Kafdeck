@@ -7,6 +7,10 @@ namespace Kafdeck.Api;
 
 public static class ObservabilityStartupSecurity
 {
+    private static readonly Encoding StrictUtf8 =
+        new UTF8Encoding(
+            encoderShouldEmitUTF8Identifier: false,
+            throwOnInvalidBytes: true);
     public static void ValidateResolvedCredentialIsolation(
         string? deploymentAccessToken,
         string? prometheusScrapeToken,
@@ -199,9 +203,20 @@ public static class ObservabilityStartupSecurity
 
         try
         {
-            var decoded =
-                Encoding.UTF8.GetString(
-                    decodedBytes);
+            string decoded;
+            try
+            {
+                decoded =
+                    StrictUtf8.GetString(
+                        decodedBytes);
+            }
+            catch (DecoderFallbackException)
+            {
+                // HTTP Basic credentials with non-UTF-8 payload bytes are
+                // not safe to reason about for credential-isolation.
+                // Reject them whenever a local credential is being checked.
+                return true;
+            }
 
             if (DeploymentAccessTokenValidator
                     .Matches(
