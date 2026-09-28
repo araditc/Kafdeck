@@ -78,6 +78,14 @@ public static class KafdeckConfigurationLoader
             section["MaxTraceAttributes"],
             ObservabilityOptions.DefaultMaxTraceAttributes,
             "Observability max trace attributes");
+        var maxLogAttributes = ParseOptionalInt(
+            section["MaxLogAttributes"],
+            ObservabilityOptions.DefaultMaxLogAttributes,
+            "Observability max log attributes");
+        var maxDiagnosticStringBytes = ParseOptionalInt(
+            section["MaxDiagnosticStringBytes"],
+            ObservabilityOptions.DefaultMaxDiagnosticStringBytes,
+            "Observability max diagnostic string bytes");
 
         var prometheusSection = section.GetSection("Prometheus");
         var prometheus = new PrometheusObservabilityOptions(
@@ -106,7 +114,9 @@ public static class KafdeckConfigurationLoader
             otlp,
             maxMetricLabelsPerSeries,
             maxMetricLabelValueBytes,
-            maxTraceAttributes);
+            maxTraceAttributes,
+            maxLogAttributes,
+            maxDiagnosticStringBytes);
     }
 
     private static DataGeneratorOptions? LoadDataGenerator(
