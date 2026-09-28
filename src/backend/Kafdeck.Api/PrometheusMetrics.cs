@@ -152,13 +152,13 @@ public sealed class PrometheusMetricsRegistry
         string value)
     {
         builder.Append(metric)
-            .Append("{route="")
+            .Append("{route=\"")
             .Append(EscapeLabel(key.Route))
-            .Append("",method="")
+            .Append("\",method=\"")
             .Append(EscapeLabel(key.Method))
-            .Append("",status="")
+            .Append("\",status=\"")
             .Append(EscapeLabel(key.StatusClass))
-            .Append(""} ")
+            .Append("\"} ")
             .Append(value)
             .AppendLine();
     }
@@ -166,7 +166,7 @@ public sealed class PrometheusMetricsRegistry
     private static string EscapeLabel(string value) =>
         value
             .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace(""", "\\"", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
             .Replace("\n", "\\n", StringComparison.Ordinal);
 }
 
