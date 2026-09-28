@@ -34,6 +34,7 @@ public enum KafdeckOperationalOutcome
     Failed = 8,
     UnknownExternalEffect = 9,
     Blocked = 10,
+    Unconfigured = 11,
 }
 
 public interface IKafdeckOperationalTelemetryScope : IDisposable
