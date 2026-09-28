@@ -24,6 +24,7 @@ public static class KafdeckOpenTelemetryRegistration
             .WithTracing(tracing =>
             {
                 tracing.AddSource(ApiTelemetry.InstrumentationName);
+                tracing.AddSource(Kafdeck.Core.KafdeckRuntimeTelemetry.InstrumentationName);
 
                 if (observability.Otlp.Enabled)
                 {
