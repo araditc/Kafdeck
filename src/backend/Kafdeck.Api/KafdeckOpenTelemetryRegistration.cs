@@ -20,8 +20,8 @@ public static class KafdeckOpenTelemetryRegistration
 
         var health = new OtlpExporterHealthState();
         services.AddSingleton(health);
-        services.AddSingleton(
-            new SafeRuntimeTelemetryLoggerFactory(
+        services.AddSingleton<SafeRuntimeTelemetryLoggerFactory>(
+            _ => new SafeRuntimeTelemetryLoggerFactory(
                 observability,
                 resolvedOtlpHeaders));
         services.AddSingleton<RuntimeTelemetry>();
