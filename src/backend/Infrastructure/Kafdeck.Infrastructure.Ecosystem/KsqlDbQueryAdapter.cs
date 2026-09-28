@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Kafdeck.Core;
 using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.ReadViews;
 using Kafdeck.Infrastructure.Configuration;
@@ -82,6 +83,9 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
         ArgumentNullException.ThrowIfNull(limits);
 
+        using var activity =
+            KafdeckRuntimeTelemetry.StartKsqlQuery();
+
         var admission = KsqlStatementClassifier.Classify(statement);
         if (!admission.IsAllowed)
         {
@@ -145,16 +149,32 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
 
             ValidateResponse(response);
 
-            return await ReadResultAsync(
+            var result = await ReadResultAsync(
                     response,
                     bounded,
                     cancellationToken,
                     queryToken)
                 .ConfigureAwait(false);
+
+            if (result.IsSuccess)
+            {
+                KafdeckRuntimeTelemetry.MarkSucceeded(activity);
+            }
+            else
+            {
+                KafdeckRuntimeTelemetry.MarkFailed(
+                    activity,
+                    RuntimeTelemetryFailure.InvalidResponse);
+            }
+
+            return result;
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                RuntimeTelemetryFailure.Cancelled);
             return Failed<KsqlQueryResult>(
                 ReadViewFailureCategory.Cancelled,
                 "operation_cancelled",
@@ -163,6 +183,9 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         }
         catch (OperationCanceledException)
         {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                RuntimeTelemetryFailure.Timeout);
             return Failed<KsqlQueryResult>(
                 ReadViewFailureCategory.Timeout,
                 "ksql_query_duration_exceeded",
@@ -171,6 +194,12 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         }
         catch (ReadViewHttpException exception)
         {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                exception.Category ==
+                    ReadViewFailureCategory.Unavailable
+                    ? RuntimeTelemetryFailure.ProviderUnavailable
+                    : RuntimeTelemetryFailure.InvalidResponse);
             return Failed<KsqlQueryResult>(
                 exception.Category,
                 exception.Code,
@@ -179,6 +208,9 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         }
         catch (HttpRequestException)
         {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                RuntimeTelemetryFailure.ProviderUnavailable);
             return Failed<KsqlQueryResult>(
                 ReadViewFailureCategory.Unavailable,
                 "ksql_unavailable",
@@ -187,6 +219,9 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         }
         catch (JsonException)
         {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                RuntimeTelemetryFailure.InvalidResponse);
             return Failed<KsqlQueryResult>(
                 ReadViewFailureCategory.InvalidResponse,
                 "invalid_ksql_query_response",
