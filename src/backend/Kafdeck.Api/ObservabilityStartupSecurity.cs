@@ -138,20 +138,19 @@ public static class ObservabilityStartupSecurity
             return false;
         }
 
-        var scheme = normalized[..separator];
-        if (!string.Equals(
-                scheme,
-                "Bearer",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var bearerValue =
+        // Authorization schemes are extensible. Treat any
+        // non-empty scheme + credential wrapper as potentially carrying
+        // local credential material; restricting this check to Bearer
+        // would allow custom schemes (for example "Token <secret>") to
+        // bypass startup credential isolation.
+        var scheme = normalized[..separator].Trim();
+        var wrappedValue =
             normalized[(separator + 1)..].Trim();
-        return bearerValue.Length > 0 &&
+
+        return scheme.Length > 0 &&
+               wrappedValue.Length > 0 &&
                DeploymentAccessTokenValidator.Matches(
                    credential,
-                   bearerValue);
+                   wrappedValue);
     }
 }
