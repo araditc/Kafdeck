@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Security;
 
@@ -147,10 +149,73 @@ public static class ObservabilityStartupSecurity
         var wrappedValue =
             normalized[(separator + 1)..].Trim();
 
-        return scheme.Length > 0 &&
-               wrappedValue.Length > 0 &&
-               DeploymentAccessTokenValidator.Matches(
-                   credential,
-                   wrappedValue);
+        if (scheme.Length == 0 ||
+            wrappedValue.Length == 0)
+        {
+            return false;
+        }
+
+        if (DeploymentAccessTokenValidator.Matches(
+                credential,
+                wrappedValue))
+        {
+            return true;
+        }
+
+        if (!string.Equals(
+                scheme,
+                "Basic",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        byte[] decodedBytes;
+        try
+        {
+            decodedBytes =
+                Convert.FromBase64String(
+                    wrappedValue);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        try
+        {
+            var decoded =
+                Encoding.UTF8.GetString(
+                    decodedBytes);
+            var delimiter =
+                decoded.IndexOf(':');
+
+            if (delimiter < 0)
+            {
+                return DeploymentAccessTokenValidator
+                    .Matches(
+                        credential,
+                        decoded);
+            }
+
+            var username =
+                decoded[..delimiter];
+            var password =
+                decoded[(delimiter + 1)..];
+
+            return DeploymentAccessTokenValidator
+                       .Matches(
+                           credential,
+                           username) ||
+                   DeploymentAccessTokenValidator
+                       .Matches(
+                           credential,
+                           password);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(
+                decodedBytes);
+        }
     }
 }
