@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Kafdeck.Cli;
 
 public static class CliApplication
@@ -50,9 +52,8 @@ public static class CliApplication
                 invocation,
                 requestToken);
 
-            using var response = await ExecuteAsync(
-                invocation,
-                client,
+            using var response = await client.GetAsync(
+                CliRouteBuilder.Build(invocation),
                 requestToken);
 
             var body = await response.Content
@@ -60,10 +61,10 @@ public static class CliApplication
 
             if (response.IsSuccessStatusCode)
             {
-                await output.WriteLineAsync(
-                    string.IsNullOrWhiteSpace(body)
-                        ? "{}"
-                        : body);
+                await WriteJsonAsync(
+                    output,
+                    body,
+                    requestToken);
                 return Success;
             }
 
@@ -83,6 +84,12 @@ public static class CliApplication
             await error.WriteLineAsync(exception.Message);
             await error.WriteLineAsync(CliParser.Usage);
             return UsageError;
+        }
+        catch (JsonException exception)
+        {
+            await error.WriteLineAsync(
+                $"Kafdeck CLI received invalid JSON from the governed API: {exception.Message}");
+            return RemoteError;
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
@@ -117,27 +124,24 @@ public static class CliApplication
         }
     }
 
-    private static Task<HttpResponseMessage> ExecuteAsync(
-        CliInvocation invocation,
-        KafdeckCliClient client,
-        CancellationToken cancellationToken) =>
-        invocation.Command switch
+    private static async Task WriteJsonAsync(
+        TextWriter output,
+        string body,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(body))
         {
-            CliCommand.SystemInfo =>
-                client.GetAsync(
-                    "/api/v1/system/info",
-                    cancellationToken),
-            CliCommand.ClustersList =>
-                client.GetAsync(
-                    "/api/v1/clusters",
-                    cancellationToken),
-            CliCommand.ClusterGet =>
-                client.GetAsync(
-                    $"/api/v1/clusters/{Uri.EscapeDataString(invocation.ResourceId!)}",
-                    cancellationToken),
-            _ => throw new InvalidOperationException(
-                "CLI invocation contains an unsupported command."),
-        };
+            await output.WriteLineAsync("{}");
+            return;
+        }
+
+        using var document =
+            JsonDocument.Parse(body);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await output.WriteLineAsync(
+            document.RootElement.GetRawText());
+    }
 }
 
 public enum CliCommand
@@ -146,6 +150,18 @@ public enum CliCommand
     SystemInfo = 1,
     ClustersList = 2,
     ClusterGet = 3,
+    TopicsList = 4,
+    TopicGet = 5,
+    ConsumerGroupsList = 6,
+    ConsumerGroupGet = 7,
+    ConsumerGroupLag = 8,
+    SchemaSubjectsList = 9,
+    SchemaVersionsList = 10,
+}
+
+public enum CliOutputFormat
+{
+    Json = 1,
 }
 
 public sealed record CliInvocation(
@@ -153,7 +169,115 @@ public sealed record CliInvocation(
     string? TokenFile,
     CliCommand Command,
     string? ResourceId,
-    bool ShowHelp);
+    bool ShowHelp,
+    string? SecondaryResourceId = null,
+    string? Search = null,
+    string? Cursor = null,
+    int? Limit = null,
+    CliOutputFormat Output = CliOutputFormat.Json);
+
+public static class CliRouteBuilder
+{
+    public static string Build(
+        CliInvocation invocation)
+    {
+        ArgumentNullException.ThrowIfNull(
+            invocation);
+
+        return invocation.Command switch
+        {
+            CliCommand.SystemInfo =>
+                "/api/v1/system/info",
+            CliCommand.ClustersList =>
+                "/api/v1/clusters",
+            CliCommand.ClusterGet =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}",
+            CliCommand.TopicsList =>
+                BuildTopicsList(
+                    RequirePrimary(invocation),
+                    invocation),
+            CliCommand.TopicGet =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}",
+            CliCommand.ConsumerGroupsList =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/consumer-groups",
+            CliCommand.ConsumerGroupGet =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/consumer-groups/{RequireSecondary(invocation)}",
+            CliCommand.ConsumerGroupLag =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/consumer-groups/{RequireSecondary(invocation)}/lag",
+            CliCommand.SchemaSubjectsList =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects",
+            CliCommand.SchemaVersionsList =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/versions",
+            _ => throw new InvalidOperationException(
+                "CLI invocation contains an unsupported command."),
+        };
+    }
+
+    private static string BuildTopicsList(
+        string cluster,
+        CliInvocation invocation)
+    {
+        var query =
+            new List<string>(3);
+
+        if (invocation.Search is not null)
+        {
+            query.Add(
+                $"q={Uri.EscapeDataString(invocation.Search)}");
+        }
+
+        if (invocation.Cursor is not null)
+        {
+            query.Add(
+                $"cursor={Uri.EscapeDataString(invocation.Cursor)}");
+        }
+
+        if (invocation.Limit is not null)
+        {
+            query.Add(
+                $"pageSize={invocation.Limit.Value}");
+        }
+
+        var path =
+            $"/api/v1/clusters/{cluster}/topics";
+
+        return query.Count == 0
+            ? path
+            : $"{path}?{string.Join("&", query)}";
+    }
+
+    private static string RequirePrimary(
+        CliInvocation invocation) =>
+        EscapeSegment(
+            invocation.ResourceId,
+            "primary");
+
+    private static string RequireSecondary(
+        CliInvocation invocation) =>
+        EscapeSegment(
+            invocation.SecondaryResourceId,
+            "secondary");
+
+    private static string EscapeSegment(
+        string? value,
+        string identityKind)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            throw new InvalidOperationException(
+                $"CLI invocation is missing its {identityKind} resource identity.");
+        }
+
+        if (value is "." or "..")
+        {
+            throw new InvalidOperationException(
+                $"CLI invocation contains an unsafe {identityKind} resource identity.");
+        }
+
+        return Uri.EscapeDataString(
+            value);
+    }
+}
 
 public sealed class CliUsageException : Exception
 {
@@ -165,6 +289,10 @@ public sealed class CliUsageException : Exception
 
 public static class CliParser
 {
+    public const int TopicMaximumPageSize = 200;
+    public const int MaxCursorLength = 4096;
+    public const int MaxSearchLength = 256;
+
     private static Uri DefaultBaseUri { get; } =
         new(
             "http://127.0.0.1:8080/",
@@ -175,10 +303,22 @@ public static class CliParser
         Kafdeck CLI
 
         Usage:
-          kafdeck [--url <base-url>] [--token-file <path>] system info
-          kafdeck [--url <base-url>] [--token-file <path>] clusters list
-          kafdeck [--url <base-url>] [--token-file <path>] clusters get <cluster-id>
+          kafdeck [global-options] system info
+          kafdeck [global-options] clusters list
+          kafdeck [global-options] clusters get <cluster-id>
+          kafdeck [global-options] topics list <cluster-id> [--search <text>] [--cursor <opaque>] [--limit <1..200>]
+          kafdeck [global-options] topics get <cluster-id> <topic-name>
+          kafdeck [global-options] consumer-groups list <cluster-id>
+          kafdeck [global-options] consumer-groups get <cluster-id> <group-id>
+          kafdeck [global-options] consumer-groups lag <cluster-id> <group-id>
+          kafdeck [global-options] schemas subjects <cluster-id>
+          kafdeck [global-options] schemas versions <cluster-id> <subject>
           kafdeck --help
+
+        Global options:
+          --url <base-url>
+          --token-file <path>
+          --output json
 
         Environment:
           KAFDECK_URL
@@ -187,6 +327,7 @@ public static class CliParser
         Security:
           Access tokens are intentionally not accepted as command-line arguments.
           Use KAFDECK_ACCESS_TOKEN or --token-file.
+          The CLI exposes only typed governed API routes; there is no arbitrary HTTP path passthrough.
           Mutation status and approval commands are withheld until the CLI has a
           governed non-browser OIDC authentication flow compatible with mutation mode.
         """;
@@ -213,11 +354,20 @@ public static class CliParser
 
         string? url = null;
         string? tokenFile = null;
-        var positionals = new List<string>();
+        string? search = null;
+        string? cursor = null;
+        int? limit = null;
+        var output =
+            CliOutputFormat.Json;
+        var positionals =
+            new List<string>();
 
-        for (var index = 0; index < args.Count; index++)
+        for (var index = 0;
+             index < args.Count;
+             index++)
         {
-            var value = args[index];
+            var value =
+                args[index];
 
             switch (value)
             {
@@ -240,6 +390,67 @@ public static class CliParser
                     }
 
                     break;
+                case "--output":
+                {
+                    var requested =
+                        RequireValue(
+                            args,
+                            ref index,
+                            "--output");
+                    if (!string.Equals(
+                            requested,
+                            "json",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new CliUsageException(
+                            "The only admitted machine output format in this slice is json.");
+                    }
+
+                    output =
+                        CliOutputFormat.Json;
+                    break;
+                }
+                case "--search":
+                    search = ValidateBoundedOption(
+                        RequireValue(
+                            args,
+                            ref index,
+                            "--search"),
+                        "--search",
+                        MaxSearchLength);
+                    break;
+                case "--cursor":
+                    cursor = ValidateBoundedOption(
+                        RequireValue(
+                            args,
+                            ref index,
+                            "--cursor"),
+                        "--cursor",
+                        MaxCursorLength);
+                    break;
+                case "--limit":
+                {
+                    var text =
+                        RequireValue(
+                            args,
+                            ref index,
+                            "--limit");
+                    if (!int.TryParse(
+                            text,
+                            System.Globalization.NumberStyles.None,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out var parsed) ||
+                        parsed is < 1 or >
+                            TopicMaximumPageSize)
+                    {
+                        throw new CliUsageException(
+                            $"--limit must be between 1 and {TopicMaximumPageSize}.");
+                    }
+
+                    limit =
+                        parsed;
+                    break;
+                }
                 case "--token":
                     throw new CliUsageException(
                         "Access tokens are not accepted on the command line. Use KAFDECK_ACCESS_TOKEN or --token-file.");
@@ -257,8 +468,41 @@ public static class CliParser
             }
         }
 
-        var baseUri = ResolveBaseUri(url);
+        var baseUri =
+            ResolveBaseUri(url);
 
+        var invocation =
+            ParseCommand(
+                baseUri,
+                tokenFile,
+                positionals,
+                search,
+                cursor,
+                limit,
+                output);
+
+        if (invocation.Command !=
+                CliCommand.TopicsList &&
+            (search is not null ||
+             cursor is not null ||
+             limit is not null))
+        {
+            throw new CliUsageException(
+                "--search, --cursor and --limit are admitted only for 'topics list'.");
+        }
+
+        return invocation;
+    }
+
+    private static CliInvocation ParseCommand(
+        Uri baseUri,
+        string? tokenFile,
+        IReadOnlyList<string> positionals,
+        string? search,
+        string? cursor,
+        int? limit,
+        CliOutputFormat output)
+    {
         if (positionals.SequenceEqual(
                 new[] { "system", "info" },
                 StringComparer.Ordinal))
@@ -266,7 +510,8 @@ public static class CliParser
             return Create(
                 baseUri,
                 tokenFile,
-                CliCommand.SystemInfo);
+                CliCommand.SystemInfo,
+                output: output);
         }
 
         if (positionals.SequenceEqual(
@@ -276,38 +521,190 @@ public static class CliParser
             return Create(
                 baseUri,
                 tokenFile,
-                CliCommand.ClustersList);
+                CliCommand.ClustersList,
+                output: output);
         }
 
         if (positionals.Count == 3 &&
             positionals[0] == "clusters" &&
             positionals[1] == "get")
         {
-            ValidateIdentifier(
-                positionals[2],
-                "cluster ID");
-            return Create(
+            return CreateSingle(
                 baseUri,
                 tokenFile,
                 CliCommand.ClusterGet,
-                resourceId: positionals[2]);
+                positionals[2],
+                "cluster ID",
+                output);
+        }
+
+        if (positionals.Count == 3 &&
+            positionals[0] == "topics" &&
+            positionals[1] == "list")
+        {
+            return CreateSingle(
+                baseUri,
+                tokenFile,
+                CliCommand.TopicsList,
+                positionals[2],
+                "cluster ID",
+                output,
+                search,
+                cursor,
+                limit);
+        }
+
+        if (positionals.Count == 4 &&
+            positionals[0] == "topics" &&
+            positionals[1] == "get")
+        {
+            return CreateDouble(
+                baseUri,
+                tokenFile,
+                CliCommand.TopicGet,
+                positionals[2],
+                "cluster ID",
+                positionals[3],
+                "topic name",
+                output);
+        }
+
+        if (positionals.Count == 3 &&
+            positionals[0] == "consumer-groups" &&
+            positionals[1] == "list")
+        {
+            return CreateSingle(
+                baseUri,
+                tokenFile,
+                CliCommand.ConsumerGroupsList,
+                positionals[2],
+                "cluster ID",
+                output);
+        }
+
+        if (positionals.Count == 4 &&
+            positionals[0] == "consumer-groups" &&
+            positionals[1] is "get" or "lag")
+        {
+            return CreateDouble(
+                baseUri,
+                tokenFile,
+                positionals[1] == "get"
+                    ? CliCommand.ConsumerGroupGet
+                    : CliCommand.ConsumerGroupLag,
+                positionals[2],
+                "cluster ID",
+                positionals[3],
+                "consumer group ID",
+                output);
+        }
+
+        if (positionals.Count == 3 &&
+            positionals[0] == "schemas" &&
+            positionals[1] == "subjects")
+        {
+            return CreateSingle(
+                baseUri,
+                tokenFile,
+                CliCommand.SchemaSubjectsList,
+                positionals[2],
+                "cluster ID",
+                output);
+        }
+
+        if (positionals.Count == 4 &&
+            positionals[0] == "schemas" &&
+            positionals[1] == "versions")
+        {
+            return CreateDouble(
+                baseUri,
+                tokenFile,
+                CliCommand.SchemaVersionsList,
+                positionals[2],
+                "cluster ID",
+                positionals[3],
+                "schema subject",
+                output);
         }
 
         throw new CliUsageException(
             "Unknown, incomplete, or unavailable command.");
     }
 
+    private static CliInvocation CreateSingle(
+        Uri baseUri,
+        string? tokenFile,
+        CliCommand command,
+        string resourceId,
+        string field,
+        CliOutputFormat output,
+        string? search = null,
+        string? cursor = null,
+        int? limit = null)
+    {
+        ValidateIdentifier(
+            resourceId,
+            field);
+
+        return Create(
+            baseUri,
+            tokenFile,
+            command,
+            resourceId,
+            output: output,
+            search: search,
+            cursor: cursor,
+            limit: limit);
+    }
+
+    private static CliInvocation CreateDouble(
+        Uri baseUri,
+        string? tokenFile,
+        CliCommand command,
+        string resourceId,
+        string resourceField,
+        string secondaryResourceId,
+        string secondaryField,
+        CliOutputFormat output)
+    {
+        ValidateIdentifier(
+            resourceId,
+            resourceField);
+        ValidateIdentifier(
+            secondaryResourceId,
+            secondaryField,
+            maxLength: 512);
+
+        return Create(
+            baseUri,
+            tokenFile,
+            command,
+            resourceId,
+            secondaryResourceId,
+            output: output);
+    }
+
     private static CliInvocation Create(
         Uri baseUri,
         string? tokenFile,
         CliCommand command,
-        string? resourceId = null) =>
+        string? resourceId = null,
+        string? secondaryResourceId = null,
+        CliOutputFormat output = CliOutputFormat.Json,
+        string? search = null,
+        string? cursor = null,
+        int? limit = null) =>
         new(
             baseUri,
             tokenFile,
             command,
             resourceId,
-            ShowHelp: false);
+            ShowHelp: false,
+            secondaryResourceId,
+            search,
+            cursor,
+            limit,
+            output);
 
     private static string RequireValue(
         IReadOnlyList<string> args,
@@ -322,6 +719,22 @@ public static class CliParser
 
         index++;
         return args[index];
+    }
+
+    private static string ValidateBoundedOption(
+        string value,
+        string option,
+        int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > maxLength ||
+            value.Any(char.IsControl))
+        {
+            throw new CliUsageException(
+                $"{option} must be non-empty, at most {maxLength} characters, and contain no control characters.");
+        }
+
+        return value;
     }
 
     private static Uri ResolveBaseUri(
@@ -356,14 +769,21 @@ public static class CliParser
 
     private static void ValidateIdentifier(
         string value,
-        string field)
+        string field,
+        int maxLength = 256)
     {
         if (string.IsNullOrWhiteSpace(value) ||
-            value.Length > 256 ||
+            value is "." or ".." ||
+            value.Contains('/', StringComparison.Ordinal) ||
+            value.Length > maxLength ||
+            !string.Equals(
+                value,
+                value.Trim(),
+                StringComparison.Ordinal) ||
             value.Any(char.IsControl))
         {
             throw new CliUsageException(
-                $"{field} must be non-empty, at most 256 characters, and contain no control characters.");
+                $"{field} must be exact, non-empty, at most {maxLength} characters, and contain no control characters.");
         }
     }
 }
