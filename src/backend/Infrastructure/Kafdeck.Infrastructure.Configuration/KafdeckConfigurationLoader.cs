@@ -91,15 +91,7 @@ public static class KafdeckConfigurationLoader
             ParseOptionalInt(
                 section["MaxTraceAttributes"],
                 defaults.MaxTraceAttributes,
-                "Observability max trace attributes"),
-            ParseOptionalInt(
-                section["MaxLogAttributes"],
-                defaults.MaxLogAttributes,
-                "Observability max log attributes"),
-            ParseOptionalInt(
-                section["MaxDiagnosticStringBytes"],
-                defaults.MaxDiagnosticStringBytes,
-                "Observability max diagnostic string bytes"));
+                "Observability max trace attributes"));
     }
 
     private static DataGeneratorOptions? LoadDataGenerator(
