@@ -38,6 +38,8 @@ KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
 var mutationOptions = kafdeckOptions.Administration?.Mutations;
 var observabilityOptions =
     ObservabilityOptions.Effective(kafdeckOptions);
+var historicalMetricsOptions =
+    observabilityOptions.History;
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -75,6 +77,17 @@ var otlpHeaders =
     observabilityOptions.Otlp.Headers is not null
         ? secretResolver
             .Resolve(observabilityOptions.Otlp.Headers)
+            .Reveal()
+        : null;
+
+var historicalMetricsConnectionString =
+    historicalMetricsOptions?.Enabled == true &&
+    historicalMetricsOptions.Provider ==
+        HistoricalMetricsProvider.PostgreSql &&
+    historicalMetricsOptions.ConnectionString is not null
+        ? secretResolver
+            .Resolve(
+                historicalMetricsOptions.ConnectionString)
             .Reveal()
         : null;
 
@@ -139,6 +152,42 @@ builder.Services.AddSingleton<IConsumerGroupReadPort>(services =>
             secretResolver),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<ConsumerExplorerService>();
+
+if (historicalMetricsOptions?.Enabled == true)
+{
+    builder.Services.AddSingleton<IHistoricalMetricsDbConnectionFactory>(
+        _ =>
+            historicalMetricsOptions.Provider switch
+            {
+                HistoricalMetricsProvider.Sqlite =>
+                    new SqliteHistoricalMetricsDbConnectionFactory(
+                        historicalMetricsOptions.SqliteDatabasePath!),
+                HistoricalMetricsProvider.PostgreSql =>
+                    new PostgreSqlHistoricalMetricsDbConnectionFactory(
+                        historicalMetricsConnectionString!),
+                _ => throw new KafdeckConfigurationException(
+                    "Historical metrics provider is unsupported."),
+            });
+
+    builder.Services.AddSingleton(
+        new HistoricalMetricStorePolicy(
+            TimeSpan.FromHours(
+                historicalMetricsOptions.MaxQueryRangeHours),
+            historicalMetricsOptions.MaxSeriesPerQuery,
+            historicalMetricsOptions.MaxPointsPerQuery,
+            TimeSpan.FromSeconds(
+                historicalMetricsOptions.MaxQueryDurationSeconds),
+            historicalMetricsOptions.MaxConcurrentQueries));
+
+    builder.Services.AddSingleton<IHistoricalMetricStore>(
+        services =>
+            new AdoHistoricalMetricStore(
+                services.GetRequiredService<
+                    IHistoricalMetricsDbConnectionFactory>(),
+                services.GetRequiredService<
+                    HistoricalMetricStorePolicy>()));
+}
+
 builder.Services.AddSingleton<IMetricsObservationPort, UnavailableMetricsObservationPort>();
 builder.Services.AddSingleton<IHistoryObservationPort, UnavailableHistoryObservationPort>();
 builder.Services.AddSingleton<ConsumerDiagnosticsService>();
@@ -388,6 +437,23 @@ if (mutationOptions?.Enabled == true)
 }
 
 var app = builder.Build();
+
+if (historicalMetricsOptions?.Enabled == true)
+{
+    var historicalMetricStore =
+        app.Services.GetRequiredService<
+            IHistoricalMetricStore>();
+    await historicalMetricStore
+        .InitializeAsync()
+        .ConfigureAwait(false);
+
+    app.Logger.LogInformation(
+        "Kafdeck historical metrics provider initialized with provider {Provider}, execution mode {ExecutionMode}, raw retention {RawRetentionHours}h and rollup retention {RollupRetentionDays}d.",
+        historicalMetricsOptions.Provider,
+        historicalMetricsOptions.ExecutionMode,
+        historicalMetricsOptions.RawRetentionHours,
+        historicalMetricsOptions.RollupRetentionDays);
+}
 
 app.Logger.LogInformation(
     "Kafdeck startup configuration: {@Configuration}",

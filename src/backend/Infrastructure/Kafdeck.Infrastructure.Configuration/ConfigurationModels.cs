@@ -92,7 +92,8 @@ public sealed record ObservabilityOptions(
     int MaxMetricLabelValueBytes,
     int MaxTraceAttributes,
     int MaxLogAttributes,
-    int MaxDiagnosticStringBytes)
+    int MaxDiagnosticStringBytes,
+    HistoricalMetricsOptions? History = null)
 {
     public const int MinimumMaxActiveSeries = 2;
     public const int DefaultMaxActiveSeries = 10_000;
@@ -165,6 +166,63 @@ public sealed record ObservabilityOptions(
         ArgumentNullException.ThrowIfNull(options);
         return options.Observability ?? Default;
     }
+}
+
+public enum HistoricalMetricsProvider
+{
+    Sqlite = 1,
+    PostgreSql = 2,
+}
+
+public enum HistoricalMetricsExecutionMode
+{
+    Standalone = 1,
+    HighAvailability = 2,
+}
+
+public sealed record HistoricalMetricsOptions(
+    bool Enabled,
+    HistoricalMetricsProvider Provider,
+    HistoricalMetricsExecutionMode ExecutionMode,
+    string? SqliteDatabasePath,
+    SecretReference? ConnectionString,
+    int RawRetentionHours,
+    int RollupRetentionDays,
+    int MaxQueryRangeHours,
+    int MaxSeriesPerQuery,
+    int MaxPointsPerQuery,
+    int MaxQueryDurationSeconds,
+    int MaxConcurrentQueries)
+{
+    public const int DefaultRawRetentionHours = 24;
+    public const int HardMaxRawRetentionHours = 168;
+    public const int DefaultRollupRetentionDays = 7;
+    public const int HardMaxRollupRetentionDays = 90;
+    public const int DefaultMaxQueryRangeHours = 24;
+    public const int HardMaxQueryRangeHours = 31 * 24;
+    public const int DefaultMaxSeriesPerQuery = 1_000;
+    public const int HardMaxSeriesPerQuery = 10_000;
+    public const int DefaultMaxPointsPerQuery = 50_000;
+    public const int HardMaxPointsPerQuery = 250_000;
+    public const int DefaultMaxQueryDurationSeconds = 10;
+    public const int HardMaxQueryDurationSeconds = 30;
+    public const int DefaultMaxConcurrentQueries = 2;
+    public const int HardMaxConcurrentQueries = 8;
+
+    public static HistoricalMetricsOptions Disabled { get; } =
+        new(
+            Enabled: false,
+            Provider: HistoricalMetricsProvider.Sqlite,
+            ExecutionMode: HistoricalMetricsExecutionMode.Standalone,
+            SqliteDatabasePath: null,
+            ConnectionString: null,
+            RawRetentionHours: DefaultRawRetentionHours,
+            RollupRetentionDays: DefaultRollupRetentionDays,
+            MaxQueryRangeHours: DefaultMaxQueryRangeHours,
+            MaxSeriesPerQuery: DefaultMaxSeriesPerQuery,
+            MaxPointsPerQuery: DefaultMaxPointsPerQuery,
+            MaxQueryDurationSeconds: DefaultMaxQueryDurationSeconds,
+            MaxConcurrentQueries: DefaultMaxConcurrentQueries);
 }
 
 public sealed record PrometheusObservabilityOptions(
