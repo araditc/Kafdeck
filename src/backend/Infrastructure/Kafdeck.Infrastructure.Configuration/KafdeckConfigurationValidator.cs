@@ -287,7 +287,22 @@ public static class KafdeckConfigurationValidator
                 $"Observability max active series must be between {ObservabilityOptions.MinimumMaxActiveSeries} and {ObservabilityOptions.HardMaxActiveSeries}.");
         }
 
-        var prometheus = observability.Prometheus;
+        ValidatePrometheus(
+            observability.Prometheus,
+            deployment,
+            errors);
+        ValidateOtlp(
+            observability.Otlp,
+            observability.Prometheus,
+            deployment,
+            errors);
+    }
+
+    private static void ValidatePrometheus(
+        PrometheusObservabilityOptions prometheus,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
         if (!prometheus.Enabled)
         {
             if (prometheus.AccessToken is not null)
@@ -330,6 +345,88 @@ public static class KafdeckConfigurationValidator
         {
             errors.Add(
                 "Prometheus scrape on a non-loopback deployment requires HTTPS for every remote listen URL.");
+        }
+    }
+
+    private static void ValidateOtlp(
+        OtlpObservabilityOptions otlp,
+        PrometheusObservabilityOptions prometheus,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        if (!otlp.Enabled)
+        {
+            if (!string.IsNullOrWhiteSpace(otlp.Endpoint))
+            {
+                errors.Add(
+                    "OTLP endpoint must not be configured while OTLP export is disabled.");
+            }
+
+            if (otlp.Headers is not null)
+            {
+                errors.Add(
+                    "OTLP headers secret must not be configured while OTLP export is disabled.");
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(otlp.Endpoint) ||
+            otlp.Endpoint.Length > 2048 ||
+            !Uri.TryCreate(
+                otlp.Endpoint,
+                UriKind.Absolute,
+                out var endpoint) ||
+            !(string.Equals(
+                  endpoint.Scheme,
+                  Uri.UriSchemeHttp,
+                  StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(
+                  endpoint.Scheme,
+                  Uri.UriSchemeHttps,
+                  StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add(
+                "Enabled OTLP export requires an absolute HTTP or HTTPS endpoint of at most 2048 characters.");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(endpoint.UserInfo) ||
+            !string.IsNullOrEmpty(endpoint.Query) ||
+            !string.IsNullOrEmpty(endpoint.Fragment))
+        {
+            errors.Add(
+                "OTLP endpoint must not contain user-info, query-string, or fragment components.");
+        }
+
+        if (!IsLoopbackBinding(otlp.Endpoint) &&
+            !string.Equals(
+                endpoint.Scheme,
+                Uri.UriSchemeHttps,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(
+                "Remote OTLP export requires HTTPS; HTTP is allowed only for loopback development collectors.");
+        }
+
+        if (otlp.Headers is not null &&
+            deployment.AccessToken is not null &&
+            SameSecretReference(
+                otlp.Headers,
+                deployment.AccessToken))
+        {
+            errors.Add(
+                "OTLP headers must use a distinct secret reference from the deployment access token.");
+        }
+
+        if (otlp.Headers is not null &&
+            prometheus.AccessToken is not null &&
+            SameSecretReference(
+                otlp.Headers,
+                prometheus.AccessToken))
+        {
+            errors.Add(
+                "OTLP headers must use a distinct secret reference from the Prometheus scrape token.");
         }
     }
 
