@@ -72,7 +72,8 @@ var otlpHeaders =
 ObservabilityStartupSecurity
     .ValidateResolvedCredentialIsolation(
         deploymentAccessToken,
-        prometheusScrapeToken);
+        prometheusScrapeToken,
+        otlpHeaders);
 
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
