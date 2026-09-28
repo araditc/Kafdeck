@@ -70,10 +70,10 @@ public static class KafdeckObservabilityEndpoints
                                 : "prometheus_not_enabled"),
                         new ObservabilityCapabilityValue(
                             observability.Otlp.Enabled
-                                ? "blocked"
+                                ? "supported"
                                 : "unconfigured",
                             observability.Otlp.Enabled
-                                ? "otlp_exporter_runtime_not_wired"
+                                ? null
                                 : "otlp_not_enabled"),
                         PrometheusObservabilityOptions.Path,
                         observability.MaxActiveSeries,
