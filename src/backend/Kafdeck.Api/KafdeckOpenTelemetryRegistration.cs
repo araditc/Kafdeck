@@ -97,9 +97,8 @@ public static class KafdeckOpenTelemetryRegistration
 
                     options.AddProcessor(
                         new BatchLogRecordExportProcessor(
-                            new HealthTrackingOtlpLogExporter(
-                                exporterOptions,
-                                health)));
+                            new OtlpLogExporter(
+                                exporterOptions)));
                 }
             });
         });
@@ -211,7 +210,6 @@ public sealed class OtlpExporterHealthState
     // 0 = no evidence, 1 = latest export succeeded, -1 = latest export failed.
     private int _traceState;
     private int _metricState;
-    private int _logState;
 
     public OtlpRuntimeHealth Current
     {
@@ -219,16 +217,14 @@ public sealed class OtlpExporterHealthState
         {
             var trace = Volatile.Read(ref _traceState);
             var metric = Volatile.Read(ref _metricState);
-            var log = Volatile.Read(ref _logState);
 
-            if (trace < 0 || metric < 0 || log < 0)
+            if (trace < 0 || metric < 0)
             {
                 return OtlpRuntimeHealth.Unavailable;
             }
 
             return trace > 0 &&
-                   metric > 0 &&
-                   log > 0
+                   metric > 0
                 ? OtlpRuntimeHealth.Supported
                 : OtlpRuntimeHealth.Unknown;
         }
@@ -250,9 +246,6 @@ public sealed class OtlpExporterHealthState
                 break;
             case OtlpSignalKind.Metrics:
                 Volatile.Write(ref _metricState, value);
-                break;
-            case OtlpSignalKind.Logs:
-                Volatile.Write(ref _logState, value);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(
@@ -308,32 +301,6 @@ internal sealed class HealthTrackingOtlpMetricExporter
         var result = base.Export(in batch);
         _health.Record(
             OtlpSignalKind.Metrics,
-            result);
-        return result;
-    }
-}
-
-internal sealed class HealthTrackingOtlpLogExporter
-    : OtlpLogExporter
-{
-    private readonly OtlpExporterHealthState _health;
-
-    public HealthTrackingOtlpLogExporter(
-        OtlpExporterOptions options,
-        OtlpExporterHealthState health)
-        : base(options)
-    {
-        _health =
-            health ??
-            throw new ArgumentNullException(nameof(health));
-    }
-
-    public override ExportResult Export(
-        in Batch<LogRecord> batch)
-    {
-        var result = base.Export(in batch);
-        _health.Record(
-            OtlpSignalKind.Logs,
             result);
         return result;
     }
