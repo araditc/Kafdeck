@@ -9,6 +9,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -171,6 +175,407 @@ public sealed class V08W62ObservabilityFoundationTests
 
         KafdeckConfigurationValidator
             .ValidateAndThrow(valid);
+    }
+
+    [Fact]
+    public void Otlp_exporter_clears_ambient_headers_when_kafdeck_headers_are_absent()
+    {
+        var options = new OtlpObservabilityOptions(
+            Enabled: true,
+            Endpoint: "https://otel.example:4317",
+            Protocol: OtlpObservabilityProtocol.Grpc,
+            Headers: null);
+
+        var exporter = new OtlpExporterOptions
+        {
+            Headers = "Authorization=ambient-secret",
+        };
+
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            exporter,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Traces);
+
+        Assert.Equal(string.Empty, exporter.Headers);
+    }
+
+    [Fact]
+    public void Http_protobuf_uses_signal_specific_otlp_endpoints()
+    {
+        var options = new OtlpObservabilityOptions(
+            true,
+            "https://collector.example:4318/base",
+            OtlpObservabilityProtocol.HttpProtobuf,
+            null);
+
+        var traces = new OtlpExporterOptions();
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            traces,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Traces);
+
+        var metrics = new OtlpExporterOptions();
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            metrics,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Metrics);
+
+        Assert.Equal(
+            "https://collector.example:4318/base/v1/traces",
+            traces.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(
+            "https://collector.example:4318/base/v1/metrics",
+            metrics.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, traces.Protocol);
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, metrics.Protocol);
+    }
+
+    [Fact]
+    public void Grpc_keeps_the_configured_base_endpoint()
+    {
+        var options = new OtlpObservabilityOptions(
+            true,
+            "https://collector.example:4317/base",
+            OtlpObservabilityProtocol.Grpc,
+            null);
+        var exporter = new OtlpExporterOptions();
+
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            exporter,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Traces);
+
+        Assert.Equal(
+            "https://collector.example:4317/base",
+            exporter.Endpoint.AbsoluteUri.TrimEnd('/'));
+        Assert.Equal(OtlpExportProtocol.Grpc, exporter.Protocol);
+    }
+
+    [Fact]
+    public void Http_protobuf_client_disables_redirects()
+    {
+        using var handler =
+            KafdeckOpenTelemetryRegistration
+                .CreateNoRedirectHttpHandler();
+
+        Assert.False(handler.AllowAutoRedirect);
+    }
+
+    [Theory]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "x-api-key=deployment-token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "x-api-key=metrics-token",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment token",
+        "metrics-token",
+        "x-api-key=deployment%20token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Bearer%20deployment-token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Token%20deployment-token",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Custom%20metrics-token",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjpkZXBsb3ltZW50LXRva2Vu",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjptZXRyaWNzLXRva2Vu",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20ZGVwbG95bWVudC10b2tlbjpwYXNzd29yZA==",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20ZGVwbG95bWVudC10b2tlbjpwYXNzd29yZA",
+        "deployment access token")]
+    [InlineData(
+        "user:deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjpkZXBsb3ltZW50LXRva2Vu",
+        "deployment access token")]
+    [InlineData(
+        "päss",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjpw5HNz",
+        "deployment access token")]
+    [InlineData(
+        "päss",
+        "metrics-token",
+        "Authorization=Basic%20dXNlcjpww6Rzcw==",
+        "deployment access token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20bWV0cmljcy10b2tlbjpwYXNzd29yZA==",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Basic%20bWV0cmljcy10b2tlbjpwYXNzd29yZA",
+        "Prometheus scrape token")]
+    [InlineData(
+        "deployment-token",
+        "metrics-token",
+        "Authorization=Bearer metrics-token",
+        "Prometheus scrape token")]
+    public void Resolved_otlp_header_values_must_not_reuse_local_credentials(
+        string deploymentToken,
+        string prometheusToken,
+        string otlpHeaders,
+        string expectedMessage)
+    {
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentToken,
+                            prometheusToken,
+                            otlpHeaders));
+
+        Assert.Contains(
+            expectedMessage,
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolved_otlp_headers_must_not_reuse_oidc_client_secret()
+    {
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentAccessToken: null,
+                            prometheusScrapeToken: "metrics-token",
+                            otlpHeaders:
+                                "Authorization=Bearer%20oidc-client-secret",
+                            oidcClientSecret:
+                                "oidc-client-secret"));
+
+        Assert.Contains(
+            "OIDC client secret",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prometheus_token_must_not_reuse_oidc_client_secret()
+    {
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentAccessToken: null,
+                            prometheusScrapeToken:
+                                "same-client-secret",
+                            otlpHeaders: null,
+                            oidcClientSecret:
+                                "same-client-secret"));
+
+        Assert.Contains(
+            "OIDC client secret",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Otlp_header_size_limit_is_enforced_without_local_credentials()
+    {
+        var oversized =
+            "x-api-key=" +
+            new string('x', (16 * 1024) + 1);
+
+        var exception =
+            Assert.Throws<KafdeckConfigurationException>(
+                () =>
+                    ObservabilityStartupSecurity
+                        .ValidateResolvedCredentialIsolation(
+                            deploymentAccessToken: null,
+                            prometheusScrapeToken: null,
+                            otlpHeaders: oversized));
+
+        Assert.Contains(
+            "16 KiB safety limit",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Distinct_resolved_otlp_header_value_is_admitted()
+    {
+        ObservabilityStartupSecurity
+            .ValidateResolvedCredentialIsolation(
+                "deployment-token",
+                "metrics-token",
+                "x-api-key=collector-token");
+    }
+
+    [Fact]
+    public void Otlp_runtime_health_requires_real_success_from_both_signals()
+    {
+        var health = new OtlpExporterHealthState();
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Unknown,
+            health.Current);
+        Assert.Equal(
+            "unknown",
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: true,
+                    health.Current)
+                .State);
+
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Success);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Unknown,
+            health.Current);
+
+        health.Record(
+            OtlpSignalKind.Metrics,
+            ExportResult.Success);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Supported,
+            health.Current);
+        Assert.Equal(
+            "supported",
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: true,
+                    health.Current)
+                .State);
+    }
+
+    [Fact]
+    public void Otlp_runtime_health_reports_latest_export_failure_as_unavailable()
+    {
+        var health = new OtlpExporterHealthState();
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Success);
+        health.Record(
+            OtlpSignalKind.Metrics,
+            ExportResult.Success);
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Failure);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Unavailable,
+            health.Current);
+
+        var capability =
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: true,
+                    health.Current);
+
+        Assert.Equal(
+            "unavailable",
+            capability.State);
+        Assert.Equal(
+            "otlp_export_failed",
+            capability.ReasonCode);
+
+        health.Record(
+            OtlpSignalKind.Traces,
+            ExportResult.Success);
+
+        Assert.Equal(
+            OtlpRuntimeHealth.Supported,
+            health.Current);
+    }
+
+    [Fact]
+    public void Disabled_otlp_remains_unconfigured_regardless_of_runtime_health()
+    {
+        var capability =
+            KafdeckObservabilityEndpoints
+                .OtlpCapability(
+                    enabled: false,
+                    OtlpRuntimeHealth.Unavailable);
+
+        Assert.Equal(
+            "unconfigured",
+            capability.State);
+        Assert.Equal(
+            "otlp_not_enabled",
+            capability.ReasonCode);
+    }
+
+    [Fact]
+    public void Stable_otlp_runtime_registers_trace_and_metric_providers()
+    {
+        var observability = new ObservabilityOptions(
+            100,
+            PrometheusObservabilityOptions.Disabled,
+            new OtlpObservabilityOptions(
+                true,
+                "http://127.0.0.1:4317",
+                OtlpObservabilityProtocol.Grpc,
+                null));
+
+        var services = new ServiceCollection();
+        services.AddKafdeckOpenTelemetry(
+            observability,
+            resolvedOtlpHeaders: null);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<TracerProvider>());
+        Assert.NotNull(provider.GetService<MeterProvider>());
+    }
+
+    [Fact]
+    public void Disabled_otlp_does_not_require_header_secret_resolution()
+    {
+        var observability = new ObservabilityOptions(
+            100,
+            PrometheusObservabilityOptions.Disabled,
+            OtlpObservabilityOptions.Disabled);
+
+        var services = new ServiceCollection();
+        services.AddKafdeckOpenTelemetry(
+            observability,
+            resolvedOtlpHeaders: null);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<TracerProvider>());
+        Assert.NotNull(provider.GetService<MeterProvider>());
     }
 
     [Fact]

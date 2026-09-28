@@ -61,18 +61,42 @@ var prometheusScrapeToken =
             .Reveal()
         : null;
 
+var oidcClientSecret =
+    kafdeckOptions.Deployment.Mode == AccessMode.Oidc &&
+    kafdeckOptions.Deployment.Oidc?.ClientSecret is not null
+        ? secretResolver
+            .Resolve(kafdeckOptions.Deployment.Oidc.ClientSecret)
+            .Reveal()
+        : null;
+
+var otlpHeaders =
+    observabilityOptions.Otlp.Enabled &&
+    observabilityOptions.Otlp.Headers is not null
+        ? secretResolver
+            .Resolve(observabilityOptions.Otlp.Headers)
+            .Reveal()
+        : null;
+
 ObservabilityStartupSecurity
     .ValidateResolvedCredentialIsolation(
         deploymentAccessToken,
-        prometheusScrapeToken);
+        prometheusScrapeToken,
+        otlpHeaders,
+        oidcClientSecret);
 
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
-    builder.Services.AddKafdeckOidc(kafdeckOptions.Deployment, secretResolver);
+    builder.Services.AddKafdeckOidc(
+        kafdeckOptions.Deployment,
+        secretResolver,
+        oidcClientSecret);
     builder.Services.AddKafdeckAntiforgery(kafdeckOptions.Deployment.ListenUrl);
 }
 
 builder.Services.AddProblemDetails();
+builder.Services.AddKafdeckOpenTelemetry(
+    observabilityOptions,
+    otlpHeaders);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
