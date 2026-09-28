@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="src/backend/Kafdeck.Api/Kafdeck.Api.csproj" />
+  <Project Path="src/cli/Kafdeck.Cli/Kafdeck.Cli.csproj" />
   <Project Path="src/backend/Kafdeck.Core/Kafdeck.Core.csproj" />
   <Project Path="src/backend/Modules/Kafdeck.Modules.Clusters/Kafdeck.Modules.Clusters.csproj" />
   <Project Path="src/backend/Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />

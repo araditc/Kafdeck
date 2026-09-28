@@ -18,6 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/backend/Kafdeck.Api/Kafdeck.Api.csproj" />
+    <ProjectReference Include="../../src/cli/Kafdeck.Cli/Kafdeck.Cli.csproj" />
     <ProjectReference Include="../../src/backend/Kafdeck.Core/Kafdeck.Core.csproj" />
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Clusters/Kafdeck.Modules.Clusters.csproj" />
     <ProjectReference Include="../../src/backend/Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj" />
