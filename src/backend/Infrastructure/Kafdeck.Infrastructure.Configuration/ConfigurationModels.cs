@@ -24,7 +24,8 @@ public sealed record KafdeckOptions(
     RecordDataOptions? Records = null,
     TopicCatalogOptions? Catalog = null,
     AdministrationOptions? Administration = null,
-    DataGeneratorOptions? Generator = null);
+    DataGeneratorOptions? Generator = null,
+    ObservabilityOptions? Observability = null);
 
 public enum MutationPersistenceProvider
 {
@@ -82,6 +83,34 @@ public sealed record RecordDataOptions(
 
 public sealed record DataGeneratorOptions(
     IReadOnlyList<string> EnabledClusterIds);
+
+public sealed record ObservabilityOptions(
+    PrometheusMetricsOptions Prometheus,
+    int MaxActiveMetricSeries,
+    int MaxMetricLabelsPerSeries,
+    int MaxMetricLabelValueBytes,
+    int MaxTraceAttributes,
+    int MaxLogAttributes,
+    int MaxDiagnosticStringBytes)
+{
+    public static ObservabilityOptions Default { get; } =
+        new(
+            new PrometheusMetricsOptions(
+                Enabled: false,
+                Path: "/metrics",
+                ScrapeToken: null),
+            MaxActiveMetricSeries: 10_000,
+            MaxMetricLabelsPerSeries: 8,
+            MaxMetricLabelValueBytes: 64,
+            MaxTraceAttributes: 24,
+            MaxLogAttributes: 24,
+            MaxDiagnosticStringBytes: 512);
+}
+
+public sealed record PrometheusMetricsOptions(
+    bool Enabled,
+    string Path,
+    SecretReference? ScrapeToken);
 
 public sealed record TopicCatalogOptions(
     IReadOnlyList<TopicCatalogEntryProfile> Topics);
