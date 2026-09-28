@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Kafdeck.Core;
 using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Connect;
@@ -389,16 +390,37 @@ public sealed class MutationDispatchService
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? executionMaterial,
         CancellationToken cancellationToken)
     {
+        using var activity =
+            KafdeckRuntimeTelemetry.StartMutationDispatch();
         using var requestScope = _requestContext.Push(principal);
-        var executed = executionMaterial is null
-            ? await _executor
-                .ExecuteAsync(operationId, cancellationToken)
-                .ConfigureAwait(false)
-            : await _executor
-                .ExecuteAsync(operationId, executionMaterial, cancellationToken)
-                .ConfigureAwait(false);
 
-        return Executed(executed);
+        try
+        {
+            var executed = executionMaterial is null
+                ? await _executor
+                    .ExecuteAsync(operationId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await _executor
+                    .ExecuteAsync(operationId, executionMaterial, cancellationToken)
+                    .ConfigureAwait(false);
+
+            KafdeckRuntimeTelemetry.MarkSucceeded(activity);
+            return Executed(executed);
+        }
+        catch (OperationCanceledException)
+        {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                RuntimeTelemetryFailure.Cancelled);
+            throw;
+        }
+        catch
+        {
+            KafdeckRuntimeTelemetry.MarkFailed(
+                activity,
+                RuntimeTelemetryFailure.ExecutionFailed);
+            throw;
+        }
     }
 
     private async Task<(
