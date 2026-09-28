@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Kafdeck.Core.Records;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Generator;
@@ -66,6 +67,7 @@ public sealed class DataGeneratorWorker
     private readonly DataGeneratorWorkerPolicy _policy;
     private readonly TimeProvider _timeProvider;
     private readonly string _workerId;
+    private readonly RuntimeTelemetry? _telemetry;
 
     public DataGeneratorWorker(
         IMutationOperationRepository operations,
@@ -76,7 +78,8 @@ public sealed class DataGeneratorWorker
         SchemaExplorerService schemas,
         DataGeneratorWorkerPolicy? policy = null,
         TimeProvider? timeProvider = null,
-        string? workerId = null)
+        string? workerId = null,
+        RuntimeTelemetry? telemetry = null)
     {
         _operations =
             operations ??
@@ -113,11 +116,13 @@ public sealed class DataGeneratorWorker
             NormalizeWorkerId(
                 workerId ??
                 $"data-generator:{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}");
+        _telemetry = telemetry;
     }
 
     public async Task<int> RunOnceAsync(
         CancellationToken cancellationToken = default)
     {
+        var cycleStarted = Stopwatch.GetTimestamp();
         var active =
             await _fleet
                 .ListActiveDataGeneratorProgressAsync(
@@ -161,6 +166,10 @@ public sealed class DataGeneratorWorker
             }
         }
 
+        _telemetry?.RecordWorkerCycle(
+            RuntimeTelemetryFamily.DataGeneratorWorker,
+            attempted,
+            Stopwatch.GetElapsedTime(cycleStarted).TotalMilliseconds);
         return attempted;
     }
 
@@ -382,6 +391,9 @@ public sealed class DataGeneratorWorker
                 }
 
                 DataGeneratorDispatchResult result;
+                using var providerTelemetry =
+                    _telemetry?.Start(
+                        RuntimeTelemetryFamily.DataGeneratorProvider);
                 try
                 {
                     result =
@@ -394,13 +406,19 @@ public sealed class DataGeneratorWorker
                                 schema,
                                 cancellationToken)
                             .ConfigureAwait(false);
+                    providerTelemetry?.Complete(
+                        result.Result.ResultKind);
                 }
                 catch (DataGeneratorRateLimitException)
                 {
+                    providerTelemetry?.Complete(
+                        RuntimeTelemetryOutcome.RateLimited);
                     return;
                 }
                 catch (MutationStateException)
                 {
+                    providerTelemetry?.Complete(
+                        RuntimeTelemetryOutcome.FailedDefinitive);
                     await StopBestEffortAsync(
                             operation,
                             plan,
