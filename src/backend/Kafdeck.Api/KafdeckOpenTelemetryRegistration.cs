@@ -100,10 +100,14 @@ public static class KafdeckOpenTelemetryRegistration
                     disposeHandler: true);
         }
 
-        if (!string.IsNullOrWhiteSpace(resolvedHeaders))
-        {
-            exporter.Headers = resolvedHeaders;
-        }
+        // Always override ambient OpenTelemetry header configuration.
+        // Kafdeck accepts OTLP credentials only through the validated
+        // secret-reference path; environment-provided exporter headers
+        // must not bypass size/isolation/security validation.
+        exporter.Headers =
+            string.IsNullOrWhiteSpace(resolvedHeaders)
+                ? string.Empty
+                : resolvedHeaders;
     }
 
     internal static Uri BuildHttpSignalEndpoint(
