@@ -177,6 +177,29 @@ public sealed class V08W62ObservabilityFoundationTests
     }
 
     [Fact]
+    public void Otlp_exporter_clears_ambient_headers_when_kafdeck_headers_are_absent()
+    {
+        var options = new OtlpObservabilityOptions(
+            Enabled: true,
+            Endpoint: "https://otel.example:4317",
+            Protocol: OtlpObservabilityProtocol.Grpc,
+            Headers: null);
+
+        var exporter = new OtlpExporterOptions
+        {
+            Headers = "Authorization=ambient-secret",
+        };
+
+        KafdeckOpenTelemetryRegistration.ConfigureExporter(
+            exporter,
+            options,
+            resolvedHeaders: null,
+            OtlpSignalKind.Traces);
+
+        Assert.Equal(string.Empty, exporter.Headers);
+    }
+
+    [Fact]
     public void Http_protobuf_uses_signal_specific_otlp_endpoints()
     {
         var options = new OtlpObservabilityOptions(
