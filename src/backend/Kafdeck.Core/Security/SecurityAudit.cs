@@ -8,6 +8,7 @@ public enum SecurityAuditEventType
     AuthorizationDenied = 4,
     SensitiveRead = 5,
     LegacyTokenRequest = 6,
+    MetricsScrapeRequest = 7,
 }
 
 public enum SecurityAuditOutcome
@@ -60,6 +61,7 @@ public static class SecurityAuditPrincipal
 {
     public const string Anonymous = "anonymous";
     public const string LegacyDeployment = "legacy-deployment";
+    public const string ObservabilityScrape = "observability-scrape";
 
     public static string FromOperator(OperatorIdentity identity)
     {

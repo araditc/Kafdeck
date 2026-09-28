@@ -35,6 +35,8 @@ var builder = WebApplication.CreateBuilder(args);
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
 var mutationOptions = kafdeckOptions.Administration?.Mutations;
+var observabilityOptions =
+    ObservabilityOptions.Effective(kafdeckOptions);
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -50,6 +52,19 @@ var deploymentAccessToken =
     kafdeckOptions.Deployment.AccessToken is not null
         ? secretResolver.Resolve(kafdeckOptions.Deployment.AccessToken).Reveal()
         : null;
+
+var prometheusScrapeToken =
+    observabilityOptions.Prometheus.Enabled &&
+    observabilityOptions.Prometheus.AccessToken is not null
+        ? secretResolver
+            .Resolve(observabilityOptions.Prometheus.AccessToken)
+            .Reveal()
+        : null;
+
+ObservabilityStartupSecurity
+    .ValidateResolvedCredentialIsolation(
+        deploymentAccessToken,
+        prometheusScrapeToken);
 
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
@@ -357,6 +372,17 @@ foreach (var cluster in kafdeckOptions.Clusters.Where(cluster =>
 app.UseExceptionHandler();
 app.UseMiddleware<ApiTelemetryMiddleware>();
 
+if (prometheusScrapeToken is not null)
+{
+    app.UseWhen(
+        context =>
+            KafdeckObservabilityEndpoints
+                .IsPrometheusScrapePath(
+                    context.Request.Path),
+        branch => branch.UseMiddleware<PrometheusScrapeTokenMiddleware>(
+            prometheusScrapeToken));
+}
+
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
     app.UseAuthentication();
@@ -402,6 +428,7 @@ app.MapKafdeckV07SchemaCapabilities(kafdeckOptions);
 app.MapKafdeckV07SchemaDeveloperTools(kafdeckOptions);
 app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
+app.MapKafdeckV08Observability(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();

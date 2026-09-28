@@ -24,7 +24,8 @@ public sealed record KafdeckOptions(
     RecordDataOptions? Records = null,
     TopicCatalogOptions? Catalog = null,
     AdministrationOptions? Administration = null,
-    DataGeneratorOptions? Generator = null);
+    DataGeneratorOptions? Generator = null,
+    ObservabilityOptions? Observability = null);
 
 public enum MutationPersistenceProvider
 {
@@ -82,6 +83,84 @@ public sealed record RecordDataOptions(
 
 public sealed record DataGeneratorOptions(
     IReadOnlyList<string> EnabledClusterIds);
+
+public sealed record ObservabilityOptions(
+    int MaxActiveSeries,
+    PrometheusObservabilityOptions Prometheus,
+    OtlpObservabilityOptions Otlp,
+    int MaxMetricLabelsPerSeries = DefaultMaxMetricLabelsPerSeries,
+    int MaxMetricLabelValueBytes = DefaultMaxMetricLabelValueBytes,
+    int MaxTraceAttributes = DefaultMaxTraceAttributes)
+{
+    public const int MinimumMaxActiveSeries = 2;
+    public const int DefaultMaxActiveSeries = 10_000;
+    public const int HardMaxActiveSeries = 50_000;
+
+    public const int MinimumMaxMetricLabelsPerSeries = 3;
+    public const int DefaultMaxMetricLabelsPerSeries = 8;
+    public const int HardMaxMetricLabelsPerSeries = 12;
+
+    public const int MinimumMaxMetricLabelValueBytes = 5;
+    public const int DefaultMaxMetricLabelValueBytes = 64;
+    public const int HardMaxMetricLabelValueBytes = 128;
+
+    public const int MinimumMaxTraceAttributes = 1;
+    public const int DefaultMaxTraceAttributes = 24;
+    public const int HardMaxTraceAttributes = 48;
+
+
+    public static ObservabilityOptions Default { get; } =
+        new(
+            DefaultMaxActiveSeries,
+            PrometheusObservabilityOptions.Disabled,
+            OtlpObservabilityOptions.Disabled);
+
+    public ObservabilityOptions(
+        int maxActiveSeries,
+        PrometheusObservabilityOptions prometheus)
+        : this(
+            maxActiveSeries,
+            prometheus,
+            OtlpObservabilityOptions.Disabled)
+    {
+    }
+
+    public static ObservabilityOptions Effective(KafdeckOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return options.Observability ?? Default;
+    }
+}
+
+public sealed record PrometheusObservabilityOptions(
+    bool Enabled,
+    SecretReference? AccessToken)
+{
+    public const string Path = "/metrics";
+
+    public static PrometheusObservabilityOptions Disabled { get; } =
+        new(false, null);
+}
+
+public enum OtlpObservabilityProtocol
+{
+    Grpc = 1,
+    HttpProtobuf = 2,
+}
+
+public sealed record OtlpObservabilityOptions(
+    bool Enabled,
+    string? Endpoint,
+    OtlpObservabilityProtocol Protocol,
+    SecretReference? Headers)
+{
+    public static OtlpObservabilityOptions Disabled { get; } =
+        new(
+            false,
+            null,
+            OtlpObservabilityProtocol.Grpc,
+            null);
+}
 
 public sealed record TopicCatalogOptions(
     IReadOnlyList<TopicCatalogEntryProfile> Topics);
