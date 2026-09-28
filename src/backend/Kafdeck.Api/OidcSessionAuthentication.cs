@@ -29,7 +29,8 @@ public static class KafdeckOidcServiceCollectionExtensions
     public static IServiceCollection AddKafdeckOidc(
         this IServiceCollection services,
         DeploymentOptions deployment,
-        SecretResolver secretResolver)
+        SecretResolver secretResolver,
+        string? resolvedClientSecret = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(deployment);
@@ -82,7 +83,8 @@ public static class KafdeckOidcServiceCollectionExtensions
                 options.ClientId = oidc.ClientId;
                 options.ClientSecret = oidc.ClientSecret is null
                     ? null
-                    : secretResolver.Resolve(oidc.ClientSecret).Reveal();
+                    : resolvedClientSecret ??
+                      secretResolver.Resolve(oidc.ClientSecret).Reveal();
                 options.ResponseType = OpenIdConnectResponseType.Code;
                 options.ResponseMode = OpenIdConnectResponseMode.Query;
                 options.UsePkce = true;
