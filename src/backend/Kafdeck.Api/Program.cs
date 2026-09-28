@@ -186,6 +186,35 @@ if (historicalMetricsOptions?.Enabled == true)
                     IHistoricalMetricsDbConnectionFactory>(),
                 services.GetRequiredService<
                     HistoricalMetricStorePolicy>()));
+
+    builder.Services.AddSingleton(
+        new HistoricalMetricMaintenancePolicy(
+            TimeSpan.FromHours(
+                historicalMetricsOptions.RawRetentionHours),
+            TimeSpan.FromDays(
+                historicalMetricsOptions.RollupRetentionDays),
+            HistoricalMetricMaintenancePolicy
+                .DefaultRollupResolutionSeconds,
+            HistoricalMetricMaintenancePolicy
+                .DefaultMaxRollupWindowsPerCycle,
+            HistoricalMetricMaintenancePolicy
+                .DefaultMaxRollupDeletesPerCycle,
+            HistoricalMetricMaintenancePolicy
+                .DefaultLeaseDuration,
+            HistoricalMetricMaintenancePolicy
+                .DefaultCycleInterval,
+            HistoricalMetricMaintenancePolicy
+                .DefaultMaxCycleDuration));
+
+    builder.Services.AddSingleton<
+        IHistoricalMetricMaintenanceStore>(
+        services =>
+            new AdoHistoricalMetricMaintenanceStore(
+                services.GetRequiredService<
+                    IHistoricalMetricsDbConnectionFactory>()));
+
+    builder.Services.AddHostedService<
+        HistoricalMetricMaintenanceHostedService>();
 }
 
 builder.Services.AddSingleton<IMetricsObservationPort, UnavailableMetricsObservationPort>();
@@ -444,6 +473,13 @@ if (historicalMetricsOptions?.Enabled == true)
         app.Services.GetRequiredService<
             IHistoricalMetricStore>();
     await historicalMetricStore
+        .InitializeAsync()
+        .ConfigureAwait(false);
+
+    var historicalMetricMaintenanceStore =
+        app.Services.GetRequiredService<
+            IHistoricalMetricMaintenanceStore>();
+    await historicalMetricMaintenanceStore
         .InitializeAsync()
         .ConfigureAwait(false);
 

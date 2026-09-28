@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using Kafdeck.Core.Observability;
 using Kafdeck.Infrastructure.Configuration;
@@ -129,7 +130,7 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
                         schema_version)
                     VALUES (
                         'historical-metrics',
-                        2);
+                        3);
                     """;
                 await command.ExecuteNonQueryAsync();
             }
@@ -160,6 +161,172 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
                 0L,
                 Convert.ToInt64(
                     await verifyCommand.ExecuteScalarAsync()));
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Version_one_rollup_migration_preserves_unknown_coverage()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-v1-rollup-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var rawObserved =
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    28,
+                    9,
+                    1,
+                    0,
+                    TimeSpan.Zero);
+            var rollupBucket =
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    28,
+                    8,
+                    0,
+                    0,
+                    TimeSpan.Zero);
+
+            await using (var connection =
+                         new SqliteConnection(
+                             $"Data Source={path}"))
+            {
+                await connection.OpenAsync();
+                await using var command =
+                    connection.CreateCommand();
+                command.CommandText =
+                    """
+                    CREATE TABLE kafdeck_schema_info (
+                        component TEXT PRIMARY KEY,
+                        schema_version INTEGER NOT NULL
+                    );
+                    INSERT INTO kafdeck_schema_info (
+                        component,
+                        schema_version)
+                    VALUES (
+                        'historical-metrics',
+                        1);
+
+                    CREATE TABLE kafdeck_historical_metric_samples (
+                        metric_name TEXT NOT NULL,
+                        cluster_id TEXT NOT NULL,
+                        resource_kind TEXT NOT NULL,
+                        resource_id TEXT NOT NULL,
+                        observed_at_utc TEXT NOT NULL,
+                        resolution_seconds INTEGER NOT NULL,
+                        min_value REAL NOT NULL,
+                        max_value REAL NOT NULL,
+                        sum_value REAL NOT NULL,
+                        sample_count BIGINT NOT NULL,
+                        source TEXT NOT NULL,
+                        state TEXT NULL,
+                        PRIMARY KEY (
+                            metric_name,
+                            cluster_id,
+                            resource_kind,
+                            resource_id,
+                            observed_at_utc,
+                            resolution_seconds)
+                    );
+
+                    INSERT INTO kafdeck_historical_metric_samples
+                    VALUES (
+                        'consumer.lag.total',
+                        'prod',
+                        'consumer_group',
+                        'group-a',
+                        @raw_observed,
+                        0,
+                        10,
+                        10,
+                        10,
+                        1,
+                        'legacy',
+                        'Stable');
+
+                    INSERT INTO kafdeck_historical_metric_samples
+                    VALUES (
+                        'consumer.lag.total',
+                        'prod',
+                        'consumer_group',
+                        'group-a',
+                        @rollup_bucket,
+                        300,
+                        5,
+                        20,
+                        45,
+                        3,
+                        'legacy-rollup',
+                        'Stable');
+                    """;
+                command.Parameters.AddWithValue(
+                    "@raw_observed",
+                    rawObserved.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "@rollup_bucket",
+                    rollupBucket.ToString("O"));
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var store =
+                new AdoHistoricalMetricStore(
+                    new SqliteHistoricalMetricsDbConnectionFactory(
+                        path),
+                    TestPolicy());
+
+            await store.InitializeAsync();
+
+            var query =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        rollupBucket.AddHours(-1),
+                        rawObserved.AddHours(1),
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var points =
+                Assert.Single(query.Series).Points;
+
+            var raw =
+                Assert.Single(
+                    points,
+                    point =>
+                        point.ResolutionSeconds == 0);
+            Assert.True(raw.HasKnownCoverage);
+            Assert.Equal(
+                rawObserved,
+                raw.FirstObservedAtUtc);
+            Assert.Equal(
+                rawObserved,
+                raw.LastObservedAtUtc);
+
+            var rollup =
+                Assert.Single(
+                    points,
+                    point =>
+                        point.ResolutionSeconds == 300);
+            Assert.False(
+                rollup.HasKnownCoverage);
+            Assert.Null(
+                rollup.FirstObservedAtUtc);
+            Assert.Null(
+                rollup.LastObservedAtUtc);
+            Assert.Equal(
+                "Unknown",
+                rollup.State);
         }
         finally
         {
@@ -261,6 +428,115 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
     }
 
     [Fact]
+    public async Task Version_one_partial_rollup_migration_preserves_partial_state()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-v1-partial-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var bucket =
+                DateTimeOffset.UtcNow.AddHours(-2);
+
+            await using (var connection =
+                         new SqliteConnection(
+                             $"Data Source={path}"))
+            {
+                await connection.OpenAsync();
+                await using var command =
+                    connection.CreateCommand();
+                command.CommandText =
+                    """
+                    CREATE TABLE kafdeck_schema_info (
+                        component TEXT PRIMARY KEY,
+                        schema_version INTEGER NOT NULL
+                    );
+                    INSERT INTO kafdeck_schema_info (
+                        component,
+                        schema_version)
+                    VALUES (
+                        'historical-metrics',
+                        1);
+
+                    CREATE TABLE kafdeck_historical_metric_samples (
+                        metric_name TEXT NOT NULL,
+                        cluster_id TEXT NOT NULL,
+                        resource_kind TEXT NOT NULL,
+                        resource_id TEXT NOT NULL,
+                        observed_at_utc TEXT NOT NULL,
+                        resolution_seconds INTEGER NOT NULL,
+                        min_value REAL NOT NULL,
+                        max_value REAL NOT NULL,
+                        sum_value REAL NOT NULL,
+                        sample_count BIGINT NOT NULL,
+                        source TEXT NOT NULL,
+                        state TEXT NULL,
+                        PRIMARY KEY (
+                            metric_name,
+                            cluster_id,
+                            resource_kind,
+                            resource_id,
+                            observed_at_utc,
+                            resolution_seconds)
+                    );
+
+                    INSERT INTO kafdeck_historical_metric_samples
+                    VALUES (
+                        'consumer.lag.total',
+                        'prod',
+                        'consumer_group',
+                        'group-a',
+                        @bucket,
+                        300,
+                        5,
+                        20,
+                        45,
+                        3,
+                        'legacy-rollup',
+                        'Partial');
+                    """;
+                command.Parameters.AddWithValue(
+                    "@bucket",
+                    bucket.ToString("O"));
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var store =
+                new AdoHistoricalMetricStore(
+                    new SqliteHistoricalMetricsDbConnectionFactory(
+                        path),
+                    TestPolicy());
+            await store.InitializeAsync();
+
+            var query =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        bucket.AddHours(-1),
+                        bucket.AddHours(1),
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var rollup =
+                Assert.Single(
+                    Assert.Single(query.Series).Points);
+            Assert.Equal(
+                "Partial",
+                rollup.State);
+            Assert.False(
+                rollup.HasKnownCoverage);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
     public async Task Sqlite_store_append_is_idempotent_and_query_is_bounded()
     {
         var path = Path.Combine(
@@ -345,6 +621,33 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
     }
 
     [Fact]
+    public void Raw_sample_rejects_one_sided_explicit_coverage()
+    {
+        var observedAt =
+            DateTimeOffset.UtcNow;
+        var sample =
+            new HistoricalMetricSample(
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a"),
+                observedAt,
+                10,
+                10,
+                10,
+                1,
+                ResolutionSeconds: 0,
+                Source: "consumer_observer",
+                State: "Stable",
+                FirstObservedAtUtc: observedAt,
+                LastObservedAtUtc: null);
+
+        Assert.Throws<ArgumentException>(
+            sample.Validate);
+    }
+
+    [Fact]
     public async Task Sqlite_store_applies_raw_and_rollup_retention_separately()
     {
         var path = Path.Combine(
@@ -386,7 +689,7 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
                 4,
                 ResolutionSeconds: 300,
                 Source: "rollup",
-                State: "Stable");
+                State: "Unknown");
             var newRollup = new HistoricalMetricSample(
                 identity,
                 now.AddDays(-1),
@@ -396,7 +699,7 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
                 4,
                 ResolutionSeconds: 300,
                 Source: "rollup",
-                State: "Stable");
+                State: "Unknown");
 
             await store.AppendAsync(
                 [oldRaw, newRaw, oldRollup, newRollup]);
@@ -511,7 +814,9 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
                     CAST(SUM(value) AS REAL) AS sum_value,
                     COUNT(*) AS sample_count,
                     'test' AS source,
-                    'Stable' AS state
+                    'Stable' AS state,
+                    '2026-01-01T00:00:00.0000000+00:00' AS first_observed_at_utc,
+                    '2026-01-01T00:00:00.0000000+00:00' AS last_observed_at_utc
                 FROM counter
                 """;
             await schema.ExecuteNonQueryAsync();
@@ -561,6 +866,1218 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
     }
 
     [Fact]
+    public async Task Maintenance_rolls_expired_raw_before_deletion()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-maint-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var rollupWindowStart =
+                DateTimeOffset.FromUnixTimeSeconds(
+                    now.AddHours(-3)
+                        .ToUnixTimeSeconds() /
+                    300 *
+                    300);
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+
+            await store.AppendAsync(
+                [
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(1),
+                        10,
+                        "consumer_observer",
+                        "Stable"),
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(2),
+                        30,
+                        "consumer_observer",
+                        "Stable"),
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        now.AddMinutes(-30),
+                        40,
+                        "consumer_observer",
+                        "Stable"),
+                    new HistoricalMetricSample(
+                        identity,
+                        now.AddDays(-8),
+                        1,
+                        1,
+                        1,
+                        1,
+                        ResolutionSeconds: 300,
+                        Source: "rollup",
+                        State: "Unknown"),
+                ]);
+
+            var policy =
+                TestMaintenancePolicy();
+            var lease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+
+            var result =
+                await maintenance.RunCycleAsync(
+                    lease,
+                    now,
+                    policy);
+
+            Assert.True(result.LeaseValid);
+            Assert.Equal(1, result.RolledWindows);
+            Assert.Equal(2, result.RawDeleted);
+            Assert.Equal(1, result.RollupDeleted);
+
+            var query =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        now.AddHours(-4),
+                        now.AddMinutes(1),
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var points =
+                Assert.Single(query.Series)
+                    .Points;
+            Assert.Equal(2, points.Count);
+
+            var rollup =
+                Assert.Single(
+                    points,
+                    point =>
+                        point.ResolutionSeconds ==
+                        300);
+            Assert.Equal(10, rollup.Min);
+            Assert.Equal(30, rollup.Max);
+            Assert.Equal(40, rollup.Sum);
+            Assert.Equal(2, rollup.Count);
+            Assert.Equal(20, rollup.Average);
+
+            var recent =
+                Assert.Single(
+                    points,
+                    point =>
+                        point.ResolutionSeconds ==
+                        0);
+            Assert.Equal(40, recent.Sum);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_merges_late_raw_into_existing_rollup()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-late-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var rollupWindowStart =
+                DateTimeOffset.FromUnixTimeSeconds(
+                    now.AddHours(-3)
+                        .ToUnixTimeSeconds() /
+                    300 *
+                    300);
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+            var policy =
+                TestMaintenancePolicy();
+
+            await store.AppendAsync(
+                [
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(1),
+                        10,
+                        "consumer_observer"),
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(2),
+                        30,
+                        "consumer_observer"),
+                ]);
+
+            var firstLease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+            _ = await maintenance.RunCycleAsync(
+                firstLease,
+                now,
+                policy);
+
+            await store.AppendAsync(
+                [
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(3),
+                        50,
+                        "consumer_observer"),
+                ]);
+
+            var secondNow =
+                now.AddSeconds(30);
+            var secondLease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        secondNow,
+                        policy.LeaseDuration));
+            _ = await maintenance.RunCycleAsync(
+                secondLease,
+                secondNow,
+                policy);
+
+            var query =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        now.AddHours(-4),
+                        now,
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var rollup =
+                Assert.Single(
+                    Assert.Single(query.Series)
+                        .Points,
+                    point =>
+                        point.ResolutionSeconds ==
+                        300);
+
+            Assert.Equal(10, rollup.Min);
+            Assert.Equal(50, rollup.Max);
+            Assert.Equal(90, rollup.Sum);
+            Assert.Equal(3, rollup.Count);
+            Assert.Equal(30, rollup.Average);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_preserves_partial_and_unknown_truth_in_rollup()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-truth-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var rollupWindowStart =
+                DateTimeOffset.FromUnixTimeSeconds(
+                    now.AddHours(-3)
+                        .ToUnixTimeSeconds() /
+                    300 *
+                    300);
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+            var policy =
+                TestMaintenancePolicy();
+
+            await store.AppendAsync(
+                [
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(1),
+                        10,
+                        "consumer_observer",
+                        "Unknown"),
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        rollupWindowStart
+                            .AddMinutes(2),
+                        20,
+                        "consumer_observer",
+                        "Partial"),
+                ]);
+
+            var lease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+
+            var result =
+                await maintenance.RunCycleAsync(
+                    lease,
+                    now,
+                    policy);
+
+            Assert.True(result.LeaseValid);
+
+            var query =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        now.AddHours(-4),
+                        now,
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var rollup =
+                Assert.Single(
+                    Assert.Single(query.Series)
+                        .Points,
+                    point =>
+                        point.ResolutionSeconds ==
+                        policy.RollupResolutionSeconds);
+
+            Assert.Equal(
+                "Partial",
+                rollup.State);
+            Assert.NotNull(
+                rollup.FirstObservedAtUtc);
+            Assert.NotNull(
+                rollup.LastObservedAtUtc);
+            Assert.True(
+                rollup.FirstObservedAtUtc <=
+                rollup.LastObservedAtUtc);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_rejects_retry_of_already_rolled_raw_identity()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-retry-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var observedAt =
+                now.AddHours(-3)
+                    .AddMinutes(1);
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+            var sample =
+                HistoricalMetricSample.Gauge(
+                    identity,
+                    observedAt,
+                    10,
+                    "consumer_observer",
+                    "Stable");
+            var policy =
+                TestMaintenancePolicy();
+
+            await store.AppendAsync([sample]);
+
+            var firstLease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+            _ = await maintenance.RunCycleAsync(
+                firstLease,
+                now,
+                policy);
+
+            await store.AppendAsync([sample]);
+
+            var secondNow =
+                DateTimeOffset.UtcNow;
+            var secondLease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        secondNow,
+                        policy.LeaseDuration));
+            _ = await maintenance.RunCycleAsync(
+                secondLease,
+                secondNow,
+                policy);
+
+            var result =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        observedAt.AddHours(-1),
+                        secondNow.AddMinutes(1),
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var points =
+                Assert.Single(result.Series).Points;
+            var rollup =
+                Assert.Single(
+                    points,
+                    point =>
+                        point.ResolutionSeconds == 300);
+
+            Assert.Equal(1, rollup.Count);
+            Assert.Equal(10, rollup.Sum);
+            Assert.DoesNotContain(
+                points,
+                point =>
+                    point.ResolutionSeconds == 0 &&
+                    point.ObservedAtUtc == observedAt);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_keeps_legacy_rollup_coverage_unknown_after_late_merge()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-legacy-late-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var bucket =
+                DateTimeOffset.FromUnixTimeSeconds(
+                    now.AddHours(-3)
+                        .ToUnixTimeSeconds() /
+                    300 *
+                    300);
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+
+            await store.AppendAsync(
+                [
+                    new HistoricalMetricSample(
+                        identity,
+                        bucket,
+                        5,
+                        20,
+                        45,
+                        3,
+                        300,
+                        "legacy-rollup",
+                        "Unknown"),
+                    HistoricalMetricSample.Gauge(
+                        identity,
+                        bucket.AddMinutes(1),
+                        30,
+                        "consumer_observer",
+                        "Stable"),
+                ]);
+
+            // Simulate migrated legacy coverage: aggregate exists but original bounds are unknowable.
+            await using (var connection =
+                         new SqliteConnection(
+                             $"Data Source={path}"))
+            {
+                await connection.OpenAsync();
+                await using var command =
+                    connection.CreateCommand();
+                command.CommandText =
+                    """
+                    UPDATE kafdeck_historical_metric_samples
+                    SET
+                        first_observed_at_utc = NULL,
+                        last_observed_at_utc = NULL
+                    WHERE resolution_seconds = 300
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var policy =
+                TestMaintenancePolicy();
+            var lease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+            _ = await maintenance.RunCycleAsync(
+                lease,
+                now,
+                policy);
+
+            var result =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        bucket.AddHours(-1),
+                        now.AddMinutes(1),
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            var rollup =
+                Assert.Single(
+                    Assert.Single(result.Series).Points,
+                    point =>
+                        point.ResolutionSeconds == 300);
+            Assert.False(
+                rollup.HasKnownCoverage);
+            Assert.Null(
+                rollup.FirstObservedAtUtc);
+            Assert.Null(
+                rollup.LastObservedAtUtc);
+            Assert.Equal(
+                "Partial",
+                rollup.State);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_rejects_lease_expired_before_cycle_execution()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-expired-lease-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var acquiredAt =
+                DateTimeOffset.UtcNow.AddMinutes(-3);
+            var lease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        acquiredAt,
+                        TimeSpan.FromMinutes(2)));
+
+            var result =
+                await maintenance.RunCycleAsync(
+                    lease,
+                    acquiredAt,
+                    TestMaintenancePolicy());
+
+            Assert.False(
+                result.LeaseValid);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_counts_exact_full_batch_as_completed_window()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-full-batch-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var windowStart =
+                DateTimeOffset.FromUnixTimeSeconds(
+                    now.AddHours(-3)
+                        .ToUnixTimeSeconds() /
+                    300 *
+                    300);
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+
+            var samples =
+                Enumerable.Range(
+                        0,
+                        AdoHistoricalMetricMaintenanceStore
+                            .MaxRawSamplesPerRollupBatch)
+                    .Select(
+                        index =>
+                            HistoricalMetricSample.Gauge(
+                                identity,
+                                windowStart.AddSeconds(index),
+                                index + 1,
+                                "consumer_observer",
+                                "Stable"))
+                    .Append(
+                        HistoricalMetricSample.Gauge(
+                            identity,
+                            windowStart
+                                .AddMinutes(5)
+                                .AddSeconds(1),
+                            999,
+                            "consumer_observer",
+                            "Stable"))
+                    .ToArray();
+
+            await store.AppendAsync(samples);
+
+            var policy =
+                TestMaintenancePolicy() with
+                {
+                    MaxRollupWindowsPerCycle = 1,
+                };
+            var lease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+
+            var result =
+                await maintenance.RunCycleAsync(
+                    lease,
+                    now,
+                    policy);
+
+            Assert.True(result.LeaseValid);
+            Assert.Equal(1, result.RolledWindows);
+            Assert.Equal(
+                AdoHistoricalMetricMaintenanceStore
+                    .MaxRawSamplesPerRollupBatch,
+                result.RawDeleted);
+
+            var query =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        windowStart.AddMinutes(-1),
+                        now.AddMinutes(1),
+                        MaxSeries: 1,
+                        MaxPoints: 100));
+
+            var points =
+                Assert.Single(query.Series).Points;
+            var rollup =
+                Assert.Single(
+                    points,
+                    point =>
+                        point.ResolutionSeconds == 300);
+            Assert.Equal(
+                AdoHistoricalMetricMaintenanceStore
+                    .MaxRawSamplesPerRollupBatch,
+                rollup.Count);
+            Assert.Contains(
+                points,
+                point =>
+                    point.ResolutionSeconds == 0 &&
+                    point.ObservedAtUtc ==
+                        windowStart
+                            .AddMinutes(5)
+                            .AddSeconds(1));
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_lease_fences_stale_worker()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-fence-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var policy =
+                TestMaintenancePolicy();
+
+            var first =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+
+            Assert.Null(
+                await maintenance.TryAcquireLeaseAsync(
+                    "node-b",
+                    now.AddSeconds(30),
+                    policy.LeaseDuration));
+
+            var takeoverAt =
+                now.AddMinutes(3);
+            var second =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-b",
+                        takeoverAt,
+                        policy.LeaseDuration));
+
+            Assert.True(
+                second.FencingToken >
+                first.FencingToken);
+
+            var staleResult =
+                await maintenance.RunCycleAsync(
+                    first,
+                    takeoverAt,
+                    policy);
+            Assert.False(
+                staleResult.LeaseValid);
+
+            var activeResult =
+                await maintenance.RunCycleAsync(
+                    second,
+                    takeoverAt,
+                    policy);
+            Assert.True(
+                activeResult.LeaseValid);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_maintenance_lease_has_single_active_owner()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w63_maint_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString);
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scopedBuilder =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var factory =
+                new PostgreSqlHistoricalMetricsDbConnectionFactory(
+                    scopedBuilder.ConnectionString);
+            var history =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var firstStore =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+            var secondStore =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await history.InitializeAsync();
+            await firstStore.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var leaseDuration =
+                TimeSpan.FromMinutes(2);
+
+            var leases =
+                await Task.WhenAll(
+                    firstStore.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        leaseDuration),
+                    secondStore.TryAcquireLeaseAsync(
+                        "node-b",
+                        now,
+                        leaseDuration));
+
+            Assert.Equal(
+                1,
+                leases.Count(
+                    lease =>
+                        lease is not null));
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_batches_expired_rollup_deletion()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-history-retention-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory =
+                new SqliteHistoricalMetricsDbConnectionFactory(
+                    path);
+            var store =
+                new AdoHistoricalMetricStore(
+                    factory,
+                    TestPolicy());
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await store.InitializeAsync();
+            await maintenance.InitializeAsync();
+
+            var now =
+                DateTimeOffset.UtcNow;
+            var identity =
+                new HistoricalMetricIdentity(
+                    "consumer.lag.total",
+                    "prod",
+                    "consumer_group",
+                    "group-a");
+
+            await store.AppendAsync(
+                [
+                    new HistoricalMetricSample(
+                        identity,
+                        now.AddDays(-10),
+                        1,
+                        1,
+                        1,
+                        1,
+                        300,
+                        "rollup",
+                        "Unknown"),
+                    new HistoricalMetricSample(
+                        identity,
+                        now.AddDays(-9),
+                        2,
+                        2,
+                        2,
+                        1,
+                        300,
+                        "rollup",
+                        "Unknown"),
+                    new HistoricalMetricSample(
+                        identity,
+                        now.AddDays(-8),
+                        3,
+                        3,
+                        3,
+                        1,
+                        300,
+                        "rollup",
+                        "Unknown"),
+                ]);
+
+            var policy =
+                TestMaintenancePolicy() with
+                {
+                    MaxRollupDeletesPerCycle = 2,
+                };
+
+            var firstLease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        now,
+                        policy.LeaseDuration));
+            var first =
+                await maintenance.RunCycleAsync(
+                    firstLease,
+                    now,
+                    policy);
+
+            Assert.True(first.LeaseValid);
+            Assert.Equal(2, first.RollupDeleted);
+
+            var secondNow =
+                now.AddSeconds(30);
+            var secondLease =
+                Assert.IsType<HistoricalMetricMaintenanceLease>(
+                    await maintenance.TryAcquireLeaseAsync(
+                        "node-a",
+                        secondNow,
+                        policy.LeaseDuration));
+            var second =
+                await maintenance.RunCycleAsync(
+                    secondLease,
+                    secondNow,
+                    policy);
+
+            Assert.True(second.LeaseValid);
+            Assert.Equal(1, second.RollupDeleted);
+
+            var remaining =
+                await store.QueryAsync(
+                    new HistoricalMetricQuery(
+                        "consumer.lag.total",
+                        "prod",
+                        "consumer_group",
+                        "group-a",
+                        now.AddDays(-11),
+                        now,
+                        MaxSeries: 1,
+                        MaxPoints: 10));
+
+            Assert.Empty(remaining.Series);
+        }
+        finally
+        {
+            DeleteSqliteFiles(path);
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_maintenance_uses_repeatable_read_snapshot()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w63_snapshot_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString);
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scopedBuilder =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var factory =
+                new PostgreSqlHistoricalMetricsDbConnectionFactory(
+                    scopedBuilder.ConnectionString);
+            var maintenance =
+                new AdoHistoricalMetricMaintenanceStore(
+                    factory);
+
+            await using var connection =
+                await factory.OpenAsync();
+            await using var transaction =
+                await maintenance.BeginMaintenanceTransactionAsync(
+                    connection,
+                    CancellationToken.None);
+
+            Assert.Equal(
+                IsolationLevel.RepeatableRead,
+                transaction.IsolationLevel);
+
+            await transaction.RollbackAsync();
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
+    public void Maintenance_has_hard_raw_batch_and_cycle_batch_caps()
+    {
+        Assert.InRange(
+            AdoHistoricalMetricMaintenanceStore
+                .MaxRawSamplesPerRollupBatch,
+            1,
+            10_000);
+        Assert.InRange(
+            AdoHistoricalMetricMaintenanceStore
+                .MaxRollupBatchesPerCycle,
+            1,
+            HistoricalMetricMaintenancePolicy
+                .HardMaxRollupWindowsPerCycle);
+
+        var root =
+            FindRepositoryRoot();
+        var source =
+            File.ReadAllText(
+                Path.Combine(
+                    root,
+                    "src",
+                    "backend",
+                    "Infrastructure",
+                    "Kafdeck.Infrastructure.Persistence",
+                    "AdoHistoricalMetricMaintenanceStore.cs"));
+
+        Assert.Contains(
+            "LIMIT @raw_limit",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "rollupBatches <",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "rollupBatches++;",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Maintenance_commits_each_rollup_window_in_its_own_transaction()
+    {
+        var root =
+            FindRepositoryRoot();
+        var source =
+            File.ReadAllText(
+                Path.Combine(
+                    root,
+                    "src",
+                    "backend",
+                    "Infrastructure",
+                    "Kafdeck.Infrastructure.Persistence",
+                    "AdoHistoricalMetricMaintenanceStore.cs"));
+
+        var loopIndex =
+            source.IndexOf(
+                "while (rolledWindows <",
+                StringComparison.Ordinal);
+        var transactionIndex =
+            source.IndexOf(
+                "await using var rollupTransaction",
+                loopIndex,
+                StringComparison.Ordinal);
+        var commitIndex =
+            source.IndexOf(
+                "await rollupTransaction",
+                transactionIndex,
+                StringComparison.Ordinal);
+        var retentionIndex =
+            source.IndexOf(
+                "long rollupDeleted = 0;",
+                commitIndex,
+                StringComparison.Ordinal);
+
+        Assert.True(loopIndex >= 0);
+        Assert.True(
+            transactionIndex > loopIndex);
+        Assert.True(
+            commitIndex > transactionIndex);
+        Assert.True(
+            retentionIndex > commitIndex);
+    }
+
+    [Fact]
     public void Query_rejects_range_above_hard_cap()
     {
         var now = DateTimeOffset.UtcNow;
@@ -578,6 +2095,18 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
         Assert.Throws<ArgumentOutOfRangeException>(
             query.Validate);
     }
+
+    private static HistoricalMetricMaintenancePolicy
+        TestMaintenancePolicy() =>
+        new(
+            RawRetention: TimeSpan.FromHours(1),
+            RollupRetention: TimeSpan.FromDays(7),
+            RollupResolutionSeconds: 300,
+            MaxRollupWindowsPerCycle: 24,
+            MaxRollupDeletesPerCycle: 1_000,
+            LeaseDuration: TimeSpan.FromMinutes(2),
+            CycleInterval: TimeSpan.FromMinutes(1),
+            MaxCycleDuration: TimeSpan.FromSeconds(30));
 
     private static HistoricalMetricStorePolicy TestPolicy() =>
         new(
@@ -648,6 +2177,27 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
             new ConfigurationBuilder()
                 .AddInMemoryCollection(values)
                 .Build());
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? current =
+            new(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(
+                    Path.Combine(
+                        current.FullName,
+                        "Kafdeck.slnx")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            "Unable to locate Kafdeck repository root.");
+    }
 
     private static void DeleteSqliteFiles(string path)
     {
