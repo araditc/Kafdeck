@@ -197,6 +197,38 @@ public sealed class OidcSessionTests
     }
 
     [Fact]
+    public void Oidc_registration_uses_prevalidated_client_secret_without_re_resolving_reference()
+    {
+        var deployment = new DeploymentOptions(
+            "https://0.0.0.0:8443",
+            null,
+            AccessMode.Oidc,
+            new OidcProfile(
+                "https://idp.example",
+                "kafdeck",
+                SecretReference.Parse(
+                    "env:KAFDECK_SHOULD_NOT_BE_READ"),
+                "groups",
+                new[] { "openid" }));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddKafdeckOidc(
+            deployment,
+            new SecretResolver(),
+            resolvedClientSecret: "frozen-validated-secret");
+
+        using var provider = services.BuildServiceProvider();
+        var oidc = provider
+            .GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>()
+            .Get(KafdeckOidcDefaults.OidcScheme);
+
+        Assert.Equal(
+            "frozen-validated-secret",
+            oidc.ClientSecret);
+    }
+
+    [Fact]
     public void Loopback_http_oidc_uses_query_response_and_lax_protocol_cookies()
     {
         var deployment = new DeploymentOptions(
