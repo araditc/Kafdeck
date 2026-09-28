@@ -31,7 +31,8 @@ public static class KafdeckOpenTelemetryRegistration
                         ConfigureExporter(
                             options,
                             observability.Otlp,
-                            resolvedOtlpHeaders));
+                            resolvedOtlpHeaders,
+                            OtlpSignalKind.Traces));
                 }
             })
             .WithMetrics(metrics =>
@@ -44,7 +45,8 @@ public static class KafdeckOpenTelemetryRegistration
                         ConfigureExporter(
                             options,
                             observability.Otlp,
-                            resolvedOtlpHeaders));
+                            resolvedOtlpHeaders,
+                            OtlpSignalKind.Metrics));
                 }
             });
 
@@ -54,7 +56,8 @@ public static class KafdeckOpenTelemetryRegistration
     internal static void ConfigureExporter(
         OtlpExporterOptions exporter,
         OtlpObservabilityOptions options,
-        string? resolvedHeaders)
+        string? resolvedHeaders,
+        OtlpSignalKind signal)
     {
         ArgumentNullException.ThrowIfNull(exporter);
         ArgumentNullException.ThrowIfNull(options);
@@ -74,7 +77,6 @@ public static class KafdeckOpenTelemetryRegistration
                 "OTLP endpoint must be validated before exporter registration.");
         }
 
-        exporter.Endpoint = endpoint;
         exporter.Protocol = options.Protocol switch
         {
             OtlpObservabilityProtocol.Grpc =>
@@ -85,9 +87,61 @@ public static class KafdeckOpenTelemetryRegistration
                 "OTLP protocol is unsupported."),
         };
 
+        exporter.Endpoint =
+            exporter.Protocol == OtlpExportProtocol.HttpProtobuf
+                ? BuildHttpSignalEndpoint(endpoint, signal)
+                : endpoint;
+
+        if (exporter.Protocol == OtlpExportProtocol.HttpProtobuf)
+        {
+            exporter.HttpClientFactory = static () =>
+                new HttpClient(
+                    CreateNoRedirectHttpHandler(),
+                    disposeHandler: true);
+        }
+
         if (!string.IsNullOrWhiteSpace(resolvedHeaders))
         {
             exporter.Headers = resolvedHeaders;
         }
     }
+
+    internal static Uri BuildHttpSignalEndpoint(
+        Uri baseEndpoint,
+        OtlpSignalKind signal)
+    {
+        ArgumentNullException.ThrowIfNull(baseEndpoint);
+
+        var suffix = signal switch
+        {
+            OtlpSignalKind.Traces => "v1/traces",
+            OtlpSignalKind.Metrics => "v1/metrics",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(signal)),
+        };
+
+        var builder = new UriBuilder(baseEndpoint);
+        var path = builder.Path;
+        if (!path.EndsWith("/", StringComparison.Ordinal))
+        {
+            path += "/";
+        }
+
+        builder.Path = path + suffix;
+        builder.Query = string.Empty;
+        builder.Fragment = string.Empty;
+        return builder.Uri;
+    }
+
+    internal static HttpClientHandler CreateNoRedirectHttpHandler() =>
+        new()
+        {
+            AllowAutoRedirect = false,
+        };
+}
+
+internal enum OtlpSignalKind
+{
+    Traces = 1,
+    Metrics = 2,
 }
