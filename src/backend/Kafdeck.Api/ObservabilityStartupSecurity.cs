@@ -202,15 +202,21 @@ public static class ObservabilityStartupSecurity
             var decoded =
                 Encoding.UTF8.GetString(
                     decodedBytes);
+
+            if (DeploymentAccessTokenValidator
+                    .Matches(
+                        credential,
+                        decoded))
+            {
+                return true;
+            }
+
             var delimiter =
                 decoded.IndexOf(':');
 
             if (delimiter < 0)
             {
-                return DeploymentAccessTokenValidator
-                    .Matches(
-                        credential,
-                        decoded);
+                return false;
             }
 
             var username =
