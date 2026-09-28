@@ -116,6 +116,213 @@ public sealed class V08W67CliFoundationTests
             StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("system", "info", "/api/v1/system/info")]
+    [InlineData("clusters", "list", "/api/v1/clusters")]
+    public void Resource_free_routes_do_not_require_cluster_identity(
+        string command,
+        string action,
+        string expected)
+    {
+        var invocation =
+            CliParser.Parse(
+                [command, action]);
+
+        Assert.Null(
+            invocation.ResourceId);
+        Assert.Equal(
+            expected,
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Theory]
+    [InlineData("clusters", "get", ".")]
+    [InlineData("topics", "list", "..")]
+    public void Cli_rejects_dot_only_primary_resource_segments(
+        string command,
+        string action,
+        string resource)
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [command, action, resource]));
+    }
+
+    [Theory]
+    [InlineData("topics", "get", "prod-a", ".")]
+    [InlineData("consumer-groups", "get", "prod-a", "..")]
+    [InlineData("schemas", "versions", "prod-a", ".")]
+    public void Cli_rejects_dot_only_secondary_resource_segments(
+        string command,
+        string action,
+        string cluster,
+        string resource)
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [command, action, cluster, resource]));
+    }
+
+    [Fact]
+    public void Topics_list_builds_bounded_encoded_route()
+    {
+        var invocation =
+            CliParser.Parse(
+                [
+                    "--output",
+                    "json",
+                    "topics",
+                    "list",
+                    "prod-a",
+                    "--search",
+                    "order events",
+                    "--cursor",
+                    "a+/=",
+                    "--limit",
+                    "200",
+                ]);
+
+        Assert.Equal(
+            CliCommand.TopicsList,
+            invocation.Command);
+        Assert.Equal(
+            200,
+            invocation.Limit);
+        Assert.Equal(
+            CliOutputFormat.Json,
+            invocation.Output);
+        Assert.Equal(
+            "/api/v1/clusters/prod-a/topics?q=order%20events&cursor=a%2B%2F%3D&pageSize=200",
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("201")]
+    [InlineData("-1")]
+    [InlineData("not-a-number")]
+    public void Topics_list_rejects_out_of_range_page_size(
+        string value)
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "topics",
+                    "list",
+                    "prod-a",
+                    "--limit",
+                    value,
+                ]));
+    }
+
+    [Fact]
+    public void Topic_pagination_options_are_not_generic_http_query_options()
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "clusters",
+                    "list",
+                    "--limit",
+                    "10",
+                ]));
+
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "consumer-groups",
+                    "list",
+                    "prod-a",
+                    "--cursor",
+                    "opaque",
+                ]));
+    }
+
+    [Theory]
+    [InlineData("topics", "get", "prod-a", "orders.main", "/api/v1/clusters/prod-a/topics/orders.main")]
+    [InlineData("consumer-groups", "get", "prod-a", "orders-group", "/api/v1/clusters/prod-a/consumer-groups/orders-group")]
+    [InlineData("consumer-groups", "lag", "prod-a", "orders-group", "/api/v1/clusters/prod-a/consumer-groups/orders-group/lag")]
+    [InlineData("schemas", "versions", "prod-a", "orders-value", "/api/v1/clusters/prod-a/schemas/subjects/orders-value/versions")]
+    public void Read_only_detail_routes_are_typed_and_confined(
+        string command,
+        string action,
+        string cluster,
+        string resource,
+        string expected)
+    {
+        var invocation =
+            CliParser.Parse(
+                [
+                    command,
+                    action,
+                    cluster,
+                    resource,
+                ]);
+
+        Assert.Equal(
+            expected,
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Theory]
+    [InlineData("topics", "get", "prod-a", "orders/main")]
+    [InlineData("consumer-groups", "get", "prod-a", "orders/group")]
+    [InlineData("consumer-groups", "lag", "prod-a", "orders/group")]
+    [InlineData("schemas", "versions", "prod-a", "orders/value")]
+    public void Cli_rejects_slash_bearing_route_identities(
+        string command,
+        string action,
+        string cluster,
+        string resource)
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [command, action, cluster, resource]));
+    }
+
+    [Theory]
+    [InlineData("consumer-groups", "list", "prod-a", "/api/v1/clusters/prod-a/consumer-groups")]
+    [InlineData("schemas", "subjects", "prod-a", "/api/v1/clusters/prod-a/schemas/subjects")]
+    public void Read_only_collection_routes_are_typed(
+        string command,
+        string action,
+        string cluster,
+        string expected)
+    {
+        var invocation =
+            CliParser.Parse(
+                [
+                    command,
+                    action,
+                    cluster,
+                ]);
+
+        Assert.Equal(
+            expected,
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Theory]
+    [InlineData("yaml")]
+    [InlineData("table")]
+    [InlineData("raw")]
+    public void Cli_rejects_unadmitted_output_formats(
+        string format)
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "--output",
+                    format,
+                    "clusters",
+                    "list",
+                ]));
+    }
+
     [Fact]
     public async Task Empty_token_file_returns_usage_error_instead_of_throwing()
     {
