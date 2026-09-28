@@ -82,32 +82,38 @@ public sealed class V08W67CliFoundationTests
     }
 
     [Theory]
-    [InlineData("0")]
-    [InlineData("101")]
-    [InlineData("not-a-number")]
-    public void Approval_limit_is_bounded(
-        string value)
+    [InlineData("operations", "get", "00000000-0000-0000-0000-000000000001")]
+    [InlineData("approvals", "list", null)]
+    public void Cli_withholds_mutation_reads_until_non_browser_oidc_is_supported(
+        string command,
+        string action,
+        string? identity)
     {
-        Assert.Throws<CliUsageException>(
-            () => CliParser.Parse(
-                [
-                    "approvals",
-                    "list",
-                    "--limit",
-                    value,
-                ]));
-    }
+        var args =
+            identity is null
+                ? new[] { command, action }
+                : new[] { command, action, identity };
 
-    [Fact]
-    public void Mutation_status_requires_guid_operation_identity()
-    {
-        Assert.Throws<CliUsageException>(
-            () => CliParser.Parse(
-                [
-                    "operations",
-                    "get",
-                    "not-a-guid",
-                ]));
+        var exception =
+            Assert.Throws<CliUsageException>(
+                () => CliParser.Parse(args));
+
+        Assert.Contains(
+            "unavailable command",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "operations get",
+            CliParser.Usage,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "approvals list",
+            CliParser.Usage,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "non-browser OIDC",
+            CliParser.Usage,
+            StringComparison.Ordinal);
     }
 
     [Fact]
