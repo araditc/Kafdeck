@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Kafdeck.Core.Kafka;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Records;
@@ -67,6 +68,7 @@ public sealed class GovernedDataJobWorker
     private readonly GovernedDataJobWorkerPolicy _policy;
     private readonly TimeProvider _timeProvider;
     private readonly string _workerId;
+    private readonly RuntimeTelemetry? _telemetry;
 
     public GovernedDataJobWorker(
         IMutationOperationRepository operations,
@@ -77,7 +79,8 @@ public sealed class GovernedDataJobWorker
         IGovernedDataJobEffectGuard guard,
         GovernedDataJobWorkerPolicy? policy = null,
         TimeProvider? timeProvider = null,
-        string? workerId = null)
+        string? workerId = null,
+        RuntimeTelemetry? telemetry = null)
     {
         _operations =
             operations ?? throw new ArgumentNullException(nameof(operations));
@@ -97,11 +100,13 @@ public sealed class GovernedDataJobWorker
         _workerId = NormalizeWorkerId(
             workerId ??
             $"data-job:{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}");
+        _telemetry = telemetry;
     }
 
     public async Task<int> RunOnceAsync(
         CancellationToken cancellationToken = default)
     {
+        var cycleStarted = Stopwatch.GetTimestamp();
         var active =
             await _fleet.ListActiveDataJobProgressAsync(
                     _policy.DiscoveryLimit,
@@ -145,6 +150,10 @@ public sealed class GovernedDataJobWorker
             }
         }
 
+        _telemetry?.RecordWorkerCycle(
+            RuntimeTelemetryFamily.DataJobWorker,
+            attempted,
+            Stopwatch.GetElapsedTime(cycleStarted).TotalMilliseconds);
         return attempted;
     }
 
@@ -358,6 +367,9 @@ public sealed class GovernedDataJobWorker
                     current;
 
                 GovernedDataJobDispatchResult result;
+                using var providerTelemetry =
+                    _telemetry?.Start(
+                        RuntimeTelemetryFamily.DataJobProvider);
                 try
                 {
                     result =
@@ -370,13 +382,19 @@ public sealed class GovernedDataJobWorker
                                 record,
                                 cancellationToken)
                             .ConfigureAwait(false);
+                    providerTelemetry?.Complete(
+                        result.Result.ResultKind);
                 }
                 catch (GovernedDataJobRateLimitException)
                 {
+                    providerTelemetry?.Complete(
+                        RuntimeTelemetryOutcome.RateLimited);
                     return;
                 }
                 catch (MutationStateException)
                 {
+                    providerTelemetry?.Complete(
+                        RuntimeTelemetryOutcome.FailedDefinitive);
                     await StopBestEffortAsync(
                             operation,
                             plan,
