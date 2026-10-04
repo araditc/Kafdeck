@@ -154,3 +154,52 @@ test('v0.7 initial Connect profile rejection is generation-fenced', () => {
     /setConnectError\(readViewError\(reason\)\)/,
   );
 });
+
+
+test('v0.8 W64 consumer analytics UI preserves bounded evidence truth', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Operational analytics/);
+  assert.match(source, /getConsumerOperationalAnalytics/);
+  assert.match(source, /getConsumerLagTrend/);
+  assert.match(source, /getConsumerLagSlo/);
+  assert.match(source, /operationalEvidenceStatusKind/);
+  assert.match(source, /points\.slice\(-50\)/);
+  assert.match(source, /Mixed or incomplete evidence remains partial/);
+  assert.match(source, /Evaluate SLO/);
+
+  const start = source.indexOf('const openConsumer = async');
+  const end = source.indexOf('const evaluateConsumerSlo = async', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const openConsumer = source.slice(start, end);
+  assert.match(openConsumer, /const generation = \+\+consumerLoadGeneration\.current/);
+  assert.match(openConsumer, /generation !== consumerLoadGeneration\.current/);
+  assert.match(openConsumer, /Promise\.allSettled/);
+  assert.match(openConsumer, /liveResult\.status === 'fulfilled'/);
+  assert.match(openConsumer, /trendResult\.status === 'fulfilled'/);
+  assert.match(openConsumer, /setGroupDetail\(detail\)/);
+  assert.match(openConsumer, /setAnalyticsError\(readViewError\(liveResult\.reason\)\)/);
+  assert.doesNotMatch(openConsumer, /fetch\(/);
+  assert.doesNotMatch(openConsumer, /mutationApi/);
+});
+
+test('v0.8 W64 SLO UI invalidates stale selection and input-scoped results', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const consumerLoadGeneration = useRef\(0\)/);
+  assert.match(source, /const sloEvaluationGeneration = useRef\(0\)/);
+  assert.match(source, /consumerGeneration !== consumerLoadGeneration\.current/);
+  assert.match(source, /sloGeneration !== sloEvaluationGeneration\.current/);
+  assert.match(source, /\+\+sloEvaluationGeneration\.current;\s*setGroupSlo\(null\);\s*setSloThreshold/);
+  assert.match(source, /\+\+sloEvaluationGeneration\.current;\s*setGroupSlo\(null\);\s*setSloTargetPercent/);
+  assert.match(source, /groupSlo\.definition\.maximumGoodValue/);
+  assert.match(source, /groupSlo\.definition\.targetFraction/);
+});

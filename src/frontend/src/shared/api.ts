@@ -73,6 +73,77 @@ export interface ConsumerDiagnostics {
   limitations: ReadViewLimitation[];
 }
 
+export type OperationalEvidenceState =
+  | 'available'
+  | 'partial'
+  | 'stale'
+  | 'unavailable'
+  | 'unknown';
+export type OperationalTrendState =
+  | 'available'
+  | 'partial'
+  | 'unavailable'
+  | 'unknown';
+export interface OperationalResourceIdentity {
+  clusterId: string;
+  kind: string;
+  resourceId: string;
+}
+export interface OperationalMetricEvidence {
+  metric: string;
+  resource: OperationalResourceIdentity;
+  value: number | null;
+  observedAtUtc: string | null;
+  window: string | null;
+  source: string;
+  state: OperationalEvidenceState;
+}
+export interface OperationalAnalyticsResult {
+  items: OperationalMetricEvidence[];
+  truncated: boolean;
+  limitReason: string | null;
+  requestedMetrics: string[];
+}
+export interface OperationalTrendPoint {
+  observedAtUtc: string;
+  min: number;
+  max: number;
+  average: number;
+  count: number;
+  resolutionSeconds: number;
+  state: OperationalEvidenceState;
+  hasKnownCoverage: boolean;
+  firstObservedAtUtc: string | null;
+  lastObservedAtUtc: string | null;
+}
+export interface OperationalTrendResult {
+  metric: string;
+  resource: OperationalResourceIdentity;
+  points: OperationalTrendPoint[];
+  truncated: boolean;
+  limitReason: string | null;
+  provider: string;
+  state: OperationalTrendState;
+}
+export interface OperationalSloDefinition {
+  id: string;
+  metric: string;
+  resource: OperationalResourceIdentity;
+  maximumGoodValue: number;
+  targetFraction: number;
+}
+export interface OperationalSloResult {
+  definition: OperationalSloDefinition;
+  fromUtc: string;
+  toUtc: string;
+  evaluatedPoints: number;
+  goodPoints: number;
+  complianceFraction: number | null;
+  burnRate: number | null;
+  state: OperationalEvidenceState;
+  reasonCode: string | null;
+}
+
 export interface SchemaReference { name: string; subject: string; version: number; }
 export interface SchemaSubjectSummary { subject: string; }
 export interface SchemaVersionSummary {
@@ -543,6 +614,34 @@ export const kafdeckApi = {
   },
   getConsumerDiagnostics(clusterId: string, groupId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<ConsumerDiagnostics>>(`${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}/diagnostics`, signal);
+  },
+  getConsumerOperationalAnalytics(clusterId: string, groupId: string, signal?: AbortSignal) {
+    return readJson<OperationalAnalyticsResult>(
+      `${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}/analytics/live`,
+      signal,
+    );
+  },
+  getConsumerLagTrend(clusterId: string, groupId: string, signal?: AbortSignal) {
+    return readJson<OperationalTrendResult>(
+      `${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}/analytics/trend`,
+      signal,
+    );
+  },
+  getConsumerLagSlo(
+    clusterId: string,
+    groupId: string,
+    threshold: number,
+    targetFraction: number,
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams({
+      threshold: String(threshold),
+      target: String(targetFraction),
+    });
+    return readJson<OperationalSloResult>(
+      `${clusterPath(clusterId)}/consumer-groups/${encodeURIComponent(groupId)}/analytics/slo?${params}`,
+      signal,
+    );
   },
   listSchemaSubjects(clusterId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<SchemaSubjectSummary[]>>(`${clusterPath(clusterId)}/schemas/subjects`, signal);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { uiStatusPresentation } from '../dist/test-source/app/statusPresentation.js';
+import { operationalEvidenceStatusKind, uiStatusPresentation } from '../dist/test-source/app/statusPresentation.js';
 
 test('unified W60 status vocabulary keeps critical states explicit in text', () => {
   assert.equal(uiStatusPresentation('denied').label, 'Denied');
@@ -34,4 +34,14 @@ test('all unified statuses provide non-color descriptive semantics', () => {
     assert.ok(item.description.length > 12);
     assert.match(item.badgeClass, /^bg-/);
   }
+});
+
+
+test('operational analytics evidence maps to explicit non-color status semantics', () => {
+  assert.equal(operationalEvidenceStatusKind('available'), 'current');
+  assert.equal(operationalEvidenceStatusKind('partial'), 'partial');
+  assert.equal(operationalEvidenceStatusKind('stale'), 'stale');
+  assert.equal(operationalEvidenceStatusKind('unavailable'), 'unavailable');
+  assert.equal(operationalEvidenceStatusKind('unknown'), 'unknown');
+  assert.equal(operationalEvidenceStatusKind('unexpected-provider-state'), 'unknown');
 });
