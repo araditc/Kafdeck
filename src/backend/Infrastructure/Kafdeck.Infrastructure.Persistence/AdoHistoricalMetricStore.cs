@@ -68,7 +68,7 @@ public sealed class AdoHistoricalMetricStore :
             AddParameter(
                 lockCommand,
                 "@lock_key",
-                HistoricalMetricsMigrationLockKey);
+                PersistenceMigrationLocks.SharedSchemaInfo);
             await lockCommand
                 .ExecuteNonQueryAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -320,8 +320,6 @@ public sealed class AdoHistoricalMetricStore :
             .ConfigureAwait(false);
     }
 
-    private const long HistoricalMetricsMigrationLockKey =
-        4_839_176_502_110_873_341L;
 
     private static async Task ExecuteInitializationStatementAsync(
         DbConnection connection,

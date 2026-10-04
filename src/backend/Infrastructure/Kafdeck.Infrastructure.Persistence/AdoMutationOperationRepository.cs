@@ -26,6 +26,21 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var schemaTransaction =
+            await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        if (_connectionFactory.SupportsSelectForUpdate)
+        {
+            await using var schemaLock = connection.CreateCommand();
+            schemaLock.Transaction = schemaTransaction;
+            schemaLock.CommandText =
+                "SELECT pg_advisory_xact_lock(@lock_key)";
+            AddParameter(
+                schemaLock,
+                "@lock_key",
+                PersistenceMigrationLocks.SharedSchemaInfo);
+            await schemaLock.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         var statements = new[]
         {
@@ -101,9 +116,14 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         foreach (var statement in statements)
         {
             await using var command = connection.CreateCommand();
+            command.Transaction = schemaTransaction;
             command.CommandText = statement;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
+
+        await schemaTransaction
+            .CommitAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         await EnsureExecutionSchemaCompatibilityAsync(
                 connection,
