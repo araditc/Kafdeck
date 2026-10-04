@@ -35,3 +35,19 @@ test('all unified statuses provide non-color descriptive semantics', () => {
     assert.match(item.badgeClass, /^bg-/);
   }
 });
+
+
+test('v0.8 operational evidence states preserve truth in status presentation', async () => {
+  const module = await import('../dist/test-source/app/statusPresentation.js');
+
+  assert.equal(module.operationalEvidenceStatusKind('available'), 'current');
+  assert.equal(module.operationalEvidenceStatusKind('partial'), 'partial');
+  assert.equal(module.operationalEvidenceStatusKind('stale'), 'stale');
+  assert.equal(module.operationalEvidenceStatusKind('unavailable'), 'unavailable');
+  assert.equal(module.operationalEvidenceStatusKind('unknown'), 'unknown');
+
+  assert.equal(module.operationalTrendStatusKind('available'), 'current');
+  assert.equal(module.operationalTrendStatusKind('partial'), 'partial');
+  assert.equal(module.operationalTrendStatusKind('unavailable'), 'unavailable');
+  assert.equal(module.operationalTrendStatusKind('unknown'), 'unknown');
+});
