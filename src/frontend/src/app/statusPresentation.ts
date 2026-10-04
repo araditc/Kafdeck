@@ -144,3 +144,32 @@ export function mutationStateStatusKind(state: string): UiStatusKind {
       return 'unknown';
   }
 }
+
+
+export function operationalEvidenceStatusKind(state: string): UiStatusKind {
+  switch (state) {
+    case 'available':
+      return 'current';
+    case 'partial':
+      return 'partial';
+    case 'stale':
+      return 'stale';
+    case 'unavailable':
+      return 'unavailable';
+    default:
+      return 'unknown';
+  }
+}
+
+export function operationalTrendStatusKind(state: string): UiStatusKind {
+  switch (state) {
+    case 'available':
+      return 'current';
+    case 'partial':
+      return 'partial';
+    case 'unavailable':
+      return 'unavailable';
+    default:
+      return 'unknown';
+  }
+}

@@ -17,6 +17,9 @@ import {
   type ConsumerGroupSummary,
   type ConsumerLag,
   type KsqlQueryResult,
+  type OperationalAnalyticsResult,
+  type OperationalSloResult,
+  type OperationalTrendResult,
   type KsqlServerInfo,
   type LineageGraph,
   type ReadViewEnvelope,
@@ -33,7 +36,12 @@ import {
 } from '../../shared/api.js';
 import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
 import { StatusBadge } from '../../app/StatusBadge.js';
-import { readViewHttpStatusKind, type UiStatusKind } from '../../app/statusPresentation.js';
+import {
+  operationalEvidenceStatusKind,
+  operationalTrendStatusKind,
+  readViewHttpStatusKind,
+  type UiStatusKind,
+} from '../../app/statusPresentation.js';
 import {
   MutationApiProblem,
   mutationApi,
@@ -97,6 +105,19 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [groupLag, setGroupLag] = useState<ReadViewEnvelope<ConsumerLag> | null>(null);
   const [groupDiagnostics, setGroupDiagnostics] = useState<ReadViewEnvelope<ConsumerDiagnostics> | null>(null);
 
+  const [operationalAnalytics, setOperationalAnalytics] = useState<OperationalAnalyticsResult | null>(null);
+  const [operationalTrend, setOperationalTrend] = useState<OperationalTrendResult | null>(null);
+  const [operationalSlo, setOperationalSlo] = useState<OperationalSloResult | null>(null);
+  const [operationalError, setOperationalError] = useState<ReadViewProblem | null>(null);
+  const [sloError, setSloError] = useState<ReadViewProblem | null>(null);
+  const [operationalBusy, setOperationalBusy] = useState(false);
+  const [activeSloRequests, setActiveSloRequests] = useState(0);
+  const sloBusy = activeSloRequests > 0;
+  const [sloThreshold, setSloThreshold] = useState(100);
+  const [sloTarget, setSloTarget] = useState(0.99);
+  const consumerLoadGeneration = useRef(0);
+  const sloEvaluationGeneration = useRef(0);
+
   const [subjects, setSubjects] = useState<ReadViewEnvelope<SchemaSubjectSummary[]> | null>(null);
   const [schemaError, setSchemaError] = useState<ReadViewProblem | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
@@ -153,7 +174,10 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   useEffect(() => {
     const controller = new AbortController();
     const initialConnectGeneration = ++connectLoadGeneration.current;
+    ++consumerLoadGeneration.current;
+    ++sloEvaluationGeneration.current;
     setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
+    setOperationalAnalytics(null); setOperationalTrend(null); setOperationalSlo(null); setOperationalError(null); setSloError(null); setOperationalBusy(false); setSloThreshold(100); setSloTarget(0.99);
     setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setSerdeCapabilities(null); setSerdeFormat('cbor'); setSerdePayloadBase64(''); setSerdeStructuredJson(''); setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null); setSerdeBusy(false);
     setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null); setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null); setAutoRestartBusy(false);
@@ -259,16 +283,86 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   };
 
   const openConsumer = async (groupId: string) => {
+    const generation = ++consumerLoadGeneration.current;
     setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
+    ++sloEvaluationGeneration.current;
+    setOperationalAnalytics(null); setOperationalTrend(null); setOperationalSlo(null); setOperationalError(null); setSloError(null); setOperationalBusy(false);
     try {
       const [detail, lag, diagnostics] = await Promise.all([
         kafdeckApi.getConsumerGroup(clusterId, groupId),
         kafdeckApi.getConsumerLag(clusterId, groupId),
         kafdeckApi.getConsumerDiagnostics(clusterId, groupId),
       ]);
+      if (generation !== consumerLoadGeneration.current) return;
       setGroupDetail(detail); setGroupLag(lag); setGroupDiagnostics(diagnostics);
     } catch (reason) {
-      setConsumerError(readViewError(reason));
+      if (generation === consumerLoadGeneration.current) {
+        setConsumerError(readViewError(reason));
+      }
+      return;
+    }
+
+    setOperationalBusy(true);
+    try {
+      const [live, trend] = await Promise.all([
+        kafdeckApi.getConsumerOperationalAnalytics(clusterId, groupId),
+        kafdeckApi.getConsumerOperationalTrend(clusterId, groupId),
+      ]);
+      if (generation !== consumerLoadGeneration.current) return;
+      setOperationalAnalytics(live);
+      setOperationalTrend(trend);
+    } catch (reason) {
+      if (generation === consumerLoadGeneration.current) {
+        setOperationalError(readViewError(reason));
+      }
+    } finally {
+      if (generation === consumerLoadGeneration.current) {
+        setOperationalBusy(false);
+      }
+    }
+  };
+
+  const evaluateConsumerSlo = async () => {
+    if (!groupDetail) return;
+
+    const generation = consumerLoadGeneration.current;
+    const sloGeneration = ++sloEvaluationGeneration.current;
+    const groupId = groupDetail.data.groupId;
+    const threshold = Number(sloThreshold);
+    const target = Number(sloTarget);
+    if (!Number.isFinite(threshold) || threshold < 0 || !Number.isFinite(target) || target <= 0 || target >= 1) {
+      setSloError({
+        kind: 'unknown',
+        message: 'SLO threshold must be non-negative and target must be between 0 and 1.',
+      });
+      return;
+    }
+
+    setActiveSloRequests(count => count + 1);
+    setSloError(null);
+    setOperationalSlo(null);
+    try {
+      const result = await kafdeckApi.getConsumerOperationalSlo(
+        clusterId,
+        groupId,
+        threshold,
+        target,
+      );
+      if (
+        generation !== consumerLoadGeneration.current ||
+        sloGeneration !== sloEvaluationGeneration.current
+      ) return;
+      setOperationalSlo(result);
+    } catch (reason) {
+      if (
+        generation === consumerLoadGeneration.current &&
+        sloGeneration === sloEvaluationGeneration.current
+      ) {
+        setSloError(readViewError(reason));
+      }
+    } finally {
+      setActiveSloRequests(count =>
+        Math.max(0, count - 1));
     }
   };
 
@@ -558,6 +652,80 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         <Limitations envelope={groupLag} /><Limitations envelope={groupDiagnostics} />
         {groupDiagnostics.data.evidence.length > 0 && <><h4>Evidence</h4><ul>{groupDiagnostics.data.evidence.map(item => <li key={item.code}>{item.safeMessage}</li>)}</ul></>}
         {groupLag.data.partitions.length > 0 && <><h4>Offsets and lag</h4><table><thead><tr><th>Topic</th><th>Partition</th><th>Committed</th><th>End</th><th>Lag</th><th>State</th></tr></thead><tbody>{groupLag.data.partitions.map(item => <tr key={`${item.topic}-${item.partition}`}><td>{item.topic}</td><td>{item.partition}</td><td>{item.committedOffset ?? 'Unknown'}</td><td>{item.endOffset ?? 'Unknown'}</td><td>{item.lag ?? 'Unknown'}</td><td>{item.state}</td></tr>)}</tbody></table></>}
+
+        <section aria-labelledby="consumer-operational-analytics-title">
+          <h4 id="consumer-operational-analytics-title">Operational analytics</h4>
+          <p>Bounded live and historical observations. Missing provider evidence remains unavailable; Kafdeck does not synthesize throughput or latency.</p>
+          {operationalBusy && !operationalAnalytics && <p role="status">Loading bounded operational evidence…</p>}
+          {operationalError && <ReadViewProblemNotice problem={operationalError} />}
+          {operationalAnalytics && <>
+            <h5>Live evidence</h5>
+            <table>
+              <thead><tr><th>Metric</th><th>State</th><th>Value</th><th>Source</th><th>Observed</th></tr></thead>
+              <tbody>{operationalAnalytics.items.map(item => <tr key={item.metric}>
+                <th scope="row">{item.metric}</th>
+                <td><StatusBadge kind={operationalEvidenceStatusKind(item.state)} label={item.state} /></td>
+                <td>{item.value ?? 'Unavailable'}</td>
+                <td>{item.source}</td>
+                <td>{item.observedAtUtc ? new Date(item.observedAtUtc).toLocaleString() : 'No observation'}</td>
+              </tr>)}</tbody>
+            </table>
+            {operationalAnalytics.truncated && <p><StatusBadge kind="partial" /> {operationalAnalytics.limitReason ?? 'Live evidence was truncated by a server limit.'}</p>}
+          </>}
+
+          {operationalTrend && <>
+            <h5>Lag trend</h5>
+            <p>
+              <StatusBadge kind={operationalTrendStatusKind(operationalTrend.state)} label={operationalTrend.state} />{' '}
+              Provider: {operationalTrend.provider} · Points: {operationalTrend.points.length}
+              {operationalTrend.truncated ? ` · Truncated: ${operationalTrend.limitReason ?? 'server limit'}` : ''}
+            </p>
+            {operationalTrend.points.length === 0 ? <p>No historical lag points are available for the bounded window.</p> :
+              <table>
+                <thead><tr><th>Observed</th><th>Average</th><th>Min</th><th>Max</th><th>Samples</th><th>Resolution</th><th>State</th></tr></thead>
+                <tbody>{operationalTrend.points.slice(-100).map((point, index) => <tr key={`${point.observedAtUtc}-${index}`}>
+                  <td>{new Date(point.observedAtUtc).toLocaleString()}</td>
+                  <td>{point.average}</td>
+                  <td>{point.min}</td>
+                  <td>{point.max}</td>
+                  <td>{point.count}</td>
+                  <td>{point.resolutionSeconds === 0 ? 'raw' : `${point.resolutionSeconds}s`}</td>
+                  <td><StatusBadge kind={operationalEvidenceStatusKind(point.state)} label={point.state} /></td>
+                </tr>)}</tbody>
+              </table>}
+          </>}
+
+          <fieldset>
+            <legend>Operator-triggered lag SLO</legend>
+            {sloError && <ReadViewProblemNotice problem={sloError} />}
+            <p>SLO evaluation is read-only and runs only when requested. It does not create alerts or perform Kafka mutations.</p>
+            <label htmlFor="consumer-slo-threshold">Maximum good lag</label>{' '}
+            <input id="consumer-slo-threshold" type="number" min={0} value={sloThreshold} onChange={event => { ++sloEvaluationGeneration.current; setSloThreshold(Number(event.target.value)); setOperationalSlo(null); setSloError(null); }} />{' '}
+            <label htmlFor="consumer-slo-target">Target fraction</label>{' '}
+            <input id="consumer-slo-target" type="number" min={0.0001} max={0.9999} step={0.001} value={sloTarget} onChange={event => { ++sloEvaluationGeneration.current; setSloTarget(Number(event.target.value)); setOperationalSlo(null); setSloError(null); }} />{' '}
+            <button type="button" disabled={operationalBusy || sloBusy} onClick={() => void evaluateConsumerSlo()}>
+              {sloBusy ? 'Evaluating…' : 'Evaluate bounded SLO'}
+            </button>
+          </fieldset>
+
+          {operationalSlo && <div aria-live="polite">
+            <h5>SLO result</h5>
+            <p>
+              <StatusBadge kind={operationalEvidenceStatusKind(operationalSlo.state)} label={operationalSlo.state} />{' '}
+              Evaluated samples: {operationalSlo.evaluatedPoints} · Good: {operationalSlo.goodPoints}
+            </p>
+            <p>
+              Evaluated definition: maximum good lag {operationalSlo.definition.maximumGoodValue} ·
+              {' '}target {(operationalSlo.definition.targetFraction * 100).toFixed(2)}% ·
+              {' '}window {new Date(operationalSlo.fromUtc).toLocaleString()} – {new Date(operationalSlo.toUtc).toLocaleString()}
+            </p>
+            <p>
+              Compliance: {operationalSlo.complianceFraction === null ? 'Unavailable' : `${(operationalSlo.complianceFraction * 100).toFixed(2)}%`} ·
+              {' '}Burn rate: {operationalSlo.burnRate === null ? 'Unavailable' : operationalSlo.burnRate.toFixed(2)}
+            </p>
+            {operationalSlo.reasonCode && <p>Evidence limitation: {operationalSlo.reasonCode}</p>}
+          </div>}
+        </section>
       </article>}
     </section>
 

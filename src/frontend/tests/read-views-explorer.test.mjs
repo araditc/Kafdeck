@@ -154,3 +154,191 @@ test('v0.7 initial Connect profile rejection is generation-fenced', () => {
     /setConnectError\(readViewError\(reason\)\)/,
   );
 });
+
+
+test('v0.8 W64 consumer analytics UI is bounded, truth-preserving and operator-triggered', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /Operational analytics/);
+  assert.match(source, /getConsumerOperationalAnalytics/);
+  assert.match(source, /getConsumerOperationalTrend\(clusterId, groupId\)/);
+  assert.match(source, /points\.slice\(-100\)/);
+  assert.match(source, /Operator-triggered lag SLO/);
+  assert.match(source, /getConsumerOperationalSlo/);
+  assert.match(source, /Evaluate bounded SLO/);
+  assert.match(source, /Missing provider evidence remains unavailable/);
+  assert.match(source, /item\.value \?\? 'Unavailable'/);
+  assert.doesNotMatch(source, /setInterval\(/);
+  assert.doesNotMatch(source, /WebSocket/);
+  assert.doesNotMatch(source, /mutate Kafka/i);
+});
+
+test('v0.8 W64 opening a consumer cannot lose core read detail if analytics fails', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+  const start = source.indexOf('const openConsumer = async');
+  const end = source.indexOf('const evaluateConsumerSlo = async', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const openConsumer = source.slice(start, end);
+  assert.match(openConsumer, /setGroupDetail\(detail\); setGroupLag\(lag\); setGroupDiagnostics\(diagnostics\)/);
+  assert.match(openConsumer, /setOperationalError\(readViewError\(reason\)\)/);
+  assert.match(openConsumer, /setOperationalBusy\(false\)/);
+});
+
+
+test('v0.8 W64 consumer analytics responses are selection-generation fenced', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const consumerLoadGeneration = useRef\(0\)/);
+  assert.match(source, /const generation = \+\+consumerLoadGeneration\.current/);
+  assert.match(source, /if \(generation !== consumerLoadGeneration\.current\) return/);
+  assert.match(source, /if \(generation === consumerLoadGeneration\.current\)/);
+
+  const start = source.indexOf('const openConsumer = async');
+  const end = source.indexOf('const evaluateConsumerSlo = async', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const openConsumer = source.slice(start, end);
+
+  assert.match(openConsumer, /setOperationalAnalytics\(live\)/);
+  assert.match(openConsumer, /setOperationalTrend\(trend\)/);
+  assert.match(openConsumer, /generation !== consumerLoadGeneration\.current/);
+});
+
+test('v0.8 W64 SLO result stays bound to immutable evaluated inputs', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /\+\+sloEvaluationGeneration\.current; setSloThreshold\(Number\(event\.target\.value\)\); setOperationalSlo\(null\)/);
+  assert.match(source, /\+\+sloEvaluationGeneration\.current; setSloTarget\(Number\(event\.target\.value\)\); setOperationalSlo\(null\)/);
+  assert.match(source, /operationalSlo\.definition\.maximumGoodValue/);
+  assert.match(source, /operationalSlo\.definition\.targetFraction/);
+  assert.match(source, /operationalSlo\.fromUtc/);
+  assert.match(source, /operationalSlo\.toUtc/);
+});
+
+
+test('v0.8 W64 analytics requests defer history point caps to the server', () => {
+  const apiSource = readFileSync(
+    new URL('../src/shared/api.ts', import.meta.url),
+    'utf8',
+  );
+  const viewSource = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(apiSource, /maxPoints\?: number/);
+  assert.match(apiSource, /if \(maxPoints !== undefined\) params\.set\('maxPoints', String\(maxPoints\)\)/);
+  assert.match(viewSource, /getConsumerOperationalTrend\(clusterId, groupId\)/);
+  assert.doesNotMatch(viewSource, /getConsumerOperationalTrend\(clusterId, groupId, 100\)/);
+  assert.doesNotMatch(viewSource, /target,\s*100,/);
+});
+
+test('v0.8 W64 SLO input changes invalidate in-flight evaluations', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const sloEvaluationGeneration = useRef\(0\)/);
+  assert.match(source, /const sloGeneration = \+\+sloEvaluationGeneration\.current/);
+  assert.match(source, /sloGeneration !== sloEvaluationGeneration\.current/);
+  assert.match(source, /\+\+sloEvaluationGeneration\.current; setSloThreshold/);
+  assert.match(source, /\+\+sloEvaluationGeneration\.current; setSloTarget/);
+});
+
+
+test('v0.8 W64 SLO errors are isolated from live/trend analytics failures', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const \[sloError, setSloError\] = useState<ReadViewProblem \| null>\(null\)/);
+  assert.match(source, /setSloError\(readViewError\(reason\)\)/);
+  assert.match(source, /\{sloError && <ReadViewProblemNotice problem=\{sloError\} \/>\}/);
+
+  const thresholdHandler = source.match(/id="consumer-slo-threshold"[^\n]+onChange=\{event => \{([^}]+)\}\}/)?.[1] ?? '';
+  const targetHandler = source.match(/id="consumer-slo-target"[^\n]+onChange=\{event => \{([^}]+)\}\}/)?.[1] ?? '';
+
+  assert.match(thresholdHandler, /setSloError\(null\)/);
+  assert.match(targetHandler, /setSloError\(null\)/);
+  assert.doesNotMatch(thresholdHandler, /setOperationalError\(null\)/);
+  assert.doesNotMatch(targetHandler, /setOperationalError\(null\)/);
+});
+
+
+test('v0.8 W64 SLO busy state is isolated from analytics loading', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /const \[activeSloRequests, setActiveSloRequests\] = useState\(0\)/);
+  assert.match(source, /const sloBusy = activeSloRequests > 0/);
+  assert.match(source, /setActiveSloRequests\(count => count \+ 1\)/);
+  assert.match(source, /setActiveSloRequests\(count =>/);
+  assert.match(source, /disabled=\{operationalBusy \|\| sloBusy\}/);
+  assert.match(source, /\{sloBusy \? 'Evaluating…' : 'Evaluate bounded SLO'\}/);
+
+  const thresholdHandler = source.match(/id="consumer-slo-threshold"[^\n]+onChange=\{event => \{([^}]+)\}\}/)?.[1] ?? '';
+  const targetHandler = source.match(/id="consumer-slo-target"[^\n]+onChange=\{event => \{([^}]+)\}\}/)?.[1] ?? '';
+
+  assert.doesNotMatch(thresholdHandler, /setActiveSloRequests/);
+  assert.doesNotMatch(targetHandler, /setActiveSloRequests/);
+  assert.doesNotMatch(thresholdHandler, /setOperationalBusy\(false\)/);
+  assert.doesNotMatch(targetHandler, /setOperationalBusy\(false\)/);
+});
+
+
+test('v0.8 W64 stale SLO invalidation cannot re-enable evaluation while requests remain active', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /setActiveSloRequests\(count => count \+ 1\)/);
+  assert.match(source, /Math\.max\(0, count - 1\)/);
+  assert.match(source, /const sloBusy = activeSloRequests > 0/);
+
+  const start = source.indexOf('const evaluateConsumerSlo = async');
+  const end = source.indexOf('const openSubject = async', start);
+  const evaluation = source.slice(start, end);
+
+  assert.match(evaluation, /sloGeneration !== sloEvaluationGeneration\.current/);
+  assert.match(evaluation, /finally \{\s*setActiveSloRequests/);
+});
+
+
+test('v0.8 W64 consumer and cluster switches preserve physical SLO request counts', () => {
+  const source = readFileSync(
+    new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
+    'utf8',
+  );
+
+  const effectStart = source.indexOf('useEffect(() => {');
+  const effectEnd = source.indexOf('const runKsqlQuery = async', effectStart);
+  const clusterReset = source.slice(effectStart, effectEnd);
+
+  const consumerStart = source.indexOf('const openConsumer = async');
+  const consumerEnd = source.indexOf('const evaluateConsumerSlo = async', consumerStart);
+  const consumerSwitch = source.slice(consumerStart, consumerEnd);
+
+  assert.match(clusterReset, /\+\+sloEvaluationGeneration\.current/);
+  assert.match(consumerSwitch, /\+\+sloEvaluationGeneration\.current/);
+  assert.doesNotMatch(clusterReset, /setActiveSloRequests\(0\)/);
+  assert.doesNotMatch(consumerSwitch, /setActiveSloRequests\(0\)/);
+});
