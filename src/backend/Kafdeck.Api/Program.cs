@@ -145,11 +145,19 @@ builder.Services.AddSingleton<IKafkaRecordReadPort>(services =>
             kafdeckOptions.Clusters,
             secretResolver),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
-builder.Services.AddSingleton<IConsumerGroupReadPort>(services =>
-    new TelemetryConsumerGroupReadPort(
+builder.Services.AddSingleton<ConfluentKafkaConsumerGroupReadAdapter>(
+    _ =>
         new ConfluentKafkaConsumerGroupReadAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver));
+builder.Services.AddSingleton<IConsumerGroupSamplingReadPort>(
+    services =>
+        services.GetRequiredService<
+            ConfluentKafkaConsumerGroupReadAdapter>());
+builder.Services.AddSingleton<IConsumerGroupReadPort>(services =>
+    new TelemetryConsumerGroupReadPort(
+        services.GetRequiredService<
+            ConfluentKafkaConsumerGroupReadAdapter>(),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<ConsumerExplorerService>();
 
@@ -207,19 +215,58 @@ if (historicalMetricsOptions?.Enabled == true)
                 .DefaultMaxCycleDuration));
 
     builder.Services.AddSingleton<
-        IHistoricalMetricMaintenanceStore>(
+        AdoHistoricalMetricMaintenanceStore>(
         services =>
             new AdoHistoricalMetricMaintenanceStore(
                 services.GetRequiredService<
                     IHistoricalMetricsDbConnectionFactory>()));
+    builder.Services.AddSingleton<
+        IHistoricalMetricMaintenanceStore>(
+        services =>
+            services.GetRequiredService<
+                AdoHistoricalMetricMaintenanceStore>());
+    builder.Services.AddSingleton<
+        IHistoricalMetricSamplingLeaseStore>(
+        services =>
+            services.GetRequiredService<
+                AdoHistoricalMetricMaintenanceStore>());
 
     builder.Services.AddHostedService<
         HistoricalMetricMaintenanceHostedService>();
+
+    builder.Services.AddSingleton<IHistoryObservationPort>(
+        services =>
+            new HistoricalConsumerHistoryObservationPort(
+                services.GetRequiredService<
+                    IHistoricalMetricStore>(),
+                services.GetRequiredService<
+                    HistoricalMetricStorePolicy>()));
+    builder.Services.AddSingleton(
+        ConsumerLagHistorySamplingPolicy.Default);
+    builder.Services.AddHostedService<
+        ConsumerLagHistorySamplingHostedService>();
+}
+else
+{
+    builder.Services.AddSingleton<IHistoryObservationPort,
+        UnavailableHistoryObservationPort>();
 }
 
-builder.Services.AddSingleton<IMetricsObservationPort, UnavailableMetricsObservationPort>();
-builder.Services.AddSingleton<IHistoryObservationPort, UnavailableHistoryObservationPort>();
+builder.Services.AddSingleton<IMetricsObservationPort,
+    UnavailableMetricsObservationPort>();
 builder.Services.AddSingleton<ConsumerDiagnosticsService>();
+builder.Services.AddSingleton<OperationalAnalyticsRuntimeService>();
+builder.Services.AddSingleton<IOperationalAnalyticsObservationPort>(
+    services =>
+        services.GetRequiredService<
+            OperationalAnalyticsRuntimeService>());
+builder.Services.AddSingleton<OperationalTrendService>(
+    services =>
+        new OperationalTrendService(
+            services.GetService<
+                IHistoricalMetricStore>(),
+            services.GetService<
+                HistoricalMetricStorePolicy>()));
 builder.Services.AddSingleton<IRecordSchemaReadPort>(services =>
     new TelemetryRecordSchemaReadPort(
         new ConfluentSchemaRegistryReadAdapter(
@@ -595,6 +642,7 @@ app.MapKafdeckV07SchemaDeveloperTools(kafdeckOptions);
 app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckV08Observability(kafdeckOptions);
+app.MapKafdeckV08OperationalAnalytics(kafdeckOptions);
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();

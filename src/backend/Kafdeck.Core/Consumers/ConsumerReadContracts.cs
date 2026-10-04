@@ -79,3 +79,18 @@ public interface IConsumerGroupReadPort
         ReadViewOperationContext operation,
         CancellationToken cancellationToken);
 }
+
+
+public sealed record ConsumerGroupPage(
+    IReadOnlyList<ConsumerGroupSummary> Items,
+    string? NextCursor);
+
+public interface IConsumerGroupSamplingReadPort
+{
+    Task<ReadViewResult<ConsumerGroupPage>> ListGroupPageAsync(
+        string clusterId,
+        string? afterGroupId,
+        int maxItems,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken);
+}
