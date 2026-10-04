@@ -157,6 +157,10 @@ public enum CliCommand
     ConsumerGroupLag = 8,
     SchemaSubjectsList = 9,
     SchemaVersionsList = 10,
+    ConsumerGroupDiagnostics = 11,
+    SchemaVersionGet = 12,
+    SchemaCompatibilityGet = 13,
+    SchemaDiff = 14,
 }
 
 public enum CliOutputFormat
@@ -174,7 +178,9 @@ public sealed record CliInvocation(
     string? Search = null,
     string? Cursor = null,
     int? Limit = null,
-    CliOutputFormat Output = CliOutputFormat.Json);
+    CliOutputFormat Output = CliOutputFormat.Json,
+    int? Version = null,
+    int? RightVersion = null);
 
 public static class CliRouteBuilder
 {
@@ -204,10 +210,18 @@ public static class CliRouteBuilder
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/consumer-groups/{RequireSecondary(invocation)}",
             CliCommand.ConsumerGroupLag =>
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/consumer-groups/{RequireSecondary(invocation)}/lag",
+            CliCommand.ConsumerGroupDiagnostics =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/consumer-groups/{RequireSecondary(invocation)}/diagnostics",
             CliCommand.SchemaSubjectsList =>
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects",
             CliCommand.SchemaVersionsList =>
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/versions",
+            CliCommand.SchemaVersionGet =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/versions/{RequireVersion(invocation)}",
+            CliCommand.SchemaCompatibilityGet =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/compatibility",
+            CliCommand.SchemaDiff =>
+                $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/diff?leftVersion={RequireVersion(invocation)}&rightVersion={RequireRightVersion(invocation)}",
             _ => throw new InvalidOperationException(
                 "CLI invocation contains an unsupported command."),
         };
@@ -257,6 +271,20 @@ public static class CliRouteBuilder
         EscapeSegment(
             invocation.SecondaryResourceId,
             "secondary");
+
+    private static int RequireVersion(
+        CliInvocation invocation) =>
+        invocation.Version is > 0
+            ? invocation.Version.Value
+            : throw new InvalidOperationException(
+                "CLI invocation is missing a valid schema version.");
+
+    private static int RequireRightVersion(
+        CliInvocation invocation) =>
+        invocation.RightVersion is > 0
+            ? invocation.RightVersion.Value
+            : throw new InvalidOperationException(
+                "CLI invocation is missing a valid right schema version.");
 
     private static string EscapeSegment(
         string? value,
@@ -311,8 +339,12 @@ public static class CliParser
           kafdeck [global-options] consumer-groups list <cluster-id>
           kafdeck [global-options] consumer-groups get <cluster-id> <group-id>
           kafdeck [global-options] consumer-groups lag <cluster-id> <group-id>
+          kafdeck [global-options] consumer-groups diagnostics <cluster-id> <group-id>
           kafdeck [global-options] schemas subjects <cluster-id>
           kafdeck [global-options] schemas versions <cluster-id> <subject>
+          kafdeck [global-options] schemas version <cluster-id> <subject> <version>
+          kafdeck [global-options] schemas compatibility <cluster-id> <subject>
+          kafdeck [global-options] schemas diff <cluster-id> <subject> <left-version> <right-version>
           kafdeck --help
 
         Global options:
@@ -584,14 +616,20 @@ public static class CliParser
 
         if (positionals.Count == 4 &&
             positionals[0] == "consumer-groups" &&
-            positionals[1] is "get" or "lag")
+            positionals[1] is "get" or "lag" or "diagnostics")
         {
+            var command =
+                positionals[1] switch
+                {
+                    "get" => CliCommand.ConsumerGroupGet,
+                    "lag" => CliCommand.ConsumerGroupLag,
+                    _ => CliCommand.ConsumerGroupDiagnostics,
+                };
+
             return CreateDouble(
                 baseUri,
                 tokenFile,
-                positionals[1] == "get"
-                    ? CliCommand.ConsumerGroupGet
-                    : CliCommand.ConsumerGroupLag,
+                command,
                 positionals[2],
                 "cluster ID",
                 positionals[3],
@@ -624,6 +662,49 @@ public static class CliParser
                 "cluster ID",
                 positionals[3],
                 "schema subject",
+                output);
+        }
+
+        if (positionals.Count == 5 &&
+            positionals[0] == "schemas" &&
+            positionals[1] == "version")
+        {
+            return CreateSchemaVersion(
+                baseUri,
+                tokenFile,
+                CliCommand.SchemaVersionGet,
+                positionals[2],
+                positionals[3],
+                positionals[4],
+                output);
+        }
+
+        if (positionals.Count == 4 &&
+            positionals[0] == "schemas" &&
+            positionals[1] == "compatibility")
+        {
+            return CreateDouble(
+                baseUri,
+                tokenFile,
+                CliCommand.SchemaCompatibilityGet,
+                positionals[2],
+                "cluster ID",
+                positionals[3],
+                "schema subject",
+                output);
+        }
+
+        if (positionals.Count == 6 &&
+            positionals[0] == "schemas" &&
+            positionals[1] == "diff")
+        {
+            return CreateSchemaDiff(
+                baseUri,
+                tokenFile,
+                positionals[2],
+                positionals[3],
+                positionals[4],
+                positionals[5],
                 output);
         }
 
@@ -684,6 +765,85 @@ public static class CliParser
             output: output);
     }
 
+    private static CliInvocation CreateSchemaVersion(
+        Uri baseUri,
+        string? tokenFile,
+        CliCommand command,
+        string clusterId,
+        string subject,
+        string versionText,
+        CliOutputFormat output)
+    {
+        ValidateIdentifier(
+            clusterId,
+            "cluster ID");
+        ValidateIdentifier(
+            subject,
+            "schema subject",
+            maxLength: 512);
+
+        return Create(
+            baseUri,
+            tokenFile,
+            command,
+            clusterId,
+            subject,
+            output: output,
+            version: ParsePositiveVersion(
+                versionText,
+                "schema version"));
+    }
+
+    private static CliInvocation CreateSchemaDiff(
+        Uri baseUri,
+        string? tokenFile,
+        string clusterId,
+        string subject,
+        string leftVersionText,
+        string rightVersionText,
+        CliOutputFormat output)
+    {
+        ValidateIdentifier(
+            clusterId,
+            "cluster ID");
+        ValidateIdentifier(
+            subject,
+            "schema subject",
+            maxLength: 512);
+
+        return Create(
+            baseUri,
+            tokenFile,
+            CliCommand.SchemaDiff,
+            clusterId,
+            subject,
+            output: output,
+            version: ParsePositiveVersion(
+                leftVersionText,
+                "left schema version"),
+            rightVersion: ParsePositiveVersion(
+                rightVersionText,
+                "right schema version"));
+    }
+
+    private static int ParsePositiveVersion(
+        string value,
+        string field)
+    {
+        if (!int.TryParse(
+                value,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var parsed) ||
+            parsed < 1)
+        {
+            throw new CliUsageException(
+                $"{field} must be a positive integer.");
+        }
+
+        return parsed;
+    }
+
     private static CliInvocation Create(
         Uri baseUri,
         string? tokenFile,
@@ -693,7 +853,9 @@ public static class CliParser
         CliOutputFormat output = CliOutputFormat.Json,
         string? search = null,
         string? cursor = null,
-        int? limit = null) =>
+        int? limit = null,
+        int? version = null,
+        int? rightVersion = null) =>
         new(
             baseUri,
             tokenFile,
@@ -704,7 +866,9 @@ public static class CliParser
             search,
             cursor,
             limit,
-            output);
+            output,
+            version,
+            rightVersion);
 
     private static string RequireValue(
         IReadOnlyList<string> args,
