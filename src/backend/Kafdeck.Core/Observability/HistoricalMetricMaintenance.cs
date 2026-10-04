@@ -116,3 +116,13 @@ public interface IHistoricalMetricMaintenanceStore
         HistoricalMetricMaintenancePolicy policy,
         CancellationToken cancellationToken = default);
 }
+
+
+public interface IHistoricalMetricSamplingLeaseStore
+{
+    Task<HistoricalMetricMaintenanceLease?> TryAcquireSamplingLeaseAsync(
+        string ownerId,
+        DateTimeOffset nowUtc,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default);
+}

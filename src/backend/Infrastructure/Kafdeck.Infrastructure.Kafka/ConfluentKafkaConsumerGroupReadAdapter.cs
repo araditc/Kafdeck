@@ -10,7 +10,7 @@ using KafkaConsumerGroupState = Confluent.Kafka.ConsumerGroupState;
 
 namespace Kafdeck.Infrastructure.Kafka;
 
-public sealed class ConfluentKafkaConsumerGroupReadAdapter : IConsumerGroupReadPort, IDisposable
+public sealed class ConfluentKafkaConsumerGroupReadAdapter : IConsumerGroupReadPort, IConsumerGroupSamplingReadPort, IDisposable
 {
     private readonly KafkaAdminClientRegistry _clients;
     private readonly TimeProvider _timeProvider;
@@ -67,6 +67,110 @@ public sealed class ConfluentKafkaConsumerGroupReadAdapter : IConsumerGroupReadP
                         group.IsSimpleConsumerGroup))
                     .ToArray();
             });
+
+    public Task<ReadViewResult<ConsumerGroupPage>> ListGroupPageAsync(
+        string clusterId,
+        string? afterGroupId,
+        int maxItems,
+        ReadViewOperationContext operation,
+        CancellationToken cancellationToken)
+    {
+        if (maxItems is < 1 or > 2_000)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxItems));
+        }
+
+        if (afterGroupId is not null &&
+            (string.IsNullOrWhiteSpace(afterGroupId) ||
+             !string.Equals(
+                 afterGroupId,
+                 afterGroupId.Trim(),
+                 StringComparison.Ordinal) ||
+             afterGroupId.Any(char.IsControl)))
+        {
+            throw new ArgumentException(
+                "Consumer-group sampling cursor is invalid.",
+                nameof(afterGroupId));
+        }
+
+        return ExecuteAsync(
+            clusterId,
+            operation,
+            cancellationToken,
+            async (client, timeout, token) =>
+            {
+                var result =
+                    await client.ListConsumerGroupsAsync(
+                            new ListConsumerGroupsOptions
+                            {
+                                RequestTimeout = timeout,
+                            })
+                        .WaitAsync(token)
+                        .ConfigureAwait(false);
+
+                var selected =
+                    new SortedSet<string>(
+                        StringComparer.Ordinal);
+                foreach (var group in result.Valid)
+                {
+                    var groupId =
+                        group.GroupId;
+                    if (afterGroupId is not null &&
+                        string.CompareOrdinal(
+                            groupId,
+                            afterGroupId) <= 0)
+                    {
+                        continue;
+                    }
+
+                    selected.Add(
+                        groupId);
+                    if (selected.Count >
+                        maxItems)
+                    {
+                        selected.Remove(
+                            selected.Max!);
+                    }
+                }
+
+                var items =
+                    selected
+                        .Take(maxItems)
+                        .ToArray();
+
+                EnsureStringBudget(
+                    items,
+                    operation.MaxResponseBytes);
+
+                string? nextCursor = null;
+                if (items.Length ==
+                    maxItems)
+                {
+                    var last =
+                        items[^1];
+                    if (result.Valid.Any(group =>
+                            string.CompareOrdinal(
+                                group.GroupId,
+                                last) > 0))
+                    {
+                        nextCursor =
+                            last;
+                    }
+                }
+
+                return new ConsumerGroupPage(
+                    items
+                        .Select(groupId =>
+                            new ConsumerGroupSummary(
+                                groupId,
+                                CoreConsumerGroupState.Unknown,
+                                null,
+                                false))
+                        .ToArray(),
+                    nextCursor);
+            });
+    }
 
     public Task<ReadViewResult<ConsumerGroupDetail>> GetGroupAsync(
         string clusterId,

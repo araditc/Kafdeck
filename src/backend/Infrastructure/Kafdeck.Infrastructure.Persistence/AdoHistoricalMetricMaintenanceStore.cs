@@ -11,10 +11,12 @@ using SQLitePCL;
 namespace Kafdeck.Infrastructure.Persistence;
 
 public sealed class AdoHistoricalMetricMaintenanceStore :
-    IHistoricalMetricMaintenanceStore
+    IHistoricalMetricMaintenanceStore,
+    IHistoricalMetricSamplingLeaseStore
 {
     private const int SchemaVersion = 2;
     private const int SingletonId = 1;
+    private const int SamplingSingletonId = 2;
     private const string Component =
         "historical-metrics-maintenance";
     private const string RollupSource =
@@ -460,9 +462,11 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
                 .ConfigureAwait(false);
         }
 
-        await using (var seed =
-                     connection.CreateCommand())
+        foreach (var singletonId in
+                 new[] { SingletonId, SamplingSingletonId })
         {
+            await using var seed =
+                connection.CreateCommand();
             seed.Transaction = transaction;
             seed.CommandText =
                 """
@@ -484,7 +488,7 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             AddParameter(
                 seed,
                 "@singleton_id",
-                SingletonId);
+                singletonId);
             AddParameter(
                 seed,
                 "@updated_at_utc",
@@ -556,12 +560,39 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             .ConfigureAwait(false);
     }
 
-    public async Task<HistoricalMetricMaintenanceLease?>
+    public Task<HistoricalMetricMaintenanceLease?>
         TryAcquireLeaseAsync(
             string ownerId,
             DateTimeOffset nowUtc,
             TimeSpan leaseDuration,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+        TryAcquireLeaseAsync(
+            SingletonId,
+            ownerId,
+            nowUtc,
+            leaseDuration,
+            cancellationToken);
+
+    public Task<HistoricalMetricMaintenanceLease?>
+        TryAcquireSamplingLeaseAsync(
+            string ownerId,
+            DateTimeOffset nowUtc,
+            TimeSpan leaseDuration,
+            CancellationToken cancellationToken = default) =>
+        TryAcquireLeaseAsync(
+            SamplingSingletonId,
+            ownerId,
+            nowUtc,
+            leaseDuration,
+            cancellationToken);
+
+    private async Task<HistoricalMetricMaintenanceLease?>
+        TryAcquireLeaseAsync(
+            int singletonId,
+            string ownerId,
+            DateTimeOffset nowUtc,
+            TimeSpan leaseDuration,
+            CancellationToken cancellationToken)
     {
         ValidateOwner(ownerId);
 
@@ -595,6 +626,7 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             await LockAndReadLeaseAsync(
                     connection,
                     transaction,
+                    singletonId,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -649,7 +681,7 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
         AddParameter(
             update,
             "@singleton_id",
-            SingletonId);
+            singletonId);
 
         if (await update
                 .ExecuteNonQueryAsync(cancellationToken)
@@ -961,9 +993,20 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             sqliteConnection);
     }
 
+    private Task<LeaseRow> LockAndReadLeaseAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken) =>
+        LockAndReadLeaseAsync(
+            connection,
+            transaction,
+            SingletonId,
+            cancellationToken);
+
     private async Task<LeaseRow> LockAndReadLeaseAsync(
         DbConnection connection,
         DbTransaction transaction,
+        int singletonId,
         CancellationToken cancellationToken)
     {
         if (!_connectionFactory.SupportsSelectForUpdate)
@@ -980,7 +1023,7 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             AddParameter(
                 lockCommand,
                 "@singleton_id",
-                SingletonId);
+                singletonId);
             await lockCommand
                 .ExecuteNonQueryAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -1011,7 +1054,7 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
         AddParameter(
             command,
             "@singleton_id",
-            SingletonId);
+            singletonId);
 
         await using var reader =
             await command
