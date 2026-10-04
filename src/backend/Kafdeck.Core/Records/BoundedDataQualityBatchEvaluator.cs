@@ -34,6 +34,36 @@ public sealed class BoundedDataQualityBatchEvaluator :
             policy,
             input);
 
+        var window =
+            input.WindowEndUtc -
+            input.WindowStartUtc;
+        if (window >
+            policy.Budget.EvaluationWindow)
+        {
+            throw new ArgumentException(
+                "Data-quality evaluation window exceeds the policy-owned evaluation window.",
+                nameof(input));
+        }
+
+        var policyRecordLimit =
+            checked(
+                window.Ticks *
+                policy.Budget.RecordsPerSecond /
+                TimeSpan.TicksPerSecond);
+        var policyByteLimit =
+            checked(
+                window.Ticks *
+                policy.Budget.BytesPerSecond /
+                TimeSpan.TicksPerSecond);
+        var effectiveRecordLimit =
+            Math.Min(
+                (long)input.Budget.MaxRecords,
+                policyRecordLimit);
+        var effectiveByteLimit =
+            Math.Min(
+                input.Budget.MaxRawBytes,
+                policyByteLimit);
+
         var startedAt =
             _timeProvider.GetUtcNow();
         var evaluationDeadline =
@@ -66,6 +96,18 @@ public sealed class BoundedDataQualityBatchEvaluator :
              index < input.Records.Count;
              index++)
         {
+            if (evaluatedRecords >=
+                effectiveRecordLimit)
+            {
+                outcome =
+                    DataQualityEvaluationOutcome.RecordLimit;
+                state =
+                    evaluatedRecords == 0
+                        ? DataQualityEvidenceState.Unknown
+                        : DataQualityEvidenceState.Partial;
+                break;
+            }
+
             if (cancellationToken.IsCancellationRequested)
             {
                 outcome =
@@ -94,9 +136,11 @@ public sealed class BoundedDataQualityBatchEvaluator :
             var rawBytes =
                 RawBytes(record);
 
-            if (evaluatedBytes >
-                input.Budget.MaxRawBytes -
-                rawBytes)
+            if (rawBytes >
+                    effectiveByteLimit ||
+                evaluatedBytes >
+                    effectiveByteLimit -
+                    rawBytes)
             {
                 outcome =
                     DataQualityEvaluationOutcome.ByteLimit;
@@ -107,18 +151,48 @@ public sealed class BoundedDataQualityBatchEvaluator :
                 break;
             }
 
-            var recordViolation =
+            var violatedRules =
                 EvaluateRecord(
                     record,
-                    policy.Rules,
-                    counts);
+                    policy.Rules);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                outcome =
+                    DataQualityEvaluationOutcome.Cancelled;
+                state =
+                    evaluatedRecords == 0
+                        ? DataQualityEvidenceState.Unknown
+                        : DataQualityEvidenceState.Partial;
+                break;
+            }
+
+            if (_timeProvider.GetUtcNow() >=
+                evaluationDeadline)
+            {
+                outcome =
+                    DataQualityEvaluationOutcome.DurationLimit;
+                state =
+                    evaluatedRecords == 0
+                        ? DataQualityEvidenceState.Unknown
+                        : DataQualityEvidenceState.Partial;
+                break;
+            }
 
             evaluatedRecords++;
             evaluatedBytes +=
                 rawBytes;
-            if (recordViolation)
+
+            if (violatedRules.Count > 0)
             {
                 violatedRecords++;
+                foreach (var ruleId in
+                         violatedRules)
+                {
+                    counts[ruleId] =
+                        checked(
+                            counts[ruleId] + 1);
+                }
             }
 
             nextOffset =
@@ -232,10 +306,9 @@ public sealed class BoundedDataQualityBatchEvaluator :
         }
     }
 
-    private static bool EvaluateRecord(
+    private static IReadOnlyList<string> EvaluateRecord(
         KafkaRawRecord record,
-        IReadOnlyList<DataQualityRule> rules,
-        IDictionary<string, long> counts)
+        IReadOnlyList<DataQualityRule> rules)
     {
         JsonDocument? document = null;
 
@@ -257,8 +330,8 @@ public sealed class BoundedDataQualityBatchEvaluator :
         {
             var root =
                 document?.RootElement;
-            var anyViolation =
-                false;
+            var violations =
+                new List<string>();
 
             foreach (var rule in rules)
             {
@@ -268,19 +341,15 @@ public sealed class BoundedDataQualityBatchEvaluator :
                         root.Value,
                         rule);
 
-                if (!violated)
+                if (violated)
                 {
-                    continue;
+                    violations.Add(
+                        rule.RuleId);
                 }
-
-                counts[rule.RuleId] =
-                    checked(
-                        counts[rule.RuleId] + 1);
-                anyViolation =
-                    true;
             }
 
-            return anyViolation;
+            return Array.AsReadOnly(
+                violations.ToArray());
         }
     }
 
@@ -403,9 +472,12 @@ public sealed class BoundedDataQualityBatchEvaluator :
              index < segments.Length;
              index++)
         {
-            var segment =
-                DecodePointerSegment(
-                    segments[index]);
+            if (!TryDecodePointerSegment(
+                    segments[index],
+                    out var segment))
+            {
+                return false;
+            }
 
             if (value.ValueKind ==
                 JsonValueKind.Object)
@@ -423,7 +495,9 @@ public sealed class BoundedDataQualityBatchEvaluator :
             if (value.ValueKind ==
                 JsonValueKind.Array)
             {
-                if (!int.TryParse(
+                if (!IsValidArrayIndexToken(
+                        segment) ||
+                    !int.TryParse(
                         segment,
                         NumberStyles.None,
                         CultureInfo.InvariantCulture,
@@ -446,17 +520,90 @@ public sealed class BoundedDataQualityBatchEvaluator :
         return true;
     }
 
-    private static string DecodePointerSegment(
-        string segment) =>
-        segment
-            .Replace(
-                "~1",
-                "/",
-                StringComparison.Ordinal)
-            .Replace(
-                "~0",
-                "~",
-                StringComparison.Ordinal);
+    private static bool TryDecodePointerSegment(
+        string segment,
+        out string decoded)
+    {
+        var builder =
+            new StringBuilder(
+                segment.Length);
+
+        for (var index = 0;
+             index < segment.Length;
+             index++)
+        {
+            var character =
+                segment[index];
+            if (character != '~')
+            {
+                builder.Append(
+                    character);
+                continue;
+            }
+
+            if (index + 1 >=
+                segment.Length)
+            {
+                decoded =
+                    string.Empty;
+                return false;
+            }
+
+            var escape =
+                segment[++index];
+            switch (escape)
+            {
+                case '0':
+                    builder.Append('~');
+                    break;
+                case '1':
+                    builder.Append('/');
+                    break;
+                default:
+                    decoded =
+                        string.Empty;
+                    return false;
+            }
+        }
+
+        decoded =
+            builder.ToString();
+        return true;
+    }
+
+    private static bool IsValidArrayIndexToken(
+        string segment)
+    {
+        if (segment.Length == 0)
+        {
+            return false;
+        }
+
+        if (segment.Length == 1)
+        {
+            return segment[0] is
+                >= '0' and <= '9';
+        }
+
+        if (segment[0] is
+            < '1' or > '9')
+        {
+            return false;
+        }
+
+        for (var index = 1;
+             index < segment.Length;
+             index++)
+        {
+            if (segment[index] is
+                < '0' or > '9')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static long RawBytes(
         KafkaRawRecord record)

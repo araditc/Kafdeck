@@ -394,6 +394,264 @@ public sealed class V08W65DataQualityEvaluatorRuntimeTests
                 json),
             Array.Empty<KafkaRecordHeader>());
 
+
+    [Fact]
+    public async Task Policy_owned_window_and_rate_limits_are_enforced()
+    {
+        var now =
+            DateTimeOffset.UtcNow;
+        var evaluator =
+            new BoundedDataQualityBatchEvaluator(
+                new FixedTimeProvider(now));
+        var restrictivePolicy =
+            new DataQualityPolicyDefinition(
+                "orders-quality",
+                1,
+                new DataQualityPolicyScope(
+                    "prod",
+                    "orders",
+                    [0]),
+                [
+                    new DataQualityRule(
+                        "id",
+                        DataQualityRuleKind.RequiredPath,
+                        "/id"),
+                ],
+                new DataQualityPolicyBudget(
+                    recordsPerSecond: 1,
+                    bytesPerSecond: 1024,
+                    evaluationWindow:
+                        TimeSpan.FromSeconds(2)));
+
+        var overWindow =
+            new DataQualityEvaluationInput(
+                "prod",
+                "orders",
+                0,
+                now.AddSeconds(-3),
+                now,
+                0,
+                1,
+                [
+                    Record(
+                        0,
+                        """{"id":"x"}"""),
+                ],
+                new DataQualityEvaluationCycleBudget());
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => evaluator.EvaluateAsync(
+                restrictivePolicy,
+                overWindow,
+                new KafkaOperationContext(
+                    now.AddSeconds(10)),
+                CancellationToken.None));
+
+        var limitedInput =
+            new DataQualityEvaluationInput(
+                "prod",
+                "orders",
+                0,
+                now.AddSeconds(-1),
+                now,
+                0,
+                3,
+                [
+                    Record(
+                        0,
+                        """{"id":"a"}"""),
+                    Record(
+                        1,
+                        """{"id":"b"}"""),
+                    Record(
+                        2,
+                        """{"id":"c"}"""),
+                ],
+                new DataQualityEvaluationCycleBudget(
+                    maxRecords: 10,
+                    maxRawBytes:
+                        RecordOperationBudget
+                            .DefaultMaxRawBytes));
+
+        var result =
+            await evaluator.EvaluateAsync(
+                restrictivePolicy,
+                limitedInput,
+                new KafkaOperationContext(
+                    now.AddSeconds(10)),
+                CancellationToken.None);
+
+        Assert.Equal(
+            1,
+            result.Evidence.EvaluatedRecords);
+        Assert.Equal(
+            DataQualityEvidenceState.Partial,
+            result.Evidence.State);
+        Assert.Equal(
+            DataQualityEvaluationOutcome.RecordLimit,
+            result.Progress.Outcome);
+        Assert.Equal(
+            1,
+            result.Progress.NextOffset);
+    }
+
+    [Fact]
+    public async Task Deadline_crossed_during_record_does_not_commit_that_record()
+    {
+        var now =
+            DateTimeOffset.UtcNow;
+        var provider =
+            new SequenceTimeProvider(
+                now,
+                now,
+                now.AddSeconds(2),
+                now.AddSeconds(2));
+
+        var result =
+            await new BoundedDataQualityBatchEvaluator(
+                    provider)
+                .EvaluateAsync(
+                    Policy(
+                        [
+                            new DataQualityRule(
+                                "id",
+                                DataQualityRuleKind.RequiredPath,
+                                "/id"),
+                        ]),
+                    Input(
+                        now,
+                        [
+                            Record(
+                                0,
+                                """{"id":"x"}"""),
+                        ],
+                        1),
+                    new KafkaOperationContext(
+                        now.AddSeconds(1)),
+                    CancellationToken.None);
+
+        Assert.Equal(
+            DataQualityEvidenceState.Unknown,
+            result.Evidence.State);
+        Assert.Equal(
+            0,
+            result.Evidence.EvaluatedRecords);
+        Assert.Equal(
+            DataQualityEvaluationOutcome.DurationLimit,
+            result.Progress.Outcome);
+        Assert.Equal(
+            0,
+            result.Progress.NextOffset);
+    }
+
+    [Fact]
+    public async Task Json_pointer_rejects_leading_zero_array_index()
+    {
+        var now =
+            DateTimeOffset.UtcNow;
+        var result =
+            await new BoundedDataQualityBatchEvaluator(
+                    new FixedTimeProvider(now))
+                .EvaluateAsync(
+                    Policy(
+                        [
+                            new DataQualityRule(
+                                "pointer",
+                                DataQualityRuleKind.RequiredPath,
+                                "/items/01/id"),
+                        ]),
+                    Input(
+                        now,
+                        [
+                            Record(
+                                0,
+                                """{"items":[{"id":"a"},{"id":"b"}]}"""),
+                        ],
+                        1),
+                    new KafkaOperationContext(
+                        now.AddSeconds(10)),
+                    CancellationToken.None);
+
+        Assert.Equal(
+            1,
+            result.Evidence.ViolationCount);
+        Assert.Equal(
+            1,
+            Count(
+                result,
+                "pointer"));
+    }
+
+    [Fact]
+    public async Task Json_pointer_rejects_invalid_escape_sequence()
+    {
+        var now =
+            DateTimeOffset.UtcNow;
+        var result =
+            await new BoundedDataQualityBatchEvaluator(
+                    new FixedTimeProvider(now))
+                .EvaluateAsync(
+                    Policy(
+                        [
+                            new DataQualityRule(
+                                "pointer",
+                                DataQualityRuleKind.RequiredPath,
+                                "/a~2b"),
+                        ]),
+                    Input(
+                        now,
+                        [
+                            Record(
+                                0,
+                                """{"a~2b":"present"}"""),
+                        ],
+                        1),
+                    new KafkaOperationContext(
+                        now.AddSeconds(10)),
+                    CancellationToken.None);
+
+        Assert.Equal(
+            1,
+            result.Evidence.ViolationCount);
+        Assert.Equal(
+            1,
+            Count(
+                result,
+                "pointer"));
+    }
+
+
+    private sealed class SequenceTimeProvider :
+        TimeProvider
+    {
+        private readonly Queue<DateTimeOffset>
+            _values;
+        private DateTimeOffset _last;
+
+        public SequenceTimeProvider(
+            params DateTimeOffset[] values)
+        {
+            _values =
+                new Queue<DateTimeOffset>(
+                    values);
+            _last =
+                values.Length == 0
+                    ? DateTimeOffset.UtcNow
+                    : values[^1];
+        }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            if (_values.Count > 0)
+            {
+                _last =
+                    _values.Dequeue();
+            }
+
+            return _last;
+        }
+    }
+
     private sealed class FixedTimeProvider :
         TimeProvider
     {
