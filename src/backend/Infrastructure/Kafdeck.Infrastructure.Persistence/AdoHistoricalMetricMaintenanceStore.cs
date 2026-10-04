@@ -272,9 +272,6 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
         bool ExactSumIsLossy,
         bool ExactCountIsLossy);
 
-    private const long MaintenanceMigrationLockKey =
-        4_839_176_502_110_873_342L;
-
     private readonly IHistoricalMetricsDbConnectionFactory
         _connectionFactory;
     private readonly TimeProvider _timeProvider;
@@ -314,7 +311,7 @@ public sealed class AdoHistoricalMetricMaintenanceStore :
             AddParameter(
                 lockCommand,
                 "@lock_key",
-                MaintenanceMigrationLockKey);
+                PersistenceMigrationLocks.SharedSchemaInfo);
             await lockCommand
                 .ExecuteNonQueryAsync(cancellationToken)
                 .ConfigureAwait(false);
