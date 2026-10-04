@@ -307,6 +307,152 @@ public sealed class V08W67CliFoundationTests
     }
 
     [Theory]
+    [InlineData(
+        "consumer-groups",
+        "diagnostics",
+        "prod-a",
+        "orders-group",
+        "/api/v1/clusters/prod-a/consumer-groups/orders-group/diagnostics")]
+    [InlineData(
+        "schemas",
+        "compatibility",
+        "prod-a",
+        "orders-value",
+        "/api/v1/clusters/prod-a/schemas/subjects/orders-value/compatibility")]
+    public void Additional_read_only_routes_are_typed_and_confined(
+        string command,
+        string action,
+        string cluster,
+        string resource,
+        string expected)
+    {
+        var invocation =
+            CliParser.Parse(
+                [
+                    command,
+                    action,
+                    cluster,
+                    resource,
+                ]);
+
+        Assert.Equal(
+            expected,
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Fact]
+    public void Schema_version_detail_route_uses_positive_positional_version()
+    {
+        var invocation =
+            CliParser.Parse(
+                [
+                    "schemas",
+                    "version",
+                    "prod-a",
+                    "orders-value",
+                    "7",
+                ]);
+
+        Assert.Equal(
+            CliCommand.SchemaVersionGet,
+            invocation.Command);
+        Assert.Equal(
+            7,
+            invocation.Version);
+        Assert.Equal(
+            "/api/v1/clusters/prod-a/schemas/subjects/orders-value/versions/7",
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Fact]
+    public void Schema_diff_route_uses_only_typed_positive_version_query_values()
+    {
+        var invocation =
+            CliParser.Parse(
+                [
+                    "schemas",
+                    "diff",
+                    "prod-a",
+                    "orders-value",
+                    "2",
+                    "9",
+                ]);
+
+        Assert.Equal(
+            CliCommand.SchemaDiff,
+            invocation.Command);
+        Assert.Equal(
+            2,
+            invocation.Version);
+        Assert.Equal(
+            9,
+            invocation.RightVersion);
+        Assert.Equal(
+            "/api/v1/clusters/prod-a/schemas/subjects/orders-value/diff?leftVersion=2&rightVersion=9",
+            CliRouteBuilder.Build(
+                invocation));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("+1")]
+    [InlineData("1.5")]
+    [InlineData("not-a-version")]
+    public void Schema_version_commands_reject_non_positive_or_non_integer_versions(
+        string version)
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "schemas",
+                    "version",
+                    "prod-a",
+                    "orders-value",
+                    version,
+                ]));
+
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "schemas",
+                    "diff",
+                    "prod-a",
+                    "orders-value",
+                    "1",
+                    version,
+                ]));
+    }
+
+    [Fact]
+    public void Additional_read_only_commands_do_not_admit_generic_query_options()
+    {
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "consumer-groups",
+                    "diagnostics",
+                    "prod-a",
+                    "orders-group",
+                    "--limit",
+                    "10",
+                ]));
+
+        Assert.Throws<CliUsageException>(
+            () => CliParser.Parse(
+                [
+                    "schemas",
+                    "compatibility",
+                    "prod-a",
+                    "orders-value",
+                    "--cursor",
+                    "opaque",
+                ]));
+    }
+
+    [Theory]
     [InlineData("yaml")]
     [InlineData("table")]
     [InlineData("raw")]
