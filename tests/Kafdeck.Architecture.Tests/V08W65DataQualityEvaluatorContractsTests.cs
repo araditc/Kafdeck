@@ -198,6 +198,45 @@ public sealed class V08W65DataQualityEvaluatorContractsTests
             input.RawByteCount);
     }
 
+
+    [Fact]
+    public void Evaluation_input_preserves_null_key_and_value_semantics()
+    {
+        var now =
+            DateTimeOffset.UtcNow;
+
+        var input =
+            new DataQualityEvaluationInput(
+                "prod",
+                "orders",
+                0,
+                now.AddMinutes(-1),
+                now,
+                0,
+                1,
+                [
+                    new KafkaRawRecord(
+                        0,
+                        now,
+                        null,
+                        null,
+                        Array.Empty<KafkaRecordHeader>()),
+                ],
+                new DataQualityEvaluationCycleBudget());
+
+        var snapshot =
+            Assert.Single(
+                input.Records);
+
+        Assert.Null(
+            snapshot.Key);
+        Assert.Null(
+            snapshot.Value);
+        Assert.Equal(
+            0,
+            input.RawByteCount);
+    }
+
     [Fact]
     public void Evaluation_input_reuses_the_admitted_header_count_once()
     {

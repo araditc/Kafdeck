@@ -227,8 +227,12 @@ public sealed record DataQualityEvaluationInput
                 new KafkaRawRecord(
                     record.Offset,
                     record.TimestampUtc,
-                    record.Key?.ToArray(),
-                    record.Value?.ToArray(),
+                    record.Key is null
+                        ? null
+                        : record.Key.Value.ToArray(),
+                    record.Value is null
+                        ? null
+                        : record.Value.Value.ToArray(),
                     Array.AsReadOnly(
                         headers));
         }
