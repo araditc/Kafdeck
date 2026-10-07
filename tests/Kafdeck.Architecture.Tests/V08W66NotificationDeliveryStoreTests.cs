@@ -603,6 +603,174 @@ public sealed class V08W66NotificationDeliveryStoreTests
     }
 
     [Fact]
+    public async Task Sqlite_cursor_queries_seek_from_continuation_indexes_without_temp_sort()
+    {
+        var path =
+            TempPath();
+
+        try
+        {
+            var factory =
+                new SqliteNotificationDeliveryDbConnectionFactory(
+                    path);
+            var store =
+                new AdoNotificationDeliveryStore(
+                    factory);
+            await store.InitializeAsync();
+
+            await using var connection =
+                await factory.OpenAsync();
+
+            await using var due =
+                connection.CreateCommand();
+            due.CommandText =
+                """
+                EXPLAIN QUERY PLAN
+                SELECT notification_id
+                FROM kafdeck_notification_deliveries
+                WHERE state IN ('Pending', 'Failed')
+                  AND due_at_utc <= @now_utc
+                  AND (
+                      due_at_utc,
+                      notification_id,
+                      destination_id) > (
+                      @after_due_at_utc,
+                      @after_notification_id,
+                      @after_destination_id)
+                ORDER BY
+                    due_at_utc,
+                    notification_id,
+                    destination_id
+                LIMIT @row_limit
+                """;
+            AddParameter(
+                due,
+                "@now_utc",
+                "2026-10-05T07:00:00.0000000+00:00");
+            AddParameter(
+                due,
+                "@after_due_at_utc",
+                "2026-10-05T06:00:00.0000000+00:00");
+            AddParameter(
+                due,
+                "@after_notification_id",
+                "11111111-1111-1111-1111-111111111111");
+            AddParameter(
+                due,
+                "@after_destination_id",
+                "ops-webhook");
+            AddParameter(
+                due,
+                "@row_limit",
+                11);
+
+            var duePlan =
+                new List<string>();
+            await using (var reader =
+                         await due.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    duePlan.Add(
+                        reader.GetString(3));
+                }
+            }
+
+            Assert.Contains(
+                duePlan,
+                detail =>
+                    detail.Contains(
+                        "ix_kafdeck_notification_delivery_due",
+                        StringComparison.Ordinal) &&
+                    detail.Contains(
+                        "due_at_utc>?",
+                        StringComparison.Ordinal));
+            Assert.DoesNotContain(
+                duePlan,
+                detail =>
+                    detail.Contains(
+                        "USE TEMP B-TREE",
+                        StringComparison.Ordinal));
+
+            await using var recovery =
+                connection.CreateCommand();
+            recovery.CommandText =
+                """
+                EXPLAIN QUERY PLAN
+                SELECT notification_id
+                FROM kafdeck_notification_deliveries
+                WHERE state = 'InFlight'
+                  AND updated_at_utc <= @stale_before_utc
+                  AND (
+                      updated_at_utc,
+                      notification_id,
+                      destination_id) > (
+                      @after_updated_at_utc,
+                      @after_notification_id,
+                      @after_destination_id)
+                ORDER BY
+                    updated_at_utc,
+                    notification_id,
+                    destination_id
+                LIMIT @row_limit
+                """;
+            AddParameter(
+                recovery,
+                "@stale_before_utc",
+                "2026-10-05T07:00:00.0000000+00:00");
+            AddParameter(
+                recovery,
+                "@after_updated_at_utc",
+                "2026-10-05T06:00:00.0000000+00:00");
+            AddParameter(
+                recovery,
+                "@after_notification_id",
+                "11111111-1111-1111-1111-111111111111");
+            AddParameter(
+                recovery,
+                "@after_destination_id",
+                "ops-webhook");
+            AddParameter(
+                recovery,
+                "@row_limit",
+                11);
+
+            var recoveryPlan =
+                new List<string>();
+            await using (var reader =
+                         await recovery.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    recoveryPlan.Add(
+                        reader.GetString(3));
+                }
+            }
+
+            Assert.Contains(
+                recoveryPlan,
+                detail =>
+                    detail.Contains(
+                        "ix_kafdeck_notification_delivery_recovery",
+                        StringComparison.Ordinal) &&
+                    detail.Contains(
+                        "updated_at_utc>?",
+                        StringComparison.Ordinal));
+            Assert.DoesNotContain(
+                recoveryPlan,
+                detail =>
+                    detail.Contains(
+                        "USE TEMP B-TREE",
+                        StringComparison.Ordinal));
+        }
+        finally
+        {
+            Cleanup(
+                path);
+        }
+    }
+
+    [Fact]
     public async Task Sqlite_schema_rejects_arbitrary_outcome_code_even_for_direct_write()
     {
         var path =
