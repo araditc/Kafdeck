@@ -771,6 +771,74 @@ public sealed class V08W66NotificationDeliveryStoreTests
     }
 
     [Fact]
+    public async Task Sqlite_recovery_index_matches_recovery_seek_and_order_key()
+    {
+        var path =
+            TempPath();
+
+        try
+        {
+            var factory =
+                new SqliteNotificationDeliveryDbConnectionFactory(
+                    path);
+            var store =
+                new AdoNotificationDeliveryStore(
+                    factory);
+            await store.InitializeAsync();
+
+            await using var connection =
+                await factory.OpenAsync();
+            await using var command =
+                connection.CreateCommand();
+            command.CommandText =
+                "PRAGMA index_info(ix_kafdeck_notification_delivery_recovery)";
+
+            var columns =
+                new List<string>();
+            await using var reader =
+                await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                columns.Add(
+                    reader.GetString(2));
+            }
+
+            Assert.Equal(
+                [
+                    "updated_at_utc",
+                    "notification_id",
+                    "destination_id",
+                ],
+                columns);
+
+            await using var sqlCommand =
+                connection.CreateCommand();
+            sqlCommand.CommandText =
+                """
+                SELECT sql
+                FROM sqlite_master
+                WHERE type = 'index'
+                  AND name = 'ix_kafdeck_notification_delivery_recovery'
+                """;
+            var indexSql =
+                (string?)await sqlCommand
+                    .ExecuteScalarAsync();
+
+            Assert.NotNull(
+                indexSql);
+            Assert.Contains(
+                "WHERE state = 'InFlight'",
+                indexSql!,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(
+                path);
+        }
+    }
+
+    [Fact]
     public async Task Sqlite_schema_rejects_arbitrary_outcome_code_even_for_direct_write()
     {
         var path =
