@@ -40,6 +40,8 @@ var observabilityOptions =
     ObservabilityOptions.Effective(kafdeckOptions);
 var historicalMetricsOptions =
     observabilityOptions.History;
+var dataQualityOptions =
+    kafdeckOptions.DataQuality;
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -88,6 +90,17 @@ var historicalMetricsConnectionString =
         ? secretResolver
             .Resolve(
                 historicalMetricsOptions.ConnectionString)
+            .Reveal()
+        : null;
+
+var dataQualityConnectionString =
+    dataQualityOptions?.Enabled == true &&
+    dataQualityOptions.Provider ==
+        DataQualityPersistenceProvider.PostgreSql &&
+    dataQualityOptions.ConnectionString is not null
+        ? secretResolver
+            .Resolve(
+                dataQualityOptions.ConnectionString)
             .Reveal()
         : null;
 
@@ -250,6 +263,29 @@ else
 {
     builder.Services.AddSingleton<IHistoryObservationPort,
         UnavailableHistoryObservationPort>();
+}
+
+if (dataQualityOptions?.Enabled == true)
+{
+    builder.Services.AddSingleton<IDataQualityDbConnectionFactory>(
+        _ =>
+            dataQualityOptions.Provider switch
+            {
+                DataQualityPersistenceProvider.Sqlite =>
+                    new SqliteDataQualityDbConnectionFactory(
+                        dataQualityOptions.SqliteDatabasePath!),
+                DataQualityPersistenceProvider.PostgreSql =>
+                    new PostgreSqlDataQualityDbConnectionFactory(
+                        dataQualityConnectionString!),
+                _ => throw new KafdeckConfigurationException(
+                    "Data-quality persistence provider is unsupported."),
+            });
+
+    builder.Services.AddSingleton<IDataQualityLifecycleStore>(
+        services =>
+            new AdoDataQualityLifecycleStore(
+                services.GetRequiredService<
+                    IDataQualityDbConnectionFactory>()));
 }
 
 builder.Services.AddSingleton<IMetricsObservationPort,
@@ -538,6 +574,22 @@ if (historicalMetricsOptions?.Enabled == true)
         historicalMetricsOptions.RollupRetentionDays);
 }
 
+if (dataQualityOptions?.Enabled == true)
+{
+    var dataQualityStore =
+        app.Services.GetRequiredService<
+            IDataQualityLifecycleStore>();
+    await dataQualityStore
+        .InitializeAsync()
+        .ConfigureAwait(false);
+
+    app.Logger.LogInformation(
+        "Kafdeck data-quality persistence initialized with provider {Provider}, execution mode {ExecutionMode}, management enabled {ManagementEnabled}.",
+        dataQualityOptions.Provider,
+        dataQualityOptions.ExecutionMode,
+        dataQualityOptions.ManagementEnabled);
+}
+
 app.Logger.LogInformation(
     "Kafdeck startup configuration: {@Configuration}",
     SafeConfigurationDiagnostics.Create(kafdeckOptions));
@@ -643,6 +695,10 @@ app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckV08Observability(kafdeckOptions);
 app.MapKafdeckV08OperationalAnalytics(kafdeckOptions);
+if (dataQualityOptions?.Enabled == true)
+{
+    app.MapKafdeckV08DataQuality(kafdeckOptions);
+}
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();

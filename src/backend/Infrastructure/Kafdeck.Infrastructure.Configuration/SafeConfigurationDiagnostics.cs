@@ -22,7 +22,12 @@ public sealed record SafeConfigurationDiagnostic(
     OtlpObservabilityProtocol OtlpProtocol = OtlpObservabilityProtocol.Grpc,
     bool OtlpHeadersConfigured = false,
     int ObservabilityMaxLogAttributes = ObservabilityOptions.DefaultMaxLogAttributes,
-    int ObservabilityMaxDiagnosticStringBytes = ObservabilityOptions.DefaultMaxDiagnosticStringBytes);
+    int ObservabilityMaxDiagnosticStringBytes = ObservabilityOptions.DefaultMaxDiagnosticStringBytes,
+    bool DataQualityConfigured = false,
+    bool DataQualityEnabled = false,
+    bool DataQualityManagementEnabled = false,
+    DataQualityPersistenceProvider? DataQualityPersistenceProvider = null,
+    DataQualityExecutionMode? DataQualityExecutionMode = null);
 
 public sealed record SafeClusterDiagnostic(
     string ClusterId,
@@ -79,6 +84,11 @@ public static class SafeConfigurationDiagnostics
             ObservabilityOptions.Effective(options).Otlp.Protocol,
             ObservabilityOptions.Effective(options).Otlp.Headers is not null,
             ObservabilityOptions.Effective(options).MaxLogAttributes,
-            ObservabilityOptions.Effective(options).MaxDiagnosticStringBytes);
+            ObservabilityOptions.Effective(options).MaxDiagnosticStringBytes,
+            options.DataQuality is not null,
+            options.DataQuality?.Enabled ?? false,
+            options.DataQuality?.ManagementEnabled ?? false,
+            options.DataQuality?.Provider,
+            options.DataQuality?.ExecutionMode);
     }
 }
