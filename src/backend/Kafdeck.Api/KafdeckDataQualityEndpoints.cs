@@ -71,6 +71,16 @@ public static class KafdeckDataQualityEndpoints
                                             item.Definition.Scope.TopicName))
                                 .ToArray();
 
+                        var authorizationFiltered =
+                            visible.Length !=
+                            page.Items.Count;
+                        var safeNextPolicyId =
+                            page.Truncated &&
+                            visible.Length > 0
+                                ? visible[^1]
+                                    .Definition.PolicyId
+                                : null;
+
                         return Results.Ok(
                             new DataQualityPolicyPageData(
                                 visible
@@ -78,10 +88,9 @@ public static class KafdeckDataQualityEndpoints
                                         DataQualityPolicyData.From)
                                     .ToArray(),
                                 page.Truncated,
-                                page.NextPolicyId,
+                                safeNextPolicyId,
                                 AuthorizationFiltered:
-                                    visible.Length !=
-                                    page.Items.Count));
+                                    authorizationFiltered));
                     }
                     catch (ArgumentException exception)
                     {
@@ -251,13 +260,24 @@ public static class KafdeckDataQualityEndpoints
                                     "Data-quality evidence scope is inconsistent");
                         }
 
+                        var visibleEvidence =
+                            await FilterEvidenceByTopicVisibilityAsync(
+                                    page.Points,
+                                    context,
+                                    authorization,
+                                    clusterId)
+                                .ConfigureAwait(false);
+
                         return Results.Ok(
                             new DataQualityEvidencePageData(
-                                page.Points
+                                visibleEvidence
                                     .Select(
                                         DataQualityEvidenceData.From)
                                     .ToArray(),
-                                page.Truncated));
+                                page.Truncated,
+                                AuthorizationFiltered:
+                                    visibleEvidence.Count !=
+                                    page.Points.Count));
                     }
                     catch (ArgumentException exception)
                     {
@@ -379,6 +399,13 @@ public static class KafdeckDataQualityEndpoints
                                 return PolicyNotFound();
                             }
 
+                            if (request.ExpectedRevision.Value !=
+                                existing.Revision)
+                            {
+                                return PolicyConflict(
+                                    "The data-quality policy revision does not match the authorized snapshot. Refresh before retrying.");
+                            }
+
                             var replaced =
                                 await store.ReplacePolicyAsync(
                                         definition,
@@ -457,6 +484,13 @@ public static class KafdeckDataQualityEndpoints
                                 return topicAuthorization;
                             }
 
+                            if (request.ExpectedRevision !=
+                                existing!.Revision)
+                            {
+                                return PolicyConflict(
+                                    "The data-quality policy revision does not match the authorized snapshot. Refresh before retrying.");
+                            }
+
                             var updated =
                                 await store.SetPolicyStateAsync(
                                         policyId,
@@ -531,29 +565,11 @@ public static class KafdeckDataQualityEndpoints
         if (outcome ==
             KafdeckAuthorizationOutcome.Forbidden)
         {
-            var audit =
-                context.RequestServices
-                    .GetRequiredService<ISecurityAuditSink>();
-            var principal =
-                OperatorSessionContextFactory.TryCreate(
-                    context.User,
-                    out var session) &&
-                session is not null
-                    ? SecurityAuditPrincipal.FromOperator(
-                        session.Identity)
-                    : SecurityAuditPrincipal.Anonymous;
-
-            await audit.WriteAsync(
-                    new SecurityAuditEvent(
-                        DateTimeOffset.UtcNow,
-                        SecurityAuditEventType.AuthorizationDenied,
-                        principal,
-                        session?.SessionId.Value.ToString("N"),
-                        clusterId,
-                        topicName,
-                        SecurityAuditOutcome.Denied,
-                        "rbac_denied_data_quality_topic"),
-                    context.RequestAborted)
+            await AuditTopicDenialAsync(
+                    context,
+                    clusterId,
+                    topicName,
+                    "rbac_denied_data_quality_topic")
                 .ConfigureAwait(false);
         }
 
@@ -575,6 +591,95 @@ public static class KafdeckDataQualityEndpoints
                     "Forbidden",
                 detail:
                     "The authenticated operator is not authorized to access the underlying topic.");
+    }
+
+    private static async Task<IReadOnlyList<
+            DataQualityEvidencePoint>>
+        FilterEvidenceByTopicVisibilityAsync(
+            IReadOnlyList<DataQualityEvidencePoint> points,
+            HttpContext context,
+            KafdeckAuthorizationService authorization,
+            string clusterId)
+    {
+        var visibility =
+            new Dictionary<string, bool>(
+                StringComparer.Ordinal);
+
+        foreach (var topicName in
+                 points
+                     .Select(
+                         point =>
+                             point.Progress.TopicName)
+                     .Distinct(
+                         StringComparer.Ordinal))
+        {
+            var outcome =
+                authorization.Authorize(
+                    context.User,
+                    new AuthorizationRequest(
+                        AuthorizationAction.TopicRead,
+                        clusterId,
+                        topicName));
+            var allowed =
+                outcome ==
+                KafdeckAuthorizationOutcome.Allowed;
+            visibility[topicName] =
+                allowed;
+
+            if (!allowed &&
+                outcome ==
+                KafdeckAuthorizationOutcome.Forbidden)
+            {
+                await AuditTopicDenialAsync(
+                        context,
+                        clusterId,
+                        topicName,
+                        "rbac_filtered_data_quality_evidence_topic")
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return Array.AsReadOnly(
+            points
+                .Where(
+                    point =>
+                        visibility.TryGetValue(
+                            point.Progress.TopicName,
+                            out var allowed) &&
+                        allowed)
+                .ToArray());
+    }
+
+    private static async Task AuditTopicDenialAsync(
+        HttpContext context,
+        string clusterId,
+        string topicName,
+        string reasonCategory)
+    {
+        var audit =
+            context.RequestServices
+                .GetRequiredService<ISecurityAuditSink>();
+        var principal =
+            OperatorSessionContextFactory.TryCreate(
+                context.User,
+                out var session) &&
+            session is not null
+                ? SecurityAuditPrincipal.FromOperator(
+                    session.Identity)
+                : SecurityAuditPrincipal.Anonymous;
+
+        await audit.WriteAsync(
+                new SecurityAuditEvent(
+                    DateTimeOffset.UtcNow,
+                    SecurityAuditEventType.AuthorizationDenied,
+                    principal,
+                    session?.SessionId.Value.ToString("N"),
+                    clusterId,
+                    topicName,
+                    SecurityAuditOutcome.Denied,
+                    reasonCategory),
+                context.RequestAborted)
+            .ConfigureAwait(false);
     }
 
     private static bool ClusterExists(
@@ -747,7 +852,8 @@ public sealed record DataQualityPolicyData(
 
 public sealed record DataQualityEvidencePageData(
     IReadOnlyList<DataQualityEvidenceData> Points,
-    bool Truncated);
+    bool Truncated,
+    bool AuthorizationFiltered);
 
 public sealed record DataQualityEvidenceData(
     string PolicyId,

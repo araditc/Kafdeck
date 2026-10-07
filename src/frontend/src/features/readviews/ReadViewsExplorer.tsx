@@ -35,6 +35,7 @@ import {
   type SchemaVersionSummary,
 } from '../../shared/api.js';
 import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
+import { DataQualityPanel } from './DataQualityPanel.js';
 import { StatusBadge } from '../../app/StatusBadge.js';
 import {
   operationalEvidenceStatusKind,
@@ -968,6 +969,8 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         {lineage.data.edges.length === 0 ? <p>No lineage edges are available from registered evidence.</p> : <table><thead><tr><th>Source</th><th>Destination</th><th>Evidence</th><th>Provenance</th><th>Confidence</th><th>State</th></tr></thead><tbody>{lineage.data.edges.map((edge, index) => <tr key={`${edge.source.kind}:${edge.source.id}->${edge.destination.kind}:${edge.destination.id}:${index}`}><td>{edge.source.kind}:{edge.source.id}</td><td>{edge.destination.kind}:{edge.destination.id}</td><td>{edge.evidenceKind}</td><td>{edge.provenance}</td><td>{edge.confidence.toFixed(2)}</td><td>{edge.stale ? 'Stale' : 'Current'}</td></tr>)}</tbody></table>}
       </>}
     </section>
+
+    <DataQualityPanel clusterId={clusterId} />
 
     <MutationOperationsPanel clusterId={clusterId} connectProfileId={selectedConnectProfileId} />
   </>;
