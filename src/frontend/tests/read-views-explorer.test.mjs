@@ -371,7 +371,7 @@ test('v0.8 W65 data-quality UI is bounded, truth-preserving and payload-free', (
 
 test('v0.8 W65 authorization-filtered pagination never exposes the raw hidden cursor', () => {
   const backend = readFileSync(
-    new URL('../../src/backend/Kafdeck.Api/KafdeckDataQualityEndpoints.cs', import.meta.url),
+    new URL('../../backend/Kafdeck.Api/KafdeckDataQualityEndpoints.cs', import.meta.url),
     'utf8',
   );
 
