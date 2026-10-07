@@ -1,6 +1,7 @@
 using Kafdeck.Core.Records;
 using Kafdeck.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
+using Npgsql;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -293,6 +294,170 @@ public sealed class V08W65DataQualityDurableStoreTests
             {
                 File.Delete(path);
             }
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_store_exercises_unfiltered_listing_cas_and_evidence_when_available()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w65_api_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString)
+            {
+                Pooling = false,
+            };
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scopedBuilder =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var factory =
+                new PostgreSqlDataQualityDbConnectionFactory(
+                    scopedBuilder.ConnectionString);
+            var store =
+                new AdoDataQualityLifecycleStore(
+                    factory);
+            await store.InitializeAsync();
+
+            var now =
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    7,
+                    12,
+                    0,
+                    0,
+                    TimeSpan.Zero);
+
+            foreach (var id in
+                     new[]
+                     {
+                         "a-policy",
+                         "b-policy",
+                         "c-policy",
+                     })
+            {
+                await store.CreatePolicyAsync(
+                    Policy(id),
+                    id == "b-policy"
+                        ? DataQualityPolicyLifecycleState.Paused
+                        : DataQualityPolicyLifecycleState.Active,
+                    now);
+            }
+
+            var first =
+                await store.ListPoliciesAsync(
+                    new DataQualityPolicyListQuery(
+                        "prod",
+                        maxResults: 2));
+            Assert.Equal(
+                2,
+                first.Items.Count);
+            Assert.True(
+                first.Truncated);
+            Assert.Equal(
+                "b-policy",
+                first.NextPolicyId);
+
+            var second =
+                await store.ListPoliciesAsync(
+                    new DataQualityPolicyListQuery(
+                        "prod",
+                        maxResults: 2,
+                        afterPolicyId:
+                            first.NextPolicyId));
+            var remaining =
+                Assert.Single(
+                    second.Items);
+            Assert.Equal(
+                "c-policy",
+                remaining.Definition.PolicyId);
+            Assert.False(
+                second.Truncated);
+
+            var active =
+                await store.ListPoliciesAsync(
+                    new DataQualityPolicyListQuery(
+                        "prod",
+                        state:
+                            DataQualityPolicyLifecycleState.Active));
+            Assert.Equal(
+                2,
+                active.Items.Count);
+
+            var updated =
+                await store.SetPolicyStateAsync(
+                    "a-policy",
+                    DataQualityPolicyLifecycleState.Disabled,
+                    expectedRevision: 1,
+                    updatedAtUtc:
+                        now.AddSeconds(1));
+            Assert.NotNull(
+                updated);
+            Assert.Equal(
+                2,
+                updated!.Revision);
+
+            var stale =
+                await store.SetPolicyStateAsync(
+                    "a-policy",
+                    DataQualityPolicyLifecycleState.Active,
+                    expectedRevision: 1,
+                    updatedAtUtc:
+                        now.AddSeconds(2));
+            Assert.Null(
+                stale);
+
+            await store.AppendEvidenceAsync(
+                Point(
+                    now));
+            var evidence =
+                await store.QueryEvidenceAsync(
+                    new DataQualityEvidenceQuery(
+                        "orders-quality",
+                        now.AddMinutes(-2),
+                        now.AddMinutes(1)));
+
+            Assert.Single(
+                evidence.Points);
+            Assert.False(
+                evidence.Truncated);
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
         }
     }
 
