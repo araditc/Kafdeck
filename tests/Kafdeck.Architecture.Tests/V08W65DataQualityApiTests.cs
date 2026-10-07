@@ -319,6 +319,56 @@ public sealed class V08W65DataQualityApiTests
                 AuthorizationAction.DataQualityManage));
     }
 
+    [Fact]
+    public void Post_merge_authorization_correctives_remain_fail_closed()
+    {
+        var source =
+            File.ReadAllText(
+                Path.Combine(
+                    FindRepositoryRoot(),
+                    "src",
+                    "backend",
+                    "Kafdeck.Api",
+                    "KafdeckDataQualityEndpoints.cs"));
+
+        Assert.Contains(
+            "safeNextPolicyId",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "page.NextPolicyId,",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "visible[^1]",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FilterEvidenceByTopicVisibilityAsync",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "point.Progress.TopicName",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "request.ExpectedRevision.Value !=",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "existing.Revision",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "request.ExpectedRevision !=",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "rbac_filtered_data_quality_evidence_topic",
+            source,
+            StringComparison.Ordinal);
+    }
+
     private static WebApplication BuildApp(
         bool managementEnabled)
     {
@@ -449,6 +499,30 @@ public sealed class V08W65DataQualityApiTests
             "https://idp.example",
             groupClaim: null,
             DateTimeOffset.UtcNow);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? current =
+            new(
+                AppContext.BaseDirectory);
+
+        while (current is not null)
+        {
+            if (File.Exists(
+                    Path.Combine(
+                        current.FullName,
+                        "Kafdeck.slnx")))
+            {
+                return current.FullName;
+            }
+
+            current =
+                current.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            "Unable to locate the Kafdeck repository root.");
     }
 
     private sealed record ApiRoute(
