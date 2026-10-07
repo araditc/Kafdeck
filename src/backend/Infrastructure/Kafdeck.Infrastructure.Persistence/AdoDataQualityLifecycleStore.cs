@@ -392,6 +392,9 @@ public sealed class AdoDataQualityLifecycleStore :
                 .ReadAsync(cancellationToken)
                 .ConfigureAwait(false))
         {
+            await reader
+                .DisposeAsync()
+                .ConfigureAwait(false);
             await transaction
                 .RollbackAsync(cancellationToken)
                 .ConfigureAwait(false);
