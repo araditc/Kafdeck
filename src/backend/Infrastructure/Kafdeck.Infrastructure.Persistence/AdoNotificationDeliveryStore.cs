@@ -894,10 +894,10 @@ public sealed class AdoNotificationDeliveryStore :
         """
         CREATE INDEX IF NOT EXISTS ix_kafdeck_notification_delivery_recovery
         ON kafdeck_notification_deliveries (
-            state,
             updated_at_utc,
             notification_id,
             destination_id)
+        WHERE state = 'InFlight'
         """,
     ];
 
