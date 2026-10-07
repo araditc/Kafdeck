@@ -39,7 +39,9 @@ const defaultDraft: DataQualityPolicyUpsertRequest = {
 function durationSeconds(value: string): number {
   const parts = value.split(':').map(part => Number(part));
   if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return 300;
-  return Math.max(1, Math.round(parts[0] * 3600 + parts[1] * 60 + parts[2]));
+  const [hours, minutes, seconds] = parts;
+  if (hours === undefined || minutes === undefined || seconds === undefined) return 300;
+  return Math.max(1, Math.round(hours * 3600 + minutes * 60 + seconds));
 }
 
 function draftFromPolicy(policy: DataQualityPolicy): DataQualityPolicyUpsertRequest {
