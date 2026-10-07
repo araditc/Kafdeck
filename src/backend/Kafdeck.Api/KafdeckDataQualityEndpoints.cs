@@ -2,6 +2,7 @@ using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Kafdeck.Api;
 
@@ -21,7 +22,7 @@ public static class KafdeckDataQualityEndpoints
                     DataQualityPolicyLifecycleState? state,
                     int? maxResults,
                     string? afterPolicyId,
-                    IDataQualityLifecycleStore store,
+                    [FromServices] IDataQualityLifecycleStore store,
                     CancellationToken cancellationToken) =>
                 {
                     if (!ClusterExists(
@@ -75,7 +76,7 @@ public static class KafdeckDataQualityEndpoints
                 async (
                     string clusterId,
                     string policyId,
-                    IDataQualityLifecycleStore store,
+                    [FromServices] IDataQualityLifecycleStore store,
                     CancellationToken cancellationToken) =>
                 {
                     if (!ClusterExists(
@@ -125,7 +126,7 @@ public static class KafdeckDataQualityEndpoints
                     DateTimeOffset? from,
                     DateTimeOffset? to,
                     int? maxPoints,
-                    IDataQualityLifecycleStore store,
+                    [FromServices] IDataQualityLifecycleStore store,
                     CancellationToken cancellationToken) =>
                 {
                     if (!ClusterExists(
@@ -219,7 +220,7 @@ public static class KafdeckDataQualityEndpoints
                         string clusterId,
                         string policyId,
                         DataQualityPolicyUpsertRequest request,
-                        IDataQualityLifecycleStore store,
+                        [FromServices] IDataQualityLifecycleStore store,
                         CancellationToken cancellationToken) =>
                     {
                         if (!ClusterExists(
@@ -324,7 +325,7 @@ public static class KafdeckDataQualityEndpoints
                         string clusterId,
                         string policyId,
                         DataQualityPolicyStateRequest request,
-                        IDataQualityLifecycleStore store,
+                        [FromServices] IDataQualityLifecycleStore store,
                         CancellationToken cancellationToken) =>
                     {
                         if (!ClusterExists(
