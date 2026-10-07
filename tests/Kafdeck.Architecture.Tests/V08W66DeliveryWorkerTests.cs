@@ -573,6 +573,185 @@ public sealed class V08W66DeliveryWorkerTests
         }
     }
 
+    [Fact]
+    public async Task Rate_limit_is_enforced_across_back_to_back_cycles()
+    {
+        var path = TempPath();
+
+        try
+        {
+            var store = Store(path);
+            await store.InitializeAsync();
+
+            var now =
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    7,
+                    19,
+                    0,
+                    0,
+                    TimeSpan.Zero);
+            for (var index = 0;
+                 index < 4;
+                 index++)
+            {
+                await store.CreateOrGetAsync(
+                    Pending(
+                        Guid.NewGuid(),
+                        now),
+                    now);
+            }
+
+            var dispatcher =
+                new RecordingDispatcher(
+                    NotificationDeliveryDispatchOutcome.Delivered,
+                    NotificationDeliveryDispatchOutcome.Delivered,
+                    NotificationDeliveryDispatchOutcome.Delivered,
+                    NotificationDeliveryDispatchOutcome.Delivered);
+            var time =
+                new MutableTimeProvider(
+                    now);
+            var worker =
+                new NotificationDeliveryWorker(
+                    store,
+                    dispatcher,
+                    new NotificationDeliveryPolicy(
+                        ratePerSecond: 2,
+                        maxConcurrency: 2),
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 4),
+                    time);
+
+            var first =
+                await worker.RunDueCycleAsync();
+            Assert.Equal(
+                2,
+                first.Delivered);
+            Assert.Equal(
+                2,
+                dispatcher.Claims.Count);
+
+            var immediate =
+                await worker.RunDueCycleAsync();
+            Assert.Equal(
+                2,
+                immediate.AdmissionDeferred);
+            Assert.Equal(
+                2,
+                dispatcher.Claims.Count);
+
+            time.Advance(
+                TimeSpan.FromSeconds(1));
+
+            var afterWindow =
+                await worker.RunDueCycleAsync();
+            Assert.Equal(
+                2,
+                afterWindow.Delivered);
+            Assert.Equal(
+                4,
+                dispatcher.Claims.Count);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrency_limit_is_shared_across_worker_instances()
+    {
+        var path = TempPath();
+
+        try
+        {
+            var storeA = Store(path);
+            var storeB = Store(path);
+            await storeA.InitializeAsync();
+            await storeB.InitializeAsync();
+
+            var now =
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    7,
+                    20,
+                    0,
+                    0,
+                    TimeSpan.Zero);
+            await storeA.CreateOrGetAsync(
+                Pending(
+                    Guid.NewGuid(),
+                    now),
+                now);
+            await storeA.CreateOrGetAsync(
+                Pending(
+                    Guid.NewGuid(),
+                    now),
+                now);
+
+            var blocking =
+                new BlockingDispatcher();
+            var policy =
+                new NotificationDeliveryPolicy(
+                    ratePerSecond: 10,
+                    maxConcurrency: 1);
+            var time =
+                new MutableTimeProvider(
+                    now);
+
+            var workerA =
+                new NotificationDeliveryWorker(
+                    storeA,
+                    blocking,
+                    policy,
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 2),
+                    time);
+            var workerB =
+                new NotificationDeliveryWorker(
+                    storeB,
+                    blocking,
+                    policy,
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 2),
+                    time);
+
+            var firstCycle =
+                workerA.RunDueCycleAsync();
+
+            await blocking.FirstDispatchStarted;
+
+            var secondCycle =
+                await workerB.RunDueCycleAsync();
+
+            Assert.True(
+                secondCycle.AdmissionDeferred >= 1);
+            Assert.Equal(
+                1,
+                blocking.ActiveDispatches);
+            Assert.Equal(
+                1,
+                blocking.MaxObservedActiveDispatches);
+
+            blocking.Release();
+            var first =
+                await firstCycle;
+
+            Assert.Equal(
+                1,
+                first.Delivered);
+            Assert.Equal(
+                1,
+                blocking.MaxObservedActiveDispatches);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
     private static AdoNotificationDeliveryStore Store(
         string path) =>
         new(
@@ -679,6 +858,83 @@ public sealed class V08W66DeliveryWorkerTests
             return Task.FromResult(
                 new NotificationDeliveryDispatchResult(
                     outcome));
+        }
+    }
+
+    private sealed class BlockingDispatcher :
+        INotificationDeliveryDispatcher
+    {
+        private readonly TaskCompletionSource
+            _started =
+                new(
+                    TaskCreationOptions
+                        .RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource
+            _release =
+                new(
+                    TaskCreationOptions
+                        .RunContinuationsAsynchronously);
+        private int _active;
+        private int _maxActive;
+
+        public Task FirstDispatchStarted =>
+            _started.Task;
+
+        public int ActiveDispatches =>
+            Volatile.Read(
+                ref _active);
+
+        public int MaxObservedActiveDispatches =>
+            Volatile.Read(
+                ref _maxActive);
+
+        public void Release() =>
+            _release.TrySetResult();
+
+        public async Task<NotificationDeliveryDispatchResult>
+            DispatchAsync(
+                NotificationDeliveryRecord claimedDelivery,
+                CancellationToken cancellationToken)
+        {
+            var active =
+                Interlocked.Increment(
+                    ref _active);
+            UpdateMax(
+                active);
+            _started.TrySetResult();
+
+            try
+            {
+                await _release.Task
+                    .WaitAsync(cancellationToken);
+                return new NotificationDeliveryDispatchResult(
+                    NotificationDeliveryDispatchOutcome.Delivered);
+            }
+            finally
+            {
+                Interlocked.Decrement(
+                    ref _active);
+            }
+        }
+
+        private void UpdateMax(
+            int value)
+        {
+            while (true)
+            {
+                var current =
+                    Volatile.Read(
+                        ref _maxActive);
+                if (value <= current ||
+                    Interlocked.CompareExchange(
+                        ref _maxActive,
+                        value,
+                        current) ==
+                    current)
+                {
+                    return;
+                }
+            }
         }
     }
 
