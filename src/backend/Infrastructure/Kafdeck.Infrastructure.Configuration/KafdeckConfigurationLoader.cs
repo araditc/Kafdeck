@@ -38,6 +38,7 @@ public static class KafdeckConfigurationLoader
         var administration = LoadAdministration(configuration.GetSection("Kafdeck:Administration"));
         var generator = LoadDataGenerator(configuration.GetSection("Kafdeck:Generator"));
         var observability = LoadObservability(configuration.GetSection("Kafdeck:Observability"));
+        var dataQuality = LoadDataQuality(configuration.GetSection("Kafdeck:DataQuality"));
 
         return new KafdeckOptions(
             new DeploymentOptions(
@@ -51,7 +52,37 @@ public static class KafdeckConfigurationLoader
             catalog,
             administration,
             generator,
-            observability);
+            observability,
+            dataQuality);
+    }
+
+    private static DataQualityOptions? LoadDataQuality(
+        IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        return new DataQualityOptions(
+            ParseOptionalBoolean(
+                section["Enabled"],
+                false,
+                "Data-quality Enabled"),
+            ParseOptionalBoolean(
+                section["ManagementEnabled"],
+                false,
+                "Data-quality ManagementEnabled"),
+            ParseEnum(
+                section["Provider"],
+                DataQualityPersistenceProvider.Sqlite,
+                "Data-quality persistence provider"),
+            ParseEnum(
+                section["ExecutionMode"],
+                DataQualityExecutionMode.Standalone,
+                "Data-quality execution mode"),
+            NullIfBlank(section["SqliteDatabasePath"]),
+            ParseOptionalSecret(section["ConnectionString"]));
     }
 
     private static ObservabilityOptions? LoadObservability(
