@@ -1,6 +1,7 @@
 using Kafdeck.Core.Notifications;
 using Kafdeck.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
+using Npgsql;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -752,6 +753,161 @@ public sealed class V08W66DeliveryWorkerTests
         }
     }
 
+    [Fact]
+    public async Task PostgreSql_admission_is_shared_across_replicas_when_available()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w66_worker_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString)
+            {
+                Pooling = false,
+            };
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scoped =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var storeA =
+                new AdoNotificationDeliveryStore(
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        scoped.ConnectionString));
+            var storeB =
+                new AdoNotificationDeliveryStore(
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        scoped.ConnectionString));
+
+            await storeA.InitializeAsync();
+            await storeB.InitializeAsync();
+
+            var now =
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    7,
+                    21,
+                    0,
+                    0,
+                    TimeSpan.Zero);
+            await storeA.CreateOrGetAsync(
+                Pending(
+                    Guid.NewGuid(),
+                    now),
+                now);
+            await storeA.CreateOrGetAsync(
+                Pending(
+                    Guid.NewGuid(),
+                    now),
+                now);
+
+            var time =
+                new MutableTimeProvider(
+                    now);
+            var dispatcher =
+                new BlockingDispatcher();
+            var policy =
+                new NotificationDeliveryPolicy(
+                    ratePerSecond: 1,
+                    maxConcurrency: 1);
+            var workerA =
+                new NotificationDeliveryWorker(
+                    storeA,
+                    dispatcher,
+                    policy,
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 2),
+                    time);
+            var workerB =
+                new NotificationDeliveryWorker(
+                    storeB,
+                    dispatcher,
+                    policy,
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 2),
+                    time);
+
+            var firstCycle =
+                workerA.RunDueCycleAsync();
+            await dispatcher.FirstDispatchStarted;
+
+            var concurrent =
+                await workerB.RunDueCycleAsync();
+
+            Assert.Equal(
+                1,
+                concurrent.AdmissionDeferred);
+            Assert.Equal(
+                1,
+                dispatcher.ActiveDispatches);
+
+            dispatcher.Release();
+            Assert.Equal(
+                1,
+                (await firstCycle).Delivered);
+
+            var sameWindow =
+                await workerB.RunDueCycleAsync();
+
+            Assert.Equal(
+                1,
+                sameWindow.AdmissionDeferred);
+            Assert.Equal(
+                1,
+                dispatcher.DispatchCount);
+
+            time.Advance(
+                TimeSpan.FromSeconds(1));
+
+            var afterWindow =
+                await workerB.RunDueCycleAsync();
+
+            Assert.Equal(
+                1,
+                afterWindow.Delivered);
+            Assert.Equal(
+                2,
+                dispatcher.DispatchCount);
+            Assert.Equal(
+                1,
+                dispatcher.MaxObservedActiveDispatches);
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
     private static AdoNotificationDeliveryStore Store(
         string path) =>
         new(
@@ -876,6 +1032,7 @@ public sealed class V08W66DeliveryWorkerTests
                         .RunContinuationsAsynchronously);
         private int _active;
         private int _maxActive;
+        private int _dispatchCount;
 
         public Task FirstDispatchStarted =>
             _started.Task;
@@ -888,6 +1045,10 @@ public sealed class V08W66DeliveryWorkerTests
             Volatile.Read(
                 ref _maxActive);
 
+        public int DispatchCount =>
+            Volatile.Read(
+                ref _dispatchCount);
+
         public void Release() =>
             _release.TrySetResult();
 
@@ -896,6 +1057,8 @@ public sealed class V08W66DeliveryWorkerTests
                 NotificationDeliveryRecord claimedDelivery,
                 CancellationToken cancellationToken)
         {
+            Interlocked.Increment(
+                ref _dispatchCount);
             var active =
                 Interlocked.Increment(
                     ref _active);
