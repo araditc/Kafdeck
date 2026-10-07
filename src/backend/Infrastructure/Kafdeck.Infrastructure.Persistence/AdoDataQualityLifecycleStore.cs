@@ -159,8 +159,25 @@ public sealed class AdoDataQualityLifecycleStore :
         await using var command =
             connection.CreateCommand();
 
+        var predicates =
+            new List<string>
+            {
+                "cluster_id = @cluster_id",
+            };
+        if (query.State is not null)
+        {
+            predicates.Add(
+                "lifecycle_state = @state");
+        }
+
+        if (query.AfterPolicyId is not null)
+        {
+            predicates.Add(
+                "policy_id > @after_policy_id");
+        }
+
         command.CommandText =
-            """
+            $"""
             SELECT
                 policy_id,
                 definition_json,
@@ -168,9 +185,9 @@ public sealed class AdoDataQualityLifecycleStore :
                 revision,
                 updated_at_utc
             FROM kafdeck_data_quality_policies
-            WHERE cluster_id = @cluster_id
-              AND (@state IS NULL OR lifecycle_state = @state)
-              AND (@after_policy_id IS NULL OR policy_id > @after_policy_id)
+            WHERE {string.Join(
+                " AND ",
+                predicates)}
             ORDER BY policy_id
             LIMIT @row_limit
             """;
@@ -178,18 +195,22 @@ public sealed class AdoDataQualityLifecycleStore :
             command,
             "@cluster_id",
             query.ClusterId);
-        AddParameter(
-            command,
-            "@state",
-            query.State is null
-                ? DBNull.Value
-                : query.State.Value.ToString());
-        AddParameter(
-            command,
-            "@after_policy_id",
-            query.AfterPolicyId is null
-                ? DBNull.Value
-                : query.AfterPolicyId);
+        if (query.State is not null)
+        {
+            AddParameter(
+                command,
+                "@state",
+                query.State.Value.ToString());
+        }
+
+        if (query.AfterPolicyId is not null)
+        {
+            AddParameter(
+                command,
+                "@after_policy_id",
+                query.AfterPolicyId);
+        }
+
         AddParameter(
             command,
             "@row_limit",
@@ -966,6 +987,12 @@ public sealed class AdoDataQualityLifecycleStore :
             updated_at_utc TEXT NOT NULL,
             definition_json TEXT NOT NULL
         )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_kafdeck_data_quality_policy_cluster_list
+        ON kafdeck_data_quality_policies (
+            cluster_id,
+            policy_id)
         """,
         """
         CREATE INDEX IF NOT EXISTS ix_kafdeck_data_quality_policy_list
