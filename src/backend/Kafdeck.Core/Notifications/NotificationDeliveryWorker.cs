@@ -90,6 +90,7 @@ public enum NotificationDeliveryWorkItemOutcome
     Exhausted = 4,
     UnknownExternalEffect = 5,
     FinalizationConflict = 6,
+    AdmissionDeferred = 7,
 }
 
 public sealed record NotificationDeliveryCycleResult(
@@ -100,6 +101,7 @@ public sealed record NotificationDeliveryCycleResult(
     int UnknownExternalEffect,
     int CasLost,
     int FinalizationConflicts,
+    int AdmissionDeferred,
     bool MoreDue);
 
 public sealed record NotificationDeliveryRecoveryResult(
@@ -181,6 +183,7 @@ public sealed class NotificationDeliveryWorker
                 0,
                 0,
                 0,
+                0,
                 page.Truncated);
         }
 
@@ -241,6 +244,10 @@ public sealed class NotificationDeliveryWorker
                 value =>
                     value ==
                     NotificationDeliveryWorkItemOutcome.FinalizationConflict),
+            outcomes.Count(
+                value =>
+                    value ==
+                    NotificationDeliveryWorkItemOutcome.AdmissionDeferred),
             page.Truncated);
     }
 
@@ -334,29 +341,35 @@ public sealed class NotificationDeliveryWorker
                 : NotificationDeliveryWorkItemOutcome.Exhausted;
         }
 
-        var claimedSnapshot =
-            new NotificationDeliverySnapshot(
-                due.Snapshot.NotificationId,
-                due.Snapshot.DestinationId,
-                due.Snapshot.PayloadFingerprint,
-                NotificationDeliveryState.InFlight,
-                checked(
-                    due.Snapshot.AttemptCount + 1),
-                due.Snapshot.CreatedAtUtc);
-
-        var claimed =
+        var claim =
             await _store
-                .ReplaceAsync(
-                    claimedSnapshot,
+                .TryClaimForDispatchAsync(
+                    due.Snapshot.NotificationId,
+                    due.Snapshot.DestinationId,
                     due.Revision,
                     now,
+                    _deliveryPolicy.MaxConcurrency,
+                    _deliveryPolicy.RatePerSecond,
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        if (claimed is null)
+        if (claim.Outcome is
+            NotificationDeliveryClaimOutcome.RateLimited or
+            NotificationDeliveryClaimOutcome.ConcurrencyLimited)
+        {
+            return NotificationDeliveryWorkItemOutcome
+                .AdmissionDeferred;
+        }
+
+        if (claim.Outcome !=
+                NotificationDeliveryClaimOutcome.Claimed ||
+            claim.Record is null)
         {
             return NotificationDeliveryWorkItemOutcome.CasLost;
         }
+
+        var claimed =
+            claim.Record;
 
         NotificationDeliveryDispatchOutcome
             dispatchOutcome;
