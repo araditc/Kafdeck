@@ -25,7 +25,38 @@ public sealed record KafdeckOptions(
     TopicCatalogOptions? Catalog = null,
     AdministrationOptions? Administration = null,
     DataGeneratorOptions? Generator = null,
-    ObservabilityOptions? Observability = null);
+    ObservabilityOptions? Observability = null,
+    DataQualityOptions? DataQuality = null);
+
+public enum DataQualityPersistenceProvider
+{
+    Sqlite = 1,
+    PostgreSql = 2,
+}
+
+public enum DataQualityExecutionMode
+{
+    Standalone = 1,
+    HighAvailability = 2,
+}
+
+public sealed record DataQualityOptions(
+    bool Enabled,
+    bool ManagementEnabled,
+    DataQualityPersistenceProvider Provider,
+    DataQualityExecutionMode ExecutionMode,
+    string? SqliteDatabasePath,
+    SecretReference? ConnectionString)
+{
+    public static DataQualityOptions Disabled { get; } =
+        new(
+            Enabled: false,
+            ManagementEnabled: false,
+            Provider: DataQualityPersistenceProvider.Sqlite,
+            ExecutionMode: DataQualityExecutionMode.Standalone,
+            SqliteDatabasePath: null,
+            ConnectionString: null);
+}
 
 public enum MutationPersistenceProvider
 {
