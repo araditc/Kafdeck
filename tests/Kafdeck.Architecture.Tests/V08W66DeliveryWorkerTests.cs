@@ -708,7 +708,7 @@ public sealed class V08W66DeliveryWorkerTests
                     blocking,
                     policy,
                     new NotificationDeliveryWorkerPolicy(
-                        maxDuePerCycle: 2),
+                        maxDuePerCycle: 1),
                     time);
             var workerB =
                 new NotificationDeliveryWorker(
@@ -716,7 +716,7 @@ public sealed class V08W66DeliveryWorkerTests
                     blocking,
                     policy,
                     new NotificationDeliveryWorkerPolicy(
-                        maxDuePerCycle: 2),
+                        maxDuePerCycle: 1),
                     time);
 
             var firstCycle =
