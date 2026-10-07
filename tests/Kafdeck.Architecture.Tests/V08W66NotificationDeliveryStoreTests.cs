@@ -683,7 +683,10 @@ public sealed class V08W66NotificationDeliveryStoreTests
                         "ix_kafdeck_notification_delivery_due",
                         StringComparison.Ordinal) &&
                     detail.Contains(
-                        "due_at_utc>?",
+                        "due_at_utc,notification_id,destination_id",
+                        StringComparison.Ordinal) &&
+                    detail.Contains(
+                        ">(?,?,?)",
                         StringComparison.Ordinal));
             Assert.DoesNotContain(
                 duePlan,
@@ -754,7 +757,10 @@ public sealed class V08W66NotificationDeliveryStoreTests
                         "ix_kafdeck_notification_delivery_recovery",
                         StringComparison.Ordinal) &&
                     detail.Contains(
-                        "updated_at_utc>?",
+                        "updated_at_utc,notification_id,destination_id",
+                        StringComparison.Ordinal) &&
+                    detail.Contains(
+                        ">(?,?,?)",
                         StringComparison.Ordinal));
             Assert.DoesNotContain(
                 recoveryPlan,
