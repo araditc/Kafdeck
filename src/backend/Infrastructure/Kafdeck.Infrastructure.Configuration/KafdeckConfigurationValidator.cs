@@ -29,6 +29,7 @@ public static class KafdeckConfigurationValidator
         ValidateAdministration(options.Administration, options.Deployment, errors);
         ValidateGenerator(options.Generator, options.Clusters, errors);
         ValidateObservability(options.Observability, options.Deployment, errors);
+        ValidateDataQuality(options.DataQuality, options.Deployment, errors);
         ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
@@ -462,6 +463,92 @@ public static class KafdeckConfigurationValidator
             default:
                 errors.Add(
                     "Historical metrics provider is unsupported.");
+                break;
+        }
+    }
+
+    private static void ValidateDataQuality(
+        DataQualityOptions? dataQuality,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        if (dataQuality is null)
+        {
+            return;
+        }
+
+        if (!dataQuality.Enabled)
+        {
+            if (dataQuality.ManagementEnabled)
+            {
+                errors.Add(
+                    "Data-quality management cannot be enabled while data-quality persistence is disabled.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(
+                    dataQuality.SqliteDatabasePath) ||
+                dataQuality.ConnectionString is not null)
+            {
+                errors.Add(
+                    "Data-quality persistence credentials/path must not be configured while data-quality is disabled.");
+            }
+
+            return;
+        }
+
+        if (dataQuality.ManagementEnabled &&
+            deployment.Mode != AccessMode.Oidc)
+        {
+            errors.Add(
+                "Data-quality lifecycle management requires OIDC access mode for an authenticated RBAC operator.");
+        }
+
+        switch (dataQuality.Provider)
+        {
+            case DataQualityPersistenceProvider.Sqlite:
+                if (dataQuality.ExecutionMode !=
+                    DataQualityExecutionMode.Standalone)
+                {
+                    errors.Add(
+                        "SQLite data-quality persistence supports standalone execution only.");
+                }
+
+                if (string.IsNullOrWhiteSpace(
+                        dataQuality.SqliteDatabasePath) ||
+                    !Path.IsPathFullyQualified(
+                        dataQuality.SqliteDatabasePath))
+                {
+                    errors.Add(
+                        "SQLite data-quality persistence requires an absolute database path.");
+                }
+
+                if (dataQuality.ConnectionString is not null)
+                {
+                    errors.Add(
+                        "SQLite data-quality persistence must not configure a PostgreSQL connection-string secret.");
+                }
+
+                break;
+
+            case DataQualityPersistenceProvider.PostgreSql:
+                if (!string.IsNullOrWhiteSpace(
+                        dataQuality.SqliteDatabasePath))
+                {
+                    errors.Add(
+                        "PostgreSQL data-quality persistence must not configure a SQLite database path.");
+                }
+
+                if (dataQuality.ConnectionString is null)
+                {
+                    errors.Add(
+                        "PostgreSQL data-quality persistence requires a connection-string secret reference.");
+                }
+
+                break;
+
+            default:
+                errors.Add(
+                    "Data-quality persistence provider is unsupported.");
                 break;
         }
     }
