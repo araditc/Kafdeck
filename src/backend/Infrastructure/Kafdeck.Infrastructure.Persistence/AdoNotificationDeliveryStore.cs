@@ -398,50 +398,57 @@ public sealed class AdoNotificationDeliveryStore :
         command.CommandText =
             SelectColumns +
             "\n" +
-            """
-            FROM kafdeck_notification_deliveries
-            WHERE state IN ('Pending', 'Failed')
-              AND due_at_utc <= @now_utc
-              AND (
-                    CAST(@after_due_at_utc AS TEXT) IS NULL
-                    OR due_at_utc > @after_due_at_utc
-                    OR (
-                        due_at_utc = @after_due_at_utc
-                        AND notification_id > @after_notification_id)
-                    OR (
-                        due_at_utc = @after_due_at_utc
-                        AND notification_id = @after_notification_id
-                        AND destination_id > @after_destination_id))
-            ORDER BY
-                due_at_utc,
-                notification_id,
-                destination_id
-            LIMIT @row_limit
-            """;
+            (query.After is null
+                ? """
+                  FROM kafdeck_notification_deliveries
+                  WHERE state IN ('Pending', 'Failed')
+                    AND due_at_utc <= @now_utc
+                  ORDER BY
+                      due_at_utc,
+                      notification_id,
+                      destination_id
+                  LIMIT @row_limit
+                  """
+                : """
+                  FROM kafdeck_notification_deliveries
+                  WHERE state IN ('Pending', 'Failed')
+                    AND due_at_utc <= @now_utc
+                    AND (
+                        due_at_utc,
+                        notification_id,
+                        destination_id) > (
+                        @after_due_at_utc,
+                        @after_notification_id,
+                        @after_destination_id)
+                  ORDER BY
+                      due_at_utc,
+                      notification_id,
+                      destination_id
+                  LIMIT @row_limit
+                  """);
 
         AddParameter(
             command,
             "@now_utc",
             Format(query.NowUtc));
-        AddParameter(
-            command,
-            "@after_due_at_utc",
-            query.After is null
-                ? DBNull.Value
-                : Format(
+        if (query.After is not null)
+        {
+            AddParameter(
+                command,
+                "@after_due_at_utc",
+                Format(
                     query.After.DueAtUtc));
-        AddParameter(
-            command,
-            "@after_notification_id",
-            query.After is null
-                ? string.Empty
-                : query.After.NotificationId
+            AddParameter(
+                command,
+                "@after_notification_id",
+                query.After.NotificationId
                     .ToString("D"));
-        AddParameter(
-            command,
-            "@after_destination_id",
-            query.After?.DestinationId ??
-            string.Empty);
+            AddParameter(
+                command,
+                "@after_destination_id",
+                query.After.DestinationId);
+        }
+
         AddParameter(
             command,
             "@row_limit",
@@ -510,51 +517,58 @@ public sealed class AdoNotificationDeliveryStore :
         command.CommandText =
             SelectColumns +
             "\n" +
-            """
-            FROM kafdeck_notification_deliveries
-            WHERE state = 'InFlight'
-              AND updated_at_utc <= @stale_before_utc
-              AND (
-                    CAST(@after_updated_at_utc AS TEXT) IS NULL
-                    OR updated_at_utc > @after_updated_at_utc
-                    OR (
-                        updated_at_utc = @after_updated_at_utc
-                        AND notification_id > @after_notification_id)
-                    OR (
-                        updated_at_utc = @after_updated_at_utc
-                        AND notification_id = @after_notification_id
-                        AND destination_id > @after_destination_id))
-            ORDER BY
-                updated_at_utc,
-                notification_id,
-                destination_id
-            LIMIT @row_limit
-            """;
+            (query.After is null
+                ? """
+                  FROM kafdeck_notification_deliveries
+                  WHERE state = 'InFlight'
+                    AND updated_at_utc <= @stale_before_utc
+                  ORDER BY
+                      updated_at_utc,
+                      notification_id,
+                      destination_id
+                  LIMIT @row_limit
+                  """
+                : """
+                  FROM kafdeck_notification_deliveries
+                  WHERE state = 'InFlight'
+                    AND updated_at_utc <= @stale_before_utc
+                    AND (
+                        updated_at_utc,
+                        notification_id,
+                        destination_id) > (
+                        @after_updated_at_utc,
+                        @after_notification_id,
+                        @after_destination_id)
+                  ORDER BY
+                      updated_at_utc,
+                      notification_id,
+                      destination_id
+                  LIMIT @row_limit
+                  """);
 
         AddParameter(
             command,
             "@stale_before_utc",
             Format(
                 query.StaleBeforeUtc));
-        AddParameter(
-            command,
-            "@after_updated_at_utc",
-            query.After is null
-                ? DBNull.Value
-                : Format(
+        if (query.After is not null)
+        {
+            AddParameter(
+                command,
+                "@after_updated_at_utc",
+                Format(
                     query.After.UpdatedAtUtc));
-        AddParameter(
-            command,
-            "@after_notification_id",
-            query.After is null
-                ? string.Empty
-                : query.After.NotificationId
+            AddParameter(
+                command,
+                "@after_notification_id",
+                query.After.NotificationId
                     .ToString("D"));
-        AddParameter(
-            command,
-            "@after_destination_id",
-            query.After?.DestinationId ??
-            string.Empty);
+            AddParameter(
+                command,
+                "@after_destination_id",
+                query.After.DestinationId);
+        }
+
         AddParameter(
             command,
             "@row_limit",
