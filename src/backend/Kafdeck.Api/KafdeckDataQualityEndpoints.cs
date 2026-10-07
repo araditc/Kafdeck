@@ -116,7 +116,8 @@ public static class KafdeckDataQualityEndpoints
                 "clusterId")
             .RequireKafdeckAuthorization(
                 AuthorizationAction.DataQualityRead,
-                "clusterId");
+                "clusterId",
+                "policyId");
 
         app.MapGet(
                 "/api/v1/clusters/{clusterId}/data-quality/policies/{policyId}/evidence",
@@ -210,7 +211,8 @@ public static class KafdeckDataQualityEndpoints
                 "clusterId")
             .RequireKafdeckAuthorization(
                 AuthorizationAction.DataQualityRead,
-                "clusterId");
+                "clusterId",
+                "policyId");
 
         if (options.DataQuality?.ManagementEnabled == true)
         {
@@ -316,7 +318,8 @@ public static class KafdeckDataQualityEndpoints
                     "clusterId")
                 .RequireKafdeckAuthorization(
                     AuthorizationAction.DataQualityManage,
-                    "clusterId")
+                    "clusterId",
+                    "policyId")
                 .RequireKafdeckAntiforgery();
 
             app.MapPut(
@@ -379,7 +382,8 @@ public static class KafdeckDataQualityEndpoints
                     "clusterId")
                 .RequireKafdeckAuthorization(
                     AuthorizationAction.DataQualityManage,
-                    "clusterId")
+                    "clusterId",
+                    "policyId")
                 .RequireKafdeckAntiforgery();
         }
 
