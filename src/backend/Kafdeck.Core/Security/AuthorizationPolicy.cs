@@ -57,6 +57,8 @@ public enum AuthorizationAction
     DataJobExecute = 49,
     DataGeneratorPlan = 50,
     DataGeneratorExecute = 51,
+    DataQualityRead = 52,
+    DataQualityManage = 53,
 }
 
 public enum AuthorizationDecisionReason
