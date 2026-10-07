@@ -152,6 +152,138 @@ export interface OperationalSloResult {
   reasonCode: string | null;
 }
 
+export type DataQualityPolicyLifecycleState =
+  | 'disabled'
+  | 'active'
+  | 'paused'
+  | 'retired';
+
+export type DataQualityRuleKind =
+  | 'requiredPath'
+  | 'nullForbidden'
+  | 'valueType'
+  | 'numericRange'
+  | 'stringLengthRange';
+
+export type DataQualityValueType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'object'
+  | 'array';
+
+export type DataQualityEvidenceState =
+  | 'available'
+  | 'partial'
+  | 'unavailable'
+  | 'unknown';
+
+export type DataQualityEvaluationOutcome =
+  | 'complete'
+  | 'recordLimit'
+  | 'byteLimit'
+  | 'durationLimit'
+  | 'cancelled'
+  | 'sourceUnavailable';
+
+export interface DataQualityRule {
+  ruleId: string;
+  kind: DataQualityRuleKind;
+  jsonPointer: string;
+  expectedType: DataQualityValueType | null;
+  minimumNumber: number | null;
+  maximumNumber: number | null;
+  minimumLength: number | null;
+  maximumLength: number | null;
+}
+
+export interface DataQualityPolicyBudget {
+  recordsPerSecond: number;
+  bytesPerSecond: number;
+  evaluationWindow: string;
+  activePoliciesPerCluster: number;
+  concurrentReadersPerCluster: number;
+}
+
+export interface DataQualityPolicy {
+  policyId: string;
+  version: number;
+  clusterId: string;
+  topicName: string;
+  partitions: number[];
+  rules: DataQualityRule[];
+  budget: DataQualityPolicyBudget;
+  state: DataQualityPolicyLifecycleState;
+  revision: number;
+  updatedAtUtc: string;
+}
+
+export interface DataQualityPolicyPage {
+  items: DataQualityPolicy[];
+  truncated: boolean;
+  nextPolicyId: string | null;
+  authorizationFiltered: boolean;
+}
+
+export interface DataQualityEvidenceRuleCount {
+  ruleId: string;
+  count: number;
+}
+
+export interface DataQualityEvidencePoint {
+  policyId: string;
+  policyVersion: number;
+  windowStartUtc: string;
+  windowEndUtc: string;
+  evaluatedRecords: number;
+  evaluatedBytes: number;
+  violationCount: number;
+  violationsByRule: DataQualityEvidenceRuleCount[];
+  state: DataQualityEvidenceState;
+  source: string;
+  clusterId: string;
+  topicName: string;
+  partition: number;
+  startOffset: number;
+  endOffsetExclusive: number;
+  nextOffset: number;
+  outcome: DataQualityEvaluationOutcome;
+  updatedAtUtc: string;
+}
+
+export interface DataQualityEvidencePage {
+  points: DataQualityEvidencePoint[];
+  truncated: boolean;
+  authorizationFiltered: boolean;
+}
+
+export interface DataQualityRuleRequest {
+  ruleId: string;
+  kind: DataQualityRuleKind;
+  jsonPointer: string;
+  expectedType: DataQualityValueType | null;
+  minimumNumber: number | null;
+  maximumNumber: number | null;
+  minimumLength: number | null;
+  maximumLength: number | null;
+}
+
+export interface DataQualityPolicyUpsertRequest {
+  version: number;
+  topicName: string;
+  partitions: number[];
+  rules: DataQualityRuleRequest[];
+  budget: {
+    recordsPerSecond: number;
+    bytesPerSecond: number;
+    evaluationWindowSeconds: number;
+    activePoliciesPerCluster: number;
+    concurrentReadersPerCluster: number;
+  } | null;
+  state: DataQualityPolicyLifecycleState;
+  expectedRevision: number | null;
+}
+
 export interface SchemaReference { name: string; subject: string; version: number; }
 export interface SchemaSubjectSummary { subject: string; }
 export interface SchemaVersionSummary {
@@ -543,6 +675,33 @@ async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): P
   return (await response.json()) as T;
 }
 
+async function putJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const headers = requestHeaders('application/json');
+  headers['Content-Type'] = 'application/json';
+
+  const csrf = await toolingCsrf(signal);
+  if (csrf !== null) headers[csrf.headerName] = csrf.requestToken;
+
+  const init: RequestInit = {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+    credentials: 'same-origin',
+  };
+  if (signal !== undefined) init.signal = signal;
+
+  const response = await fetch(path, init);
+  if (!response.ok) {
+    const problem = await parseProblem(response);
+    if (problem.code === 'urn:kafdeck:problem:antiforgery-validation-failed') {
+      toolingCsrfToken = null;
+    }
+    throw problem;
+  }
+
+  return (await response.json()) as T;
+}
+
 function clusterPath(clusterId: string) { return `/api/v1/clusters/${encodeURIComponent(clusterId)}`; }
 function topicPath(clusterId: string, topicName: string) { return `${clusterPath(clusterId)}/topics/${encodeURIComponent(topicName)}`; }
 function recordPath(clusterId: string, topicName: string, partition: number) { return `${topicPath(clusterId, topicName)}/partitions/${partition}/records`; }
@@ -661,6 +820,67 @@ export const kafdeckApi = {
       signal,
     );
   },
+  listDataQualityPolicies(
+    clusterId: string,
+    state?: DataQualityPolicyLifecycleState,
+    afterPolicyId?: string | null,
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams({ maxResults: '500' });
+    if (state !== undefined) params.set('state', state);
+    if (afterPolicyId) params.set('afterPolicyId', afterPolicyId);
+    return readJson<DataQualityPolicyPage>(
+      `${clusterPath(clusterId)}/data-quality/policies?${params}`,
+      signal,
+    );
+  },
+  getDataQualityPolicy(clusterId: string, policyId: string, signal?: AbortSignal) {
+    return readJson<DataQualityPolicy>(
+      `${clusterPath(clusterId)}/data-quality/policies/${encodeURIComponent(policyId)}`,
+      signal,
+    );
+  },
+  getDataQualityEvidence(
+    clusterId: string,
+    policyId: string,
+    fromUtc?: string,
+    toUtc?: string,
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams({ maxPoints: '500' });
+    if (fromUtc) params.set('from', fromUtc);
+    if (toUtc) params.set('to', toUtc);
+    return readJson<DataQualityEvidencePage>(
+      `${clusterPath(clusterId)}/data-quality/policies/${encodeURIComponent(policyId)}/evidence?${params}`,
+      signal,
+    );
+  },
+  upsertDataQualityPolicy(
+    clusterId: string,
+    policyId: string,
+    request: DataQualityPolicyUpsertRequest,
+    signal?: AbortSignal,
+  ) {
+    return putJson<DataQualityPolicy>(
+      `${clusterPath(clusterId)}/data-quality/policies/${encodeURIComponent(policyId)}`,
+      request,
+      signal,
+    );
+  },
+  setDataQualityPolicyState(
+    clusterId: string,
+    policyId: string,
+    state: DataQualityPolicyLifecycleState,
+    expectedRevision: number,
+    signal?: AbortSignal,
+  ) {
+    return putJson<DataQualityPolicy>(
+      `${clusterPath(clusterId)}/data-quality/policies/${encodeURIComponent(policyId)}/state`,
+      { state, expectedRevision },
+      signal,
+    );
+  },
+
   listSchemaSubjects(clusterId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<SchemaSubjectSummary[]>>(`${clusterPath(clusterId)}/schemas/subjects`, signal);
   },
