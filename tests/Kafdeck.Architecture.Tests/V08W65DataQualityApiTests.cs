@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Kafdeck.Api;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
@@ -226,6 +227,85 @@ public sealed class V08W65DataQualityApiTests
     }
 
     [Fact]
+    public void Underlying_topic_visibility_is_independent_from_policy_visibility()
+    {
+        var definition =
+            new AuthorizationPolicyDefinition(
+                [
+                    new AuthorizationRoleDefinition(
+                        "quality-reader",
+                        [
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.ClusterRead,
+                                ["prod"]),
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.DataQualityRead,
+                                ["prod"],
+                                ["*"]),
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.DataQualityManage,
+                                ["prod"],
+                                ["*"]),
+                            new AuthorizationPermissionDefinition(
+                                AuthorizationAction.TopicRead,
+                                ["prod"],
+                                ["payments*"]),
+                        ]),
+                ],
+                [
+                    new AuthorizationSubjectBindingDefinition(
+                        "https://idp.example",
+                        "alice",
+                        ["quality-reader"]),
+                ],
+                Array.Empty<
+                    AuthorizationGroupBindingDefinition>());
+
+        var authorization =
+            new KafdeckAuthorizationService(
+                new KafdeckOptions(
+                    new DeploymentOptions(
+                        "http://127.0.0.1:8080",
+                        null,
+                        AccessMode.Oidc,
+                        null),
+                    Array.Empty<ClusterProfile>()),
+                new AuthorizationPolicyEvaluator(
+                    AuthorizationPolicyCompiler.Compile(
+                        definition)));
+        var principal =
+            CreateOperatorPrincipal(
+                "alice");
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Allowed,
+            authorization.Authorize(
+                principal,
+                new AuthorizationRequest(
+                    AuthorizationAction.DataQualityRead,
+                    "prod",
+                    "secret-policy")));
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Allowed,
+            authorization.Authorize(
+                principal,
+                new AuthorizationRequest(
+                    AuthorizationAction.TopicRead,
+                    "prod",
+                    "payments")));
+
+        Assert.Equal(
+            KafdeckAuthorizationOutcome.Forbidden,
+            authorization.Authorize(
+                principal,
+                new AuthorizationRequest(
+                    AuthorizationAction.TopicRead,
+                    "prod",
+                    "secret-topic")));
+    }
+
+    [Fact]
     public void Data_quality_authorization_actions_are_explicit_and_distinct()
     {
         Assert.NotEqual(
@@ -345,6 +425,30 @@ public sealed class V08W65DataQualityApiTests
             Array.Empty<ClusterProfile>(),
             DataQuality:
                 dataQuality);
+    }
+
+    private static ClaimsPrincipal CreateOperatorPrincipal(
+        string subject)
+    {
+        var external =
+            new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [
+                        new Claim(
+                            "sub",
+                            subject),
+                        new Claim(
+                            "name",
+                            subject),
+                    ],
+                    authenticationType:
+                        "oidc"));
+
+        return OidcIdentityNormalizer.Normalize(
+            external,
+            "https://idp.example",
+            groupClaim: null,
+            DateTimeOffset.UtcNow);
     }
 
     private sealed record ApiRoute(
