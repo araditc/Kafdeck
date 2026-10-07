@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
@@ -22,6 +23,8 @@ public static class KafdeckDataQualityEndpoints
                     DataQualityPolicyLifecycleState? state,
                     int? maxResults,
                     string? afterPolicyId,
+                    HttpContext context,
+                    KafdeckAuthorizationService authorization,
                     [FromServices] IDataQualityLifecycleStore store,
                     CancellationToken cancellationToken) =>
                 {
@@ -48,14 +51,37 @@ public static class KafdeckDataQualityEndpoints
                                     cancellationToken)
                                 .ConfigureAwait(false);
 
+                        var visible =
+                            page.Items
+                                .Where(
+                                    item =>
+                                        IsAllowed(
+                                            authorization,
+                                            context.User,
+                                            AuthorizationAction
+                                                .DataQualityRead,
+                                            clusterId,
+                                            item.Definition.PolicyId) &&
+                                        IsAllowed(
+                                            authorization,
+                                            context.User,
+                                            AuthorizationAction
+                                                .TopicRead,
+                                            clusterId,
+                                            item.Definition.Scope.TopicName))
+                                .ToArray();
+
                         return Results.Ok(
                             new DataQualityPolicyPageData(
-                                page.Items
+                                visible
                                     .Select(
                                         DataQualityPolicyData.From)
                                     .ToArray(),
                                 page.Truncated,
-                                page.NextPolicyId));
+                                page.NextPolicyId,
+                                AuthorizationFiltered:
+                                    visible.Length !=
+                                    page.Items.Count));
                     }
                     catch (ArgumentException exception)
                     {
@@ -67,8 +93,11 @@ public static class KafdeckDataQualityEndpoints
             .RequireKafdeckAuthorization(
                 AuthorizationAction.ClusterRead,
                 "clusterId")
-            .RequireKafdeckAuthorization(
+            .RequireKafdeckCollectionAuthorization(
                 AuthorizationAction.DataQualityRead,
+                "clusterId")
+            .RequireKafdeckCollectionAuthorization(
+                AuthorizationAction.TopicRead,
                 "clusterId");
 
         app.MapGet(
@@ -76,6 +105,8 @@ public static class KafdeckDataQualityEndpoints
                 async (
                     string clusterId,
                     string policyId,
+                    HttpContext context,
+                    KafdeckAuthorizationService authorization,
                     [FromServices] IDataQualityLifecycleStore store,
                     CancellationToken cancellationToken) =>
                 {
@@ -96,13 +127,28 @@ public static class KafdeckDataQualityEndpoints
                                     cancellationToken)
                                 .ConfigureAwait(false);
 
-                        return PolicyBelongsToCluster(
+                        if (!PolicyBelongsToCluster(
                                 snapshot,
-                                clusterId)
-                            ? Results.Ok(
-                                DataQualityPolicyData.From(
-                                    snapshot!))
-                            : PolicyNotFound();
+                                clusterId))
+                        {
+                            return PolicyNotFound();
+                        }
+
+                        var topicAuthorization =
+                            await RequireTopicVisibilityAsync(
+                                    context,
+                                    authorization,
+                                    clusterId,
+                                    snapshot!.Definition.Scope.TopicName)
+                                .ConfigureAwait(false);
+                        if (topicAuthorization is not null)
+                        {
+                            return topicAuthorization;
+                        }
+
+                        return Results.Ok(
+                            DataQualityPolicyData.From(
+                                snapshot));
                     }
                     catch (ArgumentException exception)
                     {
@@ -127,6 +173,8 @@ public static class KafdeckDataQualityEndpoints
                     DateTimeOffset? from,
                     DateTimeOffset? to,
                     int? maxPoints,
+                    HttpContext context,
+                    KafdeckAuthorizationService authorization,
                     [FromServices] IDataQualityLifecycleStore store,
                     CancellationToken cancellationToken) =>
                 {
@@ -151,6 +199,18 @@ public static class KafdeckDataQualityEndpoints
                                 clusterId))
                         {
                             return PolicyNotFound();
+                        }
+
+                        var topicAuthorization =
+                            await RequireTopicVisibilityAsync(
+                                    context,
+                                    authorization,
+                                    clusterId,
+                                    snapshot!.Definition.Scope.TopicName)
+                                .ConfigureAwait(false);
+                        if (topicAuthorization is not null)
+                        {
+                            return topicAuthorization;
                         }
 
                         var toUtc =
@@ -222,6 +282,8 @@ public static class KafdeckDataQualityEndpoints
                         string clusterId,
                         string policyId,
                         DataQualityPolicyUpsertRequest request,
+                        HttpContext context,
+                        KafdeckAuthorizationService authorization,
                         [FromServices] IDataQualityLifecycleStore store,
                         CancellationToken cancellationToken) =>
                     {
@@ -250,10 +312,37 @@ public static class KafdeckDataQualityEndpoints
                                 return PolicyNotFound();
                             }
 
+                            if (existing is not null)
+                            {
+                                var existingTopicAuthorization =
+                                    await RequireTopicVisibilityAsync(
+                                            context,
+                                            authorization,
+                                            clusterId,
+                                            existing.Definition.Scope.TopicName)
+                                        .ConfigureAwait(false);
+                                if (existingTopicAuthorization is not null)
+                                {
+                                    return existingTopicAuthorization;
+                                }
+                            }
+
                             var definition =
                                 request.BuildDefinition(
                                     clusterId,
                                     policyId);
+
+                            var targetTopicAuthorization =
+                                await RequireTopicVisibilityAsync(
+                                        context,
+                                        authorization,
+                                        clusterId,
+                                        definition.Scope.TopicName)
+                                    .ConfigureAwait(false);
+                            if (targetTopicAuthorization is not null)
+                            {
+                                return targetTopicAuthorization;
+                            }
 
                             if (request.ExpectedRevision is null)
                             {
@@ -328,6 +417,8 @@ public static class KafdeckDataQualityEndpoints
                         string clusterId,
                         string policyId,
                         DataQualityPolicyStateRequest request,
+                        HttpContext context,
+                        KafdeckAuthorizationService authorization,
                         [FromServices] IDataQualityLifecycleStore store,
                         CancellationToken cancellationToken) =>
                     {
@@ -352,6 +443,18 @@ public static class KafdeckDataQualityEndpoints
                                     clusterId))
                             {
                                 return PolicyNotFound();
+                            }
+
+                            var topicAuthorization =
+                                await RequireTopicVisibilityAsync(
+                                        context,
+                                        authorization,
+                                        clusterId,
+                                        existing!.Definition.Scope.TopicName)
+                                    .ConfigureAwait(false);
+                            if (topicAuthorization is not null)
+                            {
+                                return topicAuthorization;
                             }
 
                             var updated =
@@ -388,6 +491,90 @@ public static class KafdeckDataQualityEndpoints
         }
 
         return app;
+    }
+
+    private static bool IsAllowed(
+        KafdeckAuthorizationService authorization,
+        ClaimsPrincipal principal,
+        AuthorizationAction action,
+        string clusterId,
+        string resourceName) =>
+        authorization.Authorize(
+            principal,
+            new AuthorizationRequest(
+                action,
+                clusterId,
+                resourceName)) ==
+        KafdeckAuthorizationOutcome.Allowed;
+
+    private static async Task<IResult?>
+        RequireTopicVisibilityAsync(
+            HttpContext context,
+            KafdeckAuthorizationService authorization,
+            string clusterId,
+            string topicName)
+    {
+        var outcome =
+            authorization.Authorize(
+                context.User,
+                new AuthorizationRequest(
+                    AuthorizationAction.TopicRead,
+                    clusterId,
+                    topicName));
+
+        if (outcome ==
+            KafdeckAuthorizationOutcome.Allowed)
+        {
+            return null;
+        }
+
+        if (outcome ==
+            KafdeckAuthorizationOutcome.Forbidden)
+        {
+            var audit =
+                context.RequestServices
+                    .GetRequiredService<ISecurityAuditSink>();
+            var principal =
+                OperatorSessionContextFactory.TryCreate(
+                    context.User,
+                    out var session) &&
+                session is not null
+                    ? SecurityAuditPrincipal.FromOperator(
+                        session.Identity)
+                    : SecurityAuditPrincipal.Anonymous;
+
+            await audit.WriteAsync(
+                    new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.AuthorizationDenied,
+                        principal,
+                        session?.SessionId.Value.ToString("N"),
+                        clusterId,
+                        topicName,
+                        SecurityAuditOutcome.Denied,
+                        "rbac_denied_data_quality_topic"),
+                    context.RequestAborted)
+                .ConfigureAwait(false);
+        }
+
+        return outcome ==
+               KafdeckAuthorizationOutcome.Unauthenticated
+            ? Results.Problem(
+                statusCode:
+                    StatusCodes.Status401Unauthorized,
+                title:
+                    "Authentication required",
+                detail:
+                    "An authenticated operator session is required.")
+            : Results.Problem(
+                statusCode:
+                    StatusCodes.Status403Forbidden,
+                type:
+                    "urn:kafdeck:problem:operator-authorization-denied",
+                title:
+                    "Forbidden",
+                detail:
+                    "The authenticated operator is not authorized to access the underlying topic.");
     }
 
     private static bool ClusterExists(
@@ -524,7 +711,8 @@ public sealed record DataQualityPolicyStateRequest(
 public sealed record DataQualityPolicyPageData(
     IReadOnlyList<DataQualityPolicyData> Items,
     bool Truncated,
-    string? NextPolicyId);
+    string? NextPolicyId,
+    bool AuthorizationFiltered);
 
 public sealed record DataQualityPolicyData(
     string PolicyId,
