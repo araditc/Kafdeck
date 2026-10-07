@@ -342,3 +342,42 @@ test('v0.8 W64 consumer and cluster switches preserve physical SLO request count
   assert.doesNotMatch(clusterReset, /setActiveSloRequests\(0\)/);
   assert.doesNotMatch(consumerSwitch, /setActiveSloRequests\(0\)/);
 });
+
+
+test('v0.8 W65 data-quality UI is bounded, truth-preserving and payload-free', () => {
+  const panel = readFileSync(
+    new URL('../src/features/readviews/DataQualityPanel.tsx', import.meta.url),
+    'utf8',
+  );
+  const api = readFileSync(
+    new URL('../src/shared/api.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(panel, /Data quality/);
+  assert.match(panel, /listDataQualityPolicies/);
+  assert.match(panel, /getDataQualityPolicy/);
+  assert.match(panel, /getDataQualityEvidence/);
+  assert.match(panel, /upsertDataQualityPolicy/);
+  assert.match(panel, /setDataQualityPolicyState/);
+  assert.match(panel, /formatEvidenceCount/);
+  assert.match(panel, /'Unavailable'/);
+  assert.match(panel, /status === 409/);
+  assert.match(panel, /never retries an overwrite implicitly/i);
+  assert.doesNotMatch(panel, /setInterval\(/);
+  assert.doesNotMatch(panel, /WebSocket/);
+  assert.doesNotMatch(api, /data-quality[^\n]*(rawValue|headers|payloadBase64)/i);
+});
+
+test('v0.8 W65 authorization-filtered pagination never exposes the raw hidden cursor', () => {
+  const backend = readFileSync(
+    new URL('../../src/backend/Kafdeck.Api/KafdeckDataQualityEndpoints.cs', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(backend, /safeNextPolicyId/);
+  assert.match(backend, /visible\[\^1\]/);
+  assert.doesNotMatch(backend, /page\.NextPolicyId,/);
+  assert.match(backend, /FilterEvidenceByTopicVisibilityAsync/);
+  assert.match(backend, /request\.ExpectedRevision\.Value !=/);
+});
