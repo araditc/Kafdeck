@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Data.Common;
 using System.Globalization;
 using Kafdeck.Core.Notifications;
@@ -7,7 +8,7 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoNotificationRoutingStore :
     INotificationRoutingStore
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const string Component =
         "notification-routing";
 
@@ -74,9 +75,39 @@ public sealed class AdoNotificationRoutingStore :
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        if (existingVersion is not null &&
-            existingVersion.Value !=
-                SchemaVersion)
+        if (existingVersion == 1)
+        {
+            // Retire is represented by a separate flag so the v1 SQL
+            // Active/Paused CHECK remains valid on both SQLite and PostgreSQL.
+            // Existing subscriptions default to non-retired wildcard types.
+            foreach (var sql in new[]
+                     {
+                         "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN event_types_json TEXT NOT NULL DEFAULT '[]'",
+                         "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN is_retired INTEGER NOT NULL DEFAULT 0",
+                     })
+            {
+                await using var migration = connection.CreateCommand();
+                migration.Transaction = transaction;
+                migration.CommandText = sql;
+                await migration.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await using var upgrade = connection.CreateCommand();
+            upgrade.Transaction = transaction;
+            upgrade.CommandText =
+                "UPDATE kafdeck_schema_info SET schema_version = @new_version WHERE component = @component AND schema_version = 1";
+            AddParameter(upgrade, "@new_version", SchemaVersion);
+            AddParameter(upgrade, "@component", Component);
+            if (await upgrade.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Notification-routing v1 to v2 migration could not claim the expected version.");
+            }
+        }
+        else if (existingVersion is not null &&
+                 existingVersion.Value != SchemaVersion)
         {
             throw new InvalidOperationException(
                 $"Notification-routing schema version {existingVersion.Value} is unsupported by this binary (expected {SchemaVersion}).");
@@ -1167,7 +1198,10 @@ public sealed class AdoNotificationRoutingStore :
             lifecycle_state TEXT NOT NULL,
             revision BIGINT NOT NULL,
             updated_at_utc TEXT NOT NULL,
+            event_types_json TEXT NOT NULL DEFAULT '[]',
+            is_retired INTEGER NOT NULL DEFAULT 0,
             CHECK (revision >= 1),
+            CHECK (is_retired IN (0, 1)),
             CHECK (lifecycle_state IN ('Active', 'Paused'))
         )
         """,
