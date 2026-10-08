@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 
 namespace Kafdeck.Core.Notifications;
 
@@ -283,25 +280,18 @@ public sealed class WebhookNotificationAdapter
                 "Webhook destination does not admit this event class.");
         }
 
+        var safeEvent =
+            new NotificationSafeEvent(
+                notificationEvent.EventId,
+                notificationEvent.EventClass,
+                notificationEvent.EventType,
+                notificationEvent.Subject,
+                notificationEvent.Summary,
+                notificationEvent.OccurredAtUtc);
         var payload =
-            JsonSerializer.SerializeToUtf8Bytes(
-                new
-                {
-                    eventId =
-                        notificationEvent.EventId,
-                    eventClass =
-                        notificationEvent.EventClass
-                            .ToString(),
-                    eventType =
-                        notificationEvent.EventType,
-                    subject =
-                        notificationEvent.Subject,
-                    summary =
-                        notificationEvent.Summary,
-                    occurredAtUtc =
-                        notificationEvent
-                            .OccurredAtUtc,
-                });
+            safeEvent
+                .ProjectJsonPayload()
+                .ToArray();
 
         if (payload.Length >
             _deliveryPolicy.MaxPayloadBytes)
@@ -353,15 +343,8 @@ public sealed class WebhookNotificationAdapter
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        var fingerprint =
-            Convert
-                .ToHexString(
-                    SHA256.HashData(
-                        payload))
-                .ToLowerInvariant();
-
         return new NotificationWebhookDispatchResult(
-            fingerprint,
+            safeEvent.PayloadFingerprint,
             transportResult);
     }
 }
