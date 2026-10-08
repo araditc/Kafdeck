@@ -524,6 +524,7 @@ public enum NotificationDeliveryClaimOutcome
     RateLimited = 3,
     ConcurrencyLimited = 4,
     NotClaimable = 5,
+    Expired = 6,
 }
 
 public sealed record NotificationDeliveryClaimResult
@@ -585,6 +586,7 @@ public interface INotificationDeliveryStore
         string destinationId,
         long expectedRevision,
         DateTimeOffset claimedAtUtc,
+        DateTimeOffset notAfterUtc,
         int maxConcurrency,
         int ratePerSecond,
         CancellationToken cancellationToken = default);
