@@ -507,7 +507,83 @@ public sealed class V08W66DeliveryWorkerTests
     }
 
     [Fact]
-    public async Task Cycle_due_limit_is_intersection_of_worker_and_rate_policy()
+    public async Task Stale_recovery_ignores_fast_worker_clock_and_uses_store_clock()
+    {
+        var path = TempPath();
+
+        try
+        {
+            var store = Store(path);
+            await store.InitializeAsync();
+
+            var created =
+                DateTimeOffset.UtcNow -
+                TimeSpan.FromSeconds(1);
+            var id =
+                Guid.NewGuid();
+            var pending =
+                await store.CreateOrGetAsync(
+                    Pending(
+                        id,
+                        created),
+                    created);
+            var claimedAt =
+                DateTimeOffset.UtcNow;
+            var claimed =
+                await store.ReplaceAsync(
+                    new NotificationDeliverySnapshot(
+                        id,
+                        "ops-webhook",
+                        Fingerprint,
+                        NotificationDeliveryState.InFlight,
+                        1,
+                        created),
+                    pending.Revision,
+                    claimedAt);
+            Assert.NotNull(
+                claimed);
+
+            var worker =
+                new NotificationDeliveryWorker(
+                    store,
+                    new RecordingDispatcher(
+                        NotificationDeliveryDispatchOutcome.Delivered),
+                    workerPolicy:
+                        new NotificationDeliveryWorkerPolicy(
+                            staleInFlightAfter:
+                                TimeSpan.FromSeconds(10)),
+                    timeProvider:
+                        new MutableTimeProvider(
+                            claimedAt.AddMinutes(30)));
+
+            var recovery =
+                await worker.RecoverStaleInFlightAsync();
+
+            Assert.Equal(
+                0,
+                recovery.Visited);
+            Assert.Equal(
+                0,
+                recovery.MarkedUnknownExternalEffect);
+
+            var stored =
+                await store.GetAsync(
+                    id,
+                    "ops-webhook");
+            Assert.NotNull(
+                stored);
+            Assert.Equal(
+                NotificationDeliveryState.InFlight,
+                stored!.Snapshot.State);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task Cycle_scans_past_deferred_rows_without_exceeding_dispatch_rate()
     {
         var path = TempPath();
 
@@ -560,11 +636,99 @@ public sealed class V08W66DeliveryWorkerTests
                 await worker.RunDueCycleAsync();
 
             Assert.Equal(
-                2,
+                6,
                 cycle.Visited);
             Assert.Equal(
                 2,
+                cycle.Delivered);
+            Assert.Equal(
+                4,
+                cycle.AdmissionDeferred);
+            Assert.Equal(
+                2,
                 dispatcher.Claims.Count);
+            Assert.True(
+                cycle.MoreDue);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task Saturated_destination_does_not_starve_later_destination()
+    {
+        var path = TempPath();
+
+        try
+        {
+            var store = Store(path);
+            await store.InitializeAsync();
+
+            var created =
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    7,
+                    18,
+                    30,
+                    0,
+                    TimeSpan.Zero);
+
+            for (var index = 0;
+                 index < 4;
+                 index++)
+            {
+                await store.CreateOrGetAsync(
+                    Pending(
+                        Guid.Parse(
+                            $"10000000-0000-0000-0000-{index + 1:000000000000}"),
+                        created,
+                        "a-webhook"),
+                    created);
+            }
+
+            await store.CreateOrGetAsync(
+                Pending(
+                    Guid.Parse(
+                        "20000000-0000-0000-0000-000000000001"),
+                    created.AddMilliseconds(1),
+                    "b-webhook"),
+                created.AddMilliseconds(1));
+
+            var dispatcher =
+                new RecordingDispatcher(
+                    NotificationDeliveryDispatchOutcome.Delivered,
+                    NotificationDeliveryDispatchOutcome.Delivered);
+            var worker =
+                new NotificationDeliveryWorker(
+                    store,
+                    dispatcher,
+                    new NotificationDeliveryPolicy(
+                        ratePerSecond: 1,
+                        maxConcurrency: 1),
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 2),
+                    new MutableTimeProvider(
+                        created.AddSeconds(1)));
+
+            var cycle =
+                await worker.RunDueCycleAsync();
+
+            Assert.Equal(
+                2,
+                cycle.Delivered);
+            Assert.Equal(
+                3,
+                cycle.AdmissionDeferred);
+            Assert.Equal(
+                ["a-webhook", "b-webhook"],
+                dispatcher.Claims
+                    .Select(
+                        claim =>
+                            claim.Snapshot.DestinationId)
+                    .ToArray());
             Assert.True(
                 cycle.MoreDue);
         }
@@ -921,10 +1085,11 @@ public sealed class V08W66DeliveryWorkerTests
 
     private static NotificationDeliverySnapshot Pending(
         Guid id,
-        DateTimeOffset createdAtUtc) =>
+        DateTimeOffset createdAtUtc,
+        string destinationId = "ops-webhook") =>
         new(
             id,
-            "ops-webhook",
+            destinationId,
             Fingerprint,
             NotificationDeliveryState.Pending,
             0,
