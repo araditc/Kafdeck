@@ -39,6 +39,7 @@ public static class KafdeckConfigurationLoader
         var generator = LoadDataGenerator(configuration.GetSection("Kafdeck:Generator"));
         var observability = LoadObservability(configuration.GetSection("Kafdeck:Observability"));
         var dataQuality = LoadDataQuality(configuration.GetSection("Kafdeck:DataQuality"));
+        var notifications = LoadNotifications(configuration.GetSection("Kafdeck:Notifications"));
 
         return new KafdeckOptions(
             new DeploymentOptions(
@@ -53,7 +54,37 @@ public static class KafdeckConfigurationLoader
             administration,
             generator,
             observability,
-            dataQuality);
+            dataQuality,
+            notifications);
+    }
+
+    private static NotificationOptions? LoadNotifications(
+        IConfigurationSection section)
+    {
+        if (!section.GetChildren().Any())
+        {
+            return null;
+        }
+
+        return new NotificationOptions(
+            ParseOptionalBoolean(
+                section["Enabled"],
+                false,
+                "Notifications Enabled"),
+            ParseOptionalBoolean(
+                section["ManagementEnabled"],
+                false,
+                "Notifications ManagementEnabled"),
+            ParseEnum(
+                section["Provider"],
+                NotificationPersistenceProvider.Sqlite,
+                "Notification persistence provider"),
+            ParseEnum(
+                section["ExecutionMode"],
+                NotificationExecutionMode.Standalone,
+                "Notification execution mode"),
+            NullIfBlank(section["SqliteDatabasePath"]),
+            ParseOptionalSecret(section["ConnectionString"]));
     }
 
     private static DataQualityOptions? LoadDataQuality(
