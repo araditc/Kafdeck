@@ -8,12 +8,14 @@ import {
   type TopicDetailData,
   type TopicListItem,
   type OperatorSession,
+  type NotificationSubscriptionListData,
   type ReadViewEnvelope,
   type TopicCatalogEntry,
   type FleetCapabilityStatus,
 } from '../shared/api.js';
 import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
+import { NotificationObservationPanel } from '../features/notifications/NotificationObservationPanel.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 import { CommandPalette } from './CommandPalette.js';
@@ -59,6 +61,7 @@ export function AppShell() {
   const [topicCatalog, setTopicCatalog] = useState<ReadViewEnvelope<TopicCatalogEntry> | null>(null);
   const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
+  const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
 
   const loadClusters = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -117,6 +120,24 @@ export function AppShell() {
       });
     return () => controller.abort();
   }, [loadClusters]);
+
+  // Expose observation only to an OIDC operator after a successful
+  // server-authorized NotificationRead collection preflight.
+  useEffect(() => {
+    setNotificationView(null);
+    if (!operator || operator.authenticationMode !== 'oidc') return;
+    const controller = new AbortController();
+    const sessionKey = `${operator.email ?? ''}:${operator.authenticatedAt}`;
+    void kafdeckApi.listNotificationSubscriptions(50, null, controller.signal)
+      .then(page => { if (!controller.signal.aborted) setNotificationView({ sessionKey, page }); })
+      .catch(() => { if (!controller.signal.aborted) setNotificationView(null); });
+    return () => controller.abort();
+  }, [operator]);
+
+  const notificationSessionKey = operator ? `${operator.email ?? ''}:${operator.authenticatedAt}` : null;
+  const visibleNotificationPage = notificationView?.sessionKey === notificationSessionKey
+    ? notificationView?.page ?? null
+    : null;
 
   useEffect(() => {
     if (!selectedClusterId) return;
@@ -230,6 +251,7 @@ export function AppShell() {
           <li className="nav-item"><a className="nav-link" href="#schemas">Schemas</a></li>
           <li className="nav-item"><a className="nav-link" href="#ecosystem">Ecosystem</a></li>
           <li className="nav-item"><a className="nav-link" href="#fleet">Fleet</a></li>
+          {visibleNotificationPage && <li className="nav-item"><a className="nav-link" href="#notifications">Notifications</a></li>}
         </ul>
       </div>
     </nav>
@@ -254,6 +276,7 @@ export function AppShell() {
             {!fleetError && fleetCapabilities.length === 0 && <p role="status">Loading fleet capability status…</p>}
             {fleetCapabilities.length > 0 && <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Capability</th><th scope="col">State</th><th scope="col">Workstream</th><th scope="col">Reason</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row">{capability.displayName}</th><td><StatusBadge kind={fleetCapabilityStatusKind(capability.state)} label={capability.state} /></td><td>{capability.workstream}</td><td>{capability.reason}</td></tr>)}</tbody></table></div>}
           </section>
+          {visibleNotificationPage && <NotificationObservationPanel key={notificationSessionKey ?? undefined} initialPage={visibleNotificationPage} />}
           {selected && <>
             <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">
               <h2 id="overview-title" className="card-title">Cluster overview</h2>
