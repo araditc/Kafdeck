@@ -300,6 +300,16 @@ public sealed class NotificationDeliveryWorker
                 true;
         }
 
+        if (outcomes.Any(
+                value =>
+                    value ==
+                    NotificationDeliveryWorkItemOutcome
+                        .AdmissionDeferred))
+        {
+            moreDue =
+                true;
+        }
+
         return new NotificationDeliveryCycleResult(
             outcomes.Count,
             outcomes.Count(
