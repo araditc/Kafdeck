@@ -420,6 +420,7 @@ public sealed class AdoNotificationDeliveryStore :
             string destinationId,
             long expectedRevision,
             DateTimeOffset claimedAtUtc,
+            DateTimeOffset notAfterUtc,
             int maxConcurrency,
             int ratePerSecond,
             CancellationToken cancellationToken = default)
@@ -431,6 +432,7 @@ public sealed class AdoNotificationDeliveryStore :
 
         if (expectedRevision < 1 ||
             claimedAtUtc == default ||
+            notAfterUtc == default ||
             maxConcurrency is < 1 or >
                 NotificationDeliveryPolicy.HardMaxConcurrency ||
             ratePerSecond is < 1 or >
@@ -443,6 +445,8 @@ public sealed class AdoNotificationDeliveryStore :
 
         var claimedAt =
             claimedAtUtc.ToUniversalTime();
+        var notAfter =
+            notAfterUtc.ToUniversalTime();
 
         await using var connection =
             await _connectionFactory
@@ -609,6 +613,33 @@ public sealed class AdoNotificationDeliveryStore :
                 .ConfigureAwait(false);
             return new NotificationDeliveryClaimResult(
                 NotificationDeliveryClaimOutcome.VersionConflict);
+        }
+
+        var hardLatest =
+            existing.Snapshot.CreatedAtUtc <=
+                    DateTimeOffset.MaxValue -
+                    NotificationDeliveryPolicy.HardMaxLifetime
+                ? existing.Snapshot.CreatedAtUtc +
+                  NotificationDeliveryPolicy.HardMaxLifetime
+                : DateTimeOffset.MaxValue;
+        if (notAfter <
+                existing.Snapshot.CreatedAtUtc ||
+            notAfter >
+                hardLatest)
+        {
+            throw new ArgumentException(
+                "Notification dispatch claim lifetime boundary is outside admitted bounds.",
+                nameof(notAfterUtc));
+        }
+
+        if (claimedAt >
+            notAfter)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new NotificationDeliveryClaimResult(
+                NotificationDeliveryClaimOutcome.Expired);
         }
 
         var dueAt =
