@@ -1,4 +1,5 @@
 import { withDeploymentAccessToken } from '../../shared/deploymentAccess.js';
+import { notifySessionLossIfUnauthorized } from '../../shared/operatorSessionSecurity.js';
 export type MutationRiskClass = 'low' | 'moderate' | 'high' | 'critical';
 export type MutationConfirmationMode = 'explicit' | 'typedTarget';
 export type MutationOperationState =
@@ -317,6 +318,8 @@ interface CsrfToken {
 let csrfToken: CsrfToken | null = null;
 
 async function parseProblem(response: Response): Promise<MutationApiProblem> {
+  // Shared auth-loss boundary with read-only APIs; cover mutation GET/PUT/POST and CSRF.
+  notifySessionLossIfUnauthorized(response.status);
   let problem: { detail?: string; title?: string; code?: string; type?: string } = {};
   try {
     problem = (await response.json()) as typeof problem;
