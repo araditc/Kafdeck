@@ -122,6 +122,11 @@ public sealed class AdoNotificationRoutingStore :
     {
         ArgumentNullException.ThrowIfNull(
             notificationEvent);
+        if (!notificationEvent.IsApprovedForDurability)
+        {
+            throw new InvalidOperationException(
+                "Unclassified notification text cannot enter durable event routing. Use a closed approved event projection.");
+        }
 
         var record =
             new NotificationSafeEventRecord(
@@ -728,7 +733,7 @@ public sealed class AdoNotificationRoutingStore :
         }
 
         var notificationEvent =
-            new NotificationSafeEvent(
+            NotificationSafeEvent.RestoreApproved(
                 eventId,
                 Enum.Parse<NotificationEventClass>(
                     reader.GetString(0),
