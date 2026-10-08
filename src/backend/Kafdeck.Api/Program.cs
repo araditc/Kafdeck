@@ -634,10 +634,10 @@ if (notificationReadOptions?.Enabled == true)
 {
     // Start-up fails closed on incompatible notification schema,
     // including an unresolved v1 delivery backlog. No send worker runs.
-    await app.Services.GetRequiredService<INotificationRoutingStore>()
+    await app.Services.GetRequiredService<INotificationDeliveryStore>()
         .InitializeAsync()
         .ConfigureAwait(false);
-    await app.Services.GetRequiredService<INotificationDeliveryStore>()
+    await app.Services.GetRequiredService<INotificationRoutingStore>()
         .InitializeAsync()
         .ConfigureAwait(false);
 
