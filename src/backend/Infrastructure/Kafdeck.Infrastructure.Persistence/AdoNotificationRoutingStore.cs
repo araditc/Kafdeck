@@ -297,13 +297,17 @@ public sealed class AdoNotificationRoutingStore :
                 destination_id,
                 lifecycle_state,
                 revision,
-                updated_at_utc)
+                updated_at_utc,
+                event_types_json,
+                is_retired)
             VALUES (
                 @subscription_id,
                 @destination_id,
                 @state,
                 1,
-                @updated_at_utc)
+                @updated_at_utc,
+                @event_types_json,
+                @is_retired)
             ON CONFLICT (subscription_id)
             DO NOTHING
             """;
@@ -467,6 +471,12 @@ public sealed class AdoNotificationRoutingStore :
             return null;
         }
 
+        if (existing.State == NotificationSubscriptionState.Retired)
+        {
+            throw new InvalidOperationException(
+                "Retired notification subscriptions cannot be reactivated or revised.");
+        }
+
         if (updatedAtUtc.ToUniversalTime() <
             existing.UpdatedAtUtc)
         {
@@ -485,6 +495,8 @@ public sealed class AdoNotificationRoutingStore :
             SET
                 destination_id = @destination_id,
                 lifecycle_state = @state,
+                event_types_json = @event_types_json,
+                is_retired = @is_retired,
                 revision = revision + 1,
                 updated_at_utc = @updated_at_utc
             WHERE subscription_id = @subscription_id
@@ -1092,7 +1104,17 @@ public sealed class AdoNotificationRoutingStore :
         AddParameter(
             command,
             "@state",
-            state.ToString());
+            state == NotificationSubscriptionState.Retired
+                ? NotificationSubscriptionState.Paused.ToString()
+                : state.ToString());
+        AddParameter(
+            command,
+            "@event_types_json",
+            JsonSerializer.Serialize(definition.EventTypes));
+        AddParameter(
+            command,
+            "@is_retired",
+            state == NotificationSubscriptionState.Retired ? 1 : 0);
         AddParameter(
             command,
             "@updated_at_utc",
