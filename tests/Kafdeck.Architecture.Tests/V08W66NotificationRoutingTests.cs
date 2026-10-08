@@ -520,11 +520,13 @@ public sealed class V08W66NotificationRoutingTests
                 notificationEvent,
                 Now);
 
+            var typed = new NotificationSubscriptionDefinition(
+                "a-subscription",
+                "ops-webhook",
+                [NotificationEventClass.DataQuality],
+                ["data-quality.violation"]);
             await store.CreateSubscriptionAsync(
-                Subscription(
-                    "a-subscription",
-                    "ops-webhook",
-                    NotificationEventClass.DataQuality),
+                typed,
                 NotificationSubscriptionState.Active,
                 Now);
             await store.CreateSubscriptionAsync(
@@ -550,6 +552,23 @@ public sealed class V08W66NotificationRoutingTests
                 only.Definition.SubscriptionId);
             Assert.False(
                 quality.Truncated);
+            Assert.Equal(["data-quality.violation"],
+                only.Definition.EventTypes);
+
+            var retired = await store.ReplaceSubscriptionAsync(
+                typed,
+                NotificationSubscriptionState.Retired,
+                only.Revision,
+                Now.AddSeconds(1));
+            Assert.NotNull(retired);
+            Assert.Equal(NotificationSubscriptionState.Retired,
+                (await store.GetSubscriptionAsync("a-subscription"))!.State);
+            var retiredPage = await store.ListSubscriptionsAsync(
+                new NotificationSubscriptionQuery(
+                    state: NotificationSubscriptionState.Retired));
+            Assert.Single(retiredPage.Items);
+            Assert.Equal(["data-quality.violation"],
+                retiredPage.Items[0].Definition.EventTypes);
 
             var fetched =
                 await store.GetEventAsync(
