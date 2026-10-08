@@ -83,7 +83,7 @@ public sealed class AdoNotificationRoutingStore :
             foreach (var sql in new[]
                      {
                          "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN event_types_json TEXT NOT NULL DEFAULT '[]'",
-                         "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN is_retired INTEGER NOT NULL DEFAULT 0",
+                         "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN is_retired INTEGER NOT NULL DEFAULT 0 CHECK (is_retired IN (0, 1))",
                      })
             {
                 await using var migration = connection.CreateCommand();
