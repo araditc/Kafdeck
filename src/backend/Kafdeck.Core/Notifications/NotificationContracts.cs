@@ -160,7 +160,8 @@ public sealed record NotificationDestinationProfile
         string displayName,
         IReadOnlyList<NotificationEventClass> enabledEvents,
         Uri? configuredEndpoint = null,
-        NotificationCredentialBindingId? credentialBindingId = null)
+        NotificationCredentialBindingId? credentialBindingId = null,
+        string? emailRecipientAddress = null)
     {
         var normalizedId =
             NormalizeDestinationId(
@@ -210,19 +211,50 @@ public sealed record NotificationDestinationProfile
                 nameof(configuredEndpoint));
         }
 
+        if (provider == NotificationProviderKind.Email)
+        {
+            if (emailRecipientAddress is null ||
+                emailRecipientAddress.Length is < 3 or > 254 ||
+                !string.Equals(
+                    emailRecipientAddress,
+                    emailRecipientAddress.Trim(),
+                    StringComparison.Ordinal) ||
+                emailRecipientAddress.Any(char.IsControl) ||
+                !System.Net.Mail.MailAddress.TryCreate(
+                    emailRecipientAddress,
+                    out var parsed) ||
+                !string.Equals(
+                    parsed.Address,
+                    emailRecipientAddress,
+                    StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "Email destination requires a revision-bound exact configured recipient.",
+                    nameof(emailRecipientAddress));
+            }
+        }
+        else if (emailRecipientAddress is not null)
+        {
+            throw new ArgumentException(
+                "Only an Email destination may configure an email recipient.",
+                nameof(emailRecipientAddress));
+        }
+
         DestinationId = normalizedId;
         Provider = provider;
         DisplayName = normalizedDisplayName;
         EnabledEvents = Array.AsReadOnly(events);
         ConfiguredEndpoint = normalizedEndpoint;
         CredentialBindingId = credentialBindingId;
+        EmailRecipientAddress = emailRecipientAddress;
         RevisionFingerprint =
             ComputeRevisionFingerprint(
                 DestinationId,
                 Provider,
                 ConfiguredEndpoint,
                 CredentialBindingId,
-                EnabledEvents);
+                EnabledEvents,
+                EmailRecipientAddress);
     }
 
     public string DestinationId { get; }
@@ -231,6 +263,7 @@ public sealed record NotificationDestinationProfile
     public IReadOnlyList<NotificationEventClass> EnabledEvents { get; }
     public Uri? ConfiguredEndpoint { get; }
     public NotificationCredentialBindingId? CredentialBindingId { get; }
+    public string? EmailRecipientAddress { get; }
 
     public string RevisionFingerprint { get; }
 
@@ -239,7 +272,8 @@ public sealed record NotificationDestinationProfile
         NotificationProviderKind provider,
         Uri? endpoint,
         NotificationCredentialBindingId? bindingId,
-        IReadOnlyList<NotificationEventClass> enabledEvents)
+        IReadOnlyList<NotificationEventClass> enabledEvents,
+        string? emailRecipientAddress)
     {
         var canonical =
             string.Join(
@@ -256,6 +290,12 @@ public sealed record NotificationDestinationProfile
                         .Select(value =>
                             ((int)value).ToString(
                                 System.Globalization.CultureInfo.InvariantCulture))));
+
+        // Preserve existing non-email revision fingerprints exactly.
+        if (provider == NotificationProviderKind.Email)
+        {
+            canonical += "\n" + emailRecipientAddress;
+        }
 
         return Convert
             .ToHexString(
