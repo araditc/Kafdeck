@@ -85,7 +85,7 @@ public sealed class PostgreSqlNotificationDeliveryDbConnectionFactory :
 
     public bool SupportsSelectForUpdate => true;
     public string DatabaseUtcNowSql =>
-        "SELECT CURRENT_TIMESTAMP";
+        "SELECT clock_timestamp()";
 
     public PostgreSqlNotificationDeliveryDbConnectionFactory(
         string connectionString)
