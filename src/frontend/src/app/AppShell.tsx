@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiProblem,
   kafdeckApi,
+  operatorSessionLostEvent,
   type ApiEnvelope,
   type ClusterData,
   type ConfigurationEntryData,
   type TopicDetailData,
   type TopicListItem,
   type OperatorSession,
+  type NotificationSubscriptionListData,
   type ReadViewEnvelope,
   type TopicCatalogEntry,
   type FleetCapabilityStatus,
 } from '../shared/api.js';
 import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
+import { NotificationObservationPanel } from '../features/notifications/NotificationObservationPanel.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 import { CommandPalette } from './CommandPalette.js';
@@ -59,6 +62,62 @@ export function AppShell() {
   const [topicCatalog, setTopicCatalog] = useState<ReadViewEnvelope<TopicCatalogEntry> | null>(null);
   const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
+  const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
+  const sessionCheckAbort = useRef<AbortController | null>(null);
+
+  const invalidateOperatorSession = useCallback(() => {
+    sessionCheckAbort.current?.abort();
+    sessionCheckAbort.current = null;
+    // Remove authorization-bound UI state on ANY 401 (including an unrelated
+    // cluster refresh), explicit logout, or session invalidation in another tab.
+    setOperator(null);
+    setNotificationView(null);
+    setAuthenticationRequired(true);
+  }, []);
+
+  const revalidateOperatorSession = useCallback(() => {
+    sessionCheckAbort.current?.abort();
+    const controller = new AbortController();
+    sessionCheckAbort.current = controller;
+    // A previously authorized panel cannot remain visible while verification
+    // is pending or if the identity switches in another tab.
+    setOperator(null);
+    setNotificationView(null);
+    void kafdeckApi.getOperatorSession(controller.signal)
+      .then(session => {
+        if (controller.signal.aborted) return;
+        setOperator(session);
+        setAuthenticationRequired(false);
+      })
+      .catch(reason => {
+        if (controller.signal.aborted) return;
+        setOperator(null);
+        setNotificationView(null);
+        if (reason instanceof ApiProblem && reason.status === 401) {
+          setAuthenticationRequired(true);
+        }
+      })
+      .finally(() => {
+        if (sessionCheckAbort.current === controller) sessionCheckAbort.current = null;
+      });
+  }, []);
+
+  useEffect(() => {
+    const onSessionLost = () => invalidateOperatorSession();
+    const onReturnToTab = () => {
+      if (document.visibilityState === 'visible') revalidateOperatorSession();
+    };
+    window.addEventListener(operatorSessionLostEvent, onSessionLost);
+    window.addEventListener('focus', onReturnToTab);
+    document.addEventListener('visibilitychange', onReturnToTab);
+    revalidateOperatorSession();
+    return () => {
+      window.removeEventListener(operatorSessionLostEvent, onSessionLost);
+      window.removeEventListener('focus', onReturnToTab);
+      document.removeEventListener('visibilitychange', onReturnToTab);
+      sessionCheckAbort.current?.abort();
+    };
+  }, [invalidateOperatorSession, revalidateOperatorSession]);
 
   const loadClusters = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -96,15 +155,6 @@ export function AppShell() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void kafdeckApi.getOperatorSession(controller.signal)
-      .then(session => {
-        setOperator(session);
-        setAuthenticationRequired(false);
-      })
-      .catch(reason => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return;
-        if (reason instanceof ApiProblem && reason.status === 401) setAuthenticationRequired(true);
-      });
     void loadClusters(controller.signal);
     void kafdeckApi.getFleetCapabilities(controller.signal)
       .then(response => {
@@ -117,6 +167,24 @@ export function AppShell() {
       });
     return () => controller.abort();
   }, [loadClusters]);
+
+  // Expose observation only to an OIDC operator after a successful
+  // server-authorized NotificationRead collection preflight.
+  useEffect(() => {
+    setNotificationView(null);
+    if (!operator || operator.authenticationMode !== 'oidc') return;
+    const controller = new AbortController();
+    const sessionKey = `${operator.email ?? ''}:${operator.authenticatedAt}`;
+    void kafdeckApi.listNotificationSubscriptions(50, null, controller.signal)
+      .then(page => { if (!controller.signal.aborted) setNotificationView({ sessionKey, page }); })
+      .catch(() => { if (!controller.signal.aborted) setNotificationView(null); });
+    return () => controller.abort();
+  }, [operator]);
+
+  const notificationSessionKey = operator ? `${operator.email ?? ''}:${operator.authenticatedAt}` : null;
+  const visibleNotificationPage = notificationView?.sessionKey === notificationSessionKey
+    ? notificationView?.page ?? null
+    : null;
 
   useEffect(() => {
     if (!selectedClusterId) return;
@@ -210,7 +278,7 @@ export function AppShell() {
         </h1>
         <div className="kafdeck-toolbar">
           <CommandPalette />
-          {operator && <div className="kafdeck-auth"><span className="text-secondary">Signed in as</span><strong>{operator.displayName ?? operator.email ?? 'operator'}</strong><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => void kafdeckApi.logout()}>Sign out</button></div>}
+          {operator && <div className="kafdeck-auth"><span className="text-secondary">Signed in as</span><strong>{operator.displayName ?? operator.email ?? 'operator'}</strong><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => { invalidateOperatorSession(); void kafdeckApi.logout(); }}>Sign out</button></div>}
           {authenticationRequired && <div className="kafdeck-auth"><a className="btn btn-sm btn-primary" href="/api/v1/auth/login">Sign in with your identity provider</a></div>}
           <div>
             <label className="form-label" htmlFor="cluster-selector">Cluster</label>
@@ -230,6 +298,7 @@ export function AppShell() {
           <li className="nav-item"><a className="nav-link" href="#schemas">Schemas</a></li>
           <li className="nav-item"><a className="nav-link" href="#ecosystem">Ecosystem</a></li>
           <li className="nav-item"><a className="nav-link" href="#fleet">Fleet</a></li>
+          {visibleNotificationPage && <li className="nav-item"><a className="nav-link" href="#notifications">Notifications</a></li>}
         </ul>
       </div>
     </nav>
@@ -254,6 +323,7 @@ export function AppShell() {
             {!fleetError && fleetCapabilities.length === 0 && <p role="status">Loading fleet capability status…</p>}
             {fleetCapabilities.length > 0 && <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Capability</th><th scope="col">State</th><th scope="col">Workstream</th><th scope="col">Reason</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row">{capability.displayName}</th><td><StatusBadge kind={fleetCapabilityStatusKind(capability.state)} label={capability.state} /></td><td>{capability.workstream}</td><td>{capability.reason}</td></tr>)}</tbody></table></div>}
           </section>
+          {visibleNotificationPage && <NotificationObservationPanel key={notificationSessionKey ?? undefined} initialPage={visibleNotificationPage} />}
           {selected && <>
             <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">
               <h2 id="overview-title" className="card-title">Cluster overview</h2>
