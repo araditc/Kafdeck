@@ -642,9 +642,10 @@ if (notificationReadOptions?.Enabled == true)
         .ConfigureAwait(false);
 
     app.Logger.LogInformation(
-        "Kafdeck notification observation persistence initialized with provider {Provider}, mode {Mode}; no delivery worker or mutation API activated.",
+        "Kafdeck notification persistence initialized with provider {Provider}, mode {Mode}; subscription management API enabled {ManagementEnabled}; no delivery worker or notification provider transport activated.",
         notificationReadOptions.Provider,
-        notificationReadOptions.ExecutionMode);
+        notificationReadOptions.ExecutionMode,
+        notificationReadOptions.ManagementEnabled);
 }
 
 app.Logger.LogInformation(
@@ -759,6 +760,10 @@ if (dataQualityOptions?.Enabled == true)
 if (notificationReadOptions?.Enabled == true)
 {
     app.MapKafdeckV08NotificationReads();
+    if (notificationReadOptions.ManagementEnabled)
+    {
+        app.MapKafdeckV08NotificationManagement();
+    }
 }
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();

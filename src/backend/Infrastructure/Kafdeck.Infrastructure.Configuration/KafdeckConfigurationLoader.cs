@@ -80,7 +80,8 @@ public static class KafdeckConfigurationLoader
                 NotificationExecutionMode.Standalone,
                 "Notification execution mode"),
             NullIfBlank(section["SqliteDatabasePath"]),
-            ParseOptionalSecret(section["ConnectionString"]));
+            ParseOptionalSecret(section["ConnectionString"]),
+            ParseOptionalBoolean(section["ManagementEnabled"], false, "Notification management Enabled"));
     }
 
     private static DataQualityOptions? LoadDataQuality(
