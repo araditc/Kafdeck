@@ -27,7 +27,11 @@ public sealed record SafeConfigurationDiagnostic(
     bool DataQualityEnabled = false,
     bool DataQualityManagementEnabled = false,
     DataQualityPersistenceProvider? DataQualityPersistenceProvider = null,
-    DataQualityExecutionMode? DataQualityExecutionMode = null);
+    DataQualityExecutionMode? DataQualityExecutionMode = null,
+    bool NotificationsEnabled = false,
+    bool NotificationManagementEnabled = false,
+    NotificationPersistenceProvider? NotificationPersistenceProvider = null,
+    NotificationExecutionMode? NotificationExecutionMode = null);
 
 public sealed record SafeClusterDiagnostic(
     string ClusterId,
@@ -89,6 +93,10 @@ public static class SafeConfigurationDiagnostics
             options.DataQuality?.Enabled ?? false,
             options.DataQuality?.ManagementEnabled ?? false,
             options.DataQuality?.Provider,
-            options.DataQuality?.ExecutionMode);
+            options.DataQuality?.ExecutionMode,
+            options.Notifications?.Enabled ?? false,
+            options.Notifications?.Enabled == true && options.Notifications.ManagementEnabled,
+            options.Notifications?.Provider,
+            options.Notifications?.ExecutionMode);
     }
 }
