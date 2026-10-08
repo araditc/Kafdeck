@@ -1,6 +1,7 @@
 using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Security;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 
 namespace Kafdeck.Api;
 
@@ -22,6 +23,7 @@ public static class KafdeckNotificationManagementEndpoints
                     HttpContext context,
                     [FromServices] KafdeckAuthorizationService authorization,
                     [FromServices] INotificationRoutingStore store,
+                    [FromServices] ISecurityAuditSink audit,
                     CancellationToken cancellationToken) =>
                 {
                     try
@@ -35,7 +37,10 @@ public static class KafdeckNotificationManagementEndpoints
                         // Route permission is independently enforced by middleware.
                         // Verify the new destination BEFORE any write or disclosure.
                         if (!Allowed(authorization, context, definition.DestinationId))
+                        {
+                            await AuditDeniedAsync(context, audit, "rbac_denied_notification_new_destination");
                             return Forbidden();
+                        }
 
                         var existing = await store.GetSubscriptionAsync(
                             subscriptionId, cancellationToken).ConfigureAwait(false);
@@ -45,13 +50,20 @@ public static class KafdeckNotificationManagementEndpoints
                             // Do not disclose the existing destination through a
                             // stale CAS error or move its subscription across RBAC.
                             if (!Allowed(authorization, context, existing.Definition.DestinationId))
+                            {
+                                await AuditDeniedAsync(context, audit, "rbac_denied_notification_existing_destination");
                                 return Forbidden();
+                            }
                             if (existing.State == NotificationSubscriptionState.Retired)
                                 return Conflict();
                         }
 
                         if (request.ExpectedRevision is null)
                         {
+                            // Retirement requires an existing CAS revision; create-only
+                            // must not permanently tombstone a never-active identity.
+                            if (request.State == NotificationSubscriptionState.Retired)
+                                return InvalidRequest();
                             if (existing is not null) return Conflict();
                             try
                             {
@@ -78,12 +90,20 @@ public static class KafdeckNotificationManagementEndpoints
                         if (request.ExpectedRevision.Value != existing.Revision)
                             return Conflict();
 
-                        var updated = await store.ReplaceSubscriptionAsync(
-                            definition, request.State, request.ExpectedRevision.Value,
-                            DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-
-                        return updated is null ? Conflict() : Results.Ok(
-                            NotificationSubscriptionData.From(updated));
+                        try
+                        {
+                            var updated = await store.ReplaceSubscriptionAsync(
+                                definition, request.State, request.ExpectedRevision.Value,
+                                DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                            return updated is null ? Conflict() : Results.Ok(
+                                NotificationSubscriptionData.From(updated));
+                        }
+                        catch (SqliteException exception) when (exception.SqliteExtendedErrorCode == 517)
+                        {
+                            // SQLITE_BUSY_SNAPSHOT: another writer committed after the
+                            // read transaction snapshot. This is a CAS loser, not a 500.
+                            return Conflict();
+                        }
                     }
                     catch (ArgumentException)
                     {
@@ -97,6 +117,20 @@ public static class KafdeckNotificationManagementEndpoints
             .RequireKafdeckAntiforgery();
 
         return app;
+    }
+
+    private static async Task AuditDeniedAsync(HttpContext context, ISecurityAuditSink audit, string code)
+    {
+        var hasOperator = OperatorSessionContextFactory.TryCreate(context.User, out var session);
+        await audit.WriteAsync(new SecurityAuditEvent(
+            DateTimeOffset.UtcNow,
+            SecurityAuditEventType.AuthorizationDenied,
+            hasOperator && session is not null
+                ? SecurityAuditPrincipal.FromOperator(session.Identity)
+                : SecurityAuditPrincipal.Anonymous,
+            session?.SessionId.Value.ToString("N"),
+            null, null, SecurityAuditOutcome.Denied, code),
+            context.RequestAborted).ConfigureAwait(false);
     }
 
     private static bool Allowed(
