@@ -26,7 +26,38 @@ public sealed record KafdeckOptions(
     AdministrationOptions? Administration = null,
     DataGeneratorOptions? Generator = null,
     ObservabilityOptions? Observability = null,
-    DataQualityOptions? DataQuality = null);
+    DataQualityOptions? DataQuality = null,
+    NotificationOptions? Notifications = null);
+
+public enum NotificationPersistenceProvider
+{
+    Sqlite = 1,
+    PostgreSql = 2,
+}
+
+public enum NotificationExecutionMode
+{
+    Standalone = 1,
+    HighAvailability = 2,
+}
+
+public sealed record NotificationOptions(
+    bool Enabled,
+    bool ManagementEnabled,
+    NotificationPersistenceProvider Provider,
+    NotificationExecutionMode ExecutionMode,
+    string? SqliteDatabasePath,
+    SecretReference? ConnectionString)
+{
+    public static NotificationOptions Disabled { get; } =
+        new(
+            Enabled: false,
+            ManagementEnabled: false,
+            Provider: NotificationPersistenceProvider.Sqlite,
+            ExecutionMode: NotificationExecutionMode.Standalone,
+            SqliteDatabasePath: null,
+            ConnectionString: null);
+}
 
 public enum DataQualityPersistenceProvider
 {
