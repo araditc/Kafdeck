@@ -409,9 +409,6 @@ public sealed class AdoNotificationDeliveryStore :
 
         var claimedAt =
             claimedAtUtc.ToUniversalTime();
-        var rateWindowStart =
-            claimedAt -
-            TimeSpan.FromSeconds(1);
 
         await using var connection =
             await _connectionFactory
@@ -472,6 +469,17 @@ public sealed class AdoNotificationDeliveryStore :
                     "Notification dispatch guard could not be acquired.");
             }
         }
+
+        var rateClockUtc =
+            await ReadRateClockUtcAsync(
+                    connection,
+                    transaction,
+                    claimedAt,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        var rateWindowStart =
+            rateClockUtc -
+            TimeSpan.FromSeconds(1);
 
         await using (var cleanup =
                      connection.CreateCommand())
@@ -702,7 +710,7 @@ public sealed class AdoNotificationDeliveryStore :
             AddParameter(
                 attempt,
                 "@started_at_utc",
-                Format(claimedAt));
+                Format(rateClockUtc));
 
             await attempt
                 .ExecuteNonQueryAsync(cancellationToken)
@@ -1305,6 +1313,53 @@ public sealed class AdoNotificationDeliveryStore :
         WHERE state = 'InFlight'
         """,
     ];
+
+    private async Task<DateTimeOffset>
+        ReadRateClockUtcAsync(
+            DbConnection connection,
+            DbTransaction transaction,
+            DateTimeOffset standaloneFallbackUtc,
+            CancellationToken cancellationToken)
+    {
+        if (!_connectionFactory.SupportsSelectForUpdate)
+        {
+            return standaloneFallbackUtc.ToUniversalTime();
+        }
+
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction =
+            transaction;
+        command.CommandText =
+            "SELECT clock_timestamp()";
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return value switch
+        {
+            DateTimeOffset offset =>
+                offset.ToUniversalTime(),
+            DateTime dateTime =>
+                new DateTimeOffset(
+                    dateTime.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(
+                            dateTime,
+                            DateTimeKind.Utc)
+                        : dateTime)
+                .ToUniversalTime(),
+            string text =>
+                DateTimeOffset.Parse(
+                    text,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal |
+                    DateTimeStyles.AdjustToUniversal),
+            _ => throw new InvalidOperationException(
+                "Notification delivery database clock returned an unsupported value."),
+        };
+    }
 
     private static DateTimeOffset Parse(
         string value) =>
