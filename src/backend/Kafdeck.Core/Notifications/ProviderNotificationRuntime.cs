@@ -382,7 +382,7 @@ public sealed class EmailNotificationAdapter
                 .ConfigureAwait(false);
 
         return new NotificationProviderDispatchResult(
-            Fingerprint(
+            NotificationProviderProjection.Fingerprint(
                 destination.Profile,
                 notificationEvent,
                 destination.RecipientAddress),
@@ -587,7 +587,7 @@ internal sealed class ProviderNotificationAdapter
                 .ConfigureAwait(false);
 
         return new NotificationProviderDispatchResult(
-            Fingerprint(
+            NotificationProviderProjection.Fingerprint(
                 destination.Profile,
                 notificationEvent,
                 null),
@@ -607,31 +607,34 @@ internal sealed class ProviderNotificationAdapter
     }
 }
 
-internal static string Fingerprint(
-    NotificationDestinationProfile profile,
-    NotificationSafeEvent notificationEvent,
-    string? target)
+internal static class NotificationProviderProjection
 {
-    var canonical =
-        string.Join(
-            "\n",
-            profile.DestinationId,
-            profile.Provider.ToString(),
-            profile.RevisionFingerprint,
-            target ?? string.Empty,
-            notificationEvent.EventId.ToString("D"),
-            notificationEvent.EventClass.ToString(),
-            notificationEvent.EventType,
-            notificationEvent.Subject,
-            notificationEvent.Summary,
-            notificationEvent.OccurredAtUtc.ToString(
-                "O",
-                CultureInfo.InvariantCulture));
+    internal static string Fingerprint(
+        NotificationDestinationProfile profile,
+        NotificationSafeEvent notificationEvent,
+        string? target)
+    {
+        var canonical =
+            string.Join(
+                "\n",
+                profile.DestinationId,
+                profile.Provider.ToString(),
+                profile.RevisionFingerprint,
+                target ?? string.Empty,
+                notificationEvent.EventId.ToString("D"),
+                notificationEvent.EventClass.ToString(),
+                notificationEvent.EventType,
+                notificationEvent.Subject,
+                notificationEvent.Summary,
+                notificationEvent.OccurredAtUtc.ToString(
+                    "O",
+                    CultureInfo.InvariantCulture));
 
-    return Convert
-        .ToHexString(
-            SHA256.HashData(
-                Encoding.UTF8.GetBytes(
-                    canonical)))
-        .ToLowerInvariant();
+        return Convert
+            .ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        canonical)))
+            .ToLowerInvariant();
+    }
 }
