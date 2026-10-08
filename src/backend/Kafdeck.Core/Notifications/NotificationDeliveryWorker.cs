@@ -122,6 +122,12 @@ public sealed class NotificationDeliveryWorker
         _workerPolicy;
     private readonly TimeProvider
         _timeProvider;
+    private readonly SemaphoreSlim
+        _dueCycleGate = new(1, 1);
+    private readonly object
+        _dueCursorGate = new();
+    private NotificationDeliveryDueCursor?
+        _dueCursor;
 
     public NotificationDeliveryWorker(
         INotificationDeliveryStore store,
@@ -153,73 +159,149 @@ public sealed class NotificationDeliveryWorker
         RunDueCycleAsync(
             CancellationToken cancellationToken = default)
     {
+        await _dueCycleGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            return await RunDueCycleCoreAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _dueCycleGate.Release();
+        }
+    }
+
+    private async Task<NotificationDeliveryCycleResult>
+        RunDueCycleCoreAsync(
+            CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
 
         var now =
             _timeProvider
                 .GetUtcNow();
-
-        var maxDue =
-            Math.Min(
-                _workerPolicy.MaxDuePerCycle,
-                _deliveryPolicy.RatePerSecond);
-
-        var page =
-            await _store
-                .ListDueAsync(
-                    new NotificationDeliveryDueQuery(
-                        now,
-                        maxDue),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-        if (page.Items.Count == 0)
-        {
-            return new NotificationDeliveryCycleResult(
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                page.Truncated);
-        }
+        var workRemaining =
+            _workerPolicy.MaxDuePerCycle;
+        var scanRemaining =
+            NotificationDeliveryDueQuery
+                .HardMaxResults;
+        var cursor =
+            GetDueCursor();
+        var startedAfterCursor =
+            cursor is not null;
+        var moreDue =
+            false;
+        var outcomes =
+            new List<
+                NotificationDeliveryWorkItemOutcome>(
+                _workerPolicy.MaxDuePerCycle);
 
         using var concurrency =
             new SemaphoreSlim(
                 _deliveryPolicy.MaxConcurrency,
                 _deliveryPolicy.MaxConcurrency);
 
-        var tasks =
-            page.Items
-                .Select(
-                    async item =>
-                    {
-                        await concurrency
-                            .WaitAsync(cancellationToken)
-                            .ConfigureAwait(false);
-                        try
-                        {
-                            return await ProcessDueAsync(
-                                    item,
-                                    cancellationToken)
-                                .ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            concurrency.Release();
-                        }
-                    })
-                .ToArray();
+        while (workRemaining > 0 &&
+               scanRemaining > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
-        var outcomes =
-            await Task.WhenAll(tasks)
-                .ConfigureAwait(false);
+            var pageLimit =
+                Math.Min(
+                    workRemaining,
+                    scanRemaining);
+            var page =
+                await _store
+                    .ListDueAsync(
+                        new NotificationDeliveryDueQuery(
+                            now,
+                            pageLimit,
+                            cursor),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            if (page.Items.Count == 0)
+            {
+                SetDueCursor(
+                    null);
+                moreDue =
+                    startedAfterCursor;
+                break;
+            }
+
+            var tasks =
+                page.Items
+                    .Select(
+                        async item =>
+                        {
+                            await concurrency
+                                .WaitAsync(cancellationToken)
+                                .ConfigureAwait(false);
+                            try
+                            {
+                                return await ProcessDueAsync(
+                                        item,
+                                        cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                concurrency.Release();
+                            }
+                        })
+                    .ToArray();
+
+            var batch =
+                await Task.WhenAll(tasks)
+                    .ConfigureAwait(false);
+
+            outcomes.AddRange(
+                batch);
+            scanRemaining -=
+                page.Items.Count;
+
+            var consumedWork =
+                batch.Count(
+                    value =>
+                        value !=
+                        NotificationDeliveryWorkItemOutcome
+                            .AdmissionDeferred);
+            workRemaining =
+                Math.Max(
+                    0,
+                    workRemaining -
+                    consumedWork);
+
+            if (page.Truncated)
+            {
+                cursor =
+                    page.NextCursor;
+                SetDueCursor(
+                    cursor);
+                moreDue =
+                    true;
+                continue;
+            }
+
+            SetDueCursor(
+                null);
+            moreDue =
+                startedAfterCursor;
+            break;
+        }
+
+        if (scanRemaining == 0 &&
+            GetDueCursor() is not null)
+        {
+            moreDue =
+                true;
+        }
 
         return new NotificationDeliveryCycleResult(
-            outcomes.Length,
+            outcomes.Count,
             outcomes.Count(
                 value =>
                     value ==
@@ -248,7 +330,7 @@ public sealed class NotificationDeliveryWorker
                 value =>
                     value ==
                     NotificationDeliveryWorkItemOutcome.AdmissionDeferred),
-            page.Truncated);
+            moreDue);
     }
 
     public async Task<NotificationDeliveryRecoveryResult>
@@ -258,8 +340,10 @@ public sealed class NotificationDeliveryWorker
         cancellationToken.ThrowIfCancellationRequested();
 
         var now =
-            _timeProvider
-                .GetUtcNow();
+            await _store
+                .GetAuthoritativeUtcNowAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
         var page =
             await _store
                 .ListStaleInFlightAsync(
@@ -309,6 +393,25 @@ public sealed class NotificationDeliveryWorker
             marked,
             casLost,
             page.Truncated);
+    }
+
+    private NotificationDeliveryDueCursor?
+        GetDueCursor()
+    {
+        lock (_dueCursorGate)
+        {
+            return _dueCursor;
+        }
+    }
+
+    private void SetDueCursor(
+        NotificationDeliveryDueCursor? cursor)
+    {
+        lock (_dueCursorGate)
+        {
+            _dueCursor =
+                cursor;
+        }
     }
 
     private async Task<NotificationDeliveryWorkItemOutcome>
