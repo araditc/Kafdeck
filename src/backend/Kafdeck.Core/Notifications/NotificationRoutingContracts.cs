@@ -510,6 +510,12 @@ public sealed class NotificationRoutingCoordinator
                     cancellationToken)
                 .ConfigureAwait(false);
 
+        if (page.Truncated)
+        {
+            throw new InvalidOperationException(
+                "Notification routing fan-out exceeds the admitted subscription ceiling.");
+        }
+
         var matched = 0;
         var missing = 0;
         var mismatches = 0;
