@@ -440,6 +440,85 @@ public sealed class V08W66NotificationRoutingTests
     }
 
     [Fact]
+    public async Task Direct_webhook_dispatcher_rejects_changed_endpoint_before_transport()
+    {
+        var path = TempPath();
+        try
+        {
+            var factory =
+                new SqliteNotificationDeliveryDbConnectionFactory(path);
+            var routingStore = new AdoNotificationRoutingStore(factory);
+            var deliveryStore = new AdoNotificationDeliveryStore(factory);
+            await routingStore.InitializeAsync();
+            await deliveryStore.InitializeAsync();
+
+            var original = WebhookProfile();
+            var catalog = new FakeProfileCatalog(original);
+            await routingStore.CreateSubscriptionAsync(
+                Subscription(
+                    "webhook-revision-fence",
+                    original.DestinationId,
+                    NotificationEventClass.DataQuality),
+                NotificationSubscriptionState.Active,
+                Now);
+
+            var notificationEvent = SafeEvent(Guid.NewGuid());
+            await new NotificationRoutingCoordinator(
+                    routingStore,
+                    deliveryStore,
+                    catalog)
+                .RouteAsync(notificationEvent, Now);
+
+            var due = await deliveryStore.GetAsync(
+                notificationEvent.EventId,
+                original.DestinationId);
+            Assert.NotNull(due);
+            Assert.Equal(
+                original.RevisionFingerprint,
+                due!.Snapshot.RoutedProfileRevisionFingerprint);
+
+            var claim = await deliveryStore.TryClaimForDispatchAsync(
+                notificationEvent.EventId,
+                original.DestinationId,
+                due.Revision,
+                Now,
+                Now.AddHours(1),
+                maxConcurrency: 1,
+                ratePerSecond: 10);
+            Assert.Equal(NotificationDeliveryClaimOutcome.Claimed, claim.Outcome);
+
+            var changed = new NotificationDestinationProfile(
+                original.DestinationId,
+                NotificationProviderKind.Webhook,
+                original.DisplayName,
+                original.EnabledEvents,
+                new Uri("https://another.example.com/new-hook"));
+            catalog.ReplaceProfile(changed);
+
+            var transport = new FakeWebhookTransport();
+            var dispatcher = new WebhookNotificationDeliveryDispatcher(
+                routingStore,
+                catalog,
+                new WebhookNotificationAdapter(
+                    new FakeEndpointResolver(),
+                    new FakeCredentialResolver(),
+                    transport));
+            var result = await dispatcher.DispatchAsync(
+                claim.Record!,
+                CancellationToken.None);
+
+            Assert.Equal(
+                NotificationDeliveryDispatchOutcome.UnknownExternalEffect,
+                result.Outcome);
+            Assert.Null(transport.LastRequest);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
     public async Task Routing_fails_closed_before_delivery_when_matching_subscriptions_exceed_cap()
     {
         var routingStore =
@@ -726,7 +805,7 @@ public sealed class V08W66NotificationRoutingTests
     private sealed class FakeProfileCatalog :
         INotificationDestinationProfileCatalog
     {
-        private readonly NotificationDestinationProfile
+        private NotificationDestinationProfile
             _profile;
 
         public FakeProfileCatalog(
@@ -734,6 +813,9 @@ public sealed class V08W66NotificationRoutingTests
         {
             _profile = profile;
         }
+
+        public void ReplaceProfile(NotificationDestinationProfile profile) =>
+            _profile = profile;
 
         public ValueTask<NotificationDestinationProfile?>
             GetAsync(
