@@ -495,6 +495,22 @@ public sealed class V08W66NotificationRoutingTests
                 new Uri("https://another.example.com/new-hook"));
             catalog.ReplaceProfile(changed);
 
+            // Replaying the same approved event must preserve the already
+            // committed revision A, rather than attempting to insert a
+            // conflicting idempotent delivery with the new revision B.
+            var replay = await new NotificationRoutingCoordinator(
+                    routingStore,
+                    deliveryStore,
+                    catalog)
+                .RouteAsync(notificationEvent, Now.AddSeconds(30));
+            Assert.Equal(1, replay.DeliveriesCreatedOrMatched);
+            var stillOriginal = await deliveryStore.GetAsync(
+                notificationEvent.EventId, original.DestinationId);
+            Assert.NotNull(stillOriginal);
+            Assert.Equal(
+                original.RevisionFingerprint,
+                stillOriginal!.Snapshot.RoutedProfileRevisionFingerprint);
+
             var transport = new FakeWebhookTransport();
             var dispatcher = new WebhookNotificationDeliveryDispatcher(
                 routingStore,
