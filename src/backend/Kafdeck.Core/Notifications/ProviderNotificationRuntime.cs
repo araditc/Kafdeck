@@ -165,7 +165,49 @@ public sealed record NotificationProviderTransportResult
 
 public sealed record NotificationProviderDispatchResult(
     string PayloadFingerprint,
-    NotificationProviderTransportResult TransportResult);
+    NotificationProviderTransportResult TransportResult)
+{
+    public NotificationDeliveryDispatchOutcome DeliveryOutcome =>
+        NotificationProviderOutcomeMapper.ToDeliveryOutcome(
+            TransportResult.Outcome);
+}
+
+public static class NotificationProviderOutcomeMapper
+{
+    public static NotificationDeliveryDispatchOutcome
+        ToDeliveryOutcome(
+            NotificationProviderTransportOutcome outcome) =>
+        outcome switch
+        {
+            NotificationProviderTransportOutcome.Delivered =>
+                NotificationDeliveryDispatchOutcome.Delivered,
+            NotificationProviderTransportOutcome.RetryableFailure =>
+                NotificationDeliveryDispatchOutcome.RetryableFailure,
+            NotificationProviderTransportOutcome.PermanentFailure =>
+                NotificationDeliveryDispatchOutcome.PermanentFailure,
+            NotificationProviderTransportOutcome.UnknownExternalEffect =>
+                NotificationDeliveryDispatchOutcome.UnknownExternalEffect,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(outcome)),
+        };
+
+    public static NotificationDeliveryDispatchOutcome
+        ToDeliveryOutcome(
+            NotificationWebhookTransportOutcome outcome) =>
+        outcome switch
+        {
+            NotificationWebhookTransportOutcome.Delivered =>
+                NotificationDeliveryDispatchOutcome.Delivered,
+            NotificationWebhookTransportOutcome.RetryableFailure =>
+                NotificationDeliveryDispatchOutcome.RetryableFailure,
+            NotificationWebhookTransportOutcome.PermanentFailure =>
+                NotificationDeliveryDispatchOutcome.PermanentFailure,
+            NotificationWebhookTransportOutcome.UnknownExternalEffect =>
+                NotificationDeliveryDispatchOutcome.UnknownExternalEffect,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(outcome)),
+        };
+}
 
 public sealed record EmailNotificationDestination
 {
