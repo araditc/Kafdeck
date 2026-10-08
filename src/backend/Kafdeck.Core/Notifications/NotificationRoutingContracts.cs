@@ -4,8 +4,24 @@ using System.Text.Json;
 
 namespace Kafdeck.Core.Notifications;
 
+// Every durable projection is a closed, server-authored message.
+// Producer-owned arbitrary strings may be sent through legacy ephemeral
+// webhook flows, but are never eligible for durable event routing.
+public enum NotificationApprovedEventKind
+{
+    DataQualityViolation = 1,
+    ConsumerLagAlert = 2,
+    SecurityAuthorizationDenied = 3,
+    MutationStateChanged = 4,
+    SloThresholdExceeded = 5,
+}
+
 public sealed record NotificationSafeEvent
 {
+    private readonly bool _approvedForDurability;
+
+    // An unclassified string-based projection is intentionally NOT
+    // admitted to the durable routing/event store.
     public NotificationSafeEvent(
         Guid eventId,
         NotificationEventClass eventClass,
@@ -13,6 +29,25 @@ public sealed record NotificationSafeEvent
         string subject,
         string summary,
         DateTimeOffset occurredAtUtc)
+        : this(
+            eventId,
+            eventClass,
+            eventType,
+            subject,
+            summary,
+            occurredAtUtc,
+            approvedForDurability: false)
+    {
+    }
+
+    private NotificationSafeEvent(
+        Guid eventId,
+        NotificationEventClass eventClass,
+        string eventType,
+        string subject,
+        string summary,
+        DateTimeOffset occurredAtUtc,
+        bool approvedForDurability)
     {
         if (eventId == Guid.Empty)
         {
@@ -49,6 +84,7 @@ public sealed record NotificationSafeEvent
         EventClass = eventClass;
         OccurredAtUtc =
             occurredAtUtc.ToUniversalTime();
+        _approvedForDurability = approvedForDurability;
         PayloadFingerprint =
             ComputePayloadFingerprint();
     }
@@ -60,6 +96,97 @@ public sealed record NotificationSafeEvent
     public string Summary { get; }
     public DateTimeOffset OccurredAtUtc { get; }
     public string PayloadFingerprint { get; }
+
+    public bool IsApprovedForDurability =>
+        _approvedForDurability;
+
+    public static NotificationSafeEvent Approved(
+        Guid eventId,
+        NotificationApprovedEventKind kind,
+        DateTimeOffset occurredAtUtc)
+    {
+        var template = Template(kind);
+        return new NotificationSafeEvent(
+            eventId,
+            template.EventClass,
+            template.EventType,
+            template.Subject,
+            template.Summary,
+            occurredAtUtc,
+            approvedForDurability: true);
+    }
+
+    // Readback verifies the exact closed template, not a caller assertion
+    // that arbitrary persisted fields are safe.
+    public static NotificationSafeEvent RestoreApproved(
+        Guid eventId,
+        NotificationEventClass eventClass,
+        string eventType,
+        string subject,
+        string summary,
+        DateTimeOffset occurredAtUtc)
+    {
+        var known =
+            Enum.GetValues<NotificationApprovedEventKind>()
+                .Any(kind =>
+                {
+                    var template = Template(kind);
+                    return template.EventClass == eventClass &&
+                           string.Equals(template.EventType, eventType, StringComparison.Ordinal) &&
+                           string.Equals(template.Subject, subject, StringComparison.Ordinal) &&
+                           string.Equals(template.Summary, summary, StringComparison.Ordinal);
+                });
+        if (!known)
+        {
+            throw new InvalidOperationException(
+                "Persisted notification event does not match an approved safe projection.");
+        }
+
+        return new NotificationSafeEvent(
+            eventId,
+            eventClass,
+            eventType,
+            subject,
+            summary,
+            occurredAtUtc,
+            approvedForDurability: true);
+    }
+
+    private static (
+        NotificationEventClass EventClass,
+        string EventType,
+        string Subject,
+        string Summary)
+        Template(NotificationApprovedEventKind kind) =>
+        kind switch
+        {
+            NotificationApprovedEventKind.DataQualityViolation =>
+                (NotificationEventClass.DataQuality,
+                 "data-quality.violation",
+                 "Orders quality",
+                 "Required field violation count exceeded the configured policy."),
+            NotificationApprovedEventKind.ConsumerLagAlert =>
+                (NotificationEventClass.Operational,
+                 "consumer-lag",
+                 "Consumer lag alert",
+                 "A monitored consumer group exceeded its lag threshold."),
+            NotificationApprovedEventKind.SecurityAuthorizationDenied =>
+                (NotificationEventClass.Security,
+                 "authorization.denied",
+                 "Security authorization event",
+                 "A governed operation was denied by an authorization policy."),
+            NotificationApprovedEventKind.MutationStateChanged =>
+                (NotificationEventClass.Mutation,
+                 "mutation.state-changed",
+                 "Mutation state change",
+                 "A governed mutation changed lifecycle state."),
+            NotificationApprovedEventKind.SloThresholdExceeded =>
+                (NotificationEventClass.Slo,
+                 "slo.threshold-exceeded",
+                 "SLO threshold alert",
+                 "A bounded service-level objective threshold was exceeded."),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
 
     public ReadOnlyMemory<byte> ProjectJsonPayload() =>
         NotificationSafeEventProjection.Serialize(
