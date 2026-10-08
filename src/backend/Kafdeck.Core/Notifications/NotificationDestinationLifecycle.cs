@@ -35,6 +35,13 @@ public sealed record NotificationDestinationDefinition
         switch (profile.Provider)
         {
             case NotificationProviderKind.Email:
+                if (profile.ConfiguredEndpoint is not null)
+                {
+                    throw new ArgumentException(
+                        "Email destinations do not accept caller-supplied provider endpoints.",
+                        nameof(profile));
+                }
+
                 if (providerTarget is null)
                 {
                     throw new ArgumentException(
@@ -62,6 +69,13 @@ public sealed record NotificationDestinationDefinition
             case NotificationProviderKind.MicrosoftTeams:
             case NotificationProviderKind.Telegram:
             case NotificationProviderKind.PagerDuty:
+                if (profile.ConfiguredEndpoint is not null)
+                {
+                    throw new ArgumentException(
+                        "Bound provider destinations do not accept caller-supplied provider endpoints.",
+                        nameof(profile));
+                }
+
                 if (providerTarget is not null)
                 {
                     throw new ArgumentException(
