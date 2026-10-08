@@ -26,7 +26,30 @@ public sealed record KafdeckOptions(
     AdministrationOptions? Administration = null,
     DataGeneratorOptions? Generator = null,
     ObservabilityOptions? Observability = null,
-    DataQualityOptions? DataQuality = null);
+    DataQualityOptions? DataQuality = null,
+    NotificationReadOptions? Notifications = null);
+
+public enum NotificationPersistenceProvider
+{
+    Sqlite = 1,
+    PostgreSql = 2,
+}
+
+public enum NotificationExecutionMode
+{
+    Standalone = 1,
+    HighAvailability = 2,
+}
+
+// This slice exposes metadata-only observation. No delivery worker,
+// subscription mutation or provider transport is activated implicitly.
+public sealed record NotificationReadOptions(
+    bool Enabled,
+    NotificationPersistenceProvider Provider,
+    NotificationExecutionMode ExecutionMode,
+    string? SqliteDatabasePath,
+    SecretReference? ConnectionString);
+
 
 public enum DataQualityPersistenceProvider
 {
