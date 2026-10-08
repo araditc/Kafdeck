@@ -13,6 +13,36 @@ export interface TopicDetailData { name: string; isInternal: boolean; partitions
 export interface ConfigurationEntryData { name: string; value: string | null; isSensitive: boolean; isReadOnly: boolean; source: string | null; }
 export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; }
 
+/** Server-authorized metadata only. Not a provider payload or a secret-bearing destination profile. */
+export interface NotificationSubscriptionData {
+  subscriptionId: string;
+  destinationId: string;
+  state: string;
+  revision: number;
+  updatedAtUtc: string;
+  eventClasses: string[];
+  eventTypes: string[];
+}
+export interface NotificationSubscriptionListData {
+  items: NotificationSubscriptionData[];
+  truncated: boolean;
+  nextSubscriptionId: string | null;
+  authorizationFiltered: boolean;
+  continuationRestricted: boolean;
+}
+export interface NotificationDeliveryEvidenceData {
+  notificationId: string;
+  destinationId: string;
+  state: string;
+  attemptCount: number;
+  revision: number;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+  nextAttemptAtUtc: string | null;
+  outcomeCode: string | null;
+  profileRevisionBound: boolean;
+}
+
 export interface ReadViewLimitation { code: string; message: string; }
 export interface ReadViewEnvelope<T> { data: T; partial: boolean; limitations: ReadViewLimitation[]; }
 
@@ -758,6 +788,22 @@ export const kafdeckApi = {
 
     document.body.appendChild(form);
     form.submit();
+  },
+  // W66 observation is read-only; all authorization stays server-side (OIDC + NotificationRead).
+  listNotificationSubscriptions(maxResults = 50, afterSubscriptionId?: string | null, signal?: AbortSignal) {
+    const params = new URLSearchParams({ maxResults: String(maxResults) });
+    if (afterSubscriptionId) params.set('afterSubscriptionId', afterSubscriptionId);
+    return readJson<NotificationSubscriptionListData>(`/api/v1/notifications/subscriptions?${params}`, signal);
+  },
+  getNotificationSubscription(subscriptionId: string, signal?: AbortSignal) {
+    return readJson<NotificationSubscriptionData>(
+      `/api/v1/notifications/subscriptions/${encodeURIComponent(subscriptionId)}`, signal,
+    );
+  },
+  getNotificationDelivery(notificationId: string, destinationId: string, signal?: AbortSignal) {
+    return readJson<NotificationDeliveryEvidenceData>(
+      `/api/v1/notifications/deliveries/${encodeURIComponent(notificationId)}/${encodeURIComponent(destinationId)}`, signal,
+    );
   },
   listClusters(signal?: AbortSignal) { return readJson<{ data: ApiEnvelope<ClusterData>[] }>('/api/v1/clusters', signal); },
   getCluster(clusterId: string, signal?: AbortSignal) { return readJson<ApiEnvelope<ClusterData>>(clusterPath(clusterId), signal); },
