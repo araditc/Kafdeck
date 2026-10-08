@@ -395,6 +395,8 @@ public sealed class NotificationDeliveryWorker
                     due.Snapshot.DestinationId,
                     due.Revision,
                     now,
+                    due.Snapshot.CreatedAtUtc +
+                    _deliveryPolicy.Lifetime,
                     _deliveryPolicy.MaxConcurrency,
                     _deliveryPolicy.RatePerSecond,
                     cancellationToken)
@@ -406,6 +408,42 @@ public sealed class NotificationDeliveryWorker
         {
             return NotificationDeliveryWorkItemOutcome
                 .AdmissionDeferred;
+        }
+
+        if (claim.Outcome ==
+            NotificationDeliveryClaimOutcome.Expired)
+        {
+            var expiredLocal =
+                _timeProvider
+                    .GetUtcNow();
+            var expiredAt =
+                await _store
+                    .GetCoordinationUtcNowAsync(
+                        expiredLocal,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (expiredAt <
+                due.UpdatedAtUtc)
+            {
+                expiredAt =
+                    due.UpdatedAtUtc;
+            }
+
+            var exhausted =
+                await _store
+                    .ReplaceAsync(
+                        TerminalSnapshot(
+                            due.Snapshot,
+                            NotificationDeliveryState.Exhausted,
+                            NotificationDeliveryOutcomeCodes.Exhausted),
+                        due.Revision,
+                        expiredAt,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            return exhausted is null
+                ? NotificationDeliveryWorkItemOutcome.CasLost
+                : NotificationDeliveryWorkItemOutcome.Exhausted;
         }
 
         if (claim.Outcome !=
