@@ -151,6 +151,129 @@ public sealed class V08W66NotificationRoutingTests
     }
 
     [Fact]
+    public async Task Exact_event_types_match_only_approved_class_and_type()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new AdoNotificationRoutingStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+
+            var typeMatch = new NotificationSubscriptionDefinition(
+                "typed-match",
+                "ops-webhook",
+                [NotificationEventClass.DataQuality],
+                ["data-quality.violation"]);
+            var typeMismatch = new NotificationSubscriptionDefinition(
+                "typed-mismatch",
+                "ops-webhook",
+                [NotificationEventClass.DataQuality],
+                ["data-quality.unrelated"]);
+
+            var approved = SafeEvent(Guid.NewGuid());
+            Assert.True(typeMatch.Matches(approved));
+            Assert.False(typeMismatch.Matches(approved));
+            Assert.False(typeMatch.Matches(NotificationEventClass.Security));
+            Assert.Throws<ArgumentException>(() =>
+                new NotificationSubscriptionDefinition(
+                    "invalid", "ops-webhook",
+                    [NotificationEventClass.DataQuality],
+                    ["data-quality.violation", "data-quality.violation"]));
+            Assert.Throws<ArgumentException>(() =>
+                new NotificationSubscriptionDefinition(
+                    "invalid", "ops-webhook",
+                    [NotificationEventClass.DataQuality],
+                    ["data-quality.violation", "bad type"]));
+
+            await store.CreateSubscriptionAsync(
+                typeMatch, NotificationSubscriptionState.Active, Now);
+            await store.CreateSubscriptionAsync(
+                typeMismatch, NotificationSubscriptionState.Active, Now);
+            var readback = await store.GetSubscriptionAsync("typed-match");
+            Assert.Equal(["data-quality.violation"],
+                readback!.Definition.EventTypes);
+
+            var deliveryStore = new AdoNotificationDeliveryStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await deliveryStore.InitializeAsync();
+
+            var routed = await new NotificationRoutingCoordinator(
+                    store, deliveryStore,
+                    new FakeProfileCatalog(WebhookProfile()))
+                .RouteAsync(approved, Now);
+
+            Assert.Equal(2, routed.SubscriptionsVisited);
+            Assert.Equal(1, routed.DeliveriesCreatedOrMatched);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task Retired_subscription_is_terminal_and_never_routed()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new AdoNotificationRoutingStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+            var definition = new NotificationSubscriptionDefinition(
+                "retired-events",
+                "ops-webhook",
+                [NotificationEventClass.DataQuality],
+                ["data-quality.violation"]);
+            var active = await store.CreateSubscriptionAsync(
+                definition, NotificationSubscriptionState.Active, Now);
+            var retired = await store.ReplaceSubscriptionAsync(
+                definition,
+                NotificationSubscriptionState.Retired,
+                active.Revision,
+                Now.AddSeconds(1));
+            Assert.NotNull(retired);
+            Assert.Equal(NotificationSubscriptionState.Retired,
+                retired!.State);
+
+            var selected = await store.ListSubscriptionsAsync(
+                new NotificationSubscriptionQuery(
+                    state: NotificationSubscriptionState.Retired));
+            var record = Assert.Single(selected.Items);
+            Assert.Equal(NotificationSubscriptionState.Retired, record.State);
+            Assert.Equal(["data-quality.violation"],
+                record.Definition.EventTypes);
+
+            Assert.Null(await store.ReplaceSubscriptionAsync(
+                definition,
+                NotificationSubscriptionState.Active,
+                expectedRevision: 1,
+                Now.AddSeconds(2)));
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.ReplaceSubscriptionAsync(
+                    definition,
+                    NotificationSubscriptionState.Active,
+                    retired.Revision,
+                    Now.AddSeconds(2)));
+
+            var deliveryStore = new AdoNotificationDeliveryStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await deliveryStore.InitializeAsync();
+            var routed = await new NotificationRoutingCoordinator(
+                    store, deliveryStore,
+                    new FakeProfileCatalog(WebhookProfile()))
+                .RouteAsync(SafeEvent(Guid.NewGuid()), Now.AddSeconds(2));
+            Assert.Equal(0, routed.SubscriptionsVisited);
+            Assert.Equal(0, routed.DeliveriesCreatedOrMatched);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
     public async Task Event_idempotency_rejects_different_safe_material()
     {
         var path = TempPath();
@@ -343,6 +466,86 @@ public sealed class V08W66NotificationRoutingTests
     }
 
     [Fact]
+    public async Task Sqlite_v1_subscription_upgrade_preserves_wildcard_and_uses_terminal_retirement()
+    {
+        var path = TempPath();
+        try
+        {
+            await using (var raw = new SqliteConnection(
+                new SqliteConnectionStringBuilder { DataSource = path }.ConnectionString))
+            {
+                await raw.OpenAsync();
+                await using var old = raw.CreateCommand();
+                old.CommandText =
+                    """
+                    CREATE TABLE kafdeck_schema_info (
+                        component TEXT PRIMARY KEY,
+                        schema_version INTEGER NOT NULL);
+                    INSERT INTO kafdeck_schema_info
+                        (component, schema_version)
+                    VALUES ('notification-routing', 1);
+                    CREATE TABLE kafdeck_notification_subscriptions (
+                        subscription_id TEXT PRIMARY KEY,
+                        destination_id TEXT NOT NULL,
+                        lifecycle_state TEXT NOT NULL,
+                        revision BIGINT NOT NULL,
+                        updated_at_utc TEXT NOT NULL,
+                        CHECK (revision >= 1),
+                        CHECK (lifecycle_state IN ('Active', 'Paused')));
+                    CREATE TABLE kafdeck_notification_subscription_events (
+                        subscription_id TEXT NOT NULL,
+                        event_class TEXT NOT NULL,
+                        PRIMARY KEY(subscription_id, event_class),
+                        FOREIGN KEY(subscription_id)
+                            REFERENCES kafdeck_notification_subscriptions(subscription_id)
+                            ON DELETE CASCADE);
+                    INSERT INTO kafdeck_notification_subscriptions
+                        (subscription_id, destination_id, lifecycle_state,
+                         revision, updated_at_utc)
+                    VALUES ('legacy-sub', 'ops-webhook', 'Active', 1,
+                            '2026-10-08T08:30:00.0000000+00:00');
+                    INSERT INTO kafdeck_notification_subscription_events
+                        (subscription_id, event_class)
+                    VALUES ('legacy-sub', 'DataQuality');
+                    """;
+                await old.ExecuteNonQueryAsync();
+            }
+
+            var store = new AdoNotificationRoutingStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+
+            var legacy = await store.GetSubscriptionAsync("legacy-sub");
+            Assert.NotNull(legacy);
+            Assert.Equal(NotificationSubscriptionState.Active, legacy!.State);
+            Assert.Empty(legacy.Definition.EventTypes);
+            Assert.True(legacy.Definition.Matches(SafeEvent(Guid.NewGuid())));
+
+            var retired = await store.ReplaceSubscriptionAsync(
+                legacy.Definition,
+                NotificationSubscriptionState.Retired,
+                legacy.Revision,
+                Now.AddSeconds(1));
+            Assert.NotNull(retired);
+            Assert.Equal(NotificationSubscriptionState.Retired,
+                (await store.GetSubscriptionAsync("legacy-sub"))!.State);
+
+            await using var verify = new SqliteConnection(
+                new SqliteConnectionStringBuilder { DataSource = path }.ConnectionString);
+            await verify.OpenAsync();
+            await using var version = verify.CreateCommand();
+            version.CommandText =
+                "SELECT schema_version FROM kafdeck_schema_info WHERE component = 'notification-routing'";
+            Assert.Equal(2L, Convert.ToInt64(
+                await version.ExecuteScalarAsync()));
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
     public async Task PostgreSql_store_round_trips_safe_events_and_subscription_queries_when_available()
     {
         var baseConnectionString =
@@ -397,11 +600,13 @@ public sealed class V08W66NotificationRoutingTests
                 notificationEvent,
                 Now);
 
+            var typed = new NotificationSubscriptionDefinition(
+                "a-subscription",
+                "ops-webhook",
+                [NotificationEventClass.DataQuality],
+                ["data-quality.violation"]);
             await store.CreateSubscriptionAsync(
-                Subscription(
-                    "a-subscription",
-                    "ops-webhook",
-                    NotificationEventClass.DataQuality),
+                typed,
                 NotificationSubscriptionState.Active,
                 Now);
             await store.CreateSubscriptionAsync(
@@ -427,6 +632,23 @@ public sealed class V08W66NotificationRoutingTests
                 only.Definition.SubscriptionId);
             Assert.False(
                 quality.Truncated);
+            Assert.Equal(["data-quality.violation"],
+                only.Definition.EventTypes);
+
+            var retired = await store.ReplaceSubscriptionAsync(
+                typed,
+                NotificationSubscriptionState.Retired,
+                only.Revision,
+                Now.AddSeconds(1));
+            Assert.NotNull(retired);
+            Assert.Equal(NotificationSubscriptionState.Retired,
+                (await store.GetSubscriptionAsync("a-subscription"))!.State);
+            var retiredPage = await store.ListSubscriptionsAsync(
+                new NotificationSubscriptionQuery(
+                    state: NotificationSubscriptionState.Retired));
+            Assert.Single(retiredPage.Items);
+            Assert.Equal(["data-quality.violation"],
+                retiredPage.Items[0].Definition.EventTypes);
 
             var fetched =
                 await store.GetEventAsync(

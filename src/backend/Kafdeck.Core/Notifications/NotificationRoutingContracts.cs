@@ -295,17 +295,20 @@ public enum NotificationSubscriptionState
 {
     Active = 1,
     Paused = 2,
+    Retired = 3,
 }
 
 public sealed record NotificationSubscriptionDefinition
 {
     public const int MaxSubscriptionIdLength = 128;
     public const int HardMaxEventClasses = 16;
+    public const int HardMaxEventTypes = 32;
 
     public NotificationSubscriptionDefinition(
         string subscriptionId,
         string destinationId,
-        IReadOnlyList<NotificationEventClass> eventClasses)
+        IReadOnlyList<NotificationEventClass> eventClasses,
+        IReadOnlyList<string>? eventTypes = null)
     {
         SubscriptionId =
             NormalizeSubscriptionId(
@@ -339,11 +342,40 @@ public sealed record NotificationSubscriptionDefinition
         EventClasses =
             Array.AsReadOnly(
                 normalized);
+
+        var types = (eventTypes ?? Array.Empty<string>()).ToArray();
+        if (types.Length > HardMaxEventTypes ||
+            types.Distinct(StringComparer.Ordinal).Count() != types.Length ||
+            types.Any(value =>
+                string.IsNullOrWhiteSpace(value) ||
+                value.Length > NotificationWebhookEvent.MaxEventTypeLength ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.Any(character =>
+                    !(char.IsAsciiLetterOrDigit(character) ||
+                      character is '.' or '_' or '-'))))
+        {
+            throw new ArgumentException(
+                "Exact event-type filters must be unique, bounded safe identifiers.",
+                nameof(eventTypes));
+        }
+
+        EventTypes = Array.AsReadOnly(
+            types.OrderBy(value => value, StringComparer.Ordinal).ToArray());
     }
 
     public string SubscriptionId { get; }
     public string DestinationId { get; }
     public IReadOnlyList<NotificationEventClass> EventClasses { get; }
+    // Empty list means all types within the selected EventClasses.
+    public IReadOnlyList<string> EventTypes { get; }
+
+    public bool Matches(NotificationSafeEvent notificationEvent)
+    {
+        ArgumentNullException.ThrowIfNull(notificationEvent);
+        return Matches(notificationEvent.EventClass) &&
+            (EventTypes.Count == 0 ||
+             EventTypes.Contains(notificationEvent.EventType, StringComparer.Ordinal));
+    }
 
     public bool Matches(
         NotificationEventClass eventClass) =>
@@ -652,6 +684,13 @@ public sealed class NotificationRoutingCoordinator
         {
             cancellationToken
                 .ThrowIfCancellationRequested();
+
+            // Listing remains server-bounded by the existing hard scan cap.
+            // Apply the exact type predicate before any destination lookup.
+            if (!subscription.Definition.Matches(notificationEvent))
+            {
+                continue;
+            }
 
             var profile =
                 await _profileCatalog

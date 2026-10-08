@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Data.Common;
 using System.Globalization;
 using Kafdeck.Core.Notifications;
@@ -7,7 +8,7 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoNotificationRoutingStore :
     INotificationRoutingStore
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const string Component =
         "notification-routing";
 
@@ -74,9 +75,39 @@ public sealed class AdoNotificationRoutingStore :
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        if (existingVersion is not null &&
-            existingVersion.Value !=
-                SchemaVersion)
+        if (existingVersion == 1)
+        {
+            // Retire is represented by a separate flag so the v1 SQL
+            // Active/Paused CHECK remains valid on both SQLite and PostgreSQL.
+            // Existing subscriptions default to non-retired wildcard types.
+            foreach (var sql in new[]
+                     {
+                         "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN event_types_json TEXT NOT NULL DEFAULT '[]'",
+                         "ALTER TABLE kafdeck_notification_subscriptions ADD COLUMN is_retired INTEGER NOT NULL DEFAULT 0 CHECK (is_retired IN (0, 1))",
+                     })
+            {
+                await using var migration = connection.CreateCommand();
+                migration.Transaction = transaction;
+                migration.CommandText = sql;
+                await migration.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await using var upgrade = connection.CreateCommand();
+            upgrade.Transaction = transaction;
+            upgrade.CommandText =
+                "UPDATE kafdeck_schema_info SET schema_version = @new_version WHERE component = @component AND schema_version = 1";
+            AddParameter(upgrade, "@new_version", SchemaVersion);
+            AddParameter(upgrade, "@component", Component);
+            if (await upgrade.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Notification-routing v1 to v2 migration could not claim the expected version.");
+            }
+        }
+        else if (existingVersion is not null &&
+                 existingVersion.Value != SchemaVersion)
         {
             throw new InvalidOperationException(
                 $"Notification-routing schema version {existingVersion.Value} is unsupported by this binary (expected {SchemaVersion}).");
@@ -266,13 +297,17 @@ public sealed class AdoNotificationRoutingStore :
                 destination_id,
                 lifecycle_state,
                 revision,
-                updated_at_utc)
+                updated_at_utc,
+                event_types_json,
+                is_retired)
             VALUES (
                 @subscription_id,
                 @destination_id,
                 @state,
                 1,
-                @updated_at_utc)
+                @updated_at_utc,
+                @event_types_json,
+                @is_retired)
             ON CONFLICT (subscription_id)
             DO NOTHING
             """;
@@ -338,6 +373,8 @@ public sealed class AdoNotificationRoutingStore :
                 s.lifecycle_state,
                 s.revision,
                 s.updated_at_utc,
+                s.event_types_json,
+                s.is_retired,
                 events.event_class
             FROM kafdeck_notification_subscriptions s
             INNER JOIN kafdeck_notification_subscription_events events
@@ -368,7 +405,7 @@ public sealed class AdoNotificationRoutingStore :
                     reader);
             var eventClass =
                 Enum.Parse<NotificationEventClass>(
-                    reader.GetString(5),
+                    reader.GetString(7),
                     ignoreCase: false);
             if (eventClasses.Count >=
                     NotificationSubscriptionDefinition
@@ -436,6 +473,12 @@ public sealed class AdoNotificationRoutingStore :
             return null;
         }
 
+        if (existing.State == NotificationSubscriptionState.Retired)
+        {
+            throw new InvalidOperationException(
+                "Retired notification subscriptions cannot be reactivated or revised.");
+        }
+
         if (updatedAtUtc.ToUniversalTime() <
             existing.UpdatedAtUtc)
         {
@@ -454,6 +497,8 @@ public sealed class AdoNotificationRoutingStore :
             SET
                 destination_id = @destination_id,
                 lifecycle_state = @state,
+                event_types_json = @event_types_json,
+                is_retired = @is_retired,
                 revision = revision + 1,
                 updated_at_utc = @updated_at_utc
             WHERE subscription_id = @subscription_id
@@ -522,7 +567,9 @@ public sealed class AdoNotificationRoutingStore :
         if (query.State is not null)
         {
             predicates.Add(
-                "s.lifecycle_state = @state");
+                query.State == NotificationSubscriptionState.Retired
+                    ? "s.is_retired = 1"
+                    : "s.lifecycle_state = @state AND s.is_retired = 0");
         }
 
         if (query.EventClass is not null)
@@ -547,7 +594,9 @@ public sealed class AdoNotificationRoutingStore :
                     s.destination_id,
                     s.lifecycle_state,
                     s.revision,
-                    s.updated_at_utc
+                    s.updated_at_utc,
+                    s.event_types_json,
+                    s.is_retired
                 FROM kafdeck_notification_subscriptions s
                 {(predicates.Count == 0
                     ? string.Empty
@@ -563,6 +612,8 @@ public sealed class AdoNotificationRoutingStore :
                 selected.lifecycle_state,
                 selected.revision,
                 selected.updated_at_utc,
+                selected.event_types_json,
+                selected.is_retired,
                 events.event_class
             FROM selected
             INNER JOIN kafdeck_notification_subscription_events events
@@ -585,7 +636,9 @@ public sealed class AdoNotificationRoutingStore :
             AddParameter(
                 command,
                 "@state",
-                query.State.Value.ToString());
+                query.State.Value == NotificationSubscriptionState.Retired
+                    ? NotificationSubscriptionState.Paused.ToString()
+                    : query.State.Value.ToString());
         }
 
         if (query.EventClass is not null)
@@ -642,7 +695,7 @@ public sealed class AdoNotificationRoutingStore :
 
             var eventClass =
                 Enum.Parse<NotificationEventClass>(
-                    reader.GetString(5),
+                    reader.GetString(7),
                     ignoreCase: false);
             if (eventClasses[id].Count >=
                     NotificationSubscriptionDefinition
@@ -778,7 +831,9 @@ public sealed class AdoNotificationRoutingStore :
                 destination_id,
                 lifecycle_state,
                 revision,
-                updated_at_utc
+                updated_at_utc,
+                event_types_json,
+                is_retired
             FROM kafdeck_notification_subscriptions
             WHERE subscription_id = @subscription_id
             """ +
@@ -809,14 +864,16 @@ public sealed class AdoNotificationRoutingStore :
         new(
             reader.GetString(0),
             reader.GetString(1),
-            Enum.Parse<NotificationSubscriptionState>(
-                reader.GetString(2),
-                ignoreCase: false),
+            reader.GetInt32(6) == 1
+                ? NotificationSubscriptionState.Retired
+                : Enum.Parse<NotificationSubscriptionState>(
+                    reader.GetString(2),
+                    ignoreCase: false),
             Convert.ToInt64(
                 reader.GetValue(3),
                 CultureInfo.InvariantCulture),
-            Parse(
-                reader.GetString(4)));
+            Parse(reader.GetString(4)),
+            reader.GetString(5));
 
     private async Task<Dictionary<string, IReadOnlyList<NotificationEventClass>>>
         ReadEventClassesAsync(
@@ -959,7 +1016,10 @@ public sealed class AdoNotificationRoutingStore :
             new NotificationSubscriptionDefinition(
                 row.SubscriptionId,
                 row.DestinationId,
-                eventClasses),
+                eventClasses,
+                JsonSerializer.Deserialize<string[]>(row.EventTypesJson) ??
+                    throw new InvalidOperationException(
+                        "Persisted subscription event-type filter is invalid.")),
             row.State,
             row.Revision,
             row.UpdatedAtUtc);
@@ -1061,7 +1121,17 @@ public sealed class AdoNotificationRoutingStore :
         AddParameter(
             command,
             "@state",
-            state.ToString());
+            state == NotificationSubscriptionState.Retired
+                ? NotificationSubscriptionState.Paused.ToString()
+                : state.ToString());
+        AddParameter(
+            command,
+            "@event_types_json",
+            JsonSerializer.Serialize(definition.EventTypes));
+        AddParameter(
+            command,
+            "@is_retired",
+            state == NotificationSubscriptionState.Retired ? 1 : 0);
         AddParameter(
             command,
             "@updated_at_utc",
@@ -1137,7 +1207,8 @@ public sealed class AdoNotificationRoutingStore :
         string DestinationId,
         NotificationSubscriptionState State,
         long Revision,
-        DateTimeOffset UpdatedAtUtc);
+        DateTimeOffset UpdatedAtUtc,
+        string EventTypesJson);
 
     private static readonly string[]
         InitializationStatements =
@@ -1167,7 +1238,10 @@ public sealed class AdoNotificationRoutingStore :
             lifecycle_state TEXT NOT NULL,
             revision BIGINT NOT NULL,
             updated_at_utc TEXT NOT NULL,
+            event_types_json TEXT NOT NULL DEFAULT '[]',
+            is_retired INTEGER NOT NULL DEFAULT 0,
             CHECK (revision >= 1),
+            CHECK (is_retired IN (0, 1)),
             CHECK (lifecycle_state IN ('Active', 'Paused'))
         )
         """,
