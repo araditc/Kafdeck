@@ -507,7 +507,7 @@ public sealed class V08W66DeliveryWorkerTests
     }
 
     [Fact]
-    public async Task Cycle_due_limit_is_intersection_of_worker_and_rate_policy()
+    public async Task Cycle_due_page_uses_worker_bound_not_one_destination_rate()
     {
         var path = TempPath();
 
@@ -560,13 +560,121 @@ public sealed class V08W66DeliveryWorkerTests
                 await worker.RunDueCycleAsync();
 
             Assert.Equal(
-                2,
+                5,
                 cycle.Visited);
+            Assert.Equal(
+                2,
+                cycle.Delivered);
+            Assert.Equal(
+                3,
+                cycle.AdmissionDeferred);
             Assert.Equal(
                 2,
                 dispatcher.Claims.Count);
             Assert.True(
                 cycle.MoreDue);
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task Due_cursor_prevents_rate_limited_destination_from_starving_later_destination()
+    {
+        var path = TempPath();
+
+        try
+        {
+            var store = Store(path);
+            await store.InitializeAsync();
+
+            var now =
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    7,
+                    18,
+                    30,
+                    0,
+                    TimeSpan.Zero);
+
+            await store.CreateOrGetAsync(
+                Pending(
+                    Guid.Parse(
+                        "00000000-0000-0000-0000-000000000001"),
+                    now,
+                    "destination-a"),
+                now);
+            await store.CreateOrGetAsync(
+                Pending(
+                    Guid.Parse(
+                        "00000000-0000-0000-0000-000000000002"),
+                    now,
+                    "destination-a"),
+                now);
+            await store.CreateOrGetAsync(
+                Pending(
+                    Guid.Parse(
+                        "00000000-0000-0000-0000-000000000003"),
+                    now,
+                    "destination-a"),
+                now);
+            await store.CreateOrGetAsync(
+                Pending(
+                    Guid.Parse(
+                        "00000000-0000-0000-0000-000000000004"),
+                    now,
+                    "destination-b"),
+                now);
+
+            var dispatcher =
+                new RecordingDispatcher(
+                    NotificationDeliveryDispatchOutcome.Delivered,
+                    NotificationDeliveryDispatchOutcome.Delivered);
+            var worker =
+                new NotificationDeliveryWorker(
+                    store,
+                    dispatcher,
+                    new NotificationDeliveryPolicy(
+                        ratePerSecond: 1,
+                        maxConcurrency: 2),
+                    new NotificationDeliveryWorkerPolicy(
+                        maxDuePerCycle: 2),
+                    new MutableTimeProvider(
+                        now));
+
+            var first =
+                await worker.RunDueCycleAsync();
+            Assert.Equal(
+                2,
+                first.Visited);
+            Assert.Equal(
+                1,
+                first.Delivered);
+            Assert.Equal(
+                1,
+                first.AdmissionDeferred);
+            Assert.True(
+                first.MoreDue);
+
+            var second =
+                await worker.RunDueCycleAsync();
+            Assert.Equal(
+                2,
+                second.Visited);
+            Assert.Equal(
+                1,
+                second.Delivered);
+            Assert.Equal(
+                1,
+                second.AdmissionDeferred);
+            Assert.Contains(
+                dispatcher.Claims,
+                claim =>
+                    claim.Snapshot.DestinationId ==
+                    "destination-b");
         }
         finally
         {
@@ -756,6 +864,232 @@ public sealed class V08W66DeliveryWorkerTests
     }
 
     [Fact]
+    public async Task PostgreSql_stale_recovery_uses_shared_clock_not_replica_skew_when_available()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w66_recovery_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString)
+            {
+                Pooling = false,
+            };
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scoped =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var storeA =
+                new AdoNotificationDeliveryStore(
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        scoped.ConnectionString));
+            var storeB =
+                new AdoNotificationDeliveryStore(
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        scoped.ConnectionString));
+
+            await storeA.InitializeAsync();
+            await storeB.InitializeAsync();
+
+            var coordinationNow =
+                await storeA
+                    .GetCoordinationUtcNowAsync(
+                        DateTimeOffset.UtcNow);
+            var id =
+                Guid.NewGuid();
+            var created =
+                coordinationNow.AddSeconds(-1);
+            var pending =
+                await storeA.CreateOrGetAsync(
+                    Pending(
+                        id,
+                        created),
+                    created);
+
+            var claim =
+                await storeA.TryClaimForDispatchAsync(
+                    id,
+                    "ops-webhook",
+                    pending.Revision,
+                    coordinationNow,
+                    created +
+                    TimeSpan.FromHours(1),
+                    maxConcurrency: 1,
+                    ratePerSecond: 10);
+
+            Assert.Equal(
+                NotificationDeliveryClaimOutcome.Claimed,
+                claim.Outcome);
+
+            var recovery =
+                new NotificationDeliveryWorker(
+                    storeB,
+                    new RecordingDispatcher(),
+                    workerPolicy:
+                        new NotificationDeliveryWorkerPolicy(
+                            staleInFlightAfter:
+                                TimeSpan.FromSeconds(10)),
+                    timeProvider:
+                        new MutableTimeProvider(
+                            coordinationNow.AddHours(1)));
+
+            var result =
+                await recovery.RecoverStaleInFlightAsync();
+
+            Assert.Equal(
+                0,
+                result.MarkedUnknownExternalEffect);
+            var stored =
+                await storeB.GetAsync(
+                    id,
+                    "ops-webhook");
+            Assert.NotNull(
+                stored);
+            Assert.Equal(
+                NotificationDeliveryState.InFlight,
+                stored!.Snapshot.State);
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_claim_rejects_delivery_expired_by_database_clock_when_available()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w66_expiry_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString)
+            {
+                Pooling = false,
+            };
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scoped =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var store =
+                new AdoNotificationDeliveryStore(
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        scoped.ConnectionString));
+            await store.InitializeAsync();
+
+            var databaseNow =
+                await store
+                    .GetCoordinationUtcNowAsync(
+                        DateTimeOffset.UtcNow);
+            var created =
+                databaseNow.AddSeconds(-20);
+            var pending =
+                await store.CreateOrGetAsync(
+                    Pending(
+                        Guid.NewGuid(),
+                        created),
+                    created);
+            var deadline =
+                created.AddSeconds(10);
+            var callerSample =
+                deadline.AddMilliseconds(-1);
+
+            var claim =
+                await store.TryClaimForDispatchAsync(
+                    pending.Snapshot.NotificationId,
+                    pending.Snapshot.DestinationId,
+                    pending.Revision,
+                    callerSample,
+                    deadline,
+                    maxConcurrency: 1,
+                    ratePerSecond: 10);
+
+            Assert.Equal(
+                NotificationDeliveryClaimOutcome.Expired,
+                claim.Outcome);
+            Assert.Null(
+                claim.Record);
+
+            var stored =
+                await store.GetAsync(
+                    pending.Snapshot.NotificationId,
+                    pending.Snapshot.DestinationId);
+            Assert.NotNull(
+                stored);
+            Assert.Equal(
+                NotificationDeliveryState.Pending,
+                stored!.Snapshot.State);
+            Assert.Equal(
+                0,
+                stored.Snapshot.AttemptCount);
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
     public async Task PostgreSql_rate_admission_uses_database_clock_across_skewed_replicas_when_available()
     {
         var baseConnectionString =
@@ -809,32 +1143,29 @@ public sealed class V08W66DeliveryWorkerTests
             await storeA.InitializeAsync();
             await storeB.InitializeAsync();
 
-            var now =
-                new DateTimeOffset(
-                    2026,
-                    10,
-                    7,
-                    21,
-                    0,
-                    0,
-                    TimeSpan.Zero);
+            var coordinationNow =
+                await storeA
+                    .GetCoordinationUtcNowAsync(
+                        DateTimeOffset.UtcNow);
+            var created =
+                coordinationNow.AddSeconds(-1);
             await storeA.CreateOrGetAsync(
                 Pending(
                     Guid.NewGuid(),
-                    now),
-                now);
+                    created),
+                created);
             await storeA.CreateOrGetAsync(
                 Pending(
                     Guid.NewGuid(),
-                    now),
-                now);
+                    created),
+                created);
 
             var timeA =
                 new MutableTimeProvider(
-                    now);
+                    coordinationNow.AddMinutes(-5));
             var timeB =
                 new MutableTimeProvider(
-                    now.AddSeconds(30));
+                    coordinationNow.AddMinutes(5));
             var dispatcher =
                 new BlockingDispatcher();
             var policy =
@@ -921,10 +1252,11 @@ public sealed class V08W66DeliveryWorkerTests
 
     private static NotificationDeliverySnapshot Pending(
         Guid id,
-        DateTimeOffset createdAtUtc) =>
+        DateTimeOffset createdAtUtc,
+        string destinationId = "ops-webhook") =>
         new(
             id,
-            "ops-webhook",
+            destinationId,
             Fingerprint,
             NotificationDeliveryState.Pending,
             0,

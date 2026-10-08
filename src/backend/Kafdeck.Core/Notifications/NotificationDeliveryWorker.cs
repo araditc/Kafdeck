@@ -122,6 +122,10 @@ public sealed class NotificationDeliveryWorker
         _workerPolicy;
     private readonly TimeProvider
         _timeProvider;
+    private readonly object
+        _dueCursorGate = new();
+    private NotificationDeliveryDueCursor?
+        _dueCursor;
 
     public NotificationDeliveryWorker(
         INotificationDeliveryStore store,
@@ -155,23 +159,44 @@ public sealed class NotificationDeliveryWorker
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var now =
+        var localNow =
             _timeProvider
                 .GetUtcNow();
+        var now =
+            await _store
+                .GetCoordinationUtcNowAsync(
+                    localNow,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-        var maxDue =
-            Math.Min(
-                _workerPolicy.MaxDuePerCycle,
-                _deliveryPolicy.RatePerSecond);
-
+        var startingCursor =
+            GetDueCursor();
         var page =
             await _store
                 .ListDueAsync(
                     new NotificationDeliveryDueQuery(
                         now,
-                        maxDue),
+                        _workerPolicy.MaxDuePerCycle,
+                        startingCursor),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+        if (page.Items.Count == 0 &&
+            startingCursor is not null)
+        {
+            SetDueCursor(
+                null);
+            startingCursor =
+                null;
+            page =
+                await _store
+                    .ListDueAsync(
+                        new NotificationDeliveryDueQuery(
+                            now,
+                            _workerPolicy.MaxDuePerCycle),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+        }
 
         if (page.Items.Count == 0)
         {
@@ -218,6 +243,17 @@ public sealed class NotificationDeliveryWorker
             await Task.WhenAll(tasks)
                 .ConfigureAwait(false);
 
+        SetDueCursor(
+            page.Truncated
+                ? page.NextCursor
+                : null);
+
+        var admissionDeferred =
+            outcomes.Count(
+                value =>
+                    value ==
+                    NotificationDeliveryWorkItemOutcome.AdmissionDeferred);
+
         return new NotificationDeliveryCycleResult(
             outcomes.Length,
             outcomes.Count(
@@ -244,11 +280,10 @@ public sealed class NotificationDeliveryWorker
                 value =>
                     value ==
                     NotificationDeliveryWorkItemOutcome.FinalizationConflict),
-            outcomes.Count(
-                value =>
-                    value ==
-                    NotificationDeliveryWorkItemOutcome.AdmissionDeferred),
-            page.Truncated);
+            admissionDeferred,
+            page.Truncated ||
+            startingCursor is not null ||
+            admissionDeferred > 0);
     }
 
     public async Task<NotificationDeliveryRecoveryResult>
@@ -257,9 +292,15 @@ public sealed class NotificationDeliveryWorker
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var now =
+        var localNow =
             _timeProvider
                 .GetUtcNow();
+        var now =
+            await _store
+                .GetCoordinationUtcNowAsync(
+                    localNow,
+                    cancellationToken)
+                .ConfigureAwait(false);
         var page =
             await _store
                 .ListStaleInFlightAsync(
@@ -316,9 +357,15 @@ public sealed class NotificationDeliveryWorker
             NotificationDeliveryRecord due,
             CancellationToken cancellationToken)
     {
-        var now =
+        var localNow =
             _timeProvider
                 .GetUtcNow();
+        var now =
+            await _store
+                .GetCoordinationUtcNowAsync(
+                    localNow,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
         if (ShouldExhaustBeforeAttempt(
                 due.Snapshot,
@@ -348,6 +395,8 @@ public sealed class NotificationDeliveryWorker
                     due.Snapshot.DestinationId,
                     due.Revision,
                     now,
+                    due.Snapshot.CreatedAtUtc +
+                    _deliveryPolicy.Lifetime,
                     _deliveryPolicy.MaxConcurrency,
                     _deliveryPolicy.RatePerSecond,
                     cancellationToken)
@@ -359,6 +408,42 @@ public sealed class NotificationDeliveryWorker
         {
             return NotificationDeliveryWorkItemOutcome
                 .AdmissionDeferred;
+        }
+
+        if (claim.Outcome ==
+            NotificationDeliveryClaimOutcome.Expired)
+        {
+            var expiredLocal =
+                _timeProvider
+                    .GetUtcNow();
+            var expiredAt =
+                await _store
+                    .GetCoordinationUtcNowAsync(
+                        expiredLocal,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (expiredAt <
+                due.UpdatedAtUtc)
+            {
+                expiredAt =
+                    due.UpdatedAtUtc;
+            }
+
+            var exhausted =
+                await _store
+                    .ReplaceAsync(
+                        TerminalSnapshot(
+                            due.Snapshot,
+                            NotificationDeliveryState.Exhausted,
+                            NotificationDeliveryOutcomeCodes.Exhausted),
+                        due.Revision,
+                        expiredAt,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            return exhausted is null
+                ? NotificationDeliveryWorkItemOutcome.CasLost
+                : NotificationDeliveryWorkItemOutcome.Exhausted;
         }
 
         if (claim.Outcome !=
@@ -400,9 +485,21 @@ public sealed class NotificationDeliveryWorker
                     .UnknownExternalEffect;
         }
 
-        var completedAt =
+        var completedLocal =
             _timeProvider
                 .GetUtcNow();
+        var completedAt =
+            await _store
+                .GetCoordinationUtcNowAsync(
+                    completedLocal,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        if (completedAt <
+            claimed.UpdatedAtUtc)
+        {
+            completedAt =
+                claimed.UpdatedAtUtc;
+        }
 
         var finalSnapshot =
             BuildFinalSnapshot(
@@ -438,6 +535,25 @@ public sealed class NotificationDeliveryWorker
             _ => throw new InvalidOperationException(
                 "Notification delivery worker produced a non-terminal/non-retry final state."),
         };
+    }
+
+    private NotificationDeliveryDueCursor?
+        GetDueCursor()
+    {
+        lock (_dueCursorGate)
+        {
+            return _dueCursor;
+        }
+    }
+
+    private void SetDueCursor(
+        NotificationDeliveryDueCursor? cursor)
+    {
+        lock (_dueCursorGate)
+        {
+            _dueCursor =
+                cursor;
+        }
     }
 
     private NotificationDeliverySnapshot

@@ -114,6 +114,40 @@ public sealed class AdoNotificationDeliveryStore :
             .ConfigureAwait(false);
     }
 
+    public async Task<DateTimeOffset>
+        GetCoordinationUtcNowAsync(
+            DateTimeOffset standaloneFallbackUtc,
+            CancellationToken cancellationToken = default)
+    {
+        if (standaloneFallbackUtc == default)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(standaloneFallbackUtc));
+        }
+
+        if (!_connectionFactory.SupportsSelectForUpdate)
+        {
+            return standaloneFallbackUtc.ToUniversalTime();
+        }
+
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+        command.CommandText =
+            _connectionFactory.DatabaseUtcNowSql;
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return ParseDatabaseClock(
+            value);
+    }
+
     public async Task<NotificationDeliveryRecord?>
         GetAsync(
             Guid notificationId,
@@ -386,6 +420,7 @@ public sealed class AdoNotificationDeliveryStore :
             string destinationId,
             long expectedRevision,
             DateTimeOffset claimedAtUtc,
+            DateTimeOffset notAfterUtc,
             int maxConcurrency,
             int ratePerSecond,
             CancellationToken cancellationToken = default)
@@ -397,6 +432,7 @@ public sealed class AdoNotificationDeliveryStore :
 
         if (expectedRevision < 1 ||
             claimedAtUtc == default ||
+            notAfterUtc == default ||
             maxConcurrency is < 1 or >
                 NotificationDeliveryPolicy.HardMaxConcurrency ||
             ratePerSecond is < 1 or >
@@ -409,6 +445,8 @@ public sealed class AdoNotificationDeliveryStore :
 
         var claimedAt =
             claimedAtUtc.ToUniversalTime();
+        var notAfter =
+            notAfterUtc.ToUniversalTime();
 
         await using var connection =
             await _connectionFactory
@@ -477,6 +515,8 @@ public sealed class AdoNotificationDeliveryStore :
                     claimedAt,
                     cancellationToken)
                 .ConfigureAwait(false);
+        claimedAt =
+            rateClockUtc;
         var rateWindowStart =
             rateClockUtc -
             TimeSpan.FromSeconds(1);
@@ -573,6 +613,33 @@ public sealed class AdoNotificationDeliveryStore :
                 .ConfigureAwait(false);
             return new NotificationDeliveryClaimResult(
                 NotificationDeliveryClaimOutcome.VersionConflict);
+        }
+
+        var hardLatest =
+            existing.Snapshot.CreatedAtUtc <=
+                    DateTimeOffset.MaxValue -
+                    NotificationDeliveryPolicy.HardMaxLifetime
+                ? existing.Snapshot.CreatedAtUtc +
+                  NotificationDeliveryPolicy.HardMaxLifetime
+                : DateTimeOffset.MaxValue;
+        if (notAfter <
+                existing.Snapshot.CreatedAtUtc ||
+            notAfter >
+                hardLatest)
+        {
+            throw new ArgumentException(
+                "Notification dispatch claim lifetime boundary is outside admitted bounds.",
+                nameof(notAfterUtc));
+        }
+
+        if (claimedAt >
+            notAfter)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new NotificationDeliveryClaimResult(
+                NotificationDeliveryClaimOutcome.Expired);
         }
 
         var dueAt =
@@ -1338,7 +1405,13 @@ public sealed class AdoNotificationDeliveryStore :
                 .ExecuteScalarAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-        return value switch
+        return ParseDatabaseClock(
+            value);
+    }
+
+    private static DateTimeOffset ParseDatabaseClock(
+        object? value) =>
+        value switch
         {
             DateTimeOffset offset =>
                 offset.ToUniversalTime(),
@@ -1359,7 +1432,6 @@ public sealed class AdoNotificationDeliveryStore :
             _ => throw new InvalidOperationException(
                 "Notification delivery database clock returned an unsupported value."),
         };
-    }
 
     private static DateTimeOffset Parse(
         string value) =>
