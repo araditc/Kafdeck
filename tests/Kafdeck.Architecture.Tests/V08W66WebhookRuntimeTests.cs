@@ -123,7 +123,8 @@ public sealed class V08W66WebhookRuntimeTests
                 "ops-email",
                 NotificationProviderKind.Email,
                 "Operations email",
-                [NotificationEventClass.DataQuality]);
+                [NotificationEventClass.DataQuality],
+                emailRecipientAddress: "ops@example.com");
         var resolver =
             new FakeEndpointResolver();
         var transport =
