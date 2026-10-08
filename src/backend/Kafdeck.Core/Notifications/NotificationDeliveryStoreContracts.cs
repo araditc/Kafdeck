@@ -303,6 +303,10 @@ public static class NotificationDeliveryTransition
                 previous.PayloadFingerprint,
                 next.PayloadFingerprint,
                 StringComparison.Ordinal) ||
+            !string.Equals(
+                previous.RoutedProfileRevisionFingerprint,
+                next.RoutedProfileRevisionFingerprint,
+                StringComparison.Ordinal) ||
             previous.CreatedAtUtc !=
                 next.CreatedAtUtc)
         {
