@@ -81,12 +81,6 @@ public static class KafdeckNotificationManagementEndpoints
                                 // Includes concurrent INSERT with the same identity.
                                 return Conflict();
                             }
-                            catch (SqliteException exception) when (IsSqliteContention(exception))
-                            {
-                                // Shared-cache SQLite can return LOCKED_SHAREDCACHE
-                                // during overlapping creates, not only BUSY_SNAPSHOT.
-                                return Conflict();
-                            }
                         }
 
                         if (request.ExpectedRevision.Value < 1)
@@ -98,24 +92,23 @@ public static class KafdeckNotificationManagementEndpoints
                         if (request.ExpectedRevision.Value != existing.Revision)
                             return Conflict();
 
-                        try
-                        {
-                            var updated = await store.ReplaceSubscriptionAsync(
-                                definition, request.State, request.ExpectedRevision.Value,
-                                DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-                            return updated is null ? Conflict() : Results.Ok(
-                                NotificationSubscriptionWriteReceipt.From(updated));
-                        }
-                        catch (SqliteException exception) when (IsSqliteContention(exception))
-                        {
-                            // SQLite WAL/snapshot and shared-cache writer locks are
-                            // recoverable concurrent-write conflicts, not HTTP 500.
-                            return Conflict();
-                        }
+                        var updated = await store.ReplaceSubscriptionAsync(
+                            definition, request.State, request.ExpectedRevision.Value,
+                            DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                        return updated is null ? Conflict() : Results.Ok(
+                            NotificationSubscriptionWriteReceipt.From(updated));
                     }
                     catch (ArgumentException)
                     {
                         return InvalidRequest();
+                    }
+                    catch (SqliteException exception) when (IsSqliteContention(exception))
+                    {
+                        // Covers connection open/initialization, preliminary GET,
+                        // shared-cache read locks and *both* CAS create/replace
+                        // write paths, not merely exceptions raised by UPDATE.
+                        // Other SQLite failures continue to fail closed.
+                        return Conflict();
                     }
                 })
             .WithName("v08-notification-subscription-upsert")
