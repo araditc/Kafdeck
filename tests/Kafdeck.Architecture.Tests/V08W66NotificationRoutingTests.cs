@@ -228,6 +228,7 @@ public sealed class V08W66NotificationRoutingTests
                     "ops-webhook",
                     pending.Revision,
                     Now,
+                    Now.AddHours(1),
                     maxConcurrency: 1,
                     ratePerSecond: 10);
             Assert.Equal(
@@ -666,6 +667,7 @@ public sealed class V08W66NotificationRoutingTests
             string destinationId,
             long expectedRevision,
             DateTimeOffset claimedAtUtc,
+            DateTimeOffset notAfterUtc,
             int maxConcurrency,
             int ratePerSecond,
             CancellationToken cancellationToken = default) =>
