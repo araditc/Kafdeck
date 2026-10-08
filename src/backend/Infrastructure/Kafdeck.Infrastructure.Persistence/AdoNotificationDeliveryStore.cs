@@ -474,7 +474,6 @@ public sealed class AdoNotificationDeliveryStore :
             await ReadRateClockUtcAsync(
                     connection,
                     transaction,
-                    claimedAt,
                     cancellationToken)
                 .ConfigureAwait(false);
         var rateWindowStart =
@@ -1318,20 +1317,14 @@ public sealed class AdoNotificationDeliveryStore :
         ReadRateClockUtcAsync(
             DbConnection connection,
             DbTransaction transaction,
-            DateTimeOffset standaloneFallbackUtc,
             CancellationToken cancellationToken)
     {
-        if (!_connectionFactory.SupportsSelectForUpdate)
-        {
-            return standaloneFallbackUtc.ToUniversalTime();
-        }
-
         await using var command =
             connection.CreateCommand();
         command.Transaction =
             transaction;
         command.CommandText =
-            "SELECT clock_timestamp()";
+            _connectionFactory.DatabaseUtcNowSql;
 
         var value =
             await command
