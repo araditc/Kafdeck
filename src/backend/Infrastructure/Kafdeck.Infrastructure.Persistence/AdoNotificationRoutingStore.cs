@@ -706,8 +706,7 @@ public sealed class AdoNotificationRoutingStore :
             WHERE subscription_id = @subscription_id
             """ +
             (lockForUpdate
-                ? "
-FOR UPDATE"
+                ? "\nFOR UPDATE"
                 : string.Empty);
         AddParameter(
             command,
