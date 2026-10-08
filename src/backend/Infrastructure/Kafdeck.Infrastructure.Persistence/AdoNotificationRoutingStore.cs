@@ -498,9 +498,9 @@ public sealed class AdoNotificationRoutingStore :
                 """
                 EXISTS (
                     SELECT 1
-                    FROM kafdeck_notification_subscription_events se
-                    WHERE se.subscription_id = s.subscription_id
-                      AND se.event_class = @event_class)
+                    FROM kafdeck_notification_subscription_events filter_events
+                    WHERE filter_events.subscription_id = s.subscription_id
+                      AND filter_events.event_class = @event_class)
                 """);
         }
 
@@ -508,20 +508,35 @@ public sealed class AdoNotificationRoutingStore :
             connection.CreateCommand();
         command.CommandText =
             $"""
+            WITH selected AS (
+                SELECT
+                    s.subscription_id,
+                    s.destination_id,
+                    s.lifecycle_state,
+                    s.revision,
+                    s.updated_at_utc
+                FROM kafdeck_notification_subscriptions s
+                {(predicates.Count == 0
+                    ? string.Empty
+                    : "WHERE " + string.Join(
+                        " AND ",
+                        predicates))}
+                ORDER BY s.subscription_id
+                LIMIT @row_limit
+            )
             SELECT
-                s.subscription_id,
-                s.destination_id,
-                s.lifecycle_state,
-                s.revision,
-                s.updated_at_utc
-            FROM kafdeck_notification_subscriptions s
-            {(predicates.Count == 0
-                ? string.Empty
-                : "WHERE " + string.Join(
-                    " AND ",
-                    predicates))}
-            ORDER BY s.subscription_id
-            LIMIT @row_limit
+                selected.subscription_id,
+                selected.destination_id,
+                selected.lifecycle_state,
+                selected.revision,
+                selected.updated_at_utc,
+                events.event_class
+            FROM selected
+            INNER JOIN kafdeck_notification_subscription_events events
+                ON events.subscription_id = selected.subscription_id
+            ORDER BY
+                selected.subscription_id,
+                events.event_class
             """;
 
         if (query.AfterSubscriptionId is not null)
@@ -553,58 +568,87 @@ public sealed class AdoNotificationRoutingStore :
             "@row_limit",
             query.MaxResults + 1);
 
-        var rows =
-            new List<SubscriptionRow>(
+        var orderedIds =
+            new List<string>(
                 query.MaxResults + 1);
-        await using (var reader =
-                     await command
-                         .ExecuteReaderAsync(cancellationToken)
-                         .ConfigureAwait(false))
+        var rows =
+            new Dictionary<string, SubscriptionRow>(
+                StringComparer.Ordinal);
+        var eventClasses =
+            new Dictionary<
+                string,
+                List<NotificationEventClass>>(
+                StringComparer.Ordinal);
+
+        await using var reader =
+            await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+        while (await reader
+                   .ReadAsync(cancellationToken)
+                   .ConfigureAwait(false))
         {
-            while (await reader
-                       .ReadAsync(cancellationToken)
-                       .ConfigureAwait(false))
+            var id =
+                reader.GetString(0);
+
+            if (!rows.ContainsKey(
+                    id))
             {
-                rows.Add(
+                var row =
                     ReadSubscriptionRow(
-                        reader));
+                        reader);
+                rows[id] =
+                    row;
+                orderedIds.Add(
+                    id);
+                eventClasses[id] =
+                    new List<NotificationEventClass>(
+                        NotificationSubscriptionDefinition
+                            .HardMaxEventClasses);
             }
+
+            var eventClass =
+                Enum.Parse<NotificationEventClass>(
+                    reader.GetString(5),
+                    ignoreCase: false);
+            if (eventClasses[id].Count >=
+                    NotificationSubscriptionDefinition
+                        .HardMaxEventClasses ||
+                eventClasses[id].Contains(
+                    eventClass))
+            {
+                throw new InvalidOperationException(
+                    "Persisted notification subscription event classes are invalid.");
+            }
+
+            eventClasses[id].Add(
+                eventClass);
         }
 
         var truncated =
-            rows.Count >
+            orderedIds.Count >
             query.MaxResults;
         if (truncated)
         {
-            rows.RemoveAt(
-                rows.Count - 1);
+            var overflowId =
+                orderedIds[^1];
+            orderedIds.RemoveAt(
+                orderedIds.Count - 1);
+            rows.Remove(
+                overflowId);
+            eventClasses.Remove(
+                overflowId);
         }
-
-        if (rows.Count == 0)
-        {
-            return new NotificationSubscriptionPage(
-                Array.Empty<NotificationSubscriptionSnapshot>(),
-                false,
-                null);
-        }
-
-        var ids =
-            rows.Select(row => row.SubscriptionId)
-                .ToArray();
-        var eventClasses =
-            await ReadEventClassesAsync(
-                    connection,
-                    transaction: null,
-                    ids,
-                    cancellationToken)
-                .ConfigureAwait(false);
 
         var snapshots =
-            rows.Select(
-                    row =>
+            orderedIds
+                .Select(
+                    id =>
                         ToSnapshot(
-                            row,
-                            eventClasses[row.SubscriptionId]))
+                            rows[id],
+                            Array.AsReadOnly(
+                                eventClasses[id]
+                                    .ToArray())))
                 .ToArray();
 
         return new NotificationSubscriptionPage(
