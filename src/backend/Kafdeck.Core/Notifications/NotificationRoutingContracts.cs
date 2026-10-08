@@ -719,7 +719,9 @@ public sealed class NotificationRoutingCoordinator
                         durableEvent.Event.PayloadFingerprint,
                         NotificationDeliveryState.Pending,
                         0,
-                        durableEvent.CreatedAtUtc),
+                        durableEvent.CreatedAtUtc,
+                        routedProfileRevisionFingerprint:
+                            profile.RevisionFingerprint),
                     durableEvent.CreatedAtUtc,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -803,6 +805,18 @@ public sealed class WebhookNotificationDeliveryDispatcher :
         {
             return new NotificationDeliveryDispatchResult(
                 NotificationDeliveryDispatchOutcome.PermanentFailure);
+        }
+
+        // Both direct Webhook and typed composite worker paths enforce
+        // the original approved recipient/endpoint/credential revision.
+        if (claimedDelivery.Snapshot.RoutedProfileRevisionFingerprint is null ||
+            !string.Equals(
+                claimedDelivery.Snapshot.RoutedProfileRevisionFingerprint,
+                profile.RevisionFingerprint,
+                StringComparison.Ordinal))
+        {
+            return new NotificationDeliveryDispatchResult(
+                NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
         }
 
         var result =
