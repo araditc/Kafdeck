@@ -460,7 +460,8 @@ public sealed class V08W66DeliveryWorkerTests
                         Fingerprint,
                         NotificationDeliveryState.InFlight,
                         1,
-                        created),
+                        created,
+                routedProfileRevisionFingerprint: new string('b', 64)),
                     pending.Revision,
                     created.AddSeconds(1));
             Assert.NotNull(
@@ -1260,7 +1261,8 @@ public sealed class V08W66DeliveryWorkerTests
             Fingerprint,
             NotificationDeliveryState.Pending,
             0,
-            createdAtUtc);
+            createdAtUtc,
+            routedProfileRevisionFingerprint: new string('b', 64));
 
     private static string TempPath() =>
         Path.Combine(

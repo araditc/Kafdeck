@@ -692,6 +692,20 @@ public sealed class NotificationRoutingCoordinator
                 continue;
             }
 
+            var existing =
+                await _deliveryStore
+                    .GetAsync(
+                        durableEvent.Event.EventId,
+                        subscription.Definition.DestinationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (existing is not null)
+            {
+                EnsureMatchingDelivery(existing, durableEvent);
+                matched++;
+                continue;
+            }
+
             var profile =
                 await _profileCatalog
                     .GetAsync(
@@ -711,18 +725,44 @@ public sealed class NotificationRoutingCoordinator
                 continue;
             }
 
-            await _deliveryStore
-                .CreateOrGetAsync(
-                    new NotificationDeliverySnapshot(
-                        durableEvent.Event.EventId,
-                        profile.DestinationId,
-                        durableEvent.Event.PayloadFingerprint,
-                        NotificationDeliveryState.Pending,
-                        0,
-                        durableEvent.CreatedAtUtc),
-                    durableEvent.CreatedAtUtc,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await _deliveryStore
+                    .CreateOrGetAsync(
+                        new NotificationDeliverySnapshot(
+                            durableEvent.Event.EventId,
+                            profile.DestinationId,
+                            durableEvent.Event.PayloadFingerprint,
+                            NotificationDeliveryState.Pending,
+                            0,
+                            durableEvent.CreatedAtUtc,
+                            routedProfileRevisionFingerprint:
+                                profile.RevisionFingerprint),
+                        durableEvent.CreatedAtUtc,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // Another replica may have created the immutable identity
+                // using a different approved profile revision after our
+                // first read. Accept only the same event material; never
+                // rewrite the original target/credential revision.
+                var concurrent =
+                    await _deliveryStore
+                        .GetAsync(
+                            durableEvent.Event.EventId,
+                            profile.DestinationId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                if (concurrent is null)
+                {
+                    throw;
+                }
+
+                EnsureMatchingDelivery(concurrent, durableEvent);
+            }
+
             matched++;
         }
 
@@ -733,6 +773,22 @@ public sealed class NotificationRoutingCoordinator
             missing,
             mismatches,
             page.Truncated);
+    }
+
+    private static void EnsureMatchingDelivery(
+        NotificationDeliveryRecord record,
+        NotificationSafeEventRecord durableEvent)
+    {
+        if (record.Snapshot.NotificationId != durableEvent.Event.EventId ||
+            !string.Equals(
+                record.Snapshot.PayloadFingerprint,
+                durableEvent.Event.PayloadFingerprint,
+                StringComparison.Ordinal) ||
+            record.Snapshot.CreatedAtUtc != durableEvent.CreatedAtUtc)
+        {
+            throw new InvalidOperationException(
+                "Notification delivery identity exists with different immutable event material.");
+        }
     }
 }
 
@@ -803,6 +859,18 @@ public sealed class WebhookNotificationDeliveryDispatcher :
         {
             return new NotificationDeliveryDispatchResult(
                 NotificationDeliveryDispatchOutcome.PermanentFailure);
+        }
+
+        // Both direct Webhook and typed composite worker paths enforce
+        // the original approved recipient/endpoint/credential revision.
+        if (claimedDelivery.Snapshot.RoutedProfileRevisionFingerprint is null ||
+            !string.Equals(
+                claimedDelivery.Snapshot.RoutedProfileRevisionFingerprint,
+                profile.RevisionFingerprint,
+                StringComparison.Ordinal))
+        {
+            return new NotificationDeliveryDispatchResult(
+                NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
         }
 
         var result =

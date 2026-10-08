@@ -633,7 +633,9 @@ public sealed class NotificationDeliveryWorker
             claimed.CreatedAtUtc,
             retryAt,
             NotificationDeliveryOutcomeCodes
-                .RetryableFailure);
+                .RetryableFailure,
+            routedProfileRevisionFingerprint:
+                claimed.RoutedProfileRevisionFingerprint);
     }
 
     private bool ShouldExhaustBeforeAttempt(
@@ -690,5 +692,7 @@ public sealed class NotificationDeliveryWorker
             current.AttemptCount,
             current.CreatedAtUtc,
             null,
-            outcomeCode);
+            outcomeCode,
+            routedProfileRevisionFingerprint:
+                current.RoutedProfileRevisionFingerprint);
 }

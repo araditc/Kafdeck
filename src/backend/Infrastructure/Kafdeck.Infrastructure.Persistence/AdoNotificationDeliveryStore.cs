@@ -7,7 +7,7 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoNotificationDeliveryStore :
     INotificationDeliveryStore
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const string Component =
         "notification-delivery";
 
@@ -75,8 +75,75 @@ public sealed class AdoNotificationDeliveryStore :
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        if (existing is not null &&
-            existing.Value != SchemaVersion)
+        if (existing == 1)
+        {
+            // Fences concurrent v1 writers before the preflight. ALTER TABLE
+            // itself also verifies the new nonterminal/revision CHECK under
+            // a database-exclusive schema lock.
+            if (_connectionFactory.SupportsSelectForUpdate)
+            {
+                await using var fence = connection.CreateCommand();
+                fence.Transaction = transaction;
+                fence.CommandText =
+                    "LOCK TABLE kafdeck_notification_deliveries IN ACCESS EXCLUSIVE MODE";
+                await fence.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            // v1 has no trustworthy destination revision for outstanding
+            // deliveries. Do NOT infer it from a mutable destination catalog:
+            // doing so could redirect retries to another recipient/credential.
+            // Refuse the upgrade atomically until v1 is drained and any
+            // InFlight/ambiguous external effects are manually reconciled.
+            await using (var pendingCheck = connection.CreateCommand())
+            {
+                pendingCheck.Transaction = transaction;
+                pendingCheck.CommandText =
+                    """
+                    SELECT COUNT(*)
+                    FROM kafdeck_notification_deliveries
+                    WHERE state IN ('Pending', 'Failed', 'InFlight')
+                    """;
+                var outstanding = Convert.ToInt64(
+                    await pendingCheck
+                        .ExecuteScalarAsync(cancellationToken)
+                        .ConfigureAwait(false),
+                    CultureInfo.InvariantCulture);
+                if (outstanding > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Notification-delivery v1 to v2 upgrade blocked: " +
+                        "undelivered v1 records have no approved profile revision. " +
+                        "Drain Pending/Failed deliveries with the v1 runtime and " +
+                        "reconcile InFlight outcomes under governed operations before retrying. " +
+                        "No queued deliveries were modified.");
+                }
+            }
+
+            // v1 -> v2 is additive; migration occurs under the
+            // shared schema lock and inside the initialization transaction.
+            await using var migration = connection.CreateCommand();
+            migration.Transaction = transaction;
+            migration.CommandText =
+                "ALTER TABLE kafdeck_notification_deliveries ADD COLUMN routed_profile_revision_fingerprint TEXT NULL CHECK (state NOT IN ('Pending', 'Failed', 'InFlight') OR routed_profile_revision_fingerprint IS NOT NULL)";
+            await migration.ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            await using var updateVersion = connection.CreateCommand();
+            updateVersion.Transaction = transaction;
+            updateVersion.CommandText =
+                "UPDATE kafdeck_schema_info SET schema_version = @schema_version WHERE component = @component AND schema_version = 1";
+            AddParameter(updateVersion, "@schema_version", SchemaVersion);
+            AddParameter(updateVersion, "@component", Component);
+            if (await updateVersion.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Notification delivery v1 schema upgrade did not claim the expected schema version.");
+            }
+        }
+        else if (existing is not null &&
+                 existing.Value != SchemaVersion)
         {
             throw new InvalidOperationException(
                 $"Notification-delivery schema version {existing.Value} is unsupported by this binary (expected {SchemaVersion}).");
@@ -231,7 +298,8 @@ public sealed class AdoNotificationDeliveryStore :
                 due_at_utc,
                 outcome_code,
                 revision,
-                updated_at_utc)
+                updated_at_utc,
+                routed_profile_revision_fingerprint)
             VALUES (
                 @notification_id,
                 @destination_id,
@@ -243,7 +311,8 @@ public sealed class AdoNotificationDeliveryStore :
                 @due_at_utc,
                 @outcome_code,
                 1,
-                @updated_at_utc)
+                @updated_at_utc,
+                @routed_profile_revision_fingerprint)
             ON CONFLICT (
                 notification_id,
                 destination_id)
@@ -285,6 +354,10 @@ public sealed class AdoNotificationDeliveryStore :
             if (!string.Equals(
                     record.Snapshot.PayloadFingerprint,
                     snapshot.PayloadFingerprint,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    record.Snapshot.RoutedProfileRevisionFingerprint,
+                    snapshot.RoutedProfileRevisionFingerprint,
                     StringComparison.Ordinal) ||
                 record.Snapshot.CreatedAtUtc !=
                     snapshot.CreatedAtUtc)
@@ -675,7 +748,9 @@ public sealed class AdoNotificationDeliveryStore :
                 NotificationDeliveryState.InFlight,
                 checked(
                     existing.Snapshot.AttemptCount + 1),
-                existing.Snapshot.CreatedAtUtc);
+                existing.Snapshot.CreatedAtUtc,
+                routedProfileRevisionFingerprint:
+                    existing.Snapshot.RoutedProfileRevisionFingerprint);
 
         NotificationDeliveryTransition
             .ValidateReplacement(
@@ -1142,7 +1217,10 @@ public sealed class AdoNotificationDeliveryStore :
                 reader.IsDBNull(7)
                     ? null
                     : reader.GetString(7),
-                null);
+                null,
+                reader.IsDBNull(10)
+                    ? null
+                    : reader.GetString(10));
 
         return new NotificationDeliveryRecord(
             snapshot,
@@ -1171,6 +1249,12 @@ public sealed class AdoNotificationDeliveryStore :
             command,
             "@payload_fingerprint",
             snapshot.PayloadFingerprint);
+        AddParameter(
+            command,
+            "@routed_profile_revision_fingerprint",
+            snapshot.RoutedProfileRevisionFingerprint is null
+                ? DBNull.Value
+                : snapshot.RoutedProfileRevisionFingerprint);
         AddParameter(
             command,
             "@state",
@@ -1291,7 +1375,8 @@ public sealed class AdoNotificationDeliveryStore :
             next_attempt_at_utc,
             outcome_code,
             revision,
-            updated_at_utc
+            updated_at_utc,
+            routed_profile_revision_fingerprint
         """;
 
     private static readonly string[]
@@ -1308,6 +1393,7 @@ public sealed class AdoNotificationDeliveryStore :
             notification_id TEXT NOT NULL,
             destination_id TEXT NOT NULL,
             payload_fingerprint TEXT NOT NULL,
+            routed_profile_revision_fingerprint TEXT NULL,
             state TEXT NOT NULL,
             attempt_count INTEGER NOT NULL,
             created_at_utc TEXT NOT NULL,
@@ -1321,6 +1407,7 @@ public sealed class AdoNotificationDeliveryStore :
                 destination_id),
             CHECK (revision >= 1),
             CHECK (attempt_count >= 0 AND attempt_count <= 10),
+            CHECK (state NOT IN ('Pending', 'Failed', 'InFlight') OR routed_profile_revision_fingerprint IS NOT NULL),
             CHECK (
                 state IN (
                     'Pending',
