@@ -466,6 +466,86 @@ public sealed class V08W66NotificationRoutingTests
     }
 
     [Fact]
+    public async Task Sqlite_v1_subscription_upgrade_preserves_wildcard_and_uses_terminal_retirement()
+    {
+        var path = TempPath();
+        try
+        {
+            await using (var raw = new SqliteConnection(
+                new SqliteConnectionStringBuilder { DataSource = path }.ConnectionString))
+            {
+                await raw.OpenAsync();
+                await using var old = raw.CreateCommand();
+                old.CommandText =
+                    """
+                    CREATE TABLE kafdeck_schema_info (
+                        component TEXT PRIMARY KEY,
+                        schema_version INTEGER NOT NULL);
+                    INSERT INTO kafdeck_schema_info
+                        (component, schema_version)
+                    VALUES ('notification-routing', 1);
+                    CREATE TABLE kafdeck_notification_subscriptions (
+                        subscription_id TEXT PRIMARY KEY,
+                        destination_id TEXT NOT NULL,
+                        lifecycle_state TEXT NOT NULL,
+                        revision BIGINT NOT NULL,
+                        updated_at_utc TEXT NOT NULL,
+                        CHECK (revision >= 1),
+                        CHECK (lifecycle_state IN ('Active', 'Paused')));
+                    CREATE TABLE kafdeck_notification_subscription_events (
+                        subscription_id TEXT NOT NULL,
+                        event_class TEXT NOT NULL,
+                        PRIMARY KEY(subscription_id, event_class),
+                        FOREIGN KEY(subscription_id)
+                            REFERENCES kafdeck_notification_subscriptions(subscription_id)
+                            ON DELETE CASCADE);
+                    INSERT INTO kafdeck_notification_subscriptions
+                        (subscription_id, destination_id, lifecycle_state,
+                         revision, updated_at_utc)
+                    VALUES ('legacy-sub', 'ops-webhook', 'Active', 1,
+                            '2026-10-08T08:30:00.0000000+00:00');
+                    INSERT INTO kafdeck_notification_subscription_events
+                        (subscription_id, event_class)
+                    VALUES ('legacy-sub', 'DataQuality');
+                    """;
+                await old.ExecuteNonQueryAsync();
+            }
+
+            var store = new AdoNotificationRoutingStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+
+            var legacy = await store.GetSubscriptionAsync("legacy-sub");
+            Assert.NotNull(legacy);
+            Assert.Equal(NotificationSubscriptionState.Active, legacy!.State);
+            Assert.Empty(legacy.Definition.EventTypes);
+            Assert.True(legacy.Definition.Matches(SafeEvent(Guid.NewGuid())));
+
+            var retired = await store.ReplaceSubscriptionAsync(
+                legacy.Definition,
+                NotificationSubscriptionState.Retired,
+                legacy.Revision,
+                Now.AddSeconds(1));
+            Assert.NotNull(retired);
+            Assert.Equal(NotificationSubscriptionState.Retired,
+                (await store.GetSubscriptionAsync("legacy-sub"))!.State);
+
+            await using var verify = new SqliteConnection(
+                new SqliteConnectionStringBuilder { DataSource = path }.ConnectionString);
+            await verify.OpenAsync();
+            await using var version = verify.CreateCommand();
+            version.CommandText =
+                "SELECT schema_version FROM kafdeck_schema_info WHERE component = 'notification-routing'";
+            Assert.Equal(2L, Convert.ToInt64(
+                await version.ExecuteScalarAsync()));
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
     public async Task PostgreSql_store_round_trips_safe_events_and_subscription_queries_when_available()
     {
         var baseConnectionString =
