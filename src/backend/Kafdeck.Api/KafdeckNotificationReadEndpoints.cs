@@ -107,6 +107,48 @@ public static class KafdeckNotificationReadEndpoints
                 AuthorizationAction.NotificationRead,
                 resourceRouteKey: "subscriptionId");
 
+        // Exact destination identity is authorized before invoking persistence.
+        // A continuation only traverses rows already in that same destination.
+        app.MapGet(
+                "/api/v1/notifications/destinations/{destinationId}/deliveries",
+                async (
+                    string destinationId,
+                    int? maxResults,
+                    DateTimeOffset? afterCreatedAtUtc,
+                    Guid? afterNotificationId,
+                    [FromServices] INotificationDeliveryHistoryReader store,
+                    CancellationToken cancellationToken) =>
+                {
+                    if ((afterCreatedAtUtc is null) !=
+                        (afterNotificationId is null))
+                        return InvalidQuery();
+
+                    try
+                    {
+                        var after = afterCreatedAtUtc is not null
+                            ? new NotificationDestinationDeliveryCursor(
+                                afterCreatedAtUtc.Value, afterNotificationId!.Value)
+                            : null;
+                        var page = await store.ListByDestinationAsync(
+                            new NotificationDestinationDeliveryQuery(
+                                destinationId, maxResults ?? 50, after),
+                            cancellationToken).ConfigureAwait(false);
+                        return Results.Ok(new NotificationDeliveryHistoryListData(
+                            page.Items.Select(NotificationDeliveryEvidenceData.From).ToArray(),
+                            page.Truncated,
+                            page.Next?.CreatedAtUtc,
+                            page.Next?.NotificationId));
+                    }
+                    catch (ArgumentException)
+                    {
+                        return InvalidQuery();
+                    }
+                })
+            .WithName("v08-notification-destination-deliveries-read")
+            .RequireKafdeckAuthorization(
+                AuthorizationAction.NotificationRead,
+                resourceRouteKey: "destinationId");
+
         app.MapGet(
                 "/api/v1/notifications/deliveries/{notificationId:guid}/{destinationId}",
                 async (
@@ -296,3 +338,10 @@ public sealed record NotificationDeliveryEvidenceData(
             record.Snapshot.OutcomeCode,
             record.Snapshot.RoutedProfileRevisionFingerprint is not null);
 }
+
+
+public sealed record NotificationDeliveryHistoryListData(
+    IReadOnlyList<NotificationDeliveryEvidenceData> Items,
+    bool Truncated,
+    DateTimeOffset? NextCreatedAtUtc,
+    Guid? NextNotificationId);

@@ -110,7 +110,7 @@ public sealed class V08W66NotificationReadApiTests
             })
             .ToArray();
 
-        Assert.Equal(3, mapped.Length);
+        Assert.Equal(4, mapped.Length);
         Assert.All(mapped, route => Assert.Equal("GET", route.Method));
         Assert.Contains(mapped, route =>
             route.Path == "/api/v1/notifications/subscriptions");
@@ -118,6 +118,8 @@ public sealed class V08W66NotificationReadApiTests
             route.Path == "/api/v1/notifications/subscriptions/{subscriptionId}");
         Assert.Contains(mapped, route =>
             route.Path == "/api/v1/notifications/deliveries/{notificationId:guid}/{destinationId}");
+        Assert.Contains(mapped, route =>
+            route.Path == "/api/v1/notifications/destinations/{destinationId}/deliveries");
     }
 
     [Fact]

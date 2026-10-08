@@ -321,11 +321,15 @@ if (notificationReadOptions?.Enabled == true)
             new AdoNotificationRoutingStore(
                 services.GetRequiredService<
                     INotificationDeliveryDbConnectionFactory>()));
-    builder.Services.AddSingleton<INotificationDeliveryStore>(
+    builder.Services.AddSingleton<AdoNotificationDeliveryStore>(
         services =>
             new AdoNotificationDeliveryStore(
                 services.GetRequiredService<
                     INotificationDeliveryDbConnectionFactory>()));
+    builder.Services.AddSingleton<INotificationDeliveryStore>(
+        services => services.GetRequiredService<AdoNotificationDeliveryStore>());
+    builder.Services.AddSingleton<INotificationDeliveryHistoryReader>(
+        services => services.GetRequiredService<AdoNotificationDeliveryStore>());
 }
 
 builder.Services.AddSingleton<IMetricsObservationPort,

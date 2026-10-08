@@ -5,7 +5,8 @@ using Kafdeck.Core.Notifications;
 namespace Kafdeck.Infrastructure.Persistence;
 
 public sealed class AdoNotificationDeliveryStore :
-    INotificationDeliveryStore
+    INotificationDeliveryStore,
+    INotificationDeliveryHistoryReader
 {
     private const int SchemaVersion = 2;
     private const string Component =
@@ -258,6 +259,67 @@ public sealed class AdoNotificationDeliveryStore :
             .ConfigureAwait(false)
             ? ReadRecord(reader)
             : null;
+    }
+
+    public async Task<NotificationDestinationDeliveryPage>
+        ListByDestinationAsync(
+            NotificationDestinationDeliveryQuery query,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        await using var connection = await _connectionFactory
+            .OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = SelectColumns + "\n" +
+            (query.After is null
+                ? """
+                  FROM kafdeck_notification_deliveries
+                  WHERE destination_id = @destination_id
+                  ORDER BY created_at_utc, notification_id
+                  LIMIT @row_limit
+                  """
+                : """
+                  FROM kafdeck_notification_deliveries
+                  WHERE destination_id = @destination_id
+                    AND (created_at_utc, notification_id) >
+                        (@after_created_at_utc, @after_notification_id)
+                  ORDER BY created_at_utc, notification_id
+                  LIMIT @row_limit
+                  """);
+
+        AddParameter(command, "@destination_id", query.DestinationId);
+        AddParameter(command, "@row_limit", query.MaxResults + 1);
+        if (query.After is not null)
+        {
+            AddParameter(command, "@after_created_at_utc",
+                Format(query.After.CreatedAtUtc));
+            AddParameter(command, "@after_notification_id",
+                query.After.NotificationId.ToString("D"));
+        }
+
+        var items = new List<NotificationDeliveryRecord>(query.MaxResults);
+        var truncated = false;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (items.Count >= query.MaxResults)
+            {
+                truncated = true;
+                break;
+            }
+            items.Add(ReadRecord(reader));
+        }
+
+        NotificationDestinationDeliveryCursor? next = null;
+        if (truncated)
+        {
+            var last = items[^1].Snapshot;
+            next = new NotificationDestinationDeliveryCursor(
+                last.CreatedAtUtc, last.NotificationId);
+        }
+        return new NotificationDestinationDeliveryPage(items, truncated, next);
     }
 
     public async Task<NotificationDeliveryRecord>
@@ -1451,7 +1513,13 @@ public sealed class AdoNotificationDeliveryStore :
             started_at_utc)
         """,
         """
-        CREATE INDEX IF NOT EXISTS ix_kafdeck_notification_delivery_due
+        CREATE INDEX IF NOT EXISTS ix_kafdeck_notification_delivery_history
+        ON kafdeck_notification_deliveries (
+            destination_id, created_at_utc, notification_id)
+        """
+        ,
+        """
+                CREATE INDEX IF NOT EXISTS ix_kafdeck_notification_delivery_due
         ON kafdeck_notification_deliveries (
             due_at_utc,
             notification_id,
