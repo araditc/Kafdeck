@@ -7,6 +7,7 @@ using Kafdeck.Core.Catalog;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.Kafka;
+using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Observability;
 using Kafdeck.Core.ReadViews;
 using Kafdeck.Core.Records;
@@ -42,6 +43,8 @@ var historicalMetricsOptions =
     observabilityOptions.History;
 var dataQualityOptions =
     kafdeckOptions.DataQuality;
+var notificationReadOptions =
+    kafdeckOptions.Notifications;
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -101,6 +104,16 @@ var dataQualityConnectionString =
         ? secretResolver
             .Resolve(
                 dataQualityOptions.ConnectionString)
+            .Reveal()
+        : null;
+
+var notificationConnectionString =
+    notificationReadOptions?.Enabled == true &&
+    notificationReadOptions.Provider ==
+        NotificationPersistenceProvider.PostgreSql &&
+    notificationReadOptions.ConnectionString is not null
+        ? secretResolver
+            .Resolve(notificationReadOptions.ConnectionString)
             .Reveal()
         : null;
 
@@ -286,6 +299,33 @@ if (dataQualityOptions?.Enabled == true)
             new AdoDataQualityLifecycleStore(
                 services.GetRequiredService<
                     IDataQualityDbConnectionFactory>()));
+}
+
+if (notificationReadOptions?.Enabled == true)
+{
+    builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(
+        _ =>
+            notificationReadOptions.Provider switch
+            {
+                NotificationPersistenceProvider.Sqlite =>
+                    new SqliteNotificationDeliveryDbConnectionFactory(
+                        notificationReadOptions.SqliteDatabasePath!),
+                NotificationPersistenceProvider.PostgreSql =>
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        notificationConnectionString!),
+                _ => throw new KafdeckConfigurationException(
+                    "Notification persistence provider is unsupported."),
+            });
+    builder.Services.AddSingleton<INotificationRoutingStore>(
+        services =>
+            new AdoNotificationRoutingStore(
+                services.GetRequiredService<
+                    INotificationDeliveryDbConnectionFactory>()));
+    builder.Services.AddSingleton<INotificationDeliveryStore>(
+        services =>
+            new AdoNotificationDeliveryStore(
+                services.GetRequiredService<
+                    INotificationDeliveryDbConnectionFactory>()));
 }
 
 builder.Services.AddSingleton<IMetricsObservationPort,
@@ -590,6 +630,23 @@ if (dataQualityOptions?.Enabled == true)
         dataQualityOptions.ManagementEnabled);
 }
 
+if (notificationReadOptions?.Enabled == true)
+{
+    // Start-up fails closed on incompatible notification schema,
+    // including an unresolved v1 delivery backlog. No send worker runs.
+    await app.Services.GetRequiredService<INotificationRoutingStore>()
+        .InitializeAsync()
+        .ConfigureAwait(false);
+    await app.Services.GetRequiredService<INotificationDeliveryStore>()
+        .InitializeAsync()
+        .ConfigureAwait(false);
+
+    app.Logger.LogInformation(
+        "Kafdeck notification observation persistence initialized with provider {Provider}, mode {Mode}; no delivery worker or mutation API activated.",
+        notificationReadOptions.Provider,
+        notificationReadOptions.ExecutionMode);
+}
+
 app.Logger.LogInformation(
     "Kafdeck startup configuration: {@Configuration}",
     SafeConfigurationDiagnostics.Create(kafdeckOptions));
@@ -698,6 +755,10 @@ app.MapKafdeckV08OperationalAnalytics(kafdeckOptions);
 if (dataQualityOptions?.Enabled == true)
 {
     app.MapKafdeckV08DataQuality(kafdeckOptions);
+}
+if (notificationReadOptions?.Enabled == true)
+{
+    app.MapKafdeckV08NotificationReads();
 }
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
