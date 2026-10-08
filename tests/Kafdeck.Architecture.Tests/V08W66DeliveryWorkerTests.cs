@@ -1037,32 +1037,29 @@ public sealed class V08W66DeliveryWorkerTests
             await storeA.InitializeAsync();
             await storeB.InitializeAsync();
 
-            var now =
-                new DateTimeOffset(
-                    2026,
-                    10,
-                    7,
-                    21,
-                    0,
-                    0,
-                    TimeSpan.Zero);
+            var coordinationNow =
+                await storeA
+                    .GetCoordinationUtcNowAsync(
+                        DateTimeOffset.UtcNow);
+            var created =
+                coordinationNow.AddSeconds(-1);
             await storeA.CreateOrGetAsync(
                 Pending(
                     Guid.NewGuid(),
-                    now),
-                now);
+                    created),
+                created);
             await storeA.CreateOrGetAsync(
                 Pending(
                     Guid.NewGuid(),
-                    now),
-                now);
+                    created),
+                created);
 
             var timeA =
                 new MutableTimeProvider(
-                    now);
+                    coordinationNow.AddMinutes(-5));
             var timeB =
                 new MutableTimeProvider(
-                    now.AddSeconds(30));
+                    coordinationNow.AddMinutes(5));
             var dispatcher =
                 new BlockingDispatcher();
             var policy =
