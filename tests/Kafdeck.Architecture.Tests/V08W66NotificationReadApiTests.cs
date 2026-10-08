@@ -151,6 +151,82 @@ public sealed class V08W66NotificationReadApiTests
     }
 
     [Fact]
+    public void Authorization_filtered_pagination_never_emits_a_hidden_identity()
+    {
+        var when = DateTimeOffset.UtcNow;
+        NotificationSubscriptionSnapshot Subscription(
+            string id, string destination) =>
+            new(
+                new NotificationSubscriptionDefinition(
+                    id,
+                    destination,
+                    [NotificationEventClass.Operational],
+                    ["consumer-lag"]),
+                NotificationSubscriptionState.Active,
+                1,
+                when);
+
+        var permitted = Subscription("a-visible", "ops-visible");
+        var hidden = Subscription("b-secret", "ops-secret");
+        var page = new NotificationSubscriptionPage(
+            [permitted, hidden],
+            truncated: true,
+            nextSubscriptionId: hidden.Definition.SubscriptionId);
+
+        var projected = NotificationSubscriptionReadProjection.Project(
+            page,
+            snapshot =>
+                snapshot.Definition.SubscriptionId == "a-visible");
+
+        Assert.Single(projected.Items);
+        Assert.Equal("a-visible", projected.Items[0].SubscriptionId);
+        Assert.True(projected.AuthorizationFiltered);
+        Assert.True(projected.Truncated);
+        Assert.True(projected.ContinuationRestricted);
+        Assert.Null(projected.NextSubscriptionId);
+        Assert.DoesNotContain(
+            "b-secret",
+            JsonSerializer.Serialize(projected),
+            StringComparison.Ordinal);
+
+        var allPermitted = NotificationSubscriptionReadProjection.Project(
+            page,
+            _ => true);
+        Assert.False(allPermitted.AuthorizationFiltered);
+        Assert.False(allPermitted.ContinuationRestricted);
+        Assert.Equal("b-secret", allPermitted.NextSubscriptionId);
+    }
+
+    [Fact]
+    public void Empty_visible_page_does_not_expose_hidden_continuation()
+    {
+        var when = DateTimeOffset.UtcNow;
+        var hidden = new NotificationSubscriptionSnapshot(
+            new NotificationSubscriptionDefinition(
+                "secret-only",
+                "secret-destination",
+                [NotificationEventClass.Security]),
+            NotificationSubscriptionState.Active,
+            1,
+            when);
+        var page = new NotificationSubscriptionPage(
+            [hidden], true, hidden.Definition.SubscriptionId);
+
+        var projected = NotificationSubscriptionReadProjection.Project(
+            page,
+            _ => false);
+
+        Assert.Empty(projected.Items);
+        Assert.True(projected.AuthorizationFiltered);
+        Assert.True(projected.ContinuationRestricted);
+        Assert.Null(projected.NextSubscriptionId);
+        Assert.DoesNotContain(
+            "secret-only",
+            JsonSerializer.Serialize(projected),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Notification_authorization_is_distinct_from_legacy_permissions()
     {
         Assert.NotEqual(AuthorizationAction.NotificationRead, AuthorizationAction.TopicRead);
