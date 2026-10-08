@@ -323,8 +323,7 @@ public sealed class AdoNotificationSubscriptionStore :
 
         command.CommandText =
             SelectColumns +
-            "
-FROM kafdeck_notification_subscriptions" +
+            "\nFROM kafdeck_notification_subscriptions" +
             where +
             """
             
