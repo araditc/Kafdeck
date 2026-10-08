@@ -114,6 +114,43 @@ public sealed class V08W66NotificationRoutingTests
     }
 
     [Fact]
+    public async Task Durable_event_store_rejects_unclassified_subject_and_summary()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new AdoNotificationRoutingStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+
+            var unclassified = new NotificationSafeEvent(
+                Guid.NewGuid(),
+                NotificationEventClass.Security,
+                "authorization.denied",
+                "arbitrary printable secret",
+                "arbitrary decoded record value",
+                Now.AddMinutes(-1));
+
+            Assert.False(unclassified.IsApprovedForDurability);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.CreateOrGetEventAsync(unclassified, Now));
+
+            Assert.Throws<InvalidOperationException>(
+                () => NotificationSafeEvent.RestoreApproved(
+                    unclassified.EventId,
+                    unclassified.EventClass,
+                    unclassified.EventType,
+                    unclassified.Subject,
+                    unclassified.Summary,
+                    unclassified.OccurredAtUtc));
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
     public async Task Event_idempotency_rejects_different_safe_material()
     {
         var path = TempPath();
@@ -136,12 +173,9 @@ public sealed class V08W66NotificationRoutingTests
             await Assert.ThrowsAsync<InvalidOperationException>(
                 () =>
                     store.CreateOrGetEventAsync(
-                        new NotificationSafeEvent(
+                        NotificationSafeEvent.Approved(
                             id,
-                            NotificationEventClass.DataQuality,
-                            "data-quality.violation",
-                            "Orders quality",
-                            "Different safe summary",
+                            NotificationApprovedEventKind.SecurityAuthorizationDenied,
                             Now.AddMinutes(-1)),
                         Now));
         }
@@ -415,12 +449,9 @@ public sealed class V08W66NotificationRoutingTests
 
     private static NotificationSafeEvent SafeEvent(
         Guid id) =>
-        new(
+        NotificationSafeEvent.Approved(
             id,
-            NotificationEventClass.DataQuality,
-            "data-quality.violation",
-            "Orders quality",
-            "Required field violation count exceeded the configured policy.",
+            NotificationApprovedEventKind.DataQualityViolation,
             Now.AddMinutes(-1));
 
     private static NotificationSubscriptionDefinition
