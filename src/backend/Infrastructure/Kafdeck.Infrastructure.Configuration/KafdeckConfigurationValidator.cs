@@ -30,6 +30,7 @@ public static class KafdeckConfigurationValidator
         ValidateGenerator(options.Generator, options.Clusters, errors);
         ValidateObservability(options.Observability, options.Deployment, errors);
         ValidateDataQuality(options.DataQuality, options.Deployment, errors);
+        ValidateNotifications(options.Notifications, options.Deployment, errors);
         ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
@@ -549,6 +550,92 @@ public static class KafdeckConfigurationValidator
             default:
                 errors.Add(
                     "Data-quality persistence provider is unsupported.");
+                break;
+        }
+    }
+
+    private static void ValidateNotifications(
+        NotificationOptions? notifications,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        if (notifications is null)
+        {
+            return;
+        }
+
+        if (!notifications.Enabled)
+        {
+            if (notifications.ManagementEnabled)
+            {
+                errors.Add(
+                    "Notification management cannot be enabled while notification persistence is disabled.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(
+                    notifications.SqliteDatabasePath) ||
+                notifications.ConnectionString is not null)
+            {
+                errors.Add(
+                    "Notification persistence credentials/path must not be configured while notifications are disabled.");
+            }
+
+            return;
+        }
+
+        if (notifications.ManagementEnabled &&
+            deployment.Mode != AccessMode.Oidc)
+        {
+            errors.Add(
+                "Notification lifecycle management requires OIDC access mode for an authenticated RBAC operator.");
+        }
+
+        switch (notifications.Provider)
+        {
+            case NotificationPersistenceProvider.Sqlite:
+                if (notifications.ExecutionMode !=
+                    NotificationExecutionMode.Standalone)
+                {
+                    errors.Add(
+                        "SQLite notification persistence supports standalone execution only.");
+                }
+
+                if (string.IsNullOrWhiteSpace(
+                        notifications.SqliteDatabasePath) ||
+                    !Path.IsPathFullyQualified(
+                        notifications.SqliteDatabasePath))
+                {
+                    errors.Add(
+                        "SQLite notification persistence requires an absolute database path.");
+                }
+
+                if (notifications.ConnectionString is not null)
+                {
+                    errors.Add(
+                        "SQLite notification persistence must not configure a PostgreSQL connection-string secret.");
+                }
+
+                break;
+
+            case NotificationPersistenceProvider.PostgreSql:
+                if (!string.IsNullOrWhiteSpace(
+                        notifications.SqliteDatabasePath))
+                {
+                    errors.Add(
+                        "PostgreSQL notification persistence must not configure a SQLite database path.");
+                }
+
+                if (notifications.ConnectionString is null)
+                {
+                    errors.Add(
+                        "PostgreSQL notification persistence requires a connection-string secret reference.");
+                }
+
+                break;
+
+            default:
+                errors.Add(
+                    "Notification persistence provider is unsupported.");
                 break;
         }
     }
