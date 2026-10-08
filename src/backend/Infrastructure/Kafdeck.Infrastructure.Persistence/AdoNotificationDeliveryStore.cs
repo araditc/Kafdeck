@@ -114,6 +114,40 @@ public sealed class AdoNotificationDeliveryStore :
             .ConfigureAwait(false);
     }
 
+    public async Task<DateTimeOffset>
+        GetCoordinationUtcNowAsync(
+            DateTimeOffset standaloneFallbackUtc,
+            CancellationToken cancellationToken = default)
+    {
+        if (standaloneFallbackUtc == default)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(standaloneFallbackUtc));
+        }
+
+        if (!_connectionFactory.SupportsSelectForUpdate)
+        {
+            return standaloneFallbackUtc.ToUniversalTime();
+        }
+
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+        command.CommandText =
+            _connectionFactory.DatabaseUtcNowSql;
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return ParseDatabaseClock(
+            value);
+    }
+
     public async Task<NotificationDeliveryRecord?>
         GetAsync(
             Guid notificationId,
@@ -1338,7 +1372,13 @@ public sealed class AdoNotificationDeliveryStore :
                 .ExecuteScalarAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-        return value switch
+        return ParseDatabaseClock(
+            value);
+    }
+
+    private static DateTimeOffset ParseDatabaseClock(
+        object? value) =>
+        value switch
         {
             DateTimeOffset offset =>
                 offset.ToUniversalTime(),
@@ -1359,7 +1399,6 @@ public sealed class AdoNotificationDeliveryStore :
             _ => throw new InvalidOperationException(
                 "Notification delivery database clock returned an unsupported value."),
         };
-    }
 
     private static DateTimeOffset Parse(
         string value) =>
