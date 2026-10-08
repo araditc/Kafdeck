@@ -560,6 +560,10 @@ public interface INotificationDeliveryStore
     Task InitializeAsync(
         CancellationToken cancellationToken = default);
 
+    Task<DateTimeOffset> GetCoordinationUtcNowAsync(
+        DateTimeOffset standaloneFallbackUtc,
+        CancellationToken cancellationToken = default);
+
     Task<NotificationDeliveryRecord?> GetAsync(
         Guid notificationId,
         string destinationId,
