@@ -123,7 +123,7 @@ public sealed record NotificationDestinationProfile
     public const int MaxDestinationIdLength = 128;
     public const int MaxDisplayNameLength = 256;
 
-    internal static string NormalizeDestinationId(
+    public static string NormalizeDestinationId(
         string destinationId)
     {
         ArgumentNullException.ThrowIfNull(
