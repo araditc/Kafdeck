@@ -517,6 +517,44 @@ public sealed record NotificationDeliveryRecoveryPage
     public NotificationDeliveryRecoveryCursor? NextCursor { get; }
 }
 
+public enum NotificationDeliveryClaimOutcome
+{
+    Claimed = 1,
+    VersionConflict = 2,
+    RateLimited = 3,
+    ConcurrencyLimited = 4,
+    NotClaimable = 5,
+}
+
+public sealed record NotificationDeliveryClaimResult
+{
+    public NotificationDeliveryClaimResult(
+        NotificationDeliveryClaimOutcome outcome,
+        NotificationDeliveryRecord? record = null)
+    {
+        if (!Enum.IsDefined(outcome))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(outcome));
+        }
+
+        if ((outcome ==
+                 NotificationDeliveryClaimOutcome.Claimed) !=
+            (record is not null))
+        {
+            throw new ArgumentException(
+                "A notification delivery claim record is present exactly when the claim succeeds.",
+                nameof(record));
+        }
+
+        Outcome = outcome;
+        Record = record;
+    }
+
+    public NotificationDeliveryClaimOutcome Outcome { get; }
+    public NotificationDeliveryRecord? Record { get; }
+}
+
 public interface INotificationDeliveryStore
 {
     Task InitializeAsync(
@@ -536,6 +574,15 @@ public interface INotificationDeliveryStore
         NotificationDeliverySnapshot snapshot,
         long expectedRevision,
         DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<NotificationDeliveryClaimResult> TryClaimForDispatchAsync(
+        Guid notificationId,
+        string destinationId,
+        long expectedRevision,
+        DateTimeOffset claimedAtUtc,
+        int maxConcurrency,
+        int ratePerSecond,
         CancellationToken cancellationToken = default);
 
     Task<NotificationDeliveryPage> ListDueAsync(

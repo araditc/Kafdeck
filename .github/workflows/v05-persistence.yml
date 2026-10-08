@@ -21,6 +21,7 @@ on:
       - 'tests/Kafdeck.Architecture.Tests/V08W63HistoricalMetricsPersistenceTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W65DataQualityDurableStoreTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W66NotificationDeliveryStoreTests.cs'
+      - 'tests/Kafdeck.Architecture.Tests/V08W66DeliveryWorkerTests.cs'
       - 'docs/implementation/v0.5-w40-readiness.md'
       - '.github/workflows/v05-persistence.yml'
   workflow_dispatch:
@@ -77,5 +78,5 @@ jobs:
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release
           --no-restore
-          --filter 'FullyQualifiedName~V05MutationKernelTests|FullyQualifiedName~V05MutationPersistenceTests|FullyQualifiedName~V06W41FleetConflictObligationTests|FullyQualifiedName~V06W41FleetConflictRelationTests|FullyQualifiedName~V06W41FleetConflictScopeTests|FullyQualifiedName~V06W41FleetPersistenceTests|FullyQualifiedName~V06W41FleetProgressTests|FullyQualifiedName~V08W63HistoricalMetricsPersistenceTests|FullyQualifiedName~V08W65DataQualityDurableStoreTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests'
+          --filter 'FullyQualifiedName~V05MutationKernelTests|FullyQualifiedName~V05MutationPersistenceTests|FullyQualifiedName~V06W41FleetConflictObligationTests|FullyQualifiedName~V06W41FleetConflictRelationTests|FullyQualifiedName~V06W41FleetConflictScopeTests|FullyQualifiedName~V06W41FleetPersistenceTests|FullyQualifiedName~V06W41FleetProgressTests|FullyQualifiedName~V08W63HistoricalMetricsPersistenceTests|FullyQualifiedName~V08W65DataQualityDurableStoreTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests'
           --logger 'console;verbosity=detailed'

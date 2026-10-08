@@ -380,6 +380,356 @@ public sealed class AdoNotificationDeliveryStore :
             updatedAtUtc);
     }
 
+    public async Task<NotificationDeliveryClaimResult>
+        TryClaimForDispatchAsync(
+            Guid notificationId,
+            string destinationId,
+            long expectedRevision,
+            DateTimeOffset claimedAtUtc,
+            int maxConcurrency,
+            int ratePerSecond,
+            CancellationToken cancellationToken = default)
+    {
+        ValidateIdentity(
+            notificationId,
+            destinationId,
+            out var normalizedDestination);
+
+        if (expectedRevision < 1 ||
+            claimedAtUtc == default ||
+            maxConcurrency is < 1 or >
+                NotificationDeliveryPolicy.HardMaxConcurrency ||
+            ratePerSecond is < 1 or >
+                NotificationDeliveryPolicy.HardMaxRatePerSecond)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(expectedRevision),
+                "Notification dispatch admission parameters are outside admitted bounds.");
+        }
+
+        var claimedAt =
+            claimedAtUtc.ToUniversalTime();
+
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var transaction =
+            await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        await using (var ensureGuard =
+                     connection.CreateCommand())
+        {
+            ensureGuard.Transaction =
+                transaction;
+            ensureGuard.CommandText =
+                """
+                INSERT INTO kafdeck_notification_dispatch_guards (
+                    destination_id,
+                    fence)
+                VALUES (
+                    @destination_id,
+                    0)
+                ON CONFLICT (destination_id)
+                DO NOTHING
+                """;
+            AddParameter(
+                ensureGuard,
+                "@destination_id",
+                normalizedDestination);
+            await ensureGuard
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await using (var lockGuard =
+                     connection.CreateCommand())
+        {
+            lockGuard.Transaction =
+                transaction;
+            lockGuard.CommandText =
+                """
+                UPDATE kafdeck_notification_dispatch_guards
+                SET fence = fence + 1
+                WHERE destination_id = @destination_id
+                """;
+            AddParameter(
+                lockGuard,
+                "@destination_id",
+                normalizedDestination);
+            var affected =
+                await lockGuard
+                    .ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            if (affected != 1)
+            {
+                throw new InvalidOperationException(
+                    "Notification dispatch guard could not be acquired.");
+            }
+        }
+
+        var rateClockUtc =
+            await ReadRateClockUtcAsync(
+                    connection,
+                    transaction,
+                    claimedAt,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        var rateWindowStart =
+            rateClockUtc -
+            TimeSpan.FromSeconds(1);
+
+        await using (var cleanup =
+                     connection.CreateCommand())
+        {
+            cleanup.Transaction =
+                transaction;
+            cleanup.CommandText =
+                """
+                DELETE FROM kafdeck_notification_dispatch_attempts
+                WHERE destination_id = @destination_id
+                  AND started_at_utc <= @window_start_utc
+                """;
+            AddParameter(
+                cleanup,
+                "@destination_id",
+                normalizedDestination);
+            AddParameter(
+                cleanup,
+                "@window_start_utc",
+                Format(rateWindowStart));
+            await cleanup
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var activeCount =
+            await CountAsync(
+                    connection,
+                    transaction,
+                    """
+                    SELECT COUNT(*)
+                    FROM kafdeck_notification_deliveries
+                    WHERE destination_id = @destination_id
+                      AND state = 'InFlight'
+                    """,
+                    normalizedDestination,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        if (activeCount >=
+            maxConcurrency)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new NotificationDeliveryClaimResult(
+                NotificationDeliveryClaimOutcome.ConcurrencyLimited);
+        }
+
+        var rateCount =
+            await CountAsync(
+                    connection,
+                    transaction,
+                    """
+                    SELECT COUNT(*)
+                    FROM kafdeck_notification_dispatch_attempts
+                    WHERE destination_id = @destination_id
+                      AND started_at_utc > @window_start_utc
+                    """,
+                    normalizedDestination,
+                    cancellationToken,
+                    rateWindowStart)
+                .ConfigureAwait(false);
+
+        if (rateCount >=
+            ratePerSecond)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new NotificationDeliveryClaimResult(
+                NotificationDeliveryClaimOutcome.RateLimited);
+        }
+
+        var existing =
+            await ReadExistingAsync(
+                    connection,
+                    transaction,
+                    notificationId,
+                    normalizedDestination,
+                    _connectionFactory.SupportsSelectForUpdate,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        if (existing is null ||
+            existing.Revision !=
+                expectedRevision)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new NotificationDeliveryClaimResult(
+                NotificationDeliveryClaimOutcome.VersionConflict);
+        }
+
+        var dueAt =
+            existing.Snapshot.NextAttemptAtUtc ??
+            existing.Snapshot.CreatedAtUtc;
+
+        if (existing.Snapshot.State is not
+                (NotificationDeliveryState.Pending or
+                 NotificationDeliveryState.Failed) ||
+            dueAt >
+                claimedAt)
+        {
+            await transaction
+                .RollbackAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new NotificationDeliveryClaimResult(
+                NotificationDeliveryClaimOutcome.NotClaimable);
+        }
+
+        if (claimedAt <
+            existing.UpdatedAtUtc)
+        {
+            throw new ArgumentException(
+                "Notification dispatch claim timestamp must be monotonic.",
+                nameof(claimedAtUtc));
+        }
+
+        var claimedSnapshot =
+            new NotificationDeliverySnapshot(
+                existing.Snapshot.NotificationId,
+                existing.Snapshot.DestinationId,
+                existing.Snapshot.PayloadFingerprint,
+                NotificationDeliveryState.InFlight,
+                checked(
+                    existing.Snapshot.AttemptCount + 1),
+                existing.Snapshot.CreatedAtUtc);
+
+        NotificationDeliveryTransition
+            .ValidateReplacement(
+                existing.Snapshot,
+                claimedSnapshot);
+
+        await using (var update =
+                     connection.CreateCommand())
+        {
+            update.Transaction =
+                transaction;
+            update.CommandText =
+                """
+                UPDATE kafdeck_notification_deliveries
+                SET
+                    state = @state,
+                    attempt_count = @attempt_count,
+                    next_attempt_at_utc = NULL,
+                    due_at_utc = @due_at_utc,
+                    outcome_code = NULL,
+                    revision = revision + 1,
+                    updated_at_utc = @updated_at_utc
+                WHERE notification_id = @notification_id
+                  AND destination_id = @destination_id
+                  AND revision = @expected_revision
+                """;
+            AddParameter(
+                update,
+                "@state",
+                NotificationDeliveryState.InFlight.ToString());
+            AddParameter(
+                update,
+                "@attempt_count",
+                claimedSnapshot.AttemptCount);
+            AddParameter(
+                update,
+                "@due_at_utc",
+                Format(
+                    claimedSnapshot.CreatedAtUtc));
+            AddParameter(
+                update,
+                "@updated_at_utc",
+                Format(claimedAt));
+            AddParameter(
+                update,
+                "@notification_id",
+                notificationId.ToString("D"));
+            AddParameter(
+                update,
+                "@destination_id",
+                normalizedDestination);
+            AddParameter(
+                update,
+                "@expected_revision",
+                expectedRevision);
+
+            if (await update
+                    .ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false) != 1)
+            {
+                await transaction
+                    .RollbackAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return new NotificationDeliveryClaimResult(
+                    NotificationDeliveryClaimOutcome.VersionConflict);
+            }
+        }
+
+        await using (var attempt =
+                     connection.CreateCommand())
+        {
+            attempt.Transaction =
+                transaction;
+            attempt.CommandText =
+                """
+                INSERT INTO kafdeck_notification_dispatch_attempts (
+                    notification_id,
+                    destination_id,
+                    attempt_no,
+                    started_at_utc)
+                VALUES (
+                    @notification_id,
+                    @destination_id,
+                    @attempt_no,
+                    @started_at_utc)
+                """;
+            AddParameter(
+                attempt,
+                "@notification_id",
+                notificationId.ToString("D"));
+            AddParameter(
+                attempt,
+                "@destination_id",
+                normalizedDestination);
+            AddParameter(
+                attempt,
+                "@attempt_no",
+                claimedSnapshot.AttemptCount);
+            AddParameter(
+                attempt,
+                "@started_at_utc",
+                Format(rateClockUtc));
+
+            await attempt
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await transaction
+            .CommitAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new NotificationDeliveryClaimResult(
+            NotificationDeliveryClaimOutcome.Claimed,
+            new NotificationDeliveryRecord(
+                claimedSnapshot,
+                checked(
+                    expectedRevision + 1),
+                claimedAt));
+    }
+
     public async Task<NotificationDeliveryPage>
         ListDueAsync(
             NotificationDeliveryDueQuery query,
@@ -616,6 +966,43 @@ public sealed class AdoNotificationDeliveryStore :
             items,
             truncated,
             nextCursor);
+    }
+
+    private static async Task<int> CountAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string sql,
+        string destinationId,
+        CancellationToken cancellationToken,
+        DateTimeOffset? windowStartUtc = null)
+    {
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction =
+            transaction;
+        command.CommandText =
+            sql;
+        AddParameter(
+            command,
+            "@destination_id",
+            destinationId);
+        if (windowStartUtc is not null)
+        {
+            AddParameter(
+                command,
+                "@window_start_utc",
+                Format(
+                    windowStartUtc.Value));
+        }
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return Convert.ToInt32(
+            value,
+            CultureInfo.InvariantCulture);
     }
 
     private async Task<NotificationDeliveryRecord?>
@@ -884,6 +1271,32 @@ public sealed class AdoNotificationDeliveryStore :
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS kafdeck_notification_dispatch_guards (
+            destination_id TEXT PRIMARY KEY,
+            fence BIGINT NOT NULL,
+            CHECK (fence >= 0)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kafdeck_notification_dispatch_attempts (
+            notification_id TEXT NOT NULL,
+            destination_id TEXT NOT NULL,
+            attempt_no INTEGER NOT NULL,
+            started_at_utc TEXT NOT NULL,
+            PRIMARY KEY (
+                notification_id,
+                destination_id,
+                attempt_no),
+            CHECK (attempt_no >= 1 AND attempt_no <= 10)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_kafdeck_notification_dispatch_attempt_window
+        ON kafdeck_notification_dispatch_attempts (
+            destination_id,
+            started_at_utc)
+        """,
+        """
         CREATE INDEX IF NOT EXISTS ix_kafdeck_notification_delivery_due
         ON kafdeck_notification_deliveries (
             due_at_utc,
@@ -900,6 +1313,53 @@ public sealed class AdoNotificationDeliveryStore :
         WHERE state = 'InFlight'
         """,
     ];
+
+    private async Task<DateTimeOffset>
+        ReadRateClockUtcAsync(
+            DbConnection connection,
+            DbTransaction transaction,
+            DateTimeOffset standaloneFallbackUtc,
+            CancellationToken cancellationToken)
+    {
+        if (!_connectionFactory.SupportsSelectForUpdate)
+        {
+            return standaloneFallbackUtc.ToUniversalTime();
+        }
+
+        await using var command =
+            connection.CreateCommand();
+        command.Transaction =
+            transaction;
+        command.CommandText =
+            _connectionFactory.DatabaseUtcNowSql;
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return value switch
+        {
+            DateTimeOffset offset =>
+                offset.ToUniversalTime(),
+            DateTime dateTime =>
+                new DateTimeOffset(
+                    dateTime.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(
+                            dateTime,
+                            DateTimeKind.Utc)
+                        : dateTime)
+                .ToUniversalTime(),
+            string text =>
+                DateTimeOffset.Parse(
+                    text,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal |
+                    DateTimeStyles.AdjustToUniversal),
+            _ => throw new InvalidOperationException(
+                "Notification delivery database clock returned an unsupported value."),
+        };
+    }
 
     private static DateTimeOffset Parse(
         string value) =>
