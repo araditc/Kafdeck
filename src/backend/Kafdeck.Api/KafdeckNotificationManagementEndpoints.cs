@@ -1,0 +1,135 @@
+using Kafdeck.Core.Notifications;
+using Kafdeck.Core.Security;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Kafdeck.Api;
+
+/// <summary>
+/// Independently gated OIDC-only subscription write surface. The read-only
+/// notification feature never implicitly enables these routes. No destination
+/// profile, provider transport, delivery worker or secret mutation is exposed.
+/// </summary>
+public static class KafdeckNotificationManagementEndpoints
+{
+    public static WebApplication MapKafdeckV08NotificationManagement(this WebApplication app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+
+        app.MapPut("/api/v1/notifications/subscriptions/{subscriptionId}",
+                async (
+                    string subscriptionId,
+                    NotificationSubscriptionWriteRequest request,
+                    HttpContext context,
+                    [FromServices] KafdeckAuthorizationService authorization,
+                    [FromServices] INotificationRoutingStore store,
+                    CancellationToken cancellationToken) =>
+                {
+                    try
+                    {
+                        var definition = new NotificationSubscriptionDefinition(
+                            subscriptionId,
+                            request.DestinationId,
+                            request.EventClasses,
+                            request.EventTypes);
+
+                        // Route permission is independently enforced by middleware.
+                        // Verify the new destination BEFORE any write or disclosure.
+                        if (!Allowed(authorization, context, definition.DestinationId))
+                            return Forbidden();
+
+                        var existing = await store.GetSubscriptionAsync(
+                            subscriptionId, cancellationToken).ConfigureAwait(false);
+
+                        if (existing is not null)
+                        {
+                            // Do not disclose the existing destination through a
+                            // stale CAS error or move its subscription across RBAC.
+                            if (!Allowed(authorization, context, existing.Definition.DestinationId))
+                                return Forbidden();
+                            if (existing.State == NotificationSubscriptionState.Retired)
+                                return Conflict();
+                        }
+
+                        if (request.ExpectedRevision is null)
+                        {
+                            if (existing is not null) return Conflict();
+                            try
+                            {
+                                var created = await store.CreateSubscriptionAsync(
+                                    definition, request.State, DateTimeOffset.UtcNow, cancellationToken)
+                                    .ConfigureAwait(false);
+                                return Results.Created(
+                                    $"/api/v1/notifications/subscriptions/{Uri.EscapeDataString(subscriptionId)}",
+                                    NotificationSubscriptionData.From(created));
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                // Includes concurrent INSERT with the same identity.
+                                return Conflict();
+                            }
+                        }
+
+                        if (request.ExpectedRevision.Value < 1)
+                            return InvalidRequest();
+
+                        if (existing is null)
+                            return NotFound();
+
+                        if (request.ExpectedRevision.Value != existing.Revision)
+                            return Conflict();
+
+                        var updated = await store.ReplaceSubscriptionAsync(
+                            definition, request.State, request.ExpectedRevision.Value,
+                            DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+
+                        return updated is null ? Conflict() : Results.Ok(
+                            NotificationSubscriptionData.From(updated));
+                    }
+                    catch (ArgumentException)
+                    {
+                        return InvalidRequest();
+                    }
+                })
+            .WithName("v08-notification-subscription-upsert")
+            .RequireKafdeckAuthorization(
+                AuthorizationAction.NotificationManage,
+                resourceRouteKey: "subscriptionId")
+            .RequireKafdeckAntiforgery();
+
+        return app;
+    }
+
+    private static bool Allowed(
+        KafdeckAuthorizationService authorization, HttpContext context, string destinationId) =>
+        authorization.Authorize(
+            context.User,
+            new AuthorizationRequest(AuthorizationAction.NotificationManage,
+                ResourceName: destinationId)) == KafdeckAuthorizationOutcome.Allowed;
+
+    private static IResult Conflict() =>
+        Results.Problem(statusCode: StatusCodes.Status409Conflict,
+            type: "urn:kafdeck:problem:notification-subscription-conflict",
+            title: "Notification subscription state or revision conflict");
+
+    private static IResult InvalidRequest() =>
+        Results.Problem(statusCode: StatusCodes.Status400BadRequest,
+            type: "urn:kafdeck:problem:invalid-notification-subscription",
+            title: "Invalid notification subscription request");
+
+    private static IResult NotFound() =>
+        Results.Problem(statusCode: StatusCodes.Status404NotFound,
+            type: "urn:kafdeck:problem:notification-subscription-not-found",
+            title: "Notification subscription not found");
+
+    private static IResult Forbidden() =>
+        Results.Problem(statusCode: StatusCodes.Status403Forbidden,
+            type: "urn:kafdeck:problem:operator-authorization-denied",
+            title: "Forbidden");
+}
+
+public sealed record NotificationSubscriptionWriteRequest(
+    string DestinationId,
+    NotificationSubscriptionState State,
+    IReadOnlyList<NotificationEventClass> EventClasses,
+    IReadOnlyList<string>? EventTypes,
+    long? ExpectedRevision);

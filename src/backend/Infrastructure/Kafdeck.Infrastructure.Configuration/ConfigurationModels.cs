@@ -48,7 +48,8 @@ public sealed record NotificationReadOptions(
     NotificationPersistenceProvider Provider,
     NotificationExecutionMode ExecutionMode,
     string? SqliteDatabasePath,
-    SecretReference? ConnectionString);
+    SecretReference? ConnectionString,
+    bool ManagementEnabled = false);
 
 
 public enum DataQualityPersistenceProvider

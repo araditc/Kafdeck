@@ -759,6 +759,10 @@ if (dataQualityOptions?.Enabled == true)
 if (notificationReadOptions?.Enabled == true)
 {
     app.MapKafdeckV08NotificationReads();
+    if (notificationReadOptions.ManagementEnabled)
+    {
+        app.MapKafdeckV08NotificationManagement();
+    }
 }
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();

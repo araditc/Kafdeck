@@ -480,6 +480,10 @@ public static class KafdeckConfigurationValidator
 
         if (!notification.Enabled)
         {
+            if (notification.ManagementEnabled)
+            {
+                errors.Add("Notification management cannot be enabled while observation is disabled.");
+            }
             if (!string.IsNullOrWhiteSpace(notification.SqliteDatabasePath) ||
                 notification.ConnectionString is not null)
             {
