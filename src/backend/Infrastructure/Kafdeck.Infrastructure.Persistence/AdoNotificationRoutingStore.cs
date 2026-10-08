@@ -320,42 +320,70 @@ public sealed class AdoNotificationRoutingStore :
             await _connectionFactory
                 .OpenAsync(cancellationToken)
                 .ConfigureAwait(false);
-        await using var transaction =
-            await connection
-                .BeginTransactionAsync(cancellationToken)
-                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
 
-        var row =
-            await ReadSubscriptionRowAsync(
-                    connection,
-                    transaction,
-                    subscriptionId,
-                    lockForUpdate: false,
-                    cancellationToken)
+        // Parent revision and all event classes must come from one
+        // statement snapshot, including under PostgreSQL READ COMMITTED.
+        command.CommandText =
+            """
+            SELECT
+                s.subscription_id,
+                s.destination_id,
+                s.lifecycle_state,
+                s.revision,
+                s.updated_at_utc,
+                events.event_class
+            FROM kafdeck_notification_subscriptions s
+            INNER JOIN kafdeck_notification_subscription_events events
+                ON events.subscription_id = s.subscription_id
+            WHERE s.subscription_id = @subscription_id
+            ORDER BY events.event_class
+            """;
+        AddParameter(
+            command,
+            "@subscription_id",
+            subscriptionId);
+
+        await using var reader =
+            await command
+                .ExecuteReaderAsync(cancellationToken)
                 .ConfigureAwait(false);
-        if (row is null)
+        SubscriptionRow? row = null;
+        var eventClasses =
+            new List<NotificationEventClass>(
+                NotificationSubscriptionDefinition
+                    .HardMaxEventClasses);
+        while (await reader
+                   .ReadAsync(cancellationToken)
+                   .ConfigureAwait(false))
         {
-            await transaction
-                .RollbackAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return null;
+            row ??=
+                ReadSubscriptionRow(
+                    reader);
+            var eventClass =
+                Enum.Parse<NotificationEventClass>(
+                    reader.GetString(5),
+                    ignoreCase: false);
+            if (eventClasses.Count >=
+                    NotificationSubscriptionDefinition
+                        .HardMaxEventClasses ||
+                eventClasses.Contains(
+                    eventClass))
+            {
+                throw new InvalidOperationException(
+                    "Persisted notification subscription event classes are invalid.");
+            }
+            eventClasses.Add(
+                eventClass);
         }
 
-        var eventClasses =
-            await ReadEventClassesAsync(
-                    connection,
-                    transaction,
-                    [subscriptionId],
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-        await transaction
-            .CommitAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return ToSnapshot(
-            row,
-            eventClasses[subscriptionId]);
+        return row is null
+            ? null
+            : ToSnapshot(
+                row,
+                Array.AsReadOnly(
+                    eventClasses.ToArray()));
     }
 
     public async Task<NotificationSubscriptionSnapshot?>
