@@ -352,7 +352,7 @@ public sealed record NotificationSubscriptionDefinition
                 !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
                 value.Any(character =>
                     !(char.IsAsciiLetterOrDigit(character) ||
-                      character is '.' or '_' or '-')))
+                      character is '.' or '_' or '-'))))
         {
             throw new ArgumentException(
                 "Exact event-type filters must be unique, bounded safe identifiers.",
