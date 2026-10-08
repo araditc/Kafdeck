@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiProblem,
   kafdeckApi,
+  operatorSessionLostEvent,
   type ApiEnvelope,
   type ClusterData,
   type ConfigurationEntryData,
@@ -62,6 +63,61 @@ export function AppShell() {
   const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
   const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
+  const sessionCheckAbort = useRef<AbortController | null>(null);
+
+  const invalidateOperatorSession = useCallback(() => {
+    sessionCheckAbort.current?.abort();
+    sessionCheckAbort.current = null;
+    // Remove authorization-bound UI state on ANY 401 (including an unrelated
+    // cluster refresh), explicit logout, or session invalidation in another tab.
+    setOperator(null);
+    setNotificationView(null);
+    setAuthenticationRequired(true);
+  }, []);
+
+  const revalidateOperatorSession = useCallback(() => {
+    sessionCheckAbort.current?.abort();
+    const controller = new AbortController();
+    sessionCheckAbort.current = controller;
+    // A previously authorized panel cannot remain visible while verification
+    // is pending or if the identity switches in another tab.
+    setOperator(null);
+    setNotificationView(null);
+    void kafdeckApi.getOperatorSession(controller.signal)
+      .then(session => {
+        if (controller.signal.aborted) return;
+        setOperator(session);
+        setAuthenticationRequired(false);
+      })
+      .catch(reason => {
+        if (controller.signal.aborted) return;
+        setOperator(null);
+        setNotificationView(null);
+        if (reason instanceof ApiProblem && reason.status === 401) {
+          setAuthenticationRequired(true);
+        }
+      })
+      .finally(() => {
+        if (sessionCheckAbort.current === controller) sessionCheckAbort.current = null;
+      });
+  }, []);
+
+  useEffect(() => {
+    const onSessionLost = () => invalidateOperatorSession();
+    const onReturnToTab = () => {
+      if (document.visibilityState === 'visible') revalidateOperatorSession();
+    };
+    window.addEventListener(operatorSessionLostEvent, onSessionLost);
+    window.addEventListener('focus', onReturnToTab);
+    document.addEventListener('visibilitychange', onReturnToTab);
+    revalidateOperatorSession();
+    return () => {
+      window.removeEventListener(operatorSessionLostEvent, onSessionLost);
+      window.removeEventListener('focus', onReturnToTab);
+      document.removeEventListener('visibilitychange', onReturnToTab);
+      sessionCheckAbort.current?.abort();
+    };
+  }, [invalidateOperatorSession, revalidateOperatorSession]);
 
   const loadClusters = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -99,15 +155,6 @@ export function AppShell() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void kafdeckApi.getOperatorSession(controller.signal)
-      .then(session => {
-        setOperator(session);
-        setAuthenticationRequired(false);
-      })
-      .catch(reason => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return;
-        if (reason instanceof ApiProblem && reason.status === 401) setAuthenticationRequired(true);
-      });
     void loadClusters(controller.signal);
     void kafdeckApi.getFleetCapabilities(controller.signal)
       .then(response => {
@@ -231,7 +278,7 @@ export function AppShell() {
         </h1>
         <div className="kafdeck-toolbar">
           <CommandPalette />
-          {operator && <div className="kafdeck-auth"><span className="text-secondary">Signed in as</span><strong>{operator.displayName ?? operator.email ?? 'operator'}</strong><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => void kafdeckApi.logout()}>Sign out</button></div>}
+          {operator && <div className="kafdeck-auth"><span className="text-secondary">Signed in as</span><strong>{operator.displayName ?? operator.email ?? 'operator'}</strong><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => { invalidateOperatorSession(); void kafdeckApi.logout(); }}>Sign out</button></div>}
           {authenticationRequired && <div className="kafdeck-auth"><a className="btn btn-sm btn-primary" href="/api/v1/auth/login">Sign in with your identity provider</a></div>}
           <div>
             <label className="form-label" htmlFor="cluster-selector">Cluster</label>

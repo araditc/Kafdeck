@@ -612,6 +612,8 @@ export interface RecordQuery {
   serdeFormat?: ControlledSerdeFormat;
 }
 
+export const operatorSessionLostEvent = 'kafdeck:operator-session-lost';
+
 export class ApiProblem extends Error {
   readonly status: number;
   readonly code: string | null;
@@ -625,6 +627,11 @@ function requestHeaders(accept: string): Record<string, string> {
 }
 
 async function parseProblem(response: Response): Promise<ApiProblem> {
+  // Notify all mounted operator views before consuming the error body.
+  // This includes 401s from observation, cluster refresh and CLI/tooling paths.
+  if (response.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(operatorSessionLostEvent));
+  }
   let problem: { detail?: string; title?: string; code?: string; type?: string } = {};
   try { problem = (await response.json()) as typeof problem; } catch { /* safe generic fallback */ }
   return new ApiProblem(response.status, problem.detail ?? problem.title ?? 'Kafdeck request failed.', problem.code ?? problem.type ?? null);

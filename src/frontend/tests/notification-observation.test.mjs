@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { NotificationObservationPanel } from '../dist/test-source/features/notifications/NotificationObservationPanel.js';
 import { AppShell } from '../dist/test-source/app/AppShell.js';
+import { ApiProblem, kafdeckApi, operatorSessionLostEvent } from '../dist/test-source/shared/api.js';
 
 function subscriptionPage(overrides = {}) {
   return {
@@ -59,4 +60,52 @@ test('W66 UI is absent from the unverified app shell', () => {
   const markup = renderToStaticMarkup(React.createElement(AppShell));
   assert.doesNotMatch(markup, /href="#notifications"/);
   assert.doesNotMatch(markup, /Notification observation — v0\.8/);
+});
+
+test('a 401 from any typed notification GET broadcasts session loss before retaining evidence', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  const events = [];
+  try {
+    globalThis.window = {
+      location: { hash: '', pathname: '/', search: '' },
+      dispatchEvent: event => { events.push(event.type); return true; },
+    };
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({ title: 'Authentication required' }),
+      { status: 401, headers: { 'Content-Type': 'application/problem+json' } },
+    );
+    await assert.rejects(
+      kafdeckApi.getNotificationSubscription('visible-before-expiration'),
+      error => error instanceof ApiProblem && error.status === 401,
+    );
+    assert.deepEqual(events, [operatorSessionLostEvent]);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('resource-scoped 403 does not incorrectly represent the whole OIDC session as expired', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  const events = [];
+  try {
+    globalThis.window = {
+      location: { hash: '', pathname: '/', search: '' },
+      dispatchEvent: event => { events.push(event.type); return true; },
+    };
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({ title: 'Access denied' }),
+      { status: 403, headers: { 'Content-Type': 'application/problem+json' } },
+    );
+    await assert.rejects(
+      kafdeckApi.getNotificationSubscription('not-authorized'),
+      error => error instanceof ApiProblem && error.status === 403,
+    );
+    assert.deepEqual(events, []);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.fetch = originalFetch;
+  }
 });
