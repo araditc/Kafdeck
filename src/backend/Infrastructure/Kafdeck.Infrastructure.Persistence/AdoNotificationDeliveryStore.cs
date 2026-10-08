@@ -511,6 +511,8 @@ public sealed class AdoNotificationDeliveryStore :
                     claimedAt,
                     cancellationToken)
                 .ConfigureAwait(false);
+        claimedAt =
+            rateClockUtc;
         var rateWindowStart =
             rateClockUtc -
             TimeSpan.FromSeconds(1);
