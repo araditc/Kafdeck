@@ -827,9 +827,12 @@ public sealed class V08W66DeliveryWorkerTests
                     now),
                 now);
 
-            var time =
+            var timeA =
                 new MutableTimeProvider(
                     now);
+            var timeB =
+                new MutableTimeProvider(
+                    now.AddSeconds(30));
             var dispatcher =
                 new BlockingDispatcher();
             var policy =
@@ -843,7 +846,7 @@ public sealed class V08W66DeliveryWorkerTests
                     policy,
                     new NotificationDeliveryWorkerPolicy(
                         maxDuePerCycle: 2),
-                    time);
+                    timeA);
             var workerB =
                 new NotificationDeliveryWorker(
                     storeB,
@@ -851,7 +854,7 @@ public sealed class V08W66DeliveryWorkerTests
                     policy,
                     new NotificationDeliveryWorkerPolicy(
                         maxDuePerCycle: 2),
-                    time);
+                    timeB);
 
             var firstCycle =
                 workerA.RunDueCycleAsync();
@@ -882,8 +885,8 @@ public sealed class V08W66DeliveryWorkerTests
                 1,
                 dispatcher.DispatchCount);
 
-            time.Advance(
-                TimeSpan.FromSeconds(1));
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(1100));
 
             var afterWindow =
                 await workerB.RunDueCycleAsync();
