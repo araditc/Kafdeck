@@ -30,6 +30,7 @@ public static class KafdeckConfigurationValidator
         ValidateGenerator(options.Generator, options.Clusters, errors);
         ValidateObservability(options.Observability, options.Deployment, errors);
         ValidateDataQuality(options.DataQuality, options.Deployment, errors);
+        ValidateNotificationReads(options.Notifications, options.Deployment, errors);
         ValidateConnectAutoRestart(options.Administration, options.Deployment, errors);
 
         if (errors.Count > 0)
@@ -464,6 +465,80 @@ public static class KafdeckConfigurationValidator
                 errors.Add(
                     "Historical metrics provider is unsupported.");
                 break;
+        }
+    }
+
+    private static void ValidateNotificationReads(
+        NotificationReadOptions? notification,
+        DeploymentOptions deployment,
+        ICollection<string> errors)
+    {
+        if (notification is null)
+        {
+            return;
+        }
+
+        if (!notification.Enabled)
+        {
+            if (!string.IsNullOrWhiteSpace(notification.SqliteDatabasePath) ||
+                notification.ConnectionString is not null)
+            {
+                errors.Add(
+                    "Disabled notification observation must not configure persistence credentials or paths.");
+            }
+
+            return;
+        }
+
+        // An operator's principal is mandatory even for metadata-only
+        // delivery evidence; Local/Token are not human RBAC identities.
+        if (deployment.Mode != AccessMode.Oidc)
+        {
+            errors.Add("Notification observation requires OIDC operator access mode.");
+        }
+
+        switch (notification.Provider)
+        {
+            case NotificationPersistenceProvider.Sqlite:
+                if (notification.ExecutionMode != NotificationExecutionMode.Standalone)
+                {
+                    errors.Add("SQLite notification persistence is standalone-only.");
+                }
+
+                if (string.IsNullOrWhiteSpace(notification.SqliteDatabasePath) ||
+                    !Path.IsPathFullyQualified(notification.SqliteDatabasePath))
+                {
+                    errors.Add("Notification SQLite persistence requires an absolute database path.");
+                }
+
+                if (notification.ConnectionString is not null)
+                {
+                    errors.Add("SQLite notification persistence must not configure a PostgreSQL secret.");
+                }
+
+                break;
+
+            case NotificationPersistenceProvider.PostgreSql:
+                if (!string.IsNullOrWhiteSpace(notification.SqliteDatabasePath))
+                {
+                    errors.Add("PostgreSQL notification persistence must not configure a SQLite path.");
+                }
+
+                if (notification.ConnectionString is null)
+                {
+                    errors.Add("PostgreSQL notification persistence requires a secret-referenced connection string.");
+                }
+
+                break;
+
+            default:
+                errors.Add("Notification persistence provider is unsupported.");
+                break;
+        }
+
+        if (!Enum.IsDefined(notification.ExecutionMode))
+        {
+            errors.Add("Notification execution mode is unsupported.");
         }
     }
 
