@@ -373,6 +373,8 @@ public sealed class AdoNotificationRoutingStore :
                 s.lifecycle_state,
                 s.revision,
                 s.updated_at_utc,
+                s.event_types_json,
+                s.is_retired,
                 events.event_class
             FROM kafdeck_notification_subscriptions s
             INNER JOIN kafdeck_notification_subscription_events events
@@ -403,7 +405,7 @@ public sealed class AdoNotificationRoutingStore :
                     reader);
             var eventClass =
                 Enum.Parse<NotificationEventClass>(
-                    reader.GetString(5),
+                    reader.GetString(7),
                     ignoreCase: false);
             if (eventClasses.Count >=
                     NotificationSubscriptionDefinition
@@ -565,7 +567,9 @@ public sealed class AdoNotificationRoutingStore :
         if (query.State is not null)
         {
             predicates.Add(
-                "s.lifecycle_state = @state");
+                query.State == NotificationSubscriptionState.Retired
+                    ? "s.is_retired = 1"
+                    : "s.lifecycle_state = @state AND s.is_retired = 0");
         }
 
         if (query.EventClass is not null)
@@ -590,7 +594,9 @@ public sealed class AdoNotificationRoutingStore :
                     s.destination_id,
                     s.lifecycle_state,
                     s.revision,
-                    s.updated_at_utc
+                    s.updated_at_utc,
+                    s.event_types_json,
+                    s.is_retired
                 FROM kafdeck_notification_subscriptions s
                 {(predicates.Count == 0
                     ? string.Empty
@@ -606,6 +612,8 @@ public sealed class AdoNotificationRoutingStore :
                 selected.lifecycle_state,
                 selected.revision,
                 selected.updated_at_utc,
+                selected.event_types_json,
+                selected.is_retired,
                 events.event_class
             FROM selected
             INNER JOIN kafdeck_notification_subscription_events events
@@ -628,7 +636,9 @@ public sealed class AdoNotificationRoutingStore :
             AddParameter(
                 command,
                 "@state",
-                query.State.Value.ToString());
+                query.State.Value == NotificationSubscriptionState.Retired
+                    ? NotificationSubscriptionState.Paused.ToString()
+                    : query.State.Value.ToString());
         }
 
         if (query.EventClass is not null)
@@ -685,7 +695,7 @@ public sealed class AdoNotificationRoutingStore :
 
             var eventClass =
                 Enum.Parse<NotificationEventClass>(
-                    reader.GetString(5),
+                    reader.GetString(7),
                     ignoreCase: false);
             if (eventClasses[id].Count >=
                     NotificationSubscriptionDefinition
@@ -821,7 +831,9 @@ public sealed class AdoNotificationRoutingStore :
                 destination_id,
                 lifecycle_state,
                 revision,
-                updated_at_utc
+                updated_at_utc,
+                event_types_json,
+                is_retired
             FROM kafdeck_notification_subscriptions
             WHERE subscription_id = @subscription_id
             """ +
@@ -852,14 +864,16 @@ public sealed class AdoNotificationRoutingStore :
         new(
             reader.GetString(0),
             reader.GetString(1),
-            Enum.Parse<NotificationSubscriptionState>(
-                reader.GetString(2),
-                ignoreCase: false),
+            reader.GetInt32(6) == 1
+                ? NotificationSubscriptionState.Retired
+                : Enum.Parse<NotificationSubscriptionState>(
+                    reader.GetString(2),
+                    ignoreCase: false),
             Convert.ToInt64(
                 reader.GetValue(3),
                 CultureInfo.InvariantCulture),
-            Parse(
-                reader.GetString(4)));
+            Parse(reader.GetString(4)),
+            reader.GetString(5));
 
     private async Task<Dictionary<string, IReadOnlyList<NotificationEventClass>>>
         ReadEventClassesAsync(
@@ -1002,7 +1016,10 @@ public sealed class AdoNotificationRoutingStore :
             new NotificationSubscriptionDefinition(
                 row.SubscriptionId,
                 row.DestinationId,
-                eventClasses),
+                eventClasses,
+                JsonSerializer.Deserialize<string[]>(row.EventTypesJson) ??
+                    throw new InvalidOperationException(
+                        "Persisted subscription event-type filter is invalid.")),
             row.State,
             row.Revision,
             row.UpdatedAtUtc);
@@ -1190,7 +1207,8 @@ public sealed class AdoNotificationRoutingStore :
         string DestinationId,
         NotificationSubscriptionState State,
         long Revision,
-        DateTimeOffset UpdatedAtUtc);
+        DateTimeOffset UpdatedAtUtc,
+        string EventTypesJson);
 
     private static readonly string[]
         InitializationStatements =
