@@ -114,6 +114,28 @@ public sealed class AdoNotificationDeliveryStore :
             .ConfigureAwait(false);
     }
 
+    public async Task<DateTimeOffset>
+        GetAuthoritativeUtcNowAsync(
+            CancellationToken cancellationToken = default)
+    {
+        await using var connection =
+            await _connectionFactory
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var command =
+            connection.CreateCommand();
+        command.CommandText =
+            _connectionFactory.DatabaseUtcNowSql;
+
+        var value =
+            await command
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return ParseDatabaseUtcNow(
+            value);
+    }
+
     public async Task<NotificationDeliveryRecord?>
         GetAsync(
             Guid notificationId,
@@ -1338,7 +1360,13 @@ public sealed class AdoNotificationDeliveryStore :
                 .ExecuteScalarAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-        return value switch
+        return ParseDatabaseUtcNow(
+            value);
+    }
+
+    private static DateTimeOffset ParseDatabaseUtcNow(
+        object? value) =>
+        value switch
         {
             DateTimeOffset offset =>
                 offset.ToUniversalTime(),
@@ -1359,7 +1387,6 @@ public sealed class AdoNotificationDeliveryStore :
             _ => throw new InvalidOperationException(
                 "Notification delivery database clock returned an unsupported value."),
         };
-    }
 
     private static DateTimeOffset Parse(
         string value) =>
