@@ -7,6 +7,252 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class V08W66NotificationDeliveryStoreTests
 {
+    [Theory]
+    [InlineData("Pending")]
+    [InlineData("Failed")]
+    [InlineData("InFlight")]
+    public async Task Sqlite_v1_upgrade_refuses_unresolved_deliveries_without_modifying_them(
+        string state)
+    {
+        var path = TempPath();
+        try
+        {
+            const string id = "99999999-9999-9999-9999-999999999999";
+            var timestamp = "2026-10-07T12:00:00.0000000+00:00";
+            await using (var raw = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                }.ConnectionString))
+            {
+                await raw.OpenAsync();
+                await using var create = raw.CreateCommand();
+                create.CommandText =
+                    """
+                    CREATE TABLE kafdeck_schema_info (
+                        component TEXT PRIMARY KEY,
+                        schema_version INTEGER NOT NULL);
+                    INSERT INTO kafdeck_schema_info (component, schema_version)
+                    VALUES ('notification-delivery', 1);
+                    CREATE TABLE kafdeck_notification_deliveries (
+                        notification_id TEXT NOT NULL,
+                        destination_id TEXT NOT NULL,
+                        payload_fingerprint TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        attempt_count INTEGER NOT NULL,
+                        created_at_utc TEXT NOT NULL,
+                        next_attempt_at_utc TEXT NULL,
+                        due_at_utc TEXT NOT NULL,
+                        outcome_code TEXT NULL,
+                        revision BIGINT NOT NULL,
+                        updated_at_utc TEXT NOT NULL,
+                        PRIMARY KEY(notification_id, destination_id));
+                    """;
+                await create.ExecuteNonQueryAsync();
+
+                await using var insert = raw.CreateCommand();
+                insert.CommandText =
+                    """
+                    INSERT INTO kafdeck_notification_deliveries (
+                        notification_id, destination_id, payload_fingerprint,
+                        state, attempt_count, created_at_utc, next_attempt_at_utc,
+                        due_at_utc, outcome_code, revision, updated_at_utc)
+                    VALUES (
+                        @id, 'ops-webhook', @fingerprint,
+                        @state, 0, @timestamp, NULL,
+                        @timestamp, NULL, 1, @timestamp)
+                    """;
+                foreach (var (name, value) in new[]
+                         {
+                             ("@id", id),
+                             ("@fingerprint", new string('a', 64)),
+                             ("@state", state),
+                             ("@timestamp", timestamp),
+                         })
+                {
+                    var parameter = insert.CreateParameter();
+                    parameter.ParameterName = name;
+                    parameter.Value = value;
+                    insert.Parameters.Add(parameter);
+                }
+                await insert.ExecuteNonQueryAsync();
+            }
+
+            var store = new AdoNotificationDeliveryStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.InitializeAsync());
+            Assert.Contains("upgrade blocked", failure.Message,
+                StringComparison.Ordinal);
+            Assert.Contains("No queued deliveries were modified",
+                failure.Message, StringComparison.Ordinal);
+
+            await using var verify = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                }.ConnectionString);
+            await verify.OpenAsync();
+            await using (var check = verify.CreateCommand())
+            {
+                check.CommandText =
+                    "SELECT schema_version FROM kafdeck_schema_info WHERE component = 'notification-delivery'";
+                Assert.Equal(1L, Convert.ToInt64(
+                    await check.ExecuteScalarAsync()));
+            }
+            await using (var check = verify.CreateCommand())
+            {
+                check.CommandText =
+                    "SELECT state FROM kafdeck_notification_deliveries WHERE notification_id = @id";
+                var parameter = check.CreateParameter();
+                parameter.ParameterName = "@id";
+                parameter.Value = id;
+                check.Parameters.Add(parameter);
+                Assert.Equal(state, await check.ExecuteScalarAsync());
+            }
+            await using (var check = verify.CreateCommand())
+            {
+                check.CommandText =
+                    "PRAGMA table_info(kafdeck_notification_deliveries)";
+                await using var reader = await check.ExecuteReaderAsync();
+                var names = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    names.Add(reader.GetString(1));
+                }
+                Assert.DoesNotContain("routed_profile_revision_fingerprint",
+                    names);
+            }
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task Sqlite_v1_ledger_upgrades_to_v2_and_fences_profile_revision()
+    {
+        var path = TempPath();
+        try
+        {
+            await using (var raw = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                }.ConnectionString))
+            {
+                await raw.OpenAsync();
+                await using var ddl = raw.CreateCommand();
+                ddl.CommandText =
+                    """
+                    CREATE TABLE kafdeck_schema_info (
+                        component TEXT PRIMARY KEY,
+                        schema_version INTEGER NOT NULL);
+                    INSERT INTO kafdeck_schema_info
+                        (component, schema_version)
+                    VALUES ('notification-delivery', 1);
+                    CREATE TABLE kafdeck_notification_deliveries (
+                        notification_id TEXT NOT NULL,
+                        destination_id TEXT NOT NULL,
+                        payload_fingerprint TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        attempt_count INTEGER NOT NULL,
+                        created_at_utc TEXT NOT NULL,
+                        next_attempt_at_utc TEXT NULL,
+                        due_at_utc TEXT NOT NULL,
+                        outcome_code TEXT NULL,
+                        revision BIGINT NOT NULL,
+                        updated_at_utc TEXT NOT NULL,
+                        PRIMARY KEY(notification_id, destination_id));
+                    """;
+                await ddl.ExecuteNonQueryAsync();
+            }
+
+            var store = new AdoNotificationDeliveryStore(
+                new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+
+            await using (var verified = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                }.ConnectionString))
+            {
+                await verified.OpenAsync();
+                await using var version = verified.CreateCommand();
+                version.CommandText =
+                    "SELECT schema_version FROM kafdeck_schema_info WHERE component = 'notification-delivery'";
+                Assert.Equal(2L, Convert.ToInt64(
+                    await version.ExecuteScalarAsync()));
+
+                // A still-running v1 binary omits the new revision column.
+                // The v2 database must reject its nonterminal write even
+                // after the migration transaction has committed.
+                await using var legacyInsert = verified.CreateCommand();
+                legacyInsert.CommandText =
+                    """
+                    INSERT INTO kafdeck_notification_deliveries (
+                        notification_id, destination_id, payload_fingerprint,
+                        state, attempt_count, created_at_utc, next_attempt_at_utc,
+                        due_at_utc, outcome_code, revision, updated_at_utc)
+                    VALUES (
+                        '88888888-8888-8888-8888-888888888888',
+                        'ops-webhook',
+                        @payload_fingerprint,
+                        'Pending', 0,
+                        '2026-10-07T12:00:00.0000000+00:00',
+                        NULL,
+                        '2026-10-07T12:00:00.0000000+00:00',
+                        NULL, 1,
+                        '2026-10-07T12:00:00.0000000+00:00')
+                    """;
+                AddParameter(
+                    legacyInsert,
+                    "@payload_fingerprint",
+                    new string('a', 64));
+                await Assert.ThrowsAnyAsync<
+                    System.Data.Common.DbException>(
+                    () => legacyInsert.ExecuteNonQueryAsync());
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var id = Guid.NewGuid();
+            var approved = new string('b', 64);
+            var record = new NotificationDeliverySnapshot(
+                id,
+                "email-ops",
+                new string('a', 64),
+                NotificationDeliveryState.Pending,
+                0,
+                now,
+                routedProfileRevisionFingerprint: approved);
+            var created = await store.CreateOrGetAsync(record, now);
+            Assert.Equal(
+                approved,
+                created.Snapshot.RoutedProfileRevisionFingerprint);
+            var retrieved = await store.GetAsync(id, "email-ops");
+            Assert.Equal(
+                approved,
+                retrieved!.Snapshot.RoutedProfileRevisionFingerprint);
+
+            var changed = new NotificationDeliverySnapshot(
+                id,
+                "email-ops",
+                new string('a', 64),
+                NotificationDeliveryState.Pending,
+                0,
+                now,
+                routedProfileRevisionFingerprint: new string('c', 64));
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.CreateOrGetAsync(changed, now));
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
     [Fact]
     public async Task Sqlite_store_round_trips_idempotent_delivery_and_cas_transition()
     {
@@ -179,7 +425,8 @@ public sealed class V08W66NotificationDeliveryStoreTests
                         64),
                     NotificationDeliveryState.Pending,
                     0,
-                    createdAt);
+                    createdAt,
+                routedProfileRevisionFingerprint: new string('b', 64));
 
             await Assert.ThrowsAsync<InvalidOperationException>(
                 () =>
@@ -234,7 +481,8 @@ public sealed class V08W66NotificationDeliveryStoreTests
                     first.PayloadFingerprint,
                     NotificationDeliveryState.Pending,
                     0,
-                    createdAt.AddMilliseconds(1));
+                    createdAt.AddMilliseconds(1),
+                routedProfileRevisionFingerprint: new string('b', 64));
 
             await Assert.ThrowsAsync<InvalidOperationException>(
                 () =>
@@ -1317,6 +1565,28 @@ public sealed class V08W66NotificationDeliveryStoreTests
                 System.Data.Common.DbException>(
                 () =>
                     command.ExecuteNonQueryAsync());
+
+            // A legacy PostgreSQL writer cannot enqueue Pending without
+            // the v2 routed-profile revision after the migration commits.
+            await using var legacyWriter = connection.CreateCommand();
+            legacyWriter.CommandText =
+                """
+                INSERT INTO kafdeck_notification_deliveries (
+                    notification_id, destination_id, payload_fingerprint,
+                    state, attempt_count, created_at_utc, next_attempt_at_utc,
+                    due_at_utc, outcome_code, revision, updated_at_utc)
+                VALUES (
+                    '88888888-8888-8888-8888-888888888888',
+                    'ops-webhook', @fingerprint, 'Pending', 0,
+                    @created_at, NULL, @created_at, NULL, 1, @updated_at)
+                """;
+            AddParameter(legacyWriter, "@fingerprint", new string('a', 64));
+            AddParameter(legacyWriter, "@created_at",
+                "2026-10-05T06:00:00.0000000+00:00");
+            AddParameter(legacyWriter, "@updated_at",
+                "2026-10-05T06:00:01.0000000+00:00");
+            await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(
+                () => legacyWriter.ExecuteNonQueryAsync());
         }
         finally
         {
@@ -1357,7 +1627,8 @@ public sealed class V08W66NotificationDeliveryStoreTests
             attemptCount,
             createdAtUtc,
             nextAttemptAtUtc,
-            outcomeCode);
+            outcomeCode,
+                routedProfileRevisionFingerprint: new string('b', 64));
     }
 
     private static async Task ClearDeliveryTableAsync(
