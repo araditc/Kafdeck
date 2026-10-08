@@ -339,36 +339,18 @@ public sealed record NotificationSubscriptionQuery
     public NotificationEventClass? EventClass { get; }
 }
 
-public sealed record NotificationSubscriptionPage(
-    IReadOnlyList<NotificationSubscriptionSnapshot> Items,
-    bool Truncated,
-    string? NextSubscriptionId)
+public sealed record NotificationSubscriptionPage
 {
     public NotificationSubscriptionPage(
         IReadOnlyList<NotificationSubscriptionSnapshot> items,
         bool truncated,
         string? nextSubscriptionId)
-        : this(
-            ValidateItems(
-                items),
-            ValidateContinuation(
-                items,
-                truncated,
-                nextSubscriptionId),
-            nextSubscriptionId)
-    {
-    }
-
-    private static IReadOnlyList<NotificationSubscriptionSnapshot>
-        ValidateItems(
-            IReadOnlyList<NotificationSubscriptionSnapshot> items)
     {
         ArgumentNullException.ThrowIfNull(
             items);
 
         if (items.Count >
-            NotificationSubscriptionQuery
-                .HardMaxResults ||
+                NotificationSubscriptionQuery.HardMaxResults ||
             items.Any(item => item is null))
         {
             throw new ArgumentException(
@@ -376,15 +358,6 @@ public sealed record NotificationSubscriptionPage(
                 nameof(items));
         }
 
-        return Array.AsReadOnly(
-            items.ToArray());
-    }
-
-    private static bool ValidateContinuation(
-        IReadOnlyList<NotificationSubscriptionSnapshot> items,
-        bool truncated,
-        string? nextSubscriptionId)
-    {
         if (truncated !=
             (nextSubscriptionId is not null))
         {
@@ -392,21 +365,29 @@ public sealed record NotificationSubscriptionPage(
                 "Truncated notification subscription pages require a continuation.");
         }
 
-        if (truncated)
+        if (truncated &&
+            (items.Count == 0 ||
+             !string.Equals(
+                 items[^1].Definition.SubscriptionId,
+                 nextSubscriptionId,
+                 StringComparison.Ordinal)))
         {
-            if (items.Count == 0 ||
-                !string.Equals(
-                    items[^1].Definition.SubscriptionId,
-                    nextSubscriptionId,
-                    StringComparison.Ordinal))
-            {
-                throw new ArgumentException(
-                    "Notification subscription continuation must identify the last returned item.");
-            }
+            throw new ArgumentException(
+                "Notification subscription continuation must identify the last returned item.",
+                nameof(nextSubscriptionId));
         }
 
-        return truncated;
+        Items =
+            Array.AsReadOnly(
+                items.ToArray());
+        Truncated = truncated;
+        NextSubscriptionId =
+            nextSubscriptionId;
     }
+
+    public IReadOnlyList<NotificationSubscriptionSnapshot> Items { get; }
+    public bool Truncated { get; }
+    public string? NextSubscriptionId { get; }
 }
 
 public interface INotificationRoutingStore
