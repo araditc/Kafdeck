@@ -7,6 +7,7 @@ namespace Kafdeck.Infrastructure.Persistence;
 public interface INotificationDeliveryDbConnectionFactory
 {
     bool SupportsSelectForUpdate { get; }
+    string DatabaseUtcNowSql { get; }
 
     ValueTask<DbConnection> OpenAsync(
         CancellationToken cancellationToken = default);
@@ -18,6 +19,8 @@ public sealed class SqliteNotificationDeliveryDbConnectionFactory :
     private readonly string _connectionString;
 
     public bool SupportsSelectForUpdate => false;
+    public string DatabaseUtcNowSql =>
+        "SELECT STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
     public SqliteNotificationDeliveryDbConnectionFactory(
         string databasePath)
@@ -81,6 +84,8 @@ public sealed class PostgreSqlNotificationDeliveryDbConnectionFactory :
     private readonly string _connectionString;
 
     public bool SupportsSelectForUpdate => true;
+    public string DatabaseUtcNowSql =>
+        "SELECT CURRENT_TIMESTAMP";
 
     public PostgreSqlNotificationDeliveryDbConnectionFactory(
         string connectionString)
