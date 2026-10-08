@@ -45,6 +45,9 @@ public sealed class V08W66ProviderSubscriptionTests
             NotificationProviderTransportOutcome.Delivered,
             result.TransportResult.Outcome);
         Assert.Equal(
+            NotificationDeliveryDispatchOutcome.Delivered,
+            result.DeliveryOutcome);
+        Assert.Equal(
             64,
             result.PayloadFingerprint.Length);
 
@@ -371,7 +374,7 @@ public sealed class V08W66ProviderSubscriptionTests
                         "consumer-lag"));
 
             Assert.Equal(
-                ["email-ops"],
+                new[] { "email-ops" },
                 result.DestinationIds);
             Assert.Equal(
                 3,
