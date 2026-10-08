@@ -245,35 +245,47 @@ public sealed record NotificationSubscriptionListQuery
     public string? AfterSubscriptionId { get; }
 }
 
-public sealed record NotificationSubscriptionPage(
-    IReadOnlyList<NotificationSubscriptionRecord> Items,
-    bool Truncated,
-    string? NextSubscriptionId)
+public sealed record NotificationSubscriptionPage
 {
-    public NotificationSubscriptionPage
+    public NotificationSubscriptionPage(
+        IReadOnlyList<NotificationSubscriptionRecord> items,
+        bool truncated,
+        string? nextSubscriptionId)
     {
-        ArgumentNullException.ThrowIfNull(Items);
+        ArgumentNullException.ThrowIfNull(items);
 
-        if (Items.Count >
+        if (items.Count >
             NotificationSubscriptionListQuery.HardMaxResults ||
-            Truncated !=
-            (NextSubscriptionId is not null))
+            truncated !=
+            (nextSubscriptionId is not null))
         {
             throw new ArgumentException(
                 "Notification subscription page metadata is invalid.");
         }
 
-        if (Truncated &&
-            (Items.Count == 0 ||
+        if (truncated &&
+            (items.Count == 0 ||
              !string.Equals(
-                 Items[^1].Snapshot.SubscriptionId,
-                 NextSubscriptionId,
+                 items[^1].Snapshot.SubscriptionId,
+                 nextSubscriptionId,
                  StringComparison.Ordinal)))
         {
             throw new ArgumentException(
                 "Notification subscription continuation must identify the last returned subscription.");
         }
+
+        Items =
+            Array.AsReadOnly(
+                items.ToArray());
+        Truncated =
+            truncated;
+        NextSubscriptionId =
+            nextSubscriptionId;
     }
+
+    public IReadOnlyList<NotificationSubscriptionRecord> Items { get; }
+    public bool Truncated { get; }
+    public string? NextSubscriptionId { get; }
 }
 
 public interface INotificationSubscriptionStore
