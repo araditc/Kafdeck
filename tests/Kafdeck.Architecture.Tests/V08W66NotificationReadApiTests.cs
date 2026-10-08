@@ -12,6 +12,34 @@ namespace Kafdeck.Architecture.Tests;
 public sealed class V08W66NotificationReadApiTests
 {
     [Fact]
+    public void Notification_startup_preflights_delivery_before_routing_migration()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null &&
+               !File.Exists(Path.Combine(root.FullName, "Kafdeck.slnx")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        var program = File.ReadAllText(Path.Combine(
+            root!.FullName, "src", "backend", "Kafdeck.Api", "Program.cs"));
+        var section = program.IndexOf(
+            "if (notificationReadOptions?.Enabled == true)",
+            program.IndexOf("var app = builder.Build();", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        Assert.True(section >= 0);
+        var delivery = program.IndexOf(
+            "GetRequiredService<INotificationDeliveryStore>()",
+            section, StringComparison.Ordinal);
+        var routing = program.IndexOf(
+            "GetRequiredService<INotificationRoutingStore>()",
+            section, StringComparison.Ordinal);
+        Assert.True(delivery > section && routing > delivery,
+            "Notification delivery preflight must reject unresolved v1 queues before any routing migration.");
+    }
+
+    [Fact]
     public void Notification_observation_is_disabled_without_explicit_configuration()
     {
         var options = new KafdeckOptions(
