@@ -139,7 +139,7 @@ public sealed record NotificationSubscriptionSnapshot
     public NotificationSubscriptionState State { get; }
     public DateTimeOffset CreatedAtUtc { get; }
 
-    internal static string NormalizeSubscriptionId(
+    public static string NormalizeSubscriptionId(
         string value)
     {
         ArgumentNullException.ThrowIfNull(value);
