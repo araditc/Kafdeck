@@ -938,6 +938,8 @@ public sealed class V08W66DeliveryWorkerTests
                     "ops-webhook",
                     pending.Revision,
                     coordinationNow,
+                    created +
+                    TimeSpan.FromHours(1),
                     maxConcurrency: 1,
                     ratePerSecond: 10);
 
@@ -972,6 +974,110 @@ public sealed class V08W66DeliveryWorkerTests
             Assert.Equal(
                 NotificationDeliveryState.InFlight,
                 stored!.Snapshot.State);
+        }
+        finally
+        {
+            await using var drop =
+                admin.CreateCommand();
+            drop.CommandText =
+                $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PostgreSql_claim_rejects_delivery_expired_by_database_clock_when_available()
+    {
+        var baseConnectionString =
+            Environment.GetEnvironmentVariable(
+                "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(
+                baseConnectionString))
+        {
+            return;
+        }
+
+        var schema =
+            $"w66_expiry_{Guid.NewGuid():N}";
+        var adminBuilder =
+            new NpgsqlConnectionStringBuilder(
+                baseConnectionString)
+            {
+                Pooling = false,
+            };
+        await using var admin =
+            new NpgsqlConnection(
+                adminBuilder.ConnectionString);
+        await admin.OpenAsync();
+
+        try
+        {
+            await using (var create =
+                         admin.CreateCommand())
+            {
+                create.CommandText =
+                    $"CREATE SCHEMA \"{schema}\"";
+                await create.ExecuteNonQueryAsync();
+            }
+
+            var scoped =
+                new NpgsqlConnectionStringBuilder(
+                    baseConnectionString)
+                {
+                    SearchPath = schema,
+                    Pooling = false,
+                };
+            var store =
+                new AdoNotificationDeliveryStore(
+                    new PostgreSqlNotificationDeliveryDbConnectionFactory(
+                        scoped.ConnectionString));
+            await store.InitializeAsync();
+
+            var databaseNow =
+                await store
+                    .GetCoordinationUtcNowAsync(
+                        DateTimeOffset.UtcNow);
+            var created =
+                databaseNow.AddSeconds(-20);
+            var pending =
+                await store.CreateOrGetAsync(
+                    Pending(
+                        Guid.NewGuid(),
+                        created),
+                    created);
+            var deadline =
+                created.AddSeconds(10);
+            var callerSample =
+                deadline.AddMilliseconds(-1);
+
+            var claim =
+                await store.TryClaimForDispatchAsync(
+                    pending.Snapshot.NotificationId,
+                    pending.Snapshot.DestinationId,
+                    pending.Revision,
+                    callerSample,
+                    deadline,
+                    maxConcurrency: 1,
+                    ratePerSecond: 10);
+
+            Assert.Equal(
+                NotificationDeliveryClaimOutcome.Expired,
+                claim.Outcome);
+            Assert.Null(
+                claim.Record);
+
+            var stored =
+                await store.GetAsync(
+                    pending.Snapshot.NotificationId,
+                    pending.Snapshot.DestinationId);
+            Assert.NotNull(
+                stored);
+            Assert.Equal(
+                NotificationDeliveryState.Pending,
+                stored!.Snapshot.State);
+            Assert.Equal(
+                0,
+                stored.Snapshot.AttemptCount);
         }
         finally
         {
