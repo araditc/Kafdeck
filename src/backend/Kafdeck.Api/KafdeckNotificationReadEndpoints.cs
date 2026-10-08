@@ -50,37 +50,18 @@ public static class KafdeckNotificationReadEndpoints
                                 cancellationToken)
                             .ConfigureAwait(false);
 
-                        var visible = page.Items
-                            .Where(item =>
-                                IsAllowed(
-                                    authorization,
-                                    context.User,
-                                    item.Definition.SubscriptionId) &&
-                                IsAllowed(
-                                    authorization,
-                                    context.User,
-                                    item.Definition.DestinationId))
-                            .ToArray();
-
-                        var authorizationFiltered =
-                            visible.Length != page.Items.Count;
-
-                        // A hidden last item may be the cursor. Never emit
-                        // its raw subscription ID through pagination.
-                        // Return a truthful incomplete result instead.
-                        var next = !authorizationFiltered
-                            ? page.NextSubscriptionId
-                            : null;
-
                         return Results.Ok(
-                            new NotificationSubscriptionListData(
-                                visible.Select(
-                                    NotificationSubscriptionData.From)
-                                    .ToArray(),
-                                page.Truncated,
-                                next,
-                                authorizationFiltered,
-                                page.Truncated && authorizationFiltered));
+                            NotificationSubscriptionReadProjection.Project(
+                                page,
+                                item =>
+                                    IsAllowed(
+                                        authorization,
+                                        context.User,
+                                        item.Definition.SubscriptionId) &&
+                                    IsAllowed(
+                                        authorization,
+                                        context.User,
+                                        item.Definition.DestinationId)));
                     }
                     catch (ArgumentException)
                     {
@@ -230,6 +211,35 @@ public static class KafdeckNotificationReadEndpoints
             statusCode: StatusCodes.Status404NotFound,
             type: "urn:kafdeck:problem:notification-observation-not-found",
             title: "Notification observation not found");
+}
+
+public static class NotificationSubscriptionReadProjection
+{
+    public static NotificationSubscriptionListData Project(
+        NotificationSubscriptionPage page,
+        Func<NotificationSubscriptionSnapshot, bool> isAuthorized)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(isAuthorized);
+
+        var visible = page.Items.Where(isAuthorized).ToArray();
+        var authorizationFiltered = visible.Length != page.Items.Count;
+
+        // The raw cursor may be the identity of an unauthorized row.
+        // Do not expose or manufacture cursors when filtering occurred;
+        // declare the continuation restricted rather than claiming the
+        // underlying complete page was returned to the operator.
+        var next = authorizationFiltered
+            ? null
+            : page.NextSubscriptionId;
+
+        return new NotificationSubscriptionListData(
+            visible.Select(NotificationSubscriptionData.From).ToArray(),
+            page.Truncated,
+            next,
+            authorizationFiltered,
+            page.Truncated && authorizationFiltered);
+    }
 }
 
 public sealed record NotificationSubscriptionListData(
