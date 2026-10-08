@@ -1606,6 +1606,70 @@ public sealed class V08W66NotificationDeliveryStoreTests
             factory.SupportsSelectForUpdate);
     }
 
+
+    [Fact]
+    public async Task PostgreSql_destination_history_keyset_and_index_are_real()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(
+            "KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return;
+
+        var factory = new PostgreSqlNotificationDeliveryDbConnectionFactory(connectionString);
+        var store = new AdoNotificationDeliveryStore(factory);
+        await store.InitializeAsync();
+
+        var target = "hist-" + Guid.NewGuid().ToString("N");
+        var other = "hist-" + Guid.NewGuid().ToString("N");
+        var first = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        var second = Guid.Parse("10000000-0000-0000-0000-000000000002");
+        var third = Guid.Parse("10000000-0000-0000-0000-000000000003");
+        var hidden = Guid.Parse("10000000-0000-0000-0000-000000000004");
+        var at = new DateTimeOffset(2026, 10, 8, 16, 0, 0, TimeSpan.Zero);
+
+        async Task Insert(Guid id, string destination, DateTimeOffset timestamp)
+        {
+            await store.CreateOrGetAsync(
+                new NotificationDeliverySnapshot(
+                    id, destination, new string('a', 64),
+                    NotificationDeliveryState.Pending, 0, timestamp,
+                    routedProfileRevisionFingerprint: new string('b', 64)),
+                timestamp);
+        }
+
+        // One exact timestamp tie, one later row and one strictly different
+        // destination prove cursor order, offset-free traversal and isolation.
+        await Insert(first, target, at);
+        await Insert(second, target, at);
+        await Insert(third, target, at.AddMilliseconds(1));
+        await Insert(hidden, other, at);
+
+        var page1 = await store.ListByDestinationAsync(
+            new NotificationDestinationDeliveryQuery(target, 2));
+        Assert.Equal([first, second],
+            page1.Items.Select(x => x.Snapshot.NotificationId).ToArray());
+        Assert.True(page1.Truncated);
+        Assert.NotNull(page1.Next);
+
+        var page2 = await store.ListByDestinationAsync(
+            new NotificationDestinationDeliveryQuery(target, 2, page1.Next));
+        Assert.Single(page2.Items);
+        Assert.Equal(third, page2.Items[0].Snapshot.NotificationId);
+        Assert.False(page2.Truncated);
+        Assert.Null(page2.Next);
+        Assert.DoesNotContain(page1.Items, x => x.Snapshot.DestinationId == other);
+
+        await using var connection = await factory.OpenAsync();
+        await using var index = connection.CreateCommand();
+        index.CommandText = """
+            SELECT COUNT(*)
+            FROM pg_indexes
+            WHERE tablename = 'kafdeck_notification_deliveries'
+              AND indexname = 'ix_kafdeck_notification_delivery_history'
+            """;
+        Assert.Equal(1L, Convert.ToInt64(await index.ExecuteScalarAsync()));
+    }
+
     private static NotificationDeliverySnapshot
         Snapshot(
             NotificationDeliveryState state,
