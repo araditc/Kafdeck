@@ -642,6 +642,8 @@ public sealed class V08W66DeliveryWorkerTests
                 2,
                 dispatcher.Claims.Count);
 
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(1100));
             time.Advance(
                 TimeSpan.FromSeconds(1));
 
@@ -754,7 +756,7 @@ public sealed class V08W66DeliveryWorkerTests
     }
 
     [Fact]
-    public async Task PostgreSql_admission_is_shared_across_replicas_when_available()
+    public async Task PostgreSql_rate_admission_uses_database_clock_across_skewed_replicas_when_available()
     {
         var baseConnectionString =
             Environment.GetEnvironmentVariable(
