@@ -26,7 +26,7 @@ public static class KafdeckNotificationReadEndpoints
                     string? afterSubscriptionId,
                     NotificationSubscriptionState? state,
                     NotificationEventClass? eventClass,
-                    KafdeckAuthorizationService authorization,
+                    [FromServices] KafdeckAuthorizationService authorization,
                     [FromServices] INotificationRoutingStore store,
                     CancellationToken cancellationToken) =>
                 {
@@ -94,7 +94,7 @@ public static class KafdeckNotificationReadEndpoints
                 async (
                     string subscriptionId,
                     HttpContext context,
-                    KafdeckAuthorizationService authorization,
+                    [FromServices] KafdeckAuthorizationService authorization,
                     [FromServices] INotificationRoutingStore store,
                     CancellationToken cancellationToken) =>
                 {
