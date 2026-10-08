@@ -110,4 +110,40 @@ public sealed class V08W66NotificationManagementApiTests
         Assert.DoesNotContain("DestinationId", serialized, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Startup_diagnostic_reflects_real_notification_management_activation_without_secret_values()
+    {
+        var notification = new NotificationReadOptions(
+            Enabled: true,
+            Provider: NotificationPersistenceProvider.PostgreSql,
+            ExecutionMode: NotificationExecutionMode.HighAvailability,
+            SqliteDatabasePath: null,
+            ConnectionString: null,
+            ManagementEnabled: true);
+        var options = new KafdeckOptions(
+            new DeploymentOptions("http://127.0.0.1:8080", null),
+            Array.Empty<ClusterProfile>(),
+            Notifications: notification);
+        var snapshot = SafeConfigurationDiagnostics.Create(options);
+
+        Assert.True(snapshot.NotificationsEnabled);
+        Assert.True(snapshot.NotificationManagementEnabled);
+        Assert.Equal(NotificationPersistenceProvider.PostgreSql, snapshot.NotificationPersistenceProvider);
+        Assert.Equal(NotificationExecutionMode.HighAvailability, snapshot.NotificationExecutionMode);
+        var json = System.Text.Json.JsonSerializer.Serialize(snapshot);
+        Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("connectionString", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Disabled_management_is_reported_accurately()
+    {
+        var options = new KafdeckOptions(
+            new DeploymentOptions("http://127.0.0.1:8080", null),
+            Array.Empty<ClusterProfile>());
+        var status = SafeConfigurationDiagnostics.Create(options);
+        Assert.False(status.NotificationsEnabled);
+        Assert.False(status.NotificationManagementEnabled);
+    }
+
 }

@@ -38,7 +38,7 @@ public static class KafdeckNotificationManagementEndpoints
                         // Verify the new destination BEFORE any write or disclosure.
                         if (!Allowed(authorization, context, definition.DestinationId))
                         {
-                            await AuditDeniedAsync(context, audit, "rbac_denied_notification_new_destination");
+                            await AuditDeniedAsync(context, audit, definition.DestinationId, "rbac_denied_notification_new_destination");
                             return Forbidden();
                         }
 
@@ -51,7 +51,7 @@ public static class KafdeckNotificationManagementEndpoints
                             // stale CAS error or move its subscription across RBAC.
                             if (!Allowed(authorization, context, existing.Definition.DestinationId))
                             {
-                                await AuditDeniedAsync(context, audit, "rbac_denied_notification_existing_destination");
+                                await AuditDeniedAsync(context, audit, existing.Definition.DestinationId, "rbac_denied_notification_existing_destination");
                                 // Same outward result as a missing subscription: do not
                                 // reveal existence outside the existing destination scope.
                                 return NotFound();
@@ -131,7 +131,7 @@ public static class KafdeckNotificationManagementEndpoints
         return exception.SqliteErrorCode is 5 or 6;
     }
 
-    private static async Task AuditDeniedAsync(HttpContext context, ISecurityAuditSink audit, string code)
+    private static async Task AuditDeniedAsync(HttpContext context, ISecurityAuditSink audit, string destinationId, string code)
     {
         var hasOperator = OperatorSessionContextFactory.TryCreate(context.User, out var session);
         await audit.WriteAsync(new SecurityAuditEvent(
@@ -141,7 +141,7 @@ public static class KafdeckNotificationManagementEndpoints
                 ? SecurityAuditPrincipal.FromOperator(session.Identity)
                 : SecurityAuditPrincipal.Anonymous,
             session?.SessionId.Value.ToString("N"),
-            null, null, SecurityAuditOutcome.Denied, code),
+            null, destinationId, SecurityAuditOutcome.Denied, code),
             context.RequestAborted).ConfigureAwait(false);
     }
 
