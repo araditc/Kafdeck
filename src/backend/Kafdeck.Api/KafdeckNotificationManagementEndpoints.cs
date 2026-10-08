@@ -52,7 +52,9 @@ public static class KafdeckNotificationManagementEndpoints
                             if (!Allowed(authorization, context, existing.Definition.DestinationId))
                             {
                                 await AuditDeniedAsync(context, audit, "rbac_denied_notification_existing_destination");
-                                return Forbidden();
+                                // Same outward result as a missing subscription: do not
+                                // reveal existence outside the existing destination scope.
+                                return NotFound();
                             }
                             if (existing.State == NotificationSubscriptionState.Retired)
                                 return Conflict();
@@ -72,11 +74,17 @@ public static class KafdeckNotificationManagementEndpoints
                                     .ConfigureAwait(false);
                                 return Results.Created(
                                     $"/api/v1/notifications/subscriptions/{Uri.EscapeDataString(subscriptionId)}",
-                                    NotificationSubscriptionData.From(created));
+                                    NotificationSubscriptionWriteReceipt.From(created));
                             }
                             catch (InvalidOperationException)
                             {
                                 // Includes concurrent INSERT with the same identity.
+                                return Conflict();
+                            }
+                            catch (SqliteException exception) when (IsSqliteContention(exception))
+                            {
+                                // Shared-cache SQLite can return LOCKED_SHAREDCACHE
+                                // during overlapping creates, not only BUSY_SNAPSHOT.
                                 return Conflict();
                             }
                         }
@@ -96,12 +104,12 @@ public static class KafdeckNotificationManagementEndpoints
                                 definition, request.State, request.ExpectedRevision.Value,
                                 DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
                             return updated is null ? Conflict() : Results.Ok(
-                                NotificationSubscriptionData.From(updated));
+                                NotificationSubscriptionWriteReceipt.From(updated));
                         }
-                        catch (SqliteException exception) when (exception.SqliteExtendedErrorCode == 517)
+                        catch (SqliteException exception) when (IsSqliteContention(exception))
                         {
-                            // SQLITE_BUSY_SNAPSHOT: another writer committed after the
-                            // read transaction snapshot. This is a CAS loser, not a 500.
+                            // SQLite WAL/snapshot and shared-cache writer locks are
+                            // recoverable concurrent-write conflicts, not HTTP 500.
                             return Conflict();
                         }
                     }
@@ -117,6 +125,17 @@ public static class KafdeckNotificationManagementEndpoints
             .RequireKafdeckAntiforgery();
 
         return app;
+    }
+
+    /// <summary>
+    /// SQLite primary BUSY (5) or LOCKED (6), including BUSY_SNAPSHOT=517
+    /// and LOCKED_SHAREDCACHE=262, are write contention outcomes. Scoped to
+    /// subscription create/replace, never to connection/other SQL failures.
+    /// </summary>
+    public static bool IsSqliteContention(SqliteException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return exception.SqliteErrorCode is 5 or 6;
     }
 
     private static async Task AuditDeniedAsync(HttpContext context, ISecurityAuditSink audit, string code)
@@ -167,3 +186,16 @@ public sealed record NotificationSubscriptionWriteRequest(
     IReadOnlyList<NotificationEventClass> EventClasses,
     IReadOnlyList<string>? EventTypes,
     long? ExpectedRevision);
+
+
+// Return only the revision needed for future CAS writes. NotificationManage
+// permission does not imply NotificationRead; do not expose the stored
+// destination, class/type filters or any read-only evidence on a write route.
+public sealed record NotificationSubscriptionWriteReceipt(
+    string SubscriptionId,
+    NotificationSubscriptionState State,
+    long Revision)
+{
+    public static NotificationSubscriptionWriteReceipt From(NotificationSubscriptionSnapshot value) =>
+        new(value.Definition.SubscriptionId, value.State, value.Revision);
+}

@@ -3,6 +3,8 @@ using Kafdeck.Core.Notifications;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Data.Sqlite;
+using System.Text.Json;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -74,4 +76,38 @@ public sealed class V08W66NotificationManagementApiTests
         foreach (var forbidden in new[] { "Url", "Endpoint", "Credential", "Secret", "Headers", "ProviderPayload" })
             Assert.DoesNotContain(fields, x => x.Contains(forbidden, StringComparison.OrdinalIgnoreCase));
     }
+    [Theory]
+    [InlineData(5, 5, true)]
+    [InlineData(6, 6, true)]
+    [InlineData(5, 517, true)]
+    [InlineData(6, 262, true)]
+    [InlineData(1, 1, false)]
+    [InlineData(19, 2067, false)]
+    public void SQLite_write_contention_classification_is_narrow(
+        int primary, int extended, bool expected)
+    {
+        var error = new SqliteException("synthetic regression", primary, extended);
+        Assert.Equal(expected, KafdeckNotificationManagementEndpoints.IsSqliteContention(error));
+    }
+
+    [Fact]
+    public void Management_receipt_never_leaks_filters_or_destination_without_read_grant()
+    {
+        var snapshot = new NotificationSubscriptionSnapshot(
+            new NotificationSubscriptionDefinition(
+                "ops-sub", "secret-destination",
+                [NotificationEventClass.Security], ["authorization.denied"]),
+            NotificationSubscriptionState.Active, 7, DateTimeOffset.UtcNow);
+
+        var receipt = NotificationSubscriptionWriteReceipt.From(snapshot);
+        var serialized = JsonSerializer.Serialize(receipt);
+
+        Assert.Equal("ops-sub", receipt.SubscriptionId);
+        Assert.Equal(7, receipt.Revision);
+        Assert.DoesNotContain("secret-destination", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("authorization.denied", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("EventClasses", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("DestinationId", serialized, StringComparison.Ordinal);
+    }
+
 }
