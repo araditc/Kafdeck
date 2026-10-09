@@ -56,6 +56,17 @@ public static class CliApplication
                 CliRouteBuilder.Build(invocation),
                 requestToken);
 
+            // A non-success response is untrusted remote text and may echo
+            // Authorization credentials, connection strings or protected
+            // provider details. Never download or print its body to stderr.
+            // Status-only errors retain stable CLI script exit categories.
+            if (!response.IsSuccessStatusCode)
+            {
+                await error.WriteLineAsync(
+                    $"Kafdeck returned HTTP {(int)response.StatusCode}.");
+                return CategorizeHttpFailure(response.StatusCode);
+            }
+
             string body;
             try
             {
@@ -66,24 +77,11 @@ public static class CliApplication
             {
                 await error.WriteLineAsync(
                     $"Kafdeck CLI refused an API response exceeding {CliResponseBodyReader.MaxBodyBytes} bytes.");
-                return CategorizeHttpFailure(response.StatusCode);
+                return RemoteError;
             }
 
-            if (response.IsSuccessStatusCode)
-            {
-                await WriteJsonAsync(
-                    output,
-                    body,
-                    requestToken);
-                return Success;
-            }
-
-            await error.WriteLineAsync(
-                string.IsNullOrWhiteSpace(body)
-                    ? $"Kafdeck returned HTTP {(int)response.StatusCode}."
-                    : body);
-
-            return CategorizeHttpFailure(response.StatusCode);
+            await WriteJsonAsync(output, body, requestToken);
+            return Success;
         }
         catch (CliUsageException exception)
         {
