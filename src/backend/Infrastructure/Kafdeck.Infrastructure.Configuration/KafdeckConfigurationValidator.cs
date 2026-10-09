@@ -481,10 +481,11 @@ public static class KafdeckConfigurationValidator
 
         if (notification.DestinationProfiles is { Count: > 0 } profiles)
         {
-            if (profiles.Count > 500 ||
-                profiles.Any(profile => profile is null) ||
-                profiles.Select(profile => profile.DestinationId)
-                    .Distinct(StringComparer.Ordinal).Count() != profiles.Count)
+            var containsNull = profiles.Any(profile => profile is null);
+            if (profiles.Count > 500 || containsNull ||
+                (!containsNull &&
+                 profiles.Select(profile => profile.DestinationId)
+                     .Distinct(StringComparer.Ordinal).Count() != profiles.Count))
             {
                 errors.Add("Notification destination catalog must be bounded and have distinct IDs.");
             }
