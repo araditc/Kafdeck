@@ -82,6 +82,13 @@ public sealed class V08W66ConfiguredCredentialBindingTests
         Assert.Throws<ArgumentException>(() =>
             new ConfiguredNotificationCredentialResolver(
                 [binding with { ProfileRevisionFingerprint = "invalid" }], new SecretResolver()));
+        Assert.Throws<ArgumentException>(() =>
+            new ConfiguredNotificationCredentialResolver(
+                [binding with
+                {
+                    ProfileRevisionFingerprint =
+                        profile.RevisionFingerprint.ToUpperInvariant(),
+                }], new SecretResolver()));
     }
 
     [Fact]
