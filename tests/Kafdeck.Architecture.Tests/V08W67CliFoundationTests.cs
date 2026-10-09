@@ -753,7 +753,11 @@ public sealed class V08W67CliFoundationTests
         Assert.Contains("return CategorizeHttpFailure(response.StatusCode);",
             source, StringComparison.Ordinal);
         Assert.DoesNotContain("ReadAsStringAsync", source, StringComparison.Ordinal);
-        var errorBranch = source[responseCheck..contentRead];
+        var errorBranchEnd = source.IndexOf(
+            "string body;", responseCheck, StringComparison.Ordinal);
+        Assert.True(errorBranchEnd > responseCheck &&
+            errorBranchEnd < contentRead);
+        var errorBranch = source[responseCheck..errorBranchEnd];
         Assert.Contains("if (!response.IsSuccessStatusCode)", errorBranch,
             StringComparison.Ordinal);
         Assert.DoesNotContain("body", errorBranch, StringComparison.Ordinal);
