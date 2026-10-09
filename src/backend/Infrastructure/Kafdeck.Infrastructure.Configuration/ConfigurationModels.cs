@@ -51,7 +51,17 @@ public sealed record NotificationReadOptions(
     string? SqliteDatabasePath,
     SecretReference? ConnectionString,
     bool ManagementEnabled = false,
-    IReadOnlyList<NotificationDestinationProfile>? DestinationProfiles = null);
+    IReadOnlyList<NotificationDestinationProfile>? DestinationProfiles = null,
+    IReadOnlyList<NotificationCredentialReferenceOptions>? CredentialBindings = null);
+
+/// <summary>
+/// Owner-defined binding to an env/file secret locator, not the secret value.
+/// A separate runtime admission must authorize actual credential resolution.
+/// </summary>
+public sealed record NotificationCredentialReferenceOptions(
+    string DestinationId,
+    NotificationCredentialBindingId BindingId,
+    SecretReference Secret);
 
 
 public enum DataQualityPersistenceProvider

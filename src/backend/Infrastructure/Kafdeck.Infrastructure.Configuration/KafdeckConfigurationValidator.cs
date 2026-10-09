@@ -508,6 +508,29 @@ public static class KafdeckConfigurationValidator
             }
         }
 
+        if (notification.CredentialBindings is { Count: > 0 } configuredBindings)
+        {
+            var destinationProfiles = notification.DestinationProfiles ??
+                Array.Empty<NotificationDestinationProfile>();
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            if (configuredBindings.Count > 500)
+                errors.Add("Notification credential binding count exceeds 500.");
+            foreach (var configured in configuredBindings)
+            {
+                if (configured is null || configured.BindingId is null ||
+                    configured.Secret is null ||
+                    !ids.Add(configured.DestinationId) ||
+                    !destinationProfiles.Any(profile => profile is not null &&
+                        string.Equals(profile.DestinationId, configured.DestinationId,
+                            StringComparison.Ordinal) &&
+                        string.Equals(profile.CredentialBindingId?.Value,
+                            configured.BindingId.Value, StringComparison.Ordinal)))
+                    errors.Add("Notification credential binding must match one exact configured destination and opaque binding ID.");
+            }
+            if (!notification.Enabled)
+                errors.Add("Disabled Notifications cannot configure credential bindings.");
+        }
+
         if (!notification.Enabled)
         {
             if (notification.ManagementEnabled)
