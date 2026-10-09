@@ -107,7 +107,9 @@ public static class KafdeckConfigurationLoader
             // Only canonical zero-based array entries are accepted.
             if (!int.TryParse(item.Key, System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out var index) ||
-                index != result.Count || result.Count >= maxProfiles)
+                index != result.Count ||
+                !string.Equals(item.Key, index.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal) ||
+                result.Count >= maxProfiles)
                 throw new KafdeckConfigurationException(
                     "Notification destinations must be a finite ordered array (maximum 500).");
 
@@ -139,7 +141,9 @@ public static class KafdeckConfigurationLoader
             {
                 if (!int.TryParse(node.Key, System.Globalization.NumberStyles.None,
                         System.Globalization.CultureInfo.InvariantCulture, out var eventIndex) ||
-                    eventIndex != events.Count || events.Count >= 16 ||
+                    eventIndex != events.Count ||
+                    !string.Equals(node.Key, eventIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal) ||
+                    events.Count >= 16 ||
                     string.IsNullOrWhiteSpace(node.Value) ||
                     node.GetChildren().Any())
                     throw new KafdeckConfigurationException(
