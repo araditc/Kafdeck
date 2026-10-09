@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Kafdeck.Core.Notifications;
 using Kafdeck.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -686,14 +687,14 @@ public sealed class V08W66TypedProviderTests
     private sealed class RecordingCredentialResolver :
         INotificationCredentialResolver
     {
-        public List<NotificationCredentialResolutionRequest>
-            Requests { get; } = [];
+        public ConcurrentQueue<NotificationCredentialResolutionRequest>
+            Requests { get; } = new();
 
         public ValueTask<NotificationCredentialValue> ResolveAsync(
             NotificationCredentialResolutionRequest request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(
+            Requests.Enqueue(
                 request);
             return ValueTask.FromResult(
                 new NotificationCredentialValue(
@@ -704,14 +705,14 @@ public sealed class V08W66TypedProviderTests
     private sealed class RecordingEmailTransport :
         INotificationEmailTransport
     {
-        public List<NotificationEmailTransportRequest>
-            Requests { get; } = [];
+        public ConcurrentQueue<NotificationEmailTransportRequest>
+            Requests { get; } = new();
 
         public Task<NotificationProviderTransportResult> SendAsync(
             NotificationEmailTransportRequest request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(
+            Requests.Enqueue(
                 request);
             return Task.FromResult(
                 new NotificationProviderTransportResult(
@@ -727,14 +728,14 @@ public sealed class V08W66TypedProviderTests
         INotificationTelegramTransport,
         INotificationPagerDutyTransport
     {
-        public List<NotificationBoundTransportRequest>
-            Requests { get; } = [];
+        public ConcurrentQueue<NotificationBoundTransportRequest>
+            Requests { get; } = new();
 
         public Task<NotificationProviderTransportResult> SendAsync(
             NotificationBoundTransportRequest request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(
+            Requests.Enqueue(
                 request);
             return Task.FromResult(
                 new NotificationProviderTransportResult(
