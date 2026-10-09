@@ -199,9 +199,9 @@ export function NotificationSubscriptionManagementPanel({ referenceSubscription,
       <label className="form-label" htmlFor="notification-manage-types">
         Exact event types (comma/newline separated; empty matches all types in selected classes)
       </label>
+      {/* Covers 32 bounded event types plus separators/whitespace; semantic limits
+           are still validated before user confirmation and enforced server-side. */}
       <textarea className="form-control" id="notification-manage-types" rows={2}
-        // Accommodate all 32 allowed event types (128 characters each), separators,
-        // and operator whitespace; validation still caps list/count/identity.
         maxLength={8192} value={eventTypes} disabled={busy}
         onChange={event => { setEventTypes(event.target.value); setPrepared(null); }} />
       <button type="submit" className="btn btn-outline-primary mt-3" disabled={busy}>
