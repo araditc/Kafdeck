@@ -1,4 +1,5 @@
 using System.Net;
+using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -476,6 +477,22 @@ public static class KafdeckConfigurationValidator
         if (notification is null)
         {
             return;
+        }
+
+        if (notification.DestinationProfiles is { Count: > 0 } profiles)
+        {
+            if (profiles.Count > 500 ||
+                profiles.Any(profile => profile is null) ||
+                profiles.Select(profile => profile.DestinationId)
+                    .Distinct(StringComparer.Ordinal).Count() != profiles.Count)
+            {
+                errors.Add("Notification destination catalog must be bounded and have distinct IDs.");
+            }
+
+            if (!notification.Enabled)
+            {
+                errors.Add("Notification destination profiles require explicitly enabled notification observation.");
+            }
         }
 
         if (!notification.Enabled)
