@@ -1,4 +1,5 @@
 using Kafdeck.Infrastructure.Configuration;
+using Kafdeck.Core.Security;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
@@ -24,9 +25,18 @@ public sealed class V08W66CredentialReferenceOptionsTests
             "env:KAFDECK_NOTIFY_PROVISIONED",
     };
 
-    private static KafdeckOptions Load(Dictionary<string, string?> values) =>
-        KafdeckConfigurationLoader.Load(new ConfigurationBuilder()
+    private static KafdeckOptions Load(Dictionary<string, string?> values)
+    {
+        var options = KafdeckConfigurationLoader.Load(new ConfigurationBuilder()
             .AddInMemoryCollection(values).Build());
+        return options with
+        {
+            Deployment = new DeploymentOptions(
+                "http://127.0.0.1:8080", null, AccessMode.Oidc,
+                new OidcProfile("http://127.0.0.1:5555",
+                    "kafdeck-tests", null, null, ["openid"])),
+        };
+    }
 
     [Fact]
     public void Parses_only_preprovisioned_secret_reference()
