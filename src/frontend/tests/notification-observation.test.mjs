@@ -328,7 +328,7 @@ test('W66 subscription client rejects unbounded IDs without issuing a network re
   try {
     globalThis.window = { location: { hash: '', pathname: '/', search: '' } };
     globalThis.fetch = async () => { called = true; throw Error('network should not be used'); };
-    await assert.rejects(kafdeckApi.upsertNotificationSubscription('../admin', {
+    assert.throws(() => kafdeckApi.upsertNotificationSubscription('../admin', {
       destinationId: 'ops', state: 'active', eventClasses: ['operational'],
       eventTypes: [], expectedRevision: null,
     }), error => error instanceof ApiProblem && error.status === 400);
