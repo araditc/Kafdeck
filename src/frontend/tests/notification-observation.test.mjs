@@ -172,8 +172,10 @@ test('W66 delivery history UI starts without privileged provider data or network
 
 test('W66 typed history GET uses an encoded destination and a complete bounded cursor', async () => {
   const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
   const requests = [];
   try {
+    globalThis.window = { location: { hash: '', pathname: '/', search: '' } };
     globalThis.fetch = async (url, init) => {
       requests.push({ url: String(url), method: init.method });
       return new Response(JSON.stringify({
@@ -193,6 +195,7 @@ test('W66 typed history GET uses an encoded destination and a complete bounded c
     assert.equal(request.searchParams.get('afterNotificationId'), '00000000-0000-4000-8000-000000000001');
     assert.deepEqual(response.items, []);
   } finally {
+    globalThis.window = originalWindow;
     globalThis.fetch = originalFetch;
   }
 });
