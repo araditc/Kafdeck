@@ -907,7 +907,9 @@ public sealed class V05MutationPersistenceTests
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-late-permit-{Guid.NewGuid():N}.db");
         try
         {
-            var time = new FixedTimeProvider(Now);
+            // Dispatch starts before the virtual deadline: CI scheduling does not
+            // manufacture an unknown provider outcome.
+            var time = new DeterministicTimeoutTimeProvider(Now);
             var repository = new AdoMutationOperationRepository(
                 new SqliteMutationDbConnectionFactory(path),
                 time);
@@ -935,9 +937,11 @@ public sealed class V05MutationPersistenceTests
                     resourceClaimTtl: TimeSpan.FromSeconds(20)),
                 time);
 
-            var firstResult = await executor
-                .ExecuteAsync(first.Snapshot.OperationId)
-                .WaitAsync(TimeSpan.FromSeconds(5));
+            var firstExecution = executor.ExecuteAsync(first.Snapshot.OperationId);
+            await handler.FirstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await time.TwoTimeoutTimersArmed.WaitAsync(TimeSpan.FromSeconds(10));
+            time.Advance(TimeSpan.FromSeconds(2));
+            var firstResult = await firstExecution.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(MutationOperationState.ExecutionUnknown, firstResult.State);
             Assert.Equal(1, handler.CallCount);
 
@@ -964,7 +968,9 @@ public sealed class V05MutationPersistenceTests
         var path = Path.Combine(Path.GetTempPath(), $"kafdeck-material-{Guid.NewGuid():N}.db");
         try
         {
-            var time = new FixedTimeProvider(Now);
+            // Material verification is not a wall-clock timeout test; retain an
+            // independent real-time hang guard on the awaited execution.
+            var time = new DeterministicTimeoutTimeProvider(Now);
             var repository = new AdoMutationOperationRepository(
                 new SqliteMutationDbConnectionFactory(path),
                 time);
@@ -1024,11 +1030,12 @@ public sealed class V05MutationPersistenceTests
                 time);
 
             var result = await executor.ExecuteAsync(
-                operation.Snapshot.OperationId,
-                new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
-                {
-                    ["value"] = secret,
-                });
+                    operation.Snapshot.OperationId,
+                    new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+                    {
+                        ["value"] = secret,
+                    })
+                .WaitAsync(TimeSpan.FromSeconds(10));
 
             Assert.Equal(MutationOperationState.AppliedVerified, result.State);
             Assert.Equal(1, handler.CallCount);
@@ -2235,6 +2242,8 @@ public sealed class V05MutationPersistenceTests
         public int CallCount { get; private set; }
         public TaskCompletionSource<bool> ReleaseFirst { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> FirstStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<MutationProviderResult> ExecuteAsync(
             MutationExecutionContext context,
@@ -2243,6 +2252,7 @@ public sealed class V05MutationPersistenceTests
             CallCount++;
             if (CallCount == 1)
             {
+                FirstStarted.TrySetResult(true);
                 await ReleaseFirst.Task.ConfigureAwait(false);
                 return new MutationProviderResult(
                     MutationExecutionResultKind.AppliedVerified,
