@@ -490,6 +490,18 @@ public static class KafdeckConfigurationValidator
                 errors.Add("Notification destination catalog must be bounded and have distinct IDs.");
             }
 
+            foreach (var profile in profiles)
+            {
+                if (profile is null) continue;
+                if (profile.Provider != NotificationProviderKind.Webhook &&
+                    (profile.CredentialBindingId is null ||
+                     profile.ConfiguredEndpoint is not null))
+                {
+                    errors.Add(
+                        "Typed notification destinations require an opaque credential binding and must not configure a webhook endpoint.");
+                }
+            }
+
             if (!notification.Enabled)
             {
                 errors.Add("Notification destination profiles require explicitly enabled notification observation.");
