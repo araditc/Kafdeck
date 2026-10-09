@@ -16,6 +16,48 @@ public static class KafdeckNotificationManagementEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        // Separate disabled-by-default management probe. A collection-level
+        // grant advertises the capability, NOT authority over any destination.
+        app.MapGet("/api/v1/notifications/management/capabilities",
+                async (
+                    HttpContext context,
+                    [FromServices] KafdeckAuthorizationService authorization,
+                    [FromServices] ISecurityAuditSink audit) =>
+                {
+                    var access = authorization.AuthorizeCollection(
+                        context.User, AuthorizationAction.NotificationManage,
+                        clusterId: null);
+                    if (access == KafdeckAuthorizationOutcome.Allowed)
+                    {
+                        return Results.Ok(new NotificationManagementCapabilityData(
+                            true,
+                            NotificationSubscriptionDefinition.HardMaxEventClasses,
+                            NotificationSubscriptionDefinition.HardMaxEventTypes));
+                    }
+                    if (access == KafdeckAuthorizationOutcome.Unauthenticated)
+                        return Results.Problem(
+                            statusCode: StatusCodes.Status401Unauthorized,
+                            title: "Authentication required");
+
+                    var sessionValid = OperatorSessionContextFactory.TryCreate(
+                        context.User, out var session);
+                    await audit.WriteAsync(new SecurityAuditEvent(
+                        DateTimeOffset.UtcNow,
+                        SecurityAuditEventType.AuthorizationDenied,
+                        sessionValid && session is not null
+                            ? SecurityAuditPrincipal.FromOperator(session.Identity)
+                            : SecurityAuditPrincipal.Anonymous,
+                        session?.SessionId.Value.ToString("N"),
+                        null, null, SecurityAuditOutcome.Denied,
+                        "rbac_denied_notification_manage_collection"),
+                        context.RequestAborted).ConfigureAwait(false);
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status403Forbidden,
+                        type: "urn:kafdeck:problem:operator-authorization-denied",
+                        title: "Forbidden");
+                })
+            .WithName("v08-notification-management-capability");
+
         app.MapPut("/api/v1/notifications/subscriptions/{subscriptionId}",
                 async (
                     string subscriptionId,
@@ -192,3 +234,8 @@ public sealed record NotificationSubscriptionWriteReceipt(
     public static NotificationSubscriptionWriteReceipt From(NotificationSubscriptionSnapshot value) =>
         new(value.Definition.SubscriptionId, value.State, value.Revision);
 }
+
+public sealed record NotificationManagementCapabilityData(
+    bool SubscriptionCasAvailable,
+    int MaxEventClasses,
+    int MaxEventTypes);
