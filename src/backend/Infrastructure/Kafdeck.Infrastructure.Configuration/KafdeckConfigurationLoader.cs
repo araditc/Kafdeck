@@ -83,7 +83,8 @@ public static class KafdeckConfigurationLoader
             NullIfBlank(section["SqliteDatabasePath"]),
             ParseOptionalSecret(section["ConnectionString"]),
             ParseOptionalBoolean(section["ManagementEnabled"], false, "Notification management Enabled"),
-            LoadConfiguredNotificationDestinations(section.GetSection("Destinations")));
+            LoadConfiguredNotificationDestinations(section.GetSection("Destinations")),
+            LoadNotificationCredentialReferences(section.GetSection("CredentialBindings")));
     }
 
     private static IReadOnlyList<NotificationDestinationProfile>
@@ -194,6 +195,58 @@ public static class KafdeckConfigurationLoader
             }
         }
         return Array.AsReadOnly(result.ToArray());
+    }
+
+    private static IReadOnlyList<NotificationCredentialReferenceOptions>
+        LoadNotificationCredentialReferences(IConfigurationSection section)
+    {
+        if (section.Value is not null)
+            throw new KafdeckConfigurationException(
+                "Notification credential bindings must be an array.");
+        var results = new List<NotificationCredentialReferenceOptions>();
+        var known = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in section.GetChildren())
+        {
+            if (!int.TryParse(entry.Key, System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var index) ||
+                index != results.Count || results.Count >= 500 ||
+                !string.Equals(entry.Key, index.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                throw new KafdeckConfigurationException(
+                    "Notification credential bindings must use canonical bounded array indices.");
+            var children = entry.GetChildren().ToArray();
+            if (entry.Value is not null || children.Length != 3 ||
+                children.Any(child =>
+                    child.GetChildren().Any() ||
+                    !(child.Key is "DestinationId" or "BindingId" or "SecretReference")))
+                throw new KafdeckConfigurationException(
+                    "Notification credential bindings require exactly three scalar fields.");
+            var id = entry["DestinationId"];
+            var bindingText = entry["BindingId"];
+            var secretText = entry["SecretReference"];
+            if (string.IsNullOrWhiteSpace(id) ||
+                string.IsNullOrWhiteSpace(bindingText) ||
+                string.IsNullOrWhiteSpace(secretText))
+                throw new KafdeckConfigurationException(
+                    "Notification credential binding fields must not be empty.");
+            try
+            {
+                var identity = NotificationDeliveryIdentity.NormalizeDestinationId(id);
+                var binding = new NotificationCredentialBindingId(bindingText);
+                var reference = SecretReference.Parse(secretText);
+                if (!known.Add(identity))
+                    throw new KafdeckConfigurationException(
+                        "Duplicate exact notification credential destination identity.");
+                results.Add(new NotificationCredentialReferenceOptions(
+                    identity, binding, reference));
+            }
+            catch (ArgumentException error)
+            {
+                throw new KafdeckConfigurationException(
+                    "Notification credential binding identity is invalid.", error);
+            }
+        }
+        return Array.AsReadOnly(results.ToArray());
     }
 
     private static DataQualityOptions? LoadDataQuality(
