@@ -40,7 +40,7 @@ public sealed class V08W66NotificationManagementApiTests
     }
 
     [Fact]
-    public void Management_maps_only_its_explicit_subscription_put_route()
+    public void Management_maps_only_its_gated_capability_get_and_subscription_put_routes()
     {
         var builder = WebApplication.CreateBuilder();
         var app = builder.Build();
@@ -52,11 +52,28 @@ public sealed class V08W66NotificationManagementApiTests
             .Where(route => route.RoutePattern.RawText?.Contains(
                 "/notifications/", StringComparison.Ordinal) == true).ToArray();
 
-        Assert.Single(mapped);
-        Assert.Equal("/api/v1/notifications/subscriptions/{subscriptionId}",
-            mapped[0].RoutePattern.RawText);
-        Assert.Equal("PUT", Assert.Single(mapped[0].Metadata
+        Assert.Equal(2, mapped.Length);
+        var capability = Assert.Single(mapped, route =>
+            route.RoutePattern.RawText == "/api/v1/notifications/management/capabilities");
+        Assert.Equal("GET", Assert.Single(capability.Metadata
             .GetMetadata<HttpMethodMetadata>()!.HttpMethods));
+        var upsert = Assert.Single(mapped, route =>
+            route.RoutePattern.RawText == "/api/v1/notifications/subscriptions/{subscriptionId}");
+        Assert.Equal("PUT", Assert.Single(upsert.Metadata
+            .GetMetadata<HttpMethodMetadata>()!.HttpMethods));
+    }
+
+    [Fact]
+    public void Management_capability_does_not_disclose_destination_or_provider_data()
+    {
+        var capability = new NotificationManagementCapabilityData(
+            true, NotificationSubscriptionDefinition.HardMaxEventClasses,
+            NotificationSubscriptionDefinition.HardMaxEventTypes);
+        var json = JsonSerializer.Serialize(capability);
+        Assert.True(capability.SubscriptionCasAvailable);
+        Assert.Equal(32, capability.MaxEventTypes);
+        foreach (var protectedField in new[] { "credential", "url", "endpoint", "destinationId", "secret" })
+            Assert.DoesNotContain(protectedField, json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -17,6 +17,7 @@ import {
 import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
 import { NotificationObservationPanel } from '../features/notifications/NotificationObservationPanel.js';
+import { NotificationSubscriptionManagementPanel } from '../features/notifications/NotificationSubscriptionManagementPanel.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 import { CommandPalette } from './CommandPalette.js';
@@ -41,6 +42,15 @@ function ConfigurationView({ entries }: { entries: ConfigurationEntryData[] }) {
   return <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Name</th><th scope="col">Value</th><th scope="col">Source</th></tr></thead><tbody>{entries.map(entry => <tr key={entry.name}><th scope="row">{entry.name}</th><td>{entry.isSensitive ? <span className="badge bg-orange-lt">Sensitive value redacted</span> : (entry.value ?? 'Not set')}</td><td>{entry.source ?? 'Unknown'}</td></tr>)}</tbody></table></div>;
 }
 
+/** Pure visibility policy: NotificationRead and NotificationManage are independent. */
+export function notificationManagementSurfaces(readAvailable: boolean, manageAvailable: boolean) {
+  return {
+    navigation: readAvailable || manageAvailable,
+    insideRead: readAvailable && manageAvailable,
+    standalone: !readAvailable && manageAvailable,
+  };
+}
+
 export function AppShell() {
   const [operator, setOperator] = useState<OperatorSession | null>(null);
   const [authenticationRequired, setAuthenticationRequired] = useState(false);
@@ -63,6 +73,7 @@ export function AppShell() {
   const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
   const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
+  const [notificationManagement, setNotificationManagement] = useState<{ sessionKey: string } | null>(null);
   const sessionCheckAbort = useRef<AbortController | null>(null);
 
   const invalidateOperatorSession = useCallback(() => {
@@ -72,6 +83,7 @@ export function AppShell() {
     // cluster refresh), explicit logout, or session invalidation in another tab.
     setOperator(null);
     setNotificationView(null);
+    setNotificationManagement(null);
     setAuthenticationRequired(true);
   }, []);
 
@@ -83,6 +95,7 @@ export function AppShell() {
     // is pending or if the identity switches in another tab.
     setOperator(null);
     setNotificationView(null);
+    setNotificationManagement(null);
     void kafdeckApi.getOperatorSession(controller.signal)
       .then(session => {
         if (controller.signal.aborted) return;
@@ -93,6 +106,7 @@ export function AppShell() {
         if (controller.signal.aborted) return;
         setOperator(null);
         setNotificationView(null);
+        setNotificationManagement(null);
         if (reason instanceof ApiProblem && reason.status === 401) {
           setAuthenticationRequired(true);
         }
@@ -172,12 +186,22 @@ export function AppShell() {
   // server-authorized NotificationRead collection preflight.
   useEffect(() => {
     setNotificationView(null);
+    setNotificationManagement(null);
     if (!operator || operator.authenticationMode !== 'oidc') return;
     const controller = new AbortController();
     const sessionKey = `${operator.email ?? ''}:${operator.authenticatedAt}`;
     void kafdeckApi.listNotificationSubscriptions(50, null, controller.signal)
       .then(page => { if (!controller.signal.aborted) setNotificationView({ sessionKey, page }); })
       .catch(() => { if (!controller.signal.aborted) setNotificationView(null); });
+    // Management is independently authorized and hidden when its explicit
+    // server-side feature flag is disabled, unavailable or forbidden.
+    void kafdeckApi.getNotificationManagementCapabilities(controller.signal)
+      .then(capability => {
+        if (!controller.signal.aborted && capability.subscriptionCasAvailable) {
+          setNotificationManagement({ sessionKey });
+        }
+      })
+      .catch(() => { if (!controller.signal.aborted) setNotificationManagement(null); });
     return () => controller.abort();
   }, [operator]);
 
@@ -185,6 +209,10 @@ export function AppShell() {
   const visibleNotificationPage = notificationView?.sessionKey === notificationSessionKey
     ? notificationView?.page ?? null
     : null;
+  const managementSurfaces = notificationManagementSurfaces(
+    visibleNotificationPage !== null,
+    notificationManagement?.sessionKey === notificationSessionKey,
+  );
 
   useEffect(() => {
     if (!selectedClusterId) return;
@@ -298,7 +326,7 @@ export function AppShell() {
           <li className="nav-item"><a className="nav-link" href="#schemas">Schemas</a></li>
           <li className="nav-item"><a className="nav-link" href="#ecosystem">Ecosystem</a></li>
           <li className="nav-item"><a className="nav-link" href="#fleet">Fleet</a></li>
-          {visibleNotificationPage && <li className="nav-item"><a className="nav-link" href="#notifications">Notifications</a></li>}
+          {managementSurfaces.navigation && <li className="nav-item"><a className="nav-link" href="#notifications">Notifications</a></li>}
         </ul>
       </div>
     </nav>
@@ -323,7 +351,14 @@ export function AppShell() {
             {!fleetError && fleetCapabilities.length === 0 && <p role="status">Loading fleet capability status…</p>}
             {fleetCapabilities.length > 0 && <div className="table-responsive"><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">Capability</th><th scope="col">State</th><th scope="col">Workstream</th><th scope="col">Reason</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row">{capability.displayName}</th><td><StatusBadge kind={fleetCapabilityStatusKind(capability.state)} label={capability.state} /></td><td>{capability.workstream}</td><td>{capability.reason}</td></tr>)}</tbody></table></div>}
           </section>
-          {visibleNotificationPage && <NotificationObservationPanel key={notificationSessionKey ?? undefined} initialPage={visibleNotificationPage} />}
+          {visibleNotificationPage && <NotificationObservationPanel key={notificationSessionKey ?? undefined}
+              initialPage={visibleNotificationPage}
+              canManageSubscriptions={managementSurfaces.insideRead} />}
+          {managementSurfaces.standalone && <section className="card kafdeck-card"
+            id="notifications" aria-label="Authorized notification subscription management">
+            <NotificationSubscriptionManagementPanel key={notificationSessionKey ?? undefined}
+              referenceSubscription={null} onUpdated={() => { /* No NotificationRead grant. */ }} />
+          </section>}
           {selected && <>
             <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">
               <h2 id="overview-title" className="card-title">Cluster overview</h2>
