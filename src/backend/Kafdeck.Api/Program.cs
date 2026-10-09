@@ -310,6 +310,33 @@ if (notificationReadOptions?.Enabled == true)
             notificationReadOptions.DestinationProfiles ??
             Array.Empty<NotificationDestinationProfile>()));
 
+    // Only preprovisioned, revision-bound credential REFERENCES are mapped.
+    // Registration never reads secret material; no worker/transport is wired.
+    builder.Services.AddSingleton<INotificationCredentialResolver>(services =>
+    {
+        var profiles = notificationReadOptions.DestinationProfiles ??
+            Array.Empty<NotificationDestinationProfile>();
+        var byId = profiles.ToDictionary(
+            profile => profile.DestinationId, StringComparer.Ordinal);
+        var configured = notificationReadOptions.CredentialBindings ??
+            Array.Empty<NotificationCredentialReferenceOptions>();
+        var approved = configured.Select(reference =>
+        {
+            if (!byId.TryGetValue(reference.DestinationId, out var profile) ||
+                profile.CredentialBindingId is null ||
+                !string.Equals(profile.CredentialBindingId.Value,
+                    reference.BindingId.Value, StringComparison.Ordinal))
+                throw new KafdeckConfigurationException(
+                    "Notification credential binding is not admitted by the destination profile.");
+            return new ConfiguredNotificationCredentialBinding(
+                profile.DestinationId, profile.Provider,
+                profile.RevisionFingerprint, reference.BindingId,
+                reference.Secret);
+        }).ToArray();
+        return new ConfiguredNotificationCredentialResolver(
+            approved, services.GetRequiredService<SecretResolver>());
+    });
+
     builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(
         _ =>
             notificationReadOptions.Provider switch
