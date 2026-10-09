@@ -3,6 +3,7 @@ import {
   ApiProblem,
   kafdeckApi,
   type NotificationDeliveryEvidenceData,
+  type NotificationDeliveryHistoryListData,
   type NotificationSubscriptionData,
   type NotificationSubscriptionListData,
 } from '../../shared/api.js';
@@ -46,10 +47,19 @@ export function NotificationObservationPanel({ initialPage }: Props) {
   const detailAbort = useRef<AbortController | null>(null);
   const deliveryAbort = useRef<AbortController | null>(null);
 
+  const [historyDestination, setHistoryDestination] = useState('');
+  const [historySelectedDestination, setHistorySelectedDestination] = useState<string | null>(null);
+  const [historyRows, setHistoryRows] = useState<NotificationDeliveryEvidenceData[]>([]);
+  const [historyPage, setHistoryPage] = useState<NotificationDeliveryHistoryListData | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyAbort = useRef<AbortController | null>(null);
+
   useEffect(() => () => {
     listAbort.current?.abort();
     detailAbort.current?.abort();
     deliveryAbort.current?.abort();
+    historyAbort.current?.abort();
   }, []);
 
   async function loadMore() {
@@ -126,6 +136,79 @@ export function NotificationObservationPanel({ initialPage }: Props) {
     }
   }
 
+  // History is scoped to a single destination. Never reuse a cursor or retain
+  // rows after the operator changes the destination identity.
+  async function loadHistory(
+    target: string,
+    cursor: { createdAtUtc: string; notificationId: string } | null,
+    append: boolean,
+  ) {
+    historyAbort.current?.abort();
+    const controller = new AbortController();
+    historyAbort.current = controller;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const result = await kafdeckApi.listNotificationDeliveryHistory(
+        target, 50, cursor, controller.signal,
+      );
+      if (historyAbort.current !== controller) return;
+      setHistoryRows(previous => {
+        if (!append) return result.items;
+        const seen = new Set(previous.map(row => row.notificationId));
+        return [...previous, ...result.items.filter(row => !seen.has(row.notificationId))];
+      });
+      setHistoryPage(result);
+      setHistorySelectedDestination(target);
+    } catch (reason) {
+      if (!controller.signal.aborted && historyAbort.current === controller) {
+        setHistoryError(observationFailure(reason));
+        setHistoryPage(null);
+      }
+    } finally {
+      if (historyAbort.current === controller) {
+        historyAbort.current = null;
+        setHistoryLoading(false);
+      }
+    }
+  }
+
+  function startHistory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const target = historyDestination.trim();
+    historyAbort.current?.abort();
+    historyAbort.current = null;
+    setHistorySelectedDestination(null);
+    setHistoryRows([]);
+    setHistoryPage(null);
+    setHistoryError(null);
+    if (target.length === 0 || target.length > 128) {
+      setHistoryError('Provide a destination ID of 1–128 characters.');
+      return;
+    }
+    void loadHistory(target, null, false);
+  }
+
+  function changeHistoryDestination(value: string) {
+    historyAbort.current?.abort();
+    historyAbort.current = null;
+    setHistoryDestination(value);
+    setHistorySelectedDestination(null);
+    setHistoryRows([]);
+    setHistoryPage(null);
+    setHistoryError(null);
+    setHistoryLoading(false);
+  }
+
+  function loadHistoryContinuation() {
+    if (!historySelectedDestination || historyLoading || !historyPage?.truncated ||
+      !historyPage.nextCreatedAtUtc || !historyPage.nextNotificationId) return;
+    void loadHistory(historySelectedDestination, {
+      createdAtUtc: historyPage.nextCreatedAtUtc,
+      notificationId: historyPage.nextNotificationId,
+    }, true);
+  }
+
   return <section className="card kafdeck-card" id="notifications" aria-labelledby="notifications-title">
     <h2 className="card-title" id="notifications-title">Notification observation — v0.8</h2>
     <p className="text-secondary">
@@ -188,6 +271,43 @@ export function NotificationObservationPanel({ initialPage }: Props) {
         <dt>Outcome</dt><dd>{delivery.outcomeCode ?? 'Not available'}</dd>
         <dt>Destination revision bound</dt><dd>{delivery.profileRevisionBound ? 'Yes' : 'No'}</dd>
       </dl>}
+    </article>
+    <article aria-labelledby="notification-delivery-history-title">
+      <h3 className="h4" id="notification-delivery-history-title">Delivery history by destination</h3>
+      <p className="text-secondary">Bounded, read-only metadata for a destination you are authorized to observe.</p>
+      <form onSubmit={startHistory}>
+        <label htmlFor="notification-history-destination" className="form-label">Destination ID</label>
+        <input id="notification-history-destination" className="form-control"
+          value={historyDestination} onChange={event => changeHistoryDestination(event.target.value)}
+          maxLength={128} required />
+        <button className="btn btn-outline-primary mt-3" type="submit"
+          disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Load destination history'}</button>
+      </form>
+      {historyError && <div className="alert alert-danger" role="alert">{historyError}</div>}
+      {historySelectedDestination && <p className="text-secondary" role="status">
+        Showing authorized delivery history for {historySelectedDestination}.
+      </p>}
+      {historyRows.length > 0 && <div className="table-responsive"><table
+        className="table table-vcenter card-table mb-0"
+        aria-label="Authorized destination delivery history">
+        <thead><tr><th scope="col">Notification UUID</th><th scope="col">State</th>
+          <th scope="col">Attempts</th><th scope="col">Outcome</th>
+          <th scope="col">Created</th><th scope="col">Revision</th></tr></thead>
+        <tbody>{historyRows.map(row => <tr key={row.notificationId}>
+          <th scope="row">{row.notificationId}</th><td>{row.state}</td>
+          <td>{row.attemptCount}</td><td>{row.outcomeCode ?? 'Not available'}</td>
+          <td>{displayTime(row.createdAtUtc)}</td><td>{row.revision}</td>
+        </tr>)}</tbody>
+      </table></div>}
+      {historySelectedDestination && !historyLoading && !historyError && historyRows.length === 0 &&
+        <p role="status">No delivery evidence is available for this destination.</p>}
+      {historyPage?.truncated && historyPage.nextCreatedAtUtc && historyPage.nextNotificationId &&
+        <button type="button" className="btn btn-sm btn-outline-primary mt-3"
+          disabled={historyLoading} onClick={loadHistoryContinuation}>
+          {historyLoading ? 'Loading…' : 'Load more delivery history'}
+        </button>}
+      {historyPage?.truncated && (!historyPage.nextCreatedAtUtc || !historyPage.nextNotificationId) &&
+        <p className="text-secondary" role="status">No safe continuation is available.</p>}
     </article>
   </section>;
 }
