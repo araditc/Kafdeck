@@ -644,9 +644,15 @@ public sealed class V08W67CliFoundationTests
             application,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ReadAsStringAsync(requestToken)",
+            "CliResponseBodyReader.ReadAsync(",
             application,
             StringComparison.Ordinal);
+        var responseReader = File.ReadAllText(
+            Path.Combine(root, "src", "cli", "Kafdeck.Cli", "CliResponseBodyReader.cs"));
+        Assert.Contains("ReadAsStreamAsync(cancellationToken)",
+            responseReader, StringComparison.Ordinal);
+        Assert.Contains("stream.ReadAsync(",
+            responseReader, StringComparison.Ordinal);
         Assert.Contains(
             "catch (OperationCanceledException)",
             application,
@@ -681,6 +687,45 @@ public sealed class V08W67CliFoundationTests
             "PackageReference",
             project,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cli_response_reader_accepts_bounded_JSON_and_error_bodies()
+    {
+        using var json = new StringContent("{\"ok\":true}");
+        Assert.Equal("{\"ok\":true}", await CliResponseBodyReader.ReadAsync(json));
+        using var error = new StringContent("{\"status\":403}");
+        Assert.Equal("{\"status\":403}", await CliResponseBodyReader.ReadAsync(error));
+    }
+
+    [Fact]
+    public async Task Cli_response_reader_rejects_claimed_oversize_before_read()
+    {
+        using var content = new ByteArrayContent(
+            new byte[CliResponseBodyReader.MaxBodyBytes + 1]);
+        await Assert.ThrowsAsync<CliResponseTooLargeException>(
+            () => CliResponseBodyReader.ReadAsync(content));
+    }
+
+    [Fact]
+    public async Task Cli_response_reader_rejects_unannounced_oversize_stream()
+    {
+        var source = new MemoryStream(
+            new byte[CliResponseBodyReader.MaxBodyBytes + 1]);
+        using var body = new StreamContent(source);
+        body.Headers.ContentLength = null;
+        await Assert.ThrowsAsync<CliResponseTooLargeException>(
+            () => CliResponseBodyReader.ReadAsync(body));
+    }
+
+    [Fact]
+    public async Task Cli_response_reader_accepts_exact_limit_without_truncation()
+    {
+        using var body = new ByteArrayContent(
+            Enumerable.Repeat((byte)'x', CliResponseBodyReader.MaxBodyBytes)
+                .ToArray());
+        var text = await CliResponseBodyReader.ReadAsync(body);
+        Assert.Equal(CliResponseBodyReader.MaxBodyBytes, text.Length);
     }
 
     private static string FindRepositoryRoot()
