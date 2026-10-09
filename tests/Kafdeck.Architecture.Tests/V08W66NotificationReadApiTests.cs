@@ -68,7 +68,13 @@ public sealed class V08W66NotificationReadApiTests
             source, StringComparison.Ordinal);
         Assert.DoesNotContain("AddHostedService<NotificationDeliveryWorker>",
             source, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddSingleton<INotificationCredentialResolver>",
+        Assert.Contains("AddSingleton<INotificationCredentialResolver>",
+            source, StringComparison.Ordinal);
+        Assert.Contains("ConfiguredNotificationCredentialResolver(",
+            source, StringComparison.Ordinal);
+        Assert.Contains("notificationReadOptions.CredentialBindings",
+            source, StringComparison.Ordinal);
+        Assert.Contains("profile.RevisionFingerprint",
             source, StringComparison.Ordinal);
         Assert.DoesNotContain("AddSingleton<NotificationProviderDeliveryDispatcher>",
             source, StringComparison.Ordinal);
