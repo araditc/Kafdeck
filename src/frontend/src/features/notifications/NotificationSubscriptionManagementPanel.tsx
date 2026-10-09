@@ -200,7 +200,9 @@ export function NotificationSubscriptionManagementPanel({ referenceSubscription,
         Exact event types (comma/newline separated; empty matches all types in selected classes)
       </label>
       <textarea className="form-control" id="notification-manage-types" rows={2}
-        maxLength={4096} value={eventTypes} disabled={busy}
+        // Accommodate all 32 allowed event types (128 characters each), separators,
+        // and operator whitespace; validation still caps list/count/identity.
+        maxLength={8192} value={eventTypes} disabled={busy}
         onChange={event => { setEventTypes(event.target.value); setPrepared(null); }} />
       <button type="submit" className="btn btn-outline-primary mt-3" disabled={busy}>
         Review subscription change
