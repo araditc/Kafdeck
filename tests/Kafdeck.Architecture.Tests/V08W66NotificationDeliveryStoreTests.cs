@@ -1664,7 +1664,8 @@ public sealed class V08W66NotificationDeliveryStoreTests
         index.CommandText = """
             SELECT COUNT(*)
             FROM pg_indexes
-            WHERE tablename = 'kafdeck_notification_deliveries'
+            WHERE schemaname = current_schema()
+              AND tablename = 'kafdeck_notification_deliveries'
               AND indexname = 'ix_kafdeck_notification_delivery_history'
             """;
         Assert.Equal(1L, Convert.ToInt64(await index.ExecuteScalarAsync()));

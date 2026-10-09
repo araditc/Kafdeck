@@ -193,7 +193,8 @@ test('W66 typed history GET uses an encoded destination and a complete bounded c
     );
     const request = new URL(requests[0].url, 'https://kafdeck.example');
     assert.equal(requests[0].method, 'GET');
-    assert.equal(request.pathname, '/api/v1/notifications/destinations/approved%20destination/deliveries');
+    assert.equal(request.pathname, '/api/v1/notifications/deliveries/history');
+    assert.equal(request.searchParams.get('destinationId'), 'approved destination');
     assert.equal(request.searchParams.get('maxResults'), '50');
     assert.equal(request.searchParams.get('afterCreatedAtUtc'), '2026-10-08T12:00:00Z');
     assert.equal(request.searchParams.get('afterNotificationId'), '00000000-0000-4000-8000-000000000001');
@@ -371,4 +372,44 @@ test('W66 destination JSON identity admits dot-only server-valid values without 
   assert.equal(isValidNotificationDestinationId('https://unapproved.example'), false);
   assert.equal(isValidNotificationDestinationId('../admin'), false);
   assert.equal(isValidNotificationDestinationId(''), false);
+});
+
+test('W66 dot-only destination identities survive history and evidence GET URL parsing', async () => {
+  const oldWindow = globalThis.window;
+  const oldFetch = globalThis.fetch;
+  const requests = [];
+  const notificationId = '00000000-0000-4000-8000-000000000001';
+  try {
+    globalThis.window = { location: { hash: '', pathname: '/', search: '' } };
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url: String(url), method: init.method });
+      return new Response(JSON.stringify({
+        items: [], truncated: false,
+        nextCreatedAtUtc: null, nextNotificationId: null,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+
+    for (const destinationId of ['.', '..', 'ops-dest']) {
+      await kafdeckApi.listNotificationDeliveryHistory(destinationId);
+      await kafdeckApi.getNotificationDelivery(notificationId, destinationId);
+    }
+
+    assert.equal(requests.length, 6);
+    for (let i = 0; i < requests.length; i += 2) {
+      const destinationId = ['.', '..', 'ops-dest'][i / 2];
+      const history = new URL(requests[i].url, 'https://kafdeck.example');
+      const evidence = new URL(requests[i + 1].url, 'https://kafdeck.example');
+      assert.equal(requests[i].method, 'GET');
+      assert.equal(requests[i + 1].method, 'GET');
+      assert.equal(history.pathname, '/api/v1/notifications/deliveries/history');
+      assert.equal(evidence.pathname,
+        '/api/v1/notifications/deliveries/evidence/' + notificationId);
+      assert.equal(history.searchParams.get('destinationId'), destinationId);
+      assert.equal(evidence.searchParams.get('destinationId'), destinationId);
+      assert.equal(history.searchParams.get('maxResults'), '50');
+    }
+  } finally {
+    globalThis.window = oldWindow;
+    globalThis.fetch = oldFetch;
+  }
 });

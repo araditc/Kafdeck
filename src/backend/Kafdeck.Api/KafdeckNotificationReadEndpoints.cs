@@ -180,6 +180,78 @@ public static class KafdeckNotificationReadEndpoints
                 AuthorizationAction.NotificationRead,
                 resourceRouteKey: "destinationId");
 
+        // Query-addressed aliases preserve exact dot-only destination IDs
+        // that URL path normalization would otherwise collapse. Never let
+        // untrusted query text choose a transport or skip per-resource RBAC.
+        app.MapGet(
+                "/api/v1/notifications/deliveries/history",
+                async (
+                    string? destinationId,
+                    HttpContext context,
+                    int? maxResults,
+                    DateTimeOffset? afterCreatedAtUtc,
+                    Guid? afterNotificationId,
+                    [FromServices] KafdeckAuthorizationService authorization,
+                    [FromServices] INotificationDeliveryHistoryReader store,
+                    CancellationToken cancellationToken) =>
+                {
+                    var admission = await RequireQueryDestinationReadAsync(
+                        context, authorization, destinationId).ConfigureAwait(false);
+                    if (admission is not null) return admission;
+                    if ((afterCreatedAtUtc is null) !=
+                        (afterNotificationId is null)) return InvalidQuery();
+
+                    try
+                    {
+                        var after = afterCreatedAtUtc is not null
+                            ? new NotificationDestinationDeliveryCursor(
+                                afterCreatedAtUtc.Value, afterNotificationId!.Value)
+                            : null;
+                        var page = await store.ListByDestinationAsync(
+                            new NotificationDestinationDeliveryQuery(
+                                destinationId!, maxResults ?? 50, after),
+                            cancellationToken).ConfigureAwait(false);
+                        return Results.Ok(new NotificationDeliveryHistoryListData(
+                            page.Items.Select(NotificationDeliveryEvidenceData.From).ToArray(),
+                            page.Truncated, page.Next?.CreatedAtUtc,
+                            page.Next?.NotificationId));
+                    }
+                    catch (ArgumentException)
+                    {
+                        return InvalidQuery();
+                    }
+                })
+            .WithName("v08-notification-destination-deliveries-query-read");
+
+        app.MapGet(
+                "/api/v1/notifications/deliveries/evidence/{notificationId:guid}",
+                async (
+                    Guid notificationId,
+                    string? destinationId,
+                    HttpContext context,
+                    [FromServices] KafdeckAuthorizationService authorization,
+                    [FromServices] INotificationDeliveryStore store,
+                    CancellationToken cancellationToken) =>
+                {
+                    var admission = await RequireQueryDestinationReadAsync(
+                        context, authorization, destinationId).ConfigureAwait(false);
+                    if (admission is not null) return admission;
+
+                    try
+                    {
+                        var record = await store.GetAsync(
+                            notificationId, destinationId!, cancellationToken)
+                            .ConfigureAwait(false);
+                        return record is null ? NotFound() :
+                            Results.Ok(NotificationDeliveryEvidenceData.From(record));
+                    }
+                    catch (ArgumentException)
+                    {
+                        return InvalidQuery();
+                    }
+                })
+            .WithName("v08-notification-delivery-evidence-query-read");
+
         return app;
     }
 
@@ -193,6 +265,66 @@ public static class KafdeckNotificationReadEndpoints
                 AuthorizationAction.NotificationRead,
                 ResourceName: resource)) ==
         KafdeckAuthorizationOutcome.Allowed;
+
+    // This query-specific resource guard runs before any persistence access.
+    // It cannot reuse route-value authorization because destinationId is
+    // deliberately NOT a path segment ('.' and '..' must remain literal).
+    private static async Task<IResult?> RequireQueryDestinationReadAsync(
+        HttpContext context,
+        KafdeckAuthorizationService authorization,
+        string? destinationId)
+    {
+        if (!OperatorSessionContextFactory.TryCreate(
+                context.User, out var operatorSession) || operatorSession is null)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: "Authentication required");
+        }
+
+        // Fail closed on absent/ambiguous repeated query keys as well as
+        // invalid identity shape. No unknown destination is inferred as absent.
+        if (!context.Request.Query.TryGetValue("destinationId", out var values) ||
+            values.Count != 1 ||
+            !string.Equals(values[0], destinationId, StringComparison.Ordinal))
+            return InvalidQuery();
+
+        try
+        {
+            NotificationDeliveryIdentity.NormalizeDestinationId(destinationId!);
+        }
+        catch (ArgumentException)
+        {
+            return InvalidQuery();
+        }
+
+        var outcome = authorization.Authorize(
+            context.User,
+            new AuthorizationRequest(
+                AuthorizationAction.NotificationRead,
+                ResourceName: destinationId));
+        if (outcome == KafdeckAuthorizationOutcome.Allowed)
+            return null;
+        if (outcome == KafdeckAuthorizationOutcome.Unauthenticated)
+            return Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: "Authentication required");
+
+        var audit = context.RequestServices.GetRequiredService<ISecurityAuditSink>();
+        await audit.WriteAsync(
+            new SecurityAuditEvent(
+                DateTimeOffset.UtcNow,
+                SecurityAuditEventType.AuthorizationDenied,
+                SecurityAuditPrincipal.FromOperator(operatorSession.Identity),
+                operatorSession.SessionId.Value.ToString("N"),
+                null, destinationId, SecurityAuditOutcome.Denied,
+                "rbac_denied_notification_destination_query_read"),
+            context.RequestAborted).ConfigureAwait(false);
+        return Results.Problem(
+            statusCode: StatusCodes.Status403Forbidden,
+            type: "urn:kafdeck:problem:operator-authorization-denied",
+            title: "Forbidden");
+    }
 
     private static async Task<IResult?> RequireCollectionReadAsync(
         HttpContext context,
