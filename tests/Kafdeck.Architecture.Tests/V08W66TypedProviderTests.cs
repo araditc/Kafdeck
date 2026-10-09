@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Kafdeck.Core.Notifications;
 using Kafdeck.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -390,6 +391,125 @@ public sealed class V08W66TypedProviderTests
     }
 
     [Fact]
+    public async Task Five_typed_providers_fanout_once_from_one_durable_approved_event()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"kafdeck-w66-multi-provider-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var factory = new SqliteNotificationDeliveryDbConnectionFactory(path);
+            var routingStore = new AdoNotificationRoutingStore(factory);
+            var deliveryStore = new AdoNotificationDeliveryStore(factory);
+            // The host preflights delivery before routing (including migrations).
+            await deliveryStore.InitializeAsync();
+            await routingStore.InitializeAsync();
+
+            var providers = new[]
+            {
+                NotificationProviderKind.Email,
+                NotificationProviderKind.Slack,
+                NotificationProviderKind.MicrosoftTeams,
+                NotificationProviderKind.Telegram,
+                NotificationProviderKind.PagerDuty,
+            };
+            var profiles = providers.Select(provider =>
+                Profile($"ops-{provider.ToString().ToLowerInvariant()}", provider)).ToArray();
+            var catalog = new ManyProfileCatalog(profiles);
+            var now = DateTimeOffset.UtcNow;
+            foreach (var profile in profiles)
+            {
+                await routingStore.CreateSubscriptionAsync(
+                    new NotificationSubscriptionDefinition(
+                        $"sub-{profile.DestinationId}",
+                        profile.DestinationId,
+                        [NotificationEventClass.Operational]),
+                    NotificationSubscriptionState.Active,
+                    now.AddSeconds(-3));
+            }
+
+            var notification = NotificationSafeEvent.Approved(
+                Guid.NewGuid(),
+                NotificationApprovedEventKind.ConsumerLagAlert,
+                now.AddSeconds(-2));
+            var router = new NotificationRoutingCoordinator(
+                routingStore, deliveryStore, catalog);
+
+            var first = await router.RouteAsync(notification, now.AddSeconds(-1));
+            Assert.Equal(profiles.Length, first.DeliveriesCreatedOrMatched);
+            Assert.Equal(0, first.MissingDestinations);
+            Assert.Equal(0, first.ProfileEventMismatches);
+
+            // Replaying one admitted event is not permission for a second send;
+            // the ledger identity is immutable per (notification, destination).
+            var replay = await router.RouteAsync(notification, now);
+            Assert.Equal(profiles.Length, replay.DeliveriesCreatedOrMatched);
+            var resolver = new RecordingCredentialResolver();
+            var email = new RecordingEmailTransport();
+            var bound = new RecordingBoundTransport();
+            var dispatcher = ProviderDispatcher(
+                routingStore, catalog, resolver, email, bound);
+            var worker = new NotificationDeliveryWorker(deliveryStore, dispatcher);
+            var cycle = await worker.RunDueCycleAsync();
+
+            Assert.Equal(profiles.Length, cycle.Delivered);
+            Assert.Equal(0, cycle.UnknownExternalEffect);
+            Assert.Equal(0, cycle.RetryScheduled);
+            Assert.Single(email.Requests);
+            Assert.Equal(4, bound.Requests.Count);
+
+            var expectedProviderKinds = providers
+                .Where(provider => provider != NotificationProviderKind.Email)
+                .OrderBy(provider => provider).ToArray();
+            Assert.Equal(expectedProviderKinds,
+                bound.Requests.Select(request => request.Provider)
+                    .OrderBy(provider => provider).ToArray());
+            Assert.All(bound.Requests, request =>
+                Assert.Equal(notification.EventId, request.Event.EventId));
+
+            var byId = profiles.ToDictionary(
+                profile => profile.DestinationId, StringComparer.Ordinal);
+            Assert.Equal(profiles.Length, resolver.Requests.Count);
+            foreach (var resolution in resolver.Requests)
+            {
+                var approved = byId[resolution.DestinationId];
+                Assert.Equal(approved.Provider, resolution.Provider);
+                Assert.Equal(approved.RevisionFingerprint,
+                    resolution.ProfileRevisionFingerprint);
+            }
+
+            foreach (var profile in profiles)
+            {
+                var record = await deliveryStore.GetAsync(
+                    notification.EventId, profile.DestinationId);
+                Assert.NotNull(record);
+                Assert.Equal(NotificationDeliveryState.Delivered,
+                    record!.Snapshot.State);
+                Assert.Equal(notification.PayloadFingerprint,
+                    record.Snapshot.PayloadFingerprint);
+                Assert.Equal(profile.RevisionFingerprint,
+                    record.Snapshot.RoutedProfileRevisionFingerprint);
+                Assert.Equal(1, record.Snapshot.AttemptCount);
+            }
+
+            var next = await worker.RunDueCycleAsync();
+            Assert.Equal(0, next.Delivered);
+            Assert.Single(email.Requests);
+            Assert.Equal(4, bound.Requests.Count);
+            Assert.Equal(profiles.Length, resolver.Requests.Count);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var candidate in new[] { path, path + "-wal", path + "-shm" })
+            {
+                if (File.Exists(candidate)) File.Delete(candidate);
+            }
+        }
+    }
+
+    [Fact]
     public void Email_recipient_is_fixed_by_server_profile_revision()
     {
         var profile =
@@ -543,17 +663,38 @@ public sealed class V08W66TypedProviderTests
         }
     }
 
+    private sealed class ManyProfileCatalog : INotificationDestinationProfileCatalog
+    {
+        private readonly IReadOnlyDictionary<string, NotificationDestinationProfile> _profiles;
+
+        public ManyProfileCatalog(IEnumerable<NotificationDestinationProfile> profiles)
+        {
+            _profiles = profiles.ToDictionary(
+                profile => profile.DestinationId, StringComparer.Ordinal);
+        }
+
+        public ValueTask<NotificationDestinationProfile?> GetAsync(
+            string destinationId, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(
+                _profiles.TryGetValue(destinationId, out var profile)
+                    ? profile
+                    : null);
+        }
+    }
+
     private sealed class RecordingCredentialResolver :
         INotificationCredentialResolver
     {
-        public List<NotificationCredentialResolutionRequest>
-            Requests { get; } = [];
+        public ConcurrentQueue<NotificationCredentialResolutionRequest>
+            Requests { get; } = new();
 
         public ValueTask<NotificationCredentialValue> ResolveAsync(
             NotificationCredentialResolutionRequest request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(
+            Requests.Enqueue(
                 request);
             return ValueTask.FromResult(
                 new NotificationCredentialValue(
@@ -564,14 +705,14 @@ public sealed class V08W66TypedProviderTests
     private sealed class RecordingEmailTransport :
         INotificationEmailTransport
     {
-        public List<NotificationEmailTransportRequest>
-            Requests { get; } = [];
+        public ConcurrentQueue<NotificationEmailTransportRequest>
+            Requests { get; } = new();
 
         public Task<NotificationProviderTransportResult> SendAsync(
             NotificationEmailTransportRequest request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(
+            Requests.Enqueue(
                 request);
             return Task.FromResult(
                 new NotificationProviderTransportResult(
@@ -587,14 +728,14 @@ public sealed class V08W66TypedProviderTests
         INotificationTelegramTransport,
         INotificationPagerDutyTransport
     {
-        public List<NotificationBoundTransportRequest>
-            Requests { get; } = [];
+        public ConcurrentQueue<NotificationBoundTransportRequest>
+            Requests { get; } = new();
 
         public Task<NotificationProviderTransportResult> SendAsync(
             NotificationBoundTransportRequest request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(
+            Requests.Enqueue(
                 request);
             return Task.FromResult(
                 new NotificationProviderTransportResult(
