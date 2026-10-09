@@ -51,6 +51,30 @@ public sealed class V08W66NotificationReadApiTests
     }
 
     [Fact]
+    public void Enabled_observation_registers_only_immutable_destination_catalog_not_outbound_worker()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null &&
+               !File.Exists(Path.Combine(root.FullName, "Kafdeck.slnx")))
+            root = root.Parent;
+        Assert.NotNull(root);
+        var source = File.ReadAllText(Path.Combine(
+            root!.FullName, "src", "backend", "Kafdeck.Api", "Program.cs"));
+        Assert.Contains("AddSingleton<INotificationDestinationProfileCatalog>",
+            source, StringComparison.Ordinal);
+        Assert.Contains("new ConfiguredNotificationDestinationProfileCatalog(",
+            source, StringComparison.Ordinal);
+        Assert.Contains("notificationReadOptions.DestinationProfiles",
+            source, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddHostedService<NotificationDeliveryWorker>",
+            source, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddSingleton<INotificationCredentialResolver>",
+            source, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddSingleton<NotificationProviderDeliveryDispatcher>",
+            source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Notification_observation_does_not_accept_legacy_unidentified_access()
     {
         var options = Options(
