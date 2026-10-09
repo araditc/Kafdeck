@@ -855,8 +855,12 @@ export const kafdeckApi = {
     );
   },
   getNotificationDelivery(notificationId: string, destinationId: string, signal?: AbortSignal) {
+    // Path segments '.' and '..' are normalized by URL implementations even
+    // after percent encoding. Carry the exact canonical destination as data.
+    const params = new URLSearchParams({ destinationId });
     return readJson<NotificationDeliveryEvidenceData>(
-      `/api/v1/notifications/deliveries/${encodeURIComponent(notificationId)}/${encodeURIComponent(destinationId)}`, signal,
+      `/api/v1/notifications/deliveries/evidence/${encodeURIComponent(notificationId)}?${params}`,
+      signal,
     );
   },
 
@@ -866,14 +870,16 @@ export const kafdeckApi = {
     after?: { createdAtUtc: string; notificationId: string } | null,
     signal?: AbortSignal,
   ) {
-    const params = new URLSearchParams({ maxResults: String(maxResults) });
+    const params = new URLSearchParams({
+      destinationId,
+      maxResults: String(maxResults),
+    });
     if (after) {
       params.set('afterCreatedAtUtc', after.createdAtUtc);
       params.set('afterNotificationId', after.notificationId);
     }
     return readJson<NotificationDeliveryHistoryListData>(
-      '/api/v1/notifications/destinations/' + encodeURIComponent(destinationId) +
-        '/deliveries?' + params.toString(),
+      '/api/v1/notifications/deliveries/history?' + params.toString(),
       signal,
     );
   },
