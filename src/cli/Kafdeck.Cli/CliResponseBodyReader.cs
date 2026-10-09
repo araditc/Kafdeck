@@ -46,4 +46,6 @@ public static class CliResponseBodyReader
     }
 }
 
-public sealed class CliResponseTooLargeException : Exception;
+public sealed class CliResponseTooLargeException : Exception
+{
+}
