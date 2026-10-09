@@ -56,8 +56,18 @@ public static class CliApplication
                 CliRouteBuilder.Build(invocation),
                 requestToken);
 
-            var body = await CliResponseBodyReader.ReadAsync(
-                response.Content, requestToken);
+            string body;
+            try
+            {
+                body = await CliResponseBodyReader.ReadAsync(
+                    response.Content, requestToken);
+            }
+            catch (CliResponseTooLargeException)
+            {
+                await error.WriteLineAsync(
+                    $"Kafdeck CLI refused an API response exceeding {CliResponseBodyReader.MaxBodyBytes} bytes.");
+                return CategorizeHttpFailure(response.StatusCode);
+            }
 
             if (response.IsSuccessStatusCode)
             {
@@ -73,23 +83,13 @@ public static class CliApplication
                     ? $"Kafdeck returned HTTP {(int)response.StatusCode}."
                     : body);
 
-            return response.StatusCode is
-                System.Net.HttpStatusCode.Unauthorized or
-                System.Net.HttpStatusCode.Forbidden
-                    ? AuthenticationOrAuthorizationError
-                    : RemoteError;
+            return CategorizeHttpFailure(response.StatusCode);
         }
         catch (CliUsageException exception)
         {
             await error.WriteLineAsync(exception.Message);
             await error.WriteLineAsync(CliParser.Usage);
             return UsageError;
-        }
-        catch (CliResponseTooLargeException)
-        {
-            await error.WriteLineAsync(
-                $"Kafdeck CLI refused an API response exceeding {CliResponseBodyReader.MaxBodyBytes} bytes.");
-            return RemoteError;
         }
         catch (JsonException exception)
         {
@@ -129,6 +129,12 @@ public static class CliApplication
             return TransportError;
         }
     }
+
+    public static int CategorizeHttpFailure(System.Net.HttpStatusCode status) =>
+        status is System.Net.HttpStatusCode.Unauthorized or
+            System.Net.HttpStatusCode.Forbidden
+            ? AuthenticationOrAuthorizationError
+            : RemoteError;
 
     private static async Task WriteJsonAsync(
         TextWriter output,

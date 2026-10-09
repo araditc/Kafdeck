@@ -728,6 +728,17 @@ public sealed class V08W67CliFoundationTests
         Assert.Equal(CliResponseBodyReader.MaxBodyBytes, text.Length);
     }
 
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.Unauthorized, CliApplication.AuthenticationOrAuthorizationError)]
+    [InlineData(System.Net.HttpStatusCode.Forbidden, CliApplication.AuthenticationOrAuthorizationError)]
+    [InlineData(System.Net.HttpStatusCode.BadGateway, CliApplication.RemoteError)]
+    [InlineData(System.Net.HttpStatusCode.RequestEntityTooLarge, CliApplication.RemoteError)]
+    public void Cli_response_cap_preserves_http_auth_failure_exit_category(
+        System.Net.HttpStatusCode status, int expected)
+    {
+        Assert.Equal(expected, CliApplication.CategorizeHttpFailure(status));
+    }
+
     private static string FindRepositoryRoot()
     {
         DirectoryInfo? current =
