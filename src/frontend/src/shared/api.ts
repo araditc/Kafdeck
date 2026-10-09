@@ -32,6 +32,25 @@ export interface NotificationSubscriptionListData {
   authorizationFiltered: boolean;
   continuationRestricted: boolean;
 }
+export interface NotificationManagementCapabilityData {
+  subscriptionCasAvailable: boolean;
+  maxEventClasses: number;
+  maxEventTypes: number;
+}
+
+export interface NotificationSubscriptionWriteRequest {
+  destinationId: string;
+  state: 'active' | 'paused' | 'retired';
+  eventClasses: string[];
+  eventTypes: string[];
+  expectedRevision: number | null;
+}
+export interface NotificationSubscriptionWriteReceipt {
+  subscriptionId: string;
+  state: string;
+  revision: number;
+}
+
 export interface NotificationDeliveryEvidenceData {
   notificationId: string;
   destinationId: string;
@@ -802,6 +821,27 @@ export const kafdeckApi = {
 
     document.body.appendChild(form);
     form.submit();
+  },
+  // Management remains opt-in, OIDC-only, RBAC-scoped and independently
+  // authorized. A capability result never grants permission on a destination.
+  getNotificationManagementCapabilities(signal?: AbortSignal) {
+    return readJson<NotificationManagementCapabilityData>(
+      '/api/v1/notifications/management/capabilities', signal,
+    );
+  },
+  upsertNotificationSubscription(
+    subscriptionId: string,
+    request: NotificationSubscriptionWriteRequest,
+    signal?: AbortSignal,
+  ) {
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(subscriptionId) ||
+      subscriptionId === '.' || subscriptionId === '..') {
+      throw new ApiProblem(400, 'Invalid bounded subscription identity.', null);
+    }
+    return putJson<NotificationSubscriptionWriteReceipt>(
+      '/api/v1/notifications/subscriptions/' + encodeURIComponent(subscriptionId),
+      request, signal,
+    );
   },
   // W66 observation is read-only; all authorization stays server-side (OIDC + NotificationRead).
   listNotificationSubscriptions(maxResults = 50, afterSubscriptionId?: string | null, signal?: AbortSignal) {

@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { NotificationObservationPanel } from '../dist/test-source/features/notifications/NotificationObservationPanel.js';
 import { AppShell } from '../dist/test-source/app/AppShell.js';
+import { NotificationSubscriptionManagementPanel } from '../dist/test-source/features/notifications/NotificationSubscriptionManagementPanel.js';
 import { ApiProblem, kafdeckApi, operatorSessionLostEvent } from '../dist/test-source/shared/api.js';
 import { mutationApi, MutationApiProblem } from '../dist/test-source/features/mutations/mutationApi.js';
 
@@ -223,6 +224,119 @@ test('W66 destination history 401 invalidates operator session, unlike resource-
       error => error instanceof ApiProblem && error.status === 401,
     );
     assert.deepEqual(events, [operatorSessionLostEvent]);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('W66 subscription management controls require separately admitted capability', () => {
+  const readOnly = renderToStaticMarkup(React.createElement(
+    NotificationObservationPanel, { initialPage: subscriptionPage() },
+  ));
+  assert.doesNotMatch(readOnly, /Manage notification subscription/);
+  const enabled = renderToStaticMarkup(React.createElement(
+    NotificationObservationPanel, { initialPage: subscriptionPage(), canManageSubscriptions: true },
+  ));
+  assert.match(enabled, /Manage notification subscription/);
+  assert.match(enabled, /Review subscription change/);
+  assert.doesNotMatch(enabled, /Confirm subscription change/);
+  assert.doesNotMatch(enabled, /TOP_SECRET_SENTINEL/);
+});
+
+test('W66 management form does not render extraneous provider secret projections', () => {
+  const value = { ...subscriptionPage().items[0], secretCredential: 'SENTINEL_PRIVATE_CREDENTIAL' };
+  const markup = renderToStaticMarkup(React.createElement(
+    NotificationSubscriptionManagementPanel, {
+      referenceSubscription: value, onUpdated: () => {},
+    },
+  ));
+  assert.match(markup, /Manage notification subscription/);
+  // Every valid 32 x 128-character exact-filter list plus separators must fit
+  // without browser-side truncation changing the intended subscription.
+  const size = markup.match(/id="notification-manage-types"[^>]*maxlength="(\d+)"/i);
+  assert.ok(size && Number(size[1]) >= 32 * 128 + 31);
+  assert.doesNotMatch(markup, /SENTINEL_PRIVATE_CREDENTIAL/);
+  assert.doesNotMatch(markup, /Confirm subscription change/);
+});
+
+test('W66 management capability preflight is GET-only and forbidden does not expire session', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  const events = [];
+  try {
+    globalThis.window = {
+      location: { hash: '', pathname: '/', search: '' },
+      dispatchEvent: event => { events.push(event.type); return true; },
+    };
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, method: init.method });
+      return new Response('{}', { status: 403, headers: { 'Content-Type': 'application/problem+json' } });
+    };
+    await assert.rejects(kafdeckApi.getNotificationManagementCapabilities(),
+      error => error instanceof ApiProblem && error.status === 403);
+    assert.deepEqual(requests, [
+      { url: '/api/v1/notifications/management/capabilities', method: 'GET' },
+    ]);
+    assert.deepEqual(events, []);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('W66 typed CAS PUT obtains same-origin antiforgery and never sends provider URLs', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  try {
+    globalThis.window = { location: { hash: '', pathname: '/', search: '' } };
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, method: init.method, headers: init.headers, body: init.body });
+      if (url === '/api/v1/auth/csrf') return new Response(
+        JSON.stringify({ headerName: 'X-CSRF', requestToken: 'opaque-session-token' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({
+        subscriptionId: 'ops-sub', state: 'active', revision: 8,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const request = {
+      destinationId: 'ops-dest',
+      state: 'active',
+      eventClasses: ['operational'],
+      eventTypes: ['consumer.lag.alert'],
+      expectedRevision: 7,
+    };
+    const result = await kafdeckApi.upsertNotificationSubscription('ops-sub', request);
+    assert.equal(result.revision, 8);
+    assert.equal(requests[0].url, '/api/v1/auth/csrf');
+    assert.equal(requests[0].method, 'GET');
+    const put = requests.find(x => x.method === 'PUT');
+    assert.ok(put);
+    assert.equal(put.url, '/api/v1/notifications/subscriptions/ops-sub');
+    assert.equal(put.headers['X-CSRF'], 'opaque-session-token');
+    assert.deepEqual(JSON.parse(put.body), request);
+    assert.equal(requests.filter(x => x.method === 'PUT').length, 1);
+    assert.doesNotMatch(put.body, /password|credential|providerUrl|https:\/\//);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('W66 subscription client rejects unbounded IDs without issuing a network request', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  let called = false;
+  try {
+    globalThis.window = { location: { hash: '', pathname: '/', search: '' } };
+    globalThis.fetch = async () => { called = true; throw Error('network should not be used'); };
+    assert.throws(() => kafdeckApi.upsertNotificationSubscription('../admin', {
+      destinationId: 'ops', state: 'active', eventClasses: ['operational'],
+      eventTypes: [], expectedRevision: null,
+    }), error => error instanceof ApiProblem && error.status === 400);
+    assert.equal(called, false);
   } finally {
     globalThis.window = originalWindow;
     globalThis.fetch = originalFetch;
