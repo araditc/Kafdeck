@@ -1,3 +1,4 @@
+using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Microsoft.Extensions.Configuration;
@@ -81,7 +82,118 @@ public static class KafdeckConfigurationLoader
                 "Notification execution mode"),
             NullIfBlank(section["SqliteDatabasePath"]),
             ParseOptionalSecret(section["ConnectionString"]),
-            ParseOptionalBoolean(section["ManagementEnabled"], false, "Notification management Enabled"));
+            ParseOptionalBoolean(section["ManagementEnabled"], false, "Notification management Enabled"),
+            LoadConfiguredNotificationDestinations(section.GetSection("Destinations")));
+    }
+
+    private static IReadOnlyList<NotificationDestinationProfile>
+        LoadConfiguredNotificationDestinations(IConfigurationSection section)
+    {
+        const int maxProfiles = 500;
+        if (section.Value is not null)
+            throw new KafdeckConfigurationException(
+                "Notification destinations must be an array, never scalar material.");
+
+        var result = new List<NotificationDestinationProfile>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var allowedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "DestinationId", "Provider", "DisplayName", "EnabledEvents",
+            "ConfiguredEndpoint", "CredentialBindingId", "EmailRecipientAddress",
+        };
+
+        foreach (var item in section.GetChildren())
+        {
+            // Only canonical zero-based array entries are accepted.
+            if (!int.TryParse(item.Key, System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var index) ||
+                index != result.Count ||
+                !string.Equals(item.Key, index.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal) ||
+                result.Count >= maxProfiles)
+                throw new KafdeckConfigurationException(
+                    "Notification destinations must be a finite ordered array (maximum 500).");
+
+            var properties = item.GetChildren().ToArray();
+            if (item.Value is not null ||
+                properties.Any(child =>
+                    !allowedKeys.Contains(child.Key) ||
+                    (child.Key.Equals("EnabledEvents", StringComparison.OrdinalIgnoreCase)
+                        ? child.Value is not null
+                        : child.GetChildren().Any())))
+                throw new KafdeckConfigurationException(
+                    "Notification destination contains unsupported or nested configuration material.");
+
+            var id = item["DestinationId"];
+            var providerText = item["Provider"];
+            var display = item["DisplayName"];
+            if (string.IsNullOrWhiteSpace(id) ||
+                string.IsNullOrWhiteSpace(providerText) ||
+                string.IsNullOrWhiteSpace(display))
+                throw new KafdeckConfigurationException(
+                    "Notification destination identity, provider and display name are mandatory.");
+
+            var provider = ParseEnum(
+                providerText, NotificationProviderKind.Webhook,
+                "Notification destination provider");
+            var eventSection = item.GetSection("EnabledEvents");
+            var events = new List<NotificationEventClass>();
+            foreach (var node in eventSection.GetChildren())
+            {
+                if (!int.TryParse(node.Key, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var eventIndex) ||
+                    eventIndex != events.Count ||
+                    !string.Equals(node.Key, eventIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal) ||
+                    events.Count >= 16 ||
+                    string.IsNullOrWhiteSpace(node.Value) ||
+                    node.GetChildren().Any())
+                    throw new KafdeckConfigurationException(
+                        "Notification destination event classes must be a finite ordered array.");
+                events.Add(ParseEnum(
+                    node.Value, NotificationEventClass.Operational,
+                    "Notification destination event class"));
+            }
+            if (events.Count == 0)
+                throw new KafdeckConfigurationException(
+                    "Notification destination needs at least one approved event class.");
+
+            var endpointText = item["ConfiguredEndpoint"];
+            var bindingText = item["CredentialBindingId"];
+            var recipient = item["EmailRecipientAddress"];
+            if (provider != NotificationProviderKind.Webhook &&
+                !string.IsNullOrWhiteSpace(endpointText))
+                throw new KafdeckConfigurationException(
+                    "Only Webhook destination may configure an HTTPS endpoint.");
+            if (provider != NotificationProviderKind.Webhook &&
+                string.IsNullOrWhiteSpace(bindingText))
+                throw new KafdeckConfigurationException(
+                    "Typed notification destination requires a registered credential binding.");
+
+            if (!string.IsNullOrWhiteSpace(endpointText) &&
+                !Uri.TryCreate(endpointText, UriKind.Absolute, out _))
+                throw new KafdeckConfigurationException(
+                    "Notification HTTPS endpoint is invalid.");
+
+            try
+            {
+                var profile = new NotificationDestinationProfile(
+                    id, provider, display, events,
+                    string.IsNullOrWhiteSpace(endpointText)
+                        ? null : new Uri(endpointText, UriKind.Absolute),
+                    string.IsNullOrWhiteSpace(bindingText)
+                        ? null : new NotificationCredentialBindingId(bindingText),
+                    recipient);
+                if (!ids.Add(profile.DestinationId))
+                    throw new KafdeckConfigurationException(
+                        "Duplicate exact notification destination identity.");
+                result.Add(profile);
+            }
+            catch (ArgumentException error)
+            {
+                throw new KafdeckConfigurationException(
+                    "Notification destination definition is invalid.", error);
+            }
+        }
+        return Array.AsReadOnly(result.ToArray());
     }
 
     private static DataQualityOptions? LoadDataQuality(
