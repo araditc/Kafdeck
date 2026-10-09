@@ -753,9 +753,12 @@ public sealed class V08W67CliFoundationTests
         Assert.Contains("return CategorizeHttpFailure(response.StatusCode);",
             source, StringComparison.Ordinal);
         Assert.DoesNotContain("ReadAsStringAsync", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("string.IsNullOrWhiteSpace(body)", source,
+        var errorBranch = source[responseCheck..contentRead];
+        Assert.Contains("if (!response.IsSuccessStatusCode)", errorBranch,
             StringComparison.Ordinal);
-        Assert.DoesNotContain(": body);", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("body", errorBranch, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadAsStringAsync", errorBranch,
+            StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
