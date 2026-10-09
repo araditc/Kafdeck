@@ -78,6 +78,29 @@ public sealed class V08W66ConfiguredDestinationOptionsTests
     }
 
     [Fact]
+    public void Refuses_zero_padded_destination_index()
+    {
+        var config = ValidEmailConfig();
+        var keys = config.Keys.Where(key =>
+            key.StartsWith("Kafdeck:Notifications:Destinations:0:", StringComparison.Ordinal)).ToArray();
+        foreach (var key in keys)
+        {
+            config[key.Replace(":Destinations:0:", ":Destinations:00:", StringComparison.Ordinal)] = config[key];
+            config.Remove(key);
+        }
+        Assert.Throws<KafdeckConfigurationException>(() => Load(config));
+    }
+
+    [Fact]
+    public void Refuses_zero_padded_event_class_index()
+    {
+        var config = ValidEmailConfig();
+        config.Remove("Kafdeck:Notifications:Destinations:0:EnabledEvents:0");
+        config["Kafdeck:Notifications:Destinations:0:EnabledEvents:00"] = "Operational";
+        Assert.Throws<KafdeckConfigurationException>(() => Load(config));
+    }
+
+    [Fact]
     public void Refuses_scalar_material_on_destination_array_root()
     {
         var config = ValidEmailConfig();
