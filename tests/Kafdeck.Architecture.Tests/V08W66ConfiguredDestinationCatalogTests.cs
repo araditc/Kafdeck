@@ -82,8 +82,8 @@ public sealed class V08W66ConfiguredDestinationCatalogTests
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await catalog.GetAsync("ops", cancelled.Token));
+            async () => { _ = await catalog.GetAsync("ops", cancelled.Token); });
         await Assert.ThrowsAsync<ArgumentException>(
-            async () => await catalog.GetAsync("https://unapproved", CancellationToken.None));
+            async () => { _ = await catalog.GetAsync("https://unapproved", CancellationToken.None); });
     }
 }
