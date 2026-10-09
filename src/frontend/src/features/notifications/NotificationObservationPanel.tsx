@@ -163,7 +163,9 @@ export function NotificationObservationPanel({ initialPage }: Props) {
     } catch (reason) {
       if (!controller.signal.aborted && historyAbort.current === controller) {
         setHistoryError(observationFailure(reason));
-        setHistoryPage(null);
+        // Keep the last successfully fetched cursor on append errors so an
+        // authorized operator can retry the failed page without restarting.
+        if (!append) setHistoryPage(null);
       }
     } finally {
       if (historyAbort.current === controller) {
