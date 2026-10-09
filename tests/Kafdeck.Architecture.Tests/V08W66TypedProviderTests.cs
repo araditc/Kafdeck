@@ -437,8 +437,8 @@ public sealed class V08W66TypedProviderTests
 
             var first = await router.RouteAsync(notification, now.AddSeconds(-1));
             Assert.Equal(profiles.Length, first.DeliveriesCreatedOrMatched);
-            Assert.Equal(0, first.MissingProfiles);
-            Assert.Equal(0, first.MismatchedProfiles);
+            Assert.Equal(0, first.MissingDestinations);
+            Assert.Equal(0, first.ProfileEventMismatches);
 
             // Replaying one admitted event is not permission for a second send;
             // the ledger identity is immutable per (notification, destination).
