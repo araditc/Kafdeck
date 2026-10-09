@@ -121,6 +121,22 @@ public sealed class V08W66ConfiguredDestinationOptionsTests
         Assert.Contains("profiles require explicitly enabled", ex.Message);
     }
 
+    [Fact]
+    public void Programmatic_null_catalog_entry_fails_with_configuration_error()
+    {
+        var configured = Load(ValidEmailConfig());
+        var malformed = configured with
+        {
+            Notifications = configured.Notifications! with
+            {
+                DestinationProfiles = new NotificationDestinationProfile[] { null! },
+            },
+        };
+        var error = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(malformed));
+        Assert.Contains("bounded and have distinct IDs", error.Message);
+    }
+
     private static string FindRoot()
     {
         DirectoryInfo? cursor = new(AppContext.BaseDirectory);
