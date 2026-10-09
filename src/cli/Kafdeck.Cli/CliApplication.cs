@@ -56,8 +56,8 @@ public static class CliApplication
                 CliRouteBuilder.Build(invocation),
                 requestToken);
 
-            var body = await response.Content
-                .ReadAsStringAsync(requestToken);
+            var body = await CliResponseBodyReader.ReadAsync(
+                response.Content, requestToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -84,6 +84,12 @@ public static class CliApplication
             await error.WriteLineAsync(exception.Message);
             await error.WriteLineAsync(CliParser.Usage);
             return UsageError;
+        }
+        catch (CliResponseTooLargeException)
+        {
+            await error.WriteLineAsync(
+                $"Kafdeck CLI refused an API response exceeding {CliResponseBodyReader.MaxBodyBytes} bytes.");
+            return RemoteError;
         }
         catch (JsonException exception)
         {
