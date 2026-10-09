@@ -665,7 +665,7 @@ public sealed class MutationExecutor
     {
         // After DispatchStarted is durable, execution is server-owned. A caller disconnect
         // must not cancel an external mutation and create avoidable outcome ambiguity.
-        using var timeout = new CancellationTokenSource(_policy.OperationTimeout);
+        using var timeout = new CancellationTokenSource(_policy.OperationTimeout, _timeProvider);
         Task<MutationProviderResult>? execution = null;
 
         try
@@ -677,7 +677,7 @@ public sealed class MutationExecutor
                 CancellationToken.None);
 
             var result = await execution
-                .WaitAsync(_policy.OperationTimeout)
+                .WaitAsync(_policy.OperationTimeout, _timeProvider)
                 .ConfigureAwait(false);
             return new ProviderExecutionOutcome(result);
         }
