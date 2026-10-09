@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { NotificationSubscriptionManagementPanel } from './NotificationSubscriptionManagementPanel.js';
 import {
   ApiProblem,
   kafdeckApi,
@@ -10,6 +11,7 @@ import {
 
 interface Props {
   initialPage: NotificationSubscriptionListData;
+  canManageSubscriptions?: boolean;
 }
 
 function observationFailure(reason: unknown): string {
@@ -31,7 +33,7 @@ function displayTime(value: string | null): string {
  * per-subscription/destination checks and fail-closed pagination remain authoritative.
  * This component never stores provider payloads, credentials, URLs or raw requests.
  */
-export function NotificationObservationPanel({ initialPage }: Props) {
+export function NotificationObservationPanel({ initialPage, canManageSubscriptions = false }: Props) {
   const [items, setItems] = useState<NotificationSubscriptionData[]>(initialPage.items);
   const [page, setPage] = useState(initialPage);
   const [loading, setLoading] = useState(false);
@@ -211,11 +213,36 @@ export function NotificationObservationPanel({ initialPage }: Props) {
     }, true);
   }
 
+  async function refreshAfterWrite() {
+    listAbort.current?.abort();
+    detailAbort.current?.abort();
+    setDetail(null);
+    setDetailError(null);
+    const controller = new AbortController();
+    listAbort.current = controller;
+    setLoading(true);
+    setListError(null);
+    try {
+      const page = await kafdeckApi.listNotificationSubscriptions(50, null, controller.signal);
+      if (listAbort.current !== controller) return;
+      setItems(page.items);
+      setPage(page);
+    } catch (reason) {
+      if (!controller.signal.aborted) setListError(observationFailure(reason));
+    } finally {
+      if (listAbort.current === controller) {
+        listAbort.current = null;
+        setLoading(false);
+      }
+    }
+  }
+
   return <section className="card kafdeck-card" id="notifications" aria-labelledby="notifications-title">
     <h2 className="card-title" id="notifications-title">Notification observation — v0.8</h2>
     <p className="text-secondary">
-      Read-only metadata from authorized subscriptions and delivery outcomes. No provider payload,
-      destination credentials, transport URL, or management operation is available here.
+      Metadata-only observation of authorized subscriptions and delivery outcomes. No provider payload,
+      destination credentials or transport URLs. Separately admitted subscription management uses
+      server-side CAS, resource-scoped NotificationManage and antiforgery.
     </p>
     {page.authorizationFiltered && <div className="alert alert-warning" role="status">
       Some subscriptions are hidden by your resource permissions.
@@ -247,6 +274,10 @@ export function NotificationObservationPanel({ initialPage }: Props) {
         <dt>Event classes</dt><dd>{detail.eventClasses.join(', ') || 'None'}</dd>
         <dt>Exact event types</dt><dd>{detail.eventTypes.join(', ') || 'All admitted types in selected classes'}</dd></dl>
     </article>}
+    {canManageSubscriptions && <NotificationSubscriptionManagementPanel
+      referenceSubscription={detail}
+      onUpdated={() => { void refreshAfterWrite(); }}
+    />}
     <article aria-labelledby="notification-delivery-title">
       <h3 className="h4" id="notification-delivery-title">Delivery evidence lookup</h3>
       <form onSubmit={event => void lookupDelivery(event)}>
