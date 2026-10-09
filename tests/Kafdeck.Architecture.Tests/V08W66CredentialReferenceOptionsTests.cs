@@ -62,6 +62,23 @@ public sealed class V08W66CredentialReferenceOptionsTests
     }
 
     [Fact]
+    public void Credential_reference_keys_follow_IConfiguration_case_insensitivity()
+    {
+        var config = Base();
+        var canonical = "Kafdeck:Notifications:CredentialBindings:0:";
+        foreach (var key in config.Keys.Where(x =>
+            x.StartsWith(canonical, StringComparison.Ordinal)).ToArray())
+        {
+            config[canonical + key[canonical.Length..].ToLowerInvariant()] =
+                config[key];
+            config.Remove(key);
+        }
+        var parsed = Load(config);
+        Assert.Single(parsed.Notifications!.CredentialBindings!);
+        KafdeckConfigurationValidator.ValidateAndThrow(parsed);
+    }
+
+    [Fact]
     public void Rejects_credential_bound_to_missing_or_different_profile()
     {
         foreach (var key in new[] { "DestinationId", "BindingId" })
