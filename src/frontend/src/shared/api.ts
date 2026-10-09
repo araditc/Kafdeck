@@ -45,6 +45,15 @@ export interface NotificationDeliveryEvidenceData {
   profileRevisionBound: boolean;
 }
 
+
+/** Bounded metadata-only history for one independently authorized destination. */
+export interface NotificationDeliveryHistoryListData {
+  items: NotificationDeliveryEvidenceData[];
+  truncated: boolean;
+  nextCreatedAtUtc: string | null;
+  nextNotificationId: string | null;
+}
+
 export interface ReadViewLimitation { code: string; message: string; }
 export interface ReadViewEnvelope<T> { data: T; partial: boolean; limitations: ReadViewLimitation[]; }
 
@@ -808,6 +817,24 @@ export const kafdeckApi = {
   getNotificationDelivery(notificationId: string, destinationId: string, signal?: AbortSignal) {
     return readJson<NotificationDeliveryEvidenceData>(
       `/api/v1/notifications/deliveries/${encodeURIComponent(notificationId)}/${encodeURIComponent(destinationId)}`, signal,
+    );
+  },
+
+  listNotificationDeliveryHistory(
+    destinationId: string,
+    maxResults = 50,
+    after?: { createdAtUtc: string; notificationId: string } | null,
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams({ maxResults: String(maxResults) });
+    if (after) {
+      params.set('afterCreatedAtUtc', after.createdAtUtc);
+      params.set('afterNotificationId', after.notificationId);
+    }
+    return readJson<NotificationDeliveryHistoryListData>(
+      '/api/v1/notifications/destinations/' + encodeURIComponent(destinationId) +
+        '/deliveries?' + params.toString(),
+      signal,
     );
   },
   listClusters(signal?: AbortSignal) { return readJson<{ data: ApiEnvelope<ClusterData>[] }>('/api/v1/clusters', signal); },
