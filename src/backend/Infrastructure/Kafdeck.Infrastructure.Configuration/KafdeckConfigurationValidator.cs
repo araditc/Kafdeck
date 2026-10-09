@@ -1,4 +1,5 @@
 using System.Net;
+using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -476,6 +477,35 @@ public static class KafdeckConfigurationValidator
         if (notification is null)
         {
             return;
+        }
+
+        if (notification.DestinationProfiles is { Count: > 0 } profiles)
+        {
+            var containsNull = profiles.Any(profile => profile is null);
+            if (profiles.Count > 500 || containsNull ||
+                (!containsNull &&
+                 profiles.Select(profile => profile.DestinationId)
+                     .Distinct(StringComparer.Ordinal).Count() != profiles.Count))
+            {
+                errors.Add("Notification destination catalog must be bounded and have distinct IDs.");
+            }
+
+            foreach (var profile in profiles)
+            {
+                if (profile is null) continue;
+                if (profile.Provider != NotificationProviderKind.Webhook &&
+                    (profile.CredentialBindingId is null ||
+                     profile.ConfiguredEndpoint is not null))
+                {
+                    errors.Add(
+                        "Typed notification destinations require an opaque credential binding and must not configure a webhook endpoint.");
+                }
+            }
+
+            if (!notification.Enabled)
+            {
+                errors.Add("Notification destination profiles require explicitly enabled notification observation.");
+            }
         }
 
         if (!notification.Enabled)
