@@ -1,3 +1,4 @@
+using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 
@@ -49,7 +50,8 @@ public sealed record NotificationReadOptions(
     NotificationExecutionMode ExecutionMode,
     string? SqliteDatabasePath,
     SecretReference? ConnectionString,
-    bool ManagementEnabled = false);
+    bool ManagementEnabled = false,
+    IReadOnlyList<NotificationDestinationProfile>? DestinationProfiles = null);
 
 
 public enum DataQualityPersistenceProvider
