@@ -107,9 +107,15 @@ public static class KafdeckConfigurationLoader
                 throw new KafdeckConfigurationException(
                     "Notification destinations must be a finite ordered array (maximum 500).");
 
-            if (item.GetChildren().Any(child => !allowedKeys.Contains(child.Key)))
+            var properties = item.GetChildren().ToArray();
+            if (item.Value is not null ||
+                properties.Any(child =>
+                    !allowedKeys.Contains(child.Key) ||
+                    (child.Key.Equals("EnabledEvents", StringComparison.OrdinalIgnoreCase)
+                        ? child.Value is not null
+                        : child.GetChildren().Any())))
                 throw new KafdeckConfigurationException(
-                    "Notification destination contains an unsupported configuration field.");
+                    "Notification destination contains unsupported or nested configuration material.");
 
             var id = item["DestinationId"];
             var providerText = item["Provider"];
@@ -130,7 +136,8 @@ public static class KafdeckConfigurationLoader
                 if (!int.TryParse(node.Key, System.Globalization.NumberStyles.None,
                         System.Globalization.CultureInfo.InvariantCulture, out var eventIndex) ||
                     eventIndex != events.Count || events.Count >= 16 ||
-                    string.IsNullOrWhiteSpace(node.Value))
+                    string.IsNullOrWhiteSpace(node.Value) ||
+                    node.GetChildren().Any())
                     throw new KafdeckConfigurationException(
                         "Notification destination event classes must be a finite ordered array.");
                 events.Add(ParseEnum(
