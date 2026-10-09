@@ -644,9 +644,15 @@ public sealed class V08W67CliFoundationTests
             application,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ReadAsStringAsync(requestToken)",
+            "CliResponseBodyReader.ReadAsync(",
             application,
             StringComparison.Ordinal);
+        var responseReader = File.ReadAllText(
+            Path.Combine(root, "src", "cli", "Kafdeck.Cli", "CliResponseBodyReader.cs"));
+        Assert.Contains("ReadAsStreamAsync(cancellationToken)",
+            responseReader, StringComparison.Ordinal);
+        Assert.Contains("stream.ReadAsync(",
+            responseReader, StringComparison.Ordinal);
         Assert.Contains(
             "catch (OperationCanceledException)",
             application,
