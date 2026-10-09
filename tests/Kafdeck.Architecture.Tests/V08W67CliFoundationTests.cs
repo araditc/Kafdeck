@@ -739,6 +739,25 @@ public sealed class V08W67CliFoundationTests
         Assert.Equal(expected, CliApplication.CategorizeHttpFailure(status));
     }
 
+    [Fact]
+    public void Cli_does_not_echo_or_ingest_untrusted_error_bodies()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root,
+            "src", "cli", "Kafdeck.Cli", "CliApplication.cs"));
+        var responseCheck = source.IndexOf(
+            "if (!response.IsSuccessStatusCode)", StringComparison.Ordinal);
+        var contentRead = source.IndexOf(
+            "CliResponseBodyReader.ReadAsync(", StringComparison.Ordinal);
+        Assert.True(responseCheck > 0 && contentRead > responseCheck);
+        Assert.Contains("return CategorizeHttpFailure(response.StatusCode);",
+            source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadAsStringAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("string.IsNullOrWhiteSpace(body)", source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(": body);", source, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         DirectoryInfo? current =
