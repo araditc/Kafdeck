@@ -181,6 +181,55 @@ public sealed class V08W66ConfiguredDestinationOptionsTests
         Assert.Contains("bounded and have distinct IDs", error.Message);
     }
 
+    [Theory]
+    [InlineData(NotificationProviderKind.Email)]
+    [InlineData(NotificationProviderKind.Slack)]
+    [InlineData(NotificationProviderKind.MicrosoftTeams)]
+    [InlineData(NotificationProviderKind.Telegram)]
+    [InlineData(NotificationProviderKind.PagerDuty)]
+    public void Programmatic_typed_profile_without_binding_is_rejected(
+        NotificationProviderKind provider)
+    {
+        var cfg = Load(ValidEmailConfig());
+        var profile = new NotificationDestinationProfile(
+            "unbound", provider, "Unbound",
+            [NotificationEventClass.Operational],
+            emailRecipientAddress: provider == NotificationProviderKind.Email
+                ? "ops@example.com" : null);
+        var invalid = cfg with
+        {
+            Notifications = cfg.Notifications! with
+            {
+                DestinationProfiles = [profile],
+            },
+        };
+        var error = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(invalid));
+        Assert.Contains("opaque credential binding", error.Message);
+    }
+
+    [Fact]
+    public void Programmatic_typed_profile_with_webhook_endpoint_is_rejected()
+    {
+        var cfg = Load(ValidEmailConfig());
+        var profile = new NotificationDestinationProfile(
+            "misbound-email", NotificationProviderKind.Email, "Email",
+            [NotificationEventClass.Operational],
+            configuredEndpoint: new Uri("https://hooks.example.com/notifications"),
+            credentialBindingId: new NotificationCredentialBindingId("ops-email-credential"),
+            emailRecipientAddress: "ops@example.com");
+        var invalid = cfg with
+        {
+            Notifications = cfg.Notifications! with
+            {
+                DestinationProfiles = [profile],
+            },
+        };
+        var error = Assert.Throws<KafdeckConfigurationException>(
+            () => KafdeckConfigurationValidator.ValidateAndThrow(invalid));
+        Assert.Contains("must not configure a webhook endpoint", error.Message);
+    }
+
     private static string FindRoot()
     {
         DirectoryInfo? cursor = new(AppContext.BaseDirectory);
