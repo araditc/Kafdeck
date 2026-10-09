@@ -37,7 +37,8 @@ public sealed class ConfiguredNotificationCredentialResolver :
                 !Enum.IsDefined(binding.Provider) ||
                 binding.ProfileRevisionFingerprint is null ||
                 binding.ProfileRevisionFingerprint.Length != 64 ||
-                binding.ProfileRevisionFingerprint.Any(ch => !char.IsAsciiHexDigit(ch)))
+                binding.ProfileRevisionFingerprint.Any(ch =>
+                    !(ch is >= '0' and <= '9' or >= 'a' and <= 'f')))
                 throw new ArgumentException("Invalid configured notification credential binding.", nameof(bindings));
             NotificationDeliveryIdentity.NormalizeDestinationId(binding.DestinationId);
             if (snapshot.Count >= 500)
