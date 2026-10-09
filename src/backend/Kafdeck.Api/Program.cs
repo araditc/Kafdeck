@@ -303,6 +303,13 @@ if (dataQualityOptions?.Enabled == true)
 
 if (notificationReadOptions?.Enabled == true)
 {
+    // Server-owned, exact-case destination catalog only. This registration
+    // never enables provider transport, credential resolution or a send worker.
+    builder.Services.AddSingleton<INotificationDestinationProfileCatalog>(
+        _ => new ConfiguredNotificationDestinationProfileCatalog(
+            notificationReadOptions.DestinationProfiles ??
+            Array.Empty<NotificationDestinationProfile>()));
+
     builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(
         _ =>
             notificationReadOptions.Provider switch
