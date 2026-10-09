@@ -90,6 +90,10 @@ public static class KafdeckConfigurationLoader
         LoadConfiguredNotificationDestinations(IConfigurationSection section)
     {
         const int maxProfiles = 500;
+        if (section.Value is not null)
+            throw new KafdeckConfigurationException(
+                "Notification destinations must be an array, never scalar material.");
+
         var result = new List<NotificationDestinationProfile>();
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var allowedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
