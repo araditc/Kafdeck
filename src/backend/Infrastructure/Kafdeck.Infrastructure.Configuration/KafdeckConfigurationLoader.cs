@@ -218,7 +218,9 @@ public static class KafdeckConfigurationLoader
             if (entry.Value is not null || children.Length != 3 ||
                 children.Any(child =>
                     child.GetChildren().Any() ||
-                    !(child.Key is "DestinationId" or "BindingId" or "SecretReference")))
+                    !(string.Equals(child.Key, "DestinationId", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(child.Key, "BindingId", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(child.Key, "SecretReference", StringComparison.OrdinalIgnoreCase))))
                 throw new KafdeckConfigurationException(
                     "Notification credential bindings require exactly three scalar fields.");
             var id = entry["DestinationId"];
