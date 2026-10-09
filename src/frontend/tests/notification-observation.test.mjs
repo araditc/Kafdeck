@@ -254,7 +254,7 @@ test('W66 management form does not render extraneous provider secret projections
   assert.match(markup, /Manage notification subscription/);
   // Every valid 32 x 128-character exact-filter list plus separators must fit
   // without browser-side truncation changing the intended subscription.
-  const size = markup.match(/id="notification-manage-types"[^>]*maxlength="(\\d+)"/i);
+  const size = markup.match(/id="notification-manage-types"[^>]*maxlength="(\d+)"/i);
   assert.ok(size && Number(size[1]) >= 32 * 128 + 31);
   assert.doesNotMatch(markup, /SENTINEL_PRIVATE_CREDENTIAL/);
   assert.doesNotMatch(markup, /Confirm subscription change/);
