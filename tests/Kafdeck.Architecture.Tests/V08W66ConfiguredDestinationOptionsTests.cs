@@ -78,6 +78,14 @@ public sealed class V08W66ConfiguredDestinationOptionsTests
     }
 
     [Fact]
+    public void Refuses_scalar_material_on_destination_array_root()
+    {
+        var config = ValidEmailConfig();
+        config["Kafdeck:Notifications:Destinations"] = "not-an-array";
+        Assert.Throws<KafdeckConfigurationException>(() => Load(config));
+    }
+
+    [Fact]
     public void Refuses_duplicate_exact_destination_identity()
     {
         var config = ValidEmailConfig();
