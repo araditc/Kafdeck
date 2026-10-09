@@ -64,6 +64,19 @@ public sealed class V08W66ConfiguredDestinationOptionsTests
         Assert.Throws<KafdeckConfigurationException>(() => Load(config));
     }
 
+    [Theory]
+    [InlineData("CredentialBindingId:Secret")]
+    [InlineData("Provider:Token")]
+    [InlineData("DestinationId:Unapproved")]
+    [InlineData("EnabledEvents:0:Nested")]
+    public void Refuses_child_properties_even_beneath_valid_scalar_fields(string path)
+    {
+        var config = ValidEmailConfig();
+        config[$"Kafdeck:Notifications:Destinations:0:{path}"] =
+            "unexpected-secret-or-value";
+        Assert.Throws<KafdeckConfigurationException>(() => Load(config));
+    }
+
     [Fact]
     public void Refuses_duplicate_exact_destination_identity()
     {
