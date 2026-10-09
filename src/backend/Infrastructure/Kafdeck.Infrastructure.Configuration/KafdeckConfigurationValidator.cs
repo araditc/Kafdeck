@@ -510,7 +510,7 @@ public static class KafdeckConfigurationValidator
 
         if (notification.CredentialBindings is { Count: > 0 } configuredBindings)
         {
-            var profiles = notification.DestinationProfiles ??
+            var destinationProfiles = notification.DestinationProfiles ??
                 Array.Empty<NotificationDestinationProfile>();
             var ids = new HashSet<string>(StringComparer.Ordinal);
             if (configuredBindings.Count > 500)
@@ -520,7 +520,7 @@ public static class KafdeckConfigurationValidator
                 if (configured is null || configured.BindingId is null ||
                     configured.Secret is null ||
                     !ids.Add(configured.DestinationId) ||
-                    !profiles.Any(profile => profile is not null &&
+                    !destinationProfiles.Any(profile => profile is not null &&
                         string.Equals(profile.DestinationId, configured.DestinationId,
                             StringComparison.Ordinal) &&
                         string.Equals(profile.CredentialBindingId?.Value,
