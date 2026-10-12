@@ -82,11 +82,30 @@ public sealed class NotificationPinnedHttpHandlerFactory
             ConnectTimeout = TimeSpan.FromSeconds(5),
             PooledConnectionLifetime = TimeSpan.Zero,
             ConnectCallback = (context, cancellationToken) =>
-                ConnectPinnedAsync(
+            {
+                // This handler is scoped to ONE exact HTTPS destination,
+                // not an arbitrary HTTP client. Restrict the full request
+                // URI in addition to the pinned DNS host/port: callers may
+                // not change scheme, path, query or fragment while reusing
+                // the transport's approved address evidence.
+                var requestUri = context.InitialRequestMessage.RequestUri;
+                if (requestUri is null ||
+                    !requestUri.IsAbsoluteUri ||
+                    !string.Equals(
+                        requestUri.AbsoluteUri,
+                        pinned.Endpoint.AbsoluteUri,
+                        StringComparison.Ordinal))
+                {
+                    throw new KafdeckConfigurationException(
+                        "Notification pinned request does not match its approved HTTPS destination.");
+                }
+
+                return ConnectPinnedAsync(
                     pinned,
                     context.DnsEndPoint.Host,
                     context.DnsEndPoint.Port,
-                    cancellationToken),
+                    cancellationToken);
+            },
         };
     }
 
