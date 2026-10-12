@@ -127,6 +127,30 @@ public sealed class V08W66PinnedHttpConnectionTests
         Assert.DoesNotContain("hooks.example.org", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("http://hooks.example.org:443/notify")]
+    [InlineData("https://hooks.example.org/other")]
+    [InlineData("https://hooks.example.org/notify?override=1")]
+    [InlineData("https://other.example.org/notify")]
+    public async Task Handler_rejects_any_non_exact_scheme_host_path_or_query(
+        string requestUri)
+    {
+        var dialer = new FakeDialer();
+        using var handler = Factory(dialer).CreateHandler(Pin());
+        using var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+
+        var error = await Record.ExceptionAsync(
+            () => client.GetAsync(requestUri));
+
+        Assert.NotNull(error);
+        Assert.IsNotType<TaskCanceledException>(error);
+        // Rejection must precede both DNS and the fake TCP dialer.
+        Assert.Empty(dialer.Attempts);
+    }
+
     [Fact]
     public async Task Caller_mutation_cannot_turn_verified_public_IP_into_local_destination()
     {
