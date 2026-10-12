@@ -37,7 +37,7 @@ public sealed class V08W66BoundedCredentialMaterialTests
         var key = "KAFDECK_W66_CAPPED_" + Guid.NewGuid().ToString("N");
         const string marker = "never-print-this-token";
         Environment.SetEnvironmentVariable(key,
-            new string('a', ConfiguredNotificationCredentialResolver.MaxCredentialBytes) + marker);
+            new string('\u0800', ConfiguredNotificationCredentialResolver.MaxCredentialBytes / 3) + marker);
         try
         {
             var resolver = Resolver(SecretReference.Parse("env:" + key));
@@ -59,12 +59,12 @@ public sealed class V08W66BoundedCredentialMaterialTests
     {
         var key = "KAFDECK_W66_CAPPED_" + Guid.NewGuid().ToString("N");
         Environment.SetEnvironmentVariable(key,
-            new string('x', ConfiguredNotificationCredentialResolver.MaxCredentialBytes));
+            new string('\u0800', ConfiguredNotificationCredentialResolver.MaxCredentialBytes / 3) + "x");
         try
         {
             var value = await ResolveAsync(Resolver(SecretReference.Parse("env:" + key)));
             Assert.Equal(ConfiguredNotificationCredentialResolver.MaxCredentialBytes,
-                value.Reveal().Length);
+                Encoding.UTF8.GetByteCount(value.Reveal()));
         }
         finally
         {
