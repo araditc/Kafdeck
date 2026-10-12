@@ -151,6 +151,50 @@ public sealed class V08W66PinnedHttpConnectionTests
         Assert.Empty(dialer.Attempts);
     }
 
+    [Theory]
+    [InlineData("unapproved.example.org")]
+    [InlineData("hooks.example.org:8443")]
+    [InlineData("hooks.example.org.evil.test")]
+    public async Task Explicit_unapproved_Host_authority_is_denied_before_any_dial(
+        string host)
+    {
+        var dialer = new FakeDialer();
+        using var handler = Factory(dialer).CreateHandler(Pin());
+        using var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, "https://hooks.example.org/notify");
+        request.Headers.Host = host;
+
+        var failure = await Record.ExceptionAsync(
+            () => client.SendAsync(request));
+
+        Assert.NotNull(failure);
+        Assert.Empty(dialer.Attempts);
+    }
+
+    [Fact]
+    public async Task Exact_explicit_Host_authority_is_not_rejected_before_pinned_dial()
+    {
+        var dialer = new FakeDialer();
+        using var handler = Factory(dialer).CreateHandler(Pin());
+        using var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, "https://hooks.example.org/notify");
+        request.Headers.Host = "hooks.example.org";
+
+        // No real network, HTTP or TLS is supplied by this fake TCP dialer.
+        // The transport may fail after dialing; only pin admission matters.
+        _ = await Record.ExceptionAsync(() => client.SendAsync(request));
+
+        Assert.Equal(["1.1.1.1"], dialer.Attempts);
+    }
+
     [Fact]
     public async Task Caller_mutation_cannot_turn_verified_public_IP_into_local_destination()
     {
