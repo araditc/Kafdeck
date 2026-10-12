@@ -774,7 +774,9 @@ public sealed class V05MutationPersistenceTests
                     // overloaded CI runner's one-second scheduler deadline.
                     // Keep production defaults and timeout-specific tests unchanged.
                     operationTimeout: TimeSpan.FromSeconds(20),
-                    resourceClaimTtl: TimeSpan.FromSeconds(20)),
+                    // Must exceed the test-only 20s operation budget by
+                    // strictly more than ten seconds (executor invariant).
+                    resourceClaimTtl: TimeSpan.FromSeconds(45)),
                 time);
 
             var result = await executor.ExecuteAsync(operation.Snapshot.OperationId);
