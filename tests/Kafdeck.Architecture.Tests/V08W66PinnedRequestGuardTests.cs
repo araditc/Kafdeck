@@ -104,7 +104,7 @@ public sealed class V08W66PinnedRequestGuardTests
 
         await Assert.ThrowsAsync<KafdeckConfigurationException>(
             () => invoker.SendAsync(request, CancellationToken.None));
-        Assert.Empty(new int[inner.Calls]);
+        Assert.Equal(0, inner.Calls);
     }
 
     [Fact]
