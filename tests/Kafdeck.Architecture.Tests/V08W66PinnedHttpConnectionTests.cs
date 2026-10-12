@@ -127,6 +127,49 @@ public sealed class V08W66PinnedHttpConnectionTests
         Assert.DoesNotContain("hooks.example.org", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Caller_mutation_cannot_turn_verified_public_IP_into_local_destination()
+    {
+        var input = IPAddress.Parse("1.1.1.1");
+        var pin = NotificationAddressPolicy.NoConfiguredNat64.ValidatePinnedEndpoint(
+            new Uri("https://hooks.example.org/notify"),
+            [input], DateTimeOffset.UtcNow);
+
+        // Demonstrates the real mutable IPAddress alias that prompted P1.
+#pragma warning disable CS0618
+        input.Address = IPAddress.Parse("127.0.0.1").Address;
+#pragma warning restore CS0618
+        Assert.Equal("127.0.0.1", input.ToString());
+        Assert.Equal("1.1.1.1", pin.Addresses[0].ToString());
+
+        var dialer = new FakeDialer();
+        _ = await Factory(dialer).ConnectPinnedAsync(
+            pin, "hooks.example.org", 443, CancellationToken.None);
+
+        Assert.Equal(["1.1.1.1"], dialer.Attempts);
+    }
+
+    [Fact]
+    public async Task Mutating_exposed_address_cannot_modify_internal_pinned_snapshot()
+    {
+        var pin = Pin();
+        var returnedAddress = pin.Addresses[0];
+        Assert.NotSame(returnedAddress, pin.Addresses[0]);
+
+#pragma warning disable CS0618
+        returnedAddress.Address = IPAddress.Parse("169.254.169.254").Address;
+#pragma warning restore CS0618
+
+        Assert.Equal("169.254.169.254", returnedAddress.ToString());
+        Assert.Equal("1.1.1.1", pin.Addresses[0].ToString());
+
+        var dialer = new FakeDialer();
+        _ = await Factory(dialer).ConnectPinnedAsync(
+            pin, "hooks.example.org", 443, CancellationToken.None);
+
+        Assert.Equal(["1.1.1.1"], dialer.Attempts);
+    }
+
     private sealed class RejectingDialer : INotificationPinnedTcpDialer
     {
         public int Attempts { get; private set; }
