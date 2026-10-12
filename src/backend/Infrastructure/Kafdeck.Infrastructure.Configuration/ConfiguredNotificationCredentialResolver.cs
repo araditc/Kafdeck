@@ -21,6 +21,8 @@ public sealed class ConfiguredNotificationCredentialResolver :
 {
     private readonly FrozenDictionary<string, ConfiguredNotificationCredentialBinding>
         _bindings;
+    public const int MaxCredentialBytes = 64 * 1024;
+
     private readonly SecretResolver _secrets;
 
     public ConfiguredNotificationCredentialResolver(
@@ -64,7 +66,7 @@ public sealed class ConfiguredNotificationCredentialResolver :
             throw new KafdeckConfigurationException(
                 "Notification credential binding does not match the approved destination revision.");
 
-        var value = _secrets.Resolve(binding.Secret);
+        var value = _secrets.ResolveBounded(binding.Secret, MaxCredentialBytes);
         return ValueTask.FromResult(new NotificationCredentialValue(value.Reveal()));
     }
 }
