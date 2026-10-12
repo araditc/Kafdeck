@@ -769,7 +769,11 @@ public sealed class V05MutationPersistenceTests
                 new TestMaterialDigestService(),
                 new MutationExecutorPolicy(
                     maxConcurrentPerCluster: 1,
-                    operationTimeout: TimeSpan.FromSeconds(1),
+                    // The synchronous fake returns malformed evidence immediately. The
+                    // regression checks durable classification, not an
+                    // overloaded CI runner's one-second scheduler deadline.
+                    // Keep production defaults and timeout-specific tests unchanged.
+                    operationTimeout: TimeSpan.FromSeconds(20),
                     resourceClaimTtl: TimeSpan.FromSeconds(20)),
                 time);
 
