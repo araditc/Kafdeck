@@ -33,6 +33,24 @@ public sealed class NotificationPinnedRequestGuardHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
+        ValidateRequest(request, cancellationToken);
+        return base.SendAsync(request, cancellationToken);
+    }
+
+    protected override HttpResponseMessage Send(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        // HttpClient.Send is a separate synchronous entry point. Do not
+        // allow it to bypass the async-only request authority guard.
+        ValidateRequest(request, cancellationToken);
+        return base.Send(request, cancellationToken);
+    }
+
+    private void ValidateRequest(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -78,6 +96,5 @@ public sealed class NotificationPinnedRequestGuardHandler : DelegatingHandler
                 "Notification request Host is not its approved HTTPS authority.");
         }
 
-        return base.SendAsync(request, cancellationToken);
     }
 }
