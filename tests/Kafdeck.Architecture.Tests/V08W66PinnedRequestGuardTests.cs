@@ -91,6 +91,25 @@ public sealed class V08W66PinnedRequestGuardTests
         Assert.Equal(1, inner.Calls);
     }
 
+    [Theory]
+    [InlineData("other.example.org")]
+    [InlineData("hooks.example.org:8443")]
+    public void Synchronous_Send_cannot_bypass_explicit_Host_authority(
+        string wrongHost)
+    {
+        var inner = new RecordingTransport();
+        using var guard = new NotificationPinnedRequestGuardHandler(
+            Pin(), NotificationAddressPolicy.NoConfiguredNat64, inner);
+        using var invoker = new HttpMessageInvoker(guard);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, "https://hooks.example.org/notify");
+        request.Headers.Host = wrongHost;
+
+        Assert.Throws<KafdeckConfigurationException>(
+            () => invoker.Send(request, CancellationToken.None));
+        Assert.Equal(0, inner.Calls);
+    }
+
     [Fact]
     public async Task Stale_pin_is_rejected_before_inner_request()
     {
