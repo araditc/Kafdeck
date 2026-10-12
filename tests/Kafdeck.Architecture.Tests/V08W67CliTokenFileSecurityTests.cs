@@ -90,14 +90,36 @@ public sealed class V08W67CliTokenFileSecurityTests
     }
 
     [Fact]
-    public async Task Terminal_newline_and_utf8_bom_remain_compatible()
+    public async Task Exact_budget_token_with_utf8_bom_and_crlf_is_accepted()
     {
         var file = TemporaryTokenFile();
         try
         {
-            await File.WriteAllTextAsync(file, "safe-token\n", Encoding.UTF8);
+            await File.WriteAllTextAsync(file,
+                new string('a', KafdeckCliClient.MaxTokenBytes) + "\r\n",
+                Encoding.UTF8);
             using var client = await CreateClientAsync(file);
             Assert.NotNull(client);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public async Task Framing_allowance_does_not_increase_normalized_token_budget()
+    {
+        var file = TemporaryTokenFile();
+        try
+        {
+            await File.WriteAllTextAsync(file,
+                new string('a', KafdeckCliClient.MaxTokenBytes + 1) + "\n",
+                Encoding.UTF8);
+            var exception = await Assert.ThrowsAsync<CliUsageException>(
+                async () => { using var _ = await CreateClientAsync(file); });
+            Assert.Contains("exceeds", exception.Message,
+                StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
