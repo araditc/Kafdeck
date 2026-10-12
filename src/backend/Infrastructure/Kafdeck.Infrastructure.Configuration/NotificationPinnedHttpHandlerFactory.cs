@@ -100,6 +100,22 @@ public sealed class NotificationPinnedHttpHandlerFactory
                         "Notification pinned request does not match its approved HTTPS destination.");
                 }
 
+                // An explicit Host header (HTTP/1.1 Host or HTTP/2
+                // :authority) can override the URI's virtual host even when
+                // ConnectCallback sees the approved URI. Never deliver a
+                // notification body/credential under a different authority.
+                // Require the original canonical host and approved port.
+                var explicitHost = context.InitialRequestMessage.Headers.Host;
+                if (explicitHost is not null &&
+                    !string.Equals(
+                        explicitHost,
+                        pinned.Endpoint.Authority,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new KafdeckConfigurationException(
+                        "Notification request Host header is not the approved destination authority.");
+                }
+
                 return ConnectPinnedAsync(
                     pinned,
                     context.DnsEndPoint.Host,
