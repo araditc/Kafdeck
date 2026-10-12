@@ -105,7 +105,7 @@ public sealed class KafdeckCliClient : IDisposable
         {
             var fullPath =
                 Path.GetFullPath(tokenFile);
-            token = await File.ReadAllTextAsync(
+            token = await ReadBoundedTokenFileAsync(
                 fullPath,
                 cancellationToken);
         }
@@ -129,6 +129,86 @@ public sealed class KafdeckCliClient : IDisposable
                 $"The configured access token exceeds {MaxTokenBytes} UTF-8 bytes.");
         }
 
+        // Never pass control characters, whitespace inside the token or
+        // non-ASCII material to TryAddWithoutValidation. A token file may
+        // end in a newline, but embedded CR/LF must not become HTTP syntax.
+        if (token.Any(ch => ch is < '!' or > '~'))
+        {
+            throw new CliUsageException(
+                "The configured access token contains invalid header characters.");
+        }
+
         return token;
+    }
+
+    private static async Task<string> ReadBoundedTokenFileAsync(
+        string fullPath,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        // Bound actual bytes read, not only the file's advertised size:
+        // a file can grow between opening and consuming it.
+        // A UTF-8 BOM (3 bytes) and one terminal CRLF (2 bytes) were
+        // historically accepted even for an exact-limit token. Keep those
+        // framing bytes without permitting an unbounded file read; the
+        // normalized credential is still capped at MaxTokenBytes below.
+        const int maxFramingBytes = 5;
+        var bytes = new byte[MaxTokenBytes + maxFramingBytes + 1];
+        try
+        {
+            var count = 0;
+            while (count < bytes.Length)
+            {
+                var read = await stream.ReadAsync(
+                    bytes.AsMemory(count),
+                    cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                count += read;
+            }
+
+            if (count > MaxTokenBytes + maxFramingBytes)
+            {
+                throw new CliUsageException(
+                    $"The configured access token file exceeds the bounded {MaxTokenBytes}-byte token budget and optional framing.");
+            }
+
+            // Match the former ReadAllTextAsync behavior for an optional
+            // UTF-8 BOM, but reject malformed UTF-8 rather than substituting
+            // replacement characters in an authentication credential.
+            var start = count >= 3 &&
+                bytes[0] == 0xEF &&
+                bytes[1] == 0xBB &&
+                bytes[2] == 0xBF
+                    ? 3
+                    : 0;
+
+            try
+            {
+                return new System.Text.UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier: false,
+                    throwOnInvalidBytes: true)
+                    .GetString(bytes, start, count - start);
+            }
+            catch (System.Text.DecoderFallbackException)
+            {
+                throw new CliUsageException(
+                    "The configured access token file must contain valid UTF-8.");
+            }
+        }
+        finally
+        {
+            Array.Clear(bytes);
+        }
     }
 }
