@@ -155,7 +155,12 @@ public sealed class KafdeckCliClient : IDisposable
 
         // Bound actual bytes read, not only the file's advertised size:
         // a file can grow between opening and consuming it.
-        var bytes = new byte[MaxTokenBytes + 1];
+        // A UTF-8 BOM (3 bytes) and one terminal CRLF (2 bytes) were
+        // historically accepted even for an exact-limit token. Keep those
+        // framing bytes without permitting an unbounded file read; the
+        // normalized credential is still capped at MaxTokenBytes below.
+        const int maxFramingBytes = 5;
+        var bytes = new byte[MaxTokenBytes + maxFramingBytes + 1];
         try
         {
             var count = 0;
@@ -172,10 +177,10 @@ public sealed class KafdeckCliClient : IDisposable
                 count += read;
             }
 
-            if (count > MaxTokenBytes)
+            if (count > MaxTokenBytes + maxFramingBytes)
             {
                 throw new CliUsageException(
-                    $"The configured access token exceeds {MaxTokenBytes} UTF-8 bytes.");
+                    $"The configured access token file exceeds the bounded {MaxTokenBytes}-byte token budget and optional framing.");
             }
 
             // Match the former ReadAllTextAsync behavior for an optional
