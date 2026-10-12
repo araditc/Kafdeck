@@ -62,7 +62,7 @@ public sealed class V08W66PinnedHttpConnectionTests
             pinned, "hooks.example.org", 443, CancellationToken.None);
 
         Assert.Same(dialer.ExpectedStream, stream);
-        Assert.Equal(["1.1.1.1"], dialer.Attempts);
+        Assert.Equal(new[] { "1.1.1.1" }, dialer.Attempts);
         Assert.Equal(443, dialer.LastPort);
     }
 
@@ -74,7 +74,7 @@ public sealed class V08W66PinnedHttpConnectionTests
             Pin(), "hooks.example.org", 443, CancellationToken.None);
 
         Assert.Same(dialer.ExpectedStream, stream);
-        Assert.Equal(["1.1.1.1", "8.8.8.8"], dialer.Attempts);
+        Assert.Equal(new[] { "1.1.1.1", "8.8.8.8" }, dialer.Attempts);
     }
 
     [Theory]
