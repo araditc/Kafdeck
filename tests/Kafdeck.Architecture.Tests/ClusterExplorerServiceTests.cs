@@ -85,7 +85,15 @@ public sealed class ClusterExplorerServiceTests
                 new KafkaCapabilities(Array.Empty<KafkaCapabilityStatus>()),
                 Observation(clock.GetUtcNow()))),
         };
-        var policy = Policy(clusterMetadataTtl: TimeSpan.FromSeconds(1));
+        // This test asserts a stale-snapshot fallback after three retryable
+        // provider failures, not cancellation timing. A 2-second real-clock
+        // deadline can expire under overloaded release CI while the fake
+        // provider is fully synchronous and the retry jitter is finite.
+        // Keep production's short default unchanged; give only this test
+        // enough budget to exercise its intended stale-read contract.
+        var policy = Policy(
+            clusterMetadataTtl: TimeSpan.FromSeconds(1),
+            operationDeadline: TimeSpan.FromSeconds(20));
         var service = new ClusterExplorerService(port, new KafkaSnapshotCoordinator(policy, clock), policy);
 
         var initial = await service.GetClusterAsync("cluster-a");
@@ -119,11 +127,13 @@ public sealed class ClusterExplorerServiceTests
         Assert.Equal(KafkaFailureCategory.Unauthorized, result.Failure?.Category);
     }
 
-    private static KafkaSnapshotPolicy Policy(TimeSpan? clusterMetadataTtl = null) =>
+    private static KafkaSnapshotPolicy Policy(
+        TimeSpan? clusterMetadataTtl = null,
+        TimeSpan? operationDeadline = null) =>
         new(
             perClusterConcurrency: 2,
             globalConcurrency: 4,
-            operationDeadline: TimeSpan.FromSeconds(2),
+            operationDeadline: operationDeadline ?? TimeSpan.FromSeconds(2),
             clusterMetadataTtl: clusterMetadataTtl ?? TimeSpan.FromSeconds(5),
             topicMetadataTtl: TimeSpan.FromSeconds(10));
 
