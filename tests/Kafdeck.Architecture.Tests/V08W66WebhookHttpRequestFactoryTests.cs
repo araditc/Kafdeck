@@ -44,25 +44,30 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
     }
 
     [Fact]
-    public async Task Produces_only_canonical_json_POST_without_arbitrary_headers()
+    public void Produces_only_immutable_canonical_JSON_POST_intent()
     {
         var profile = Profile();
         var approved = Request(profile);
-        using var http = new NotificationWebhookHttpRequestFactory().Create(profile, approved);
+        var intent = new NotificationWebhookHttpRequestFactory().Create(
+            profile, approved);
 
-        Assert.Equal(HttpMethod.Post, http.Method);
-        Assert.Equal(profile.ConfiguredEndpoint, http.RequestUri);
-        Assert.Equal(HttpVersion.Version11, http.Version);
-        Assert.Equal(HttpVersionPolicy.RequestVersionExact, http.VersionPolicy);
-        Assert.Null(http.Headers.Host);
-        Assert.Null(http.Headers.Authorization);
-        Assert.Empty(http.Headers);
-        Assert.All(http.Content!.Headers,
-            header => Assert.Contains(header.Key,
-                new[] { "Content-Type", "Content-Length" }));
-        Assert.Equal("application/json", http.Content.Headers.ContentType!.MediaType);
-        Assert.Equal(approved.JsonPayload.ToArray(),
-            await http.Content.ReadAsByteArrayAsync());
+        Assert.Equal("POST", intent.Method);
+        Assert.Equal("application/json", intent.ContentType);
+        Assert.Equal(profile.ConfiguredEndpoint, intent.Endpoint);
+        Assert.Equal(profile.DestinationId, intent.DestinationId);
+        Assert.Equal(profile.RevisionFingerprint,
+            intent.ProfileRevisionFingerprint);
+        Assert.Equal(approved.JsonPayload.ToArray(), intent.JsonPayload.ToArray());
+
+        // A mutable HTTP request escapes neither this factory nor the
+        // intent type; physical send-time enforcement is separate.
+        Assert.False(typeof(HttpRequestMessage)
+            .IsAssignableFrom(typeof(NotificationWebhookHttpIntent)));
+        Assert.Empty(typeof(NotificationWebhookHttpIntent).GetConstructors());
+        Assert.All(typeof(NotificationWebhookHttpIntent).GetProperties(),
+            property => Assert.False(property.SetMethod?.IsPublic ?? false));
+        Assert.Null(typeof(NotificationWebhookHttpIntent).GetProperty("Headers"));
+        Assert.Null(typeof(NotificationWebhookHttpIntent).GetProperty("Content"));
     }
 
     [Fact]
@@ -126,16 +131,19 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
     }
 
     [Fact]
-    public async Task Request_material_is_copied_and_never_references_mutable_source()
+    public void Intent_payload_is_immutable_and_never_references_mutable_source()
     {
         var profile = Profile();
-        var source = Encoding.UTF8.GetBytes("{\"safe\":true}");
+        var source = Encoding.UTF8.GetBytes("{\\"safe\\":true}");
         var approved = Request(profile, payload: source);
-        using var wire = new NotificationWebhookHttpRequestFactory().Create(
+        var intent = new NotificationWebhookHttpRequestFactory().Create(
             profile, approved);
-        source.AsSpan().Fill((byte)'x');
 
-        var contents = await wire.Content!.ReadAsByteArrayAsync();
-        Assert.Equal(Encoding.UTF8.GetBytes("{\"safe\":true}"), contents);
+        source.AsSpan().Fill((byte)'x');
+        var callerCopy = intent.JsonPayload.ToArray();
+        callerCopy.AsSpan().Fill((byte)'y');
+
+        Assert.Equal(Encoding.UTF8.GetBytes("{\\"safe\\":true}"),
+            intent.JsonPayload.ToArray());
     }
 }
