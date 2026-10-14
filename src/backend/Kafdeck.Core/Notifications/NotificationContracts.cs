@@ -925,8 +925,12 @@ public sealed record NotificationPinnedEndpoint
                 nameof(addresses));
         }
 
+        // IPAddress (including IPv4 Address) is mutable. Snapshot the
+        // exact wire bytes BEFORE validation so a caller cannot change
+        // a validated public address into a loopback/metadata destination.
         var admitted =
             addresses
+                .Select(CloneAddress)
                 .Distinct()
                 .ToArray();
         if (admitted.Length != addresses.Count ||
@@ -938,9 +942,7 @@ public sealed record NotificationPinnedEndpoint
                 nameof(addresses));
         }
 
-        Addresses =
-            Array.AsReadOnly(
-                admitted);
+        _addresses = admitted;
         ResolvedAtUtc =
             resolvedAtUtc.ToUniversalTime();
         AddressPolicyFingerprint =
@@ -949,7 +951,22 @@ public sealed record NotificationPinnedEndpoint
 
     public Uri Endpoint { get; }
 
-    public IReadOnlyList<IPAddress> Addresses { get; }
+    // Never expose the mutable objects that hold the validated pin.
+    // Each read returns independent address instances; mutating one
+    // cannot change the original evidence used by the HTTPS dialer.
+    private readonly IPAddress[] _addresses;
+
+    public IReadOnlyList<IPAddress> Addresses =>
+        Array.AsReadOnly(_addresses.Select(CloneAddress).ToArray());
+
+    private static IPAddress CloneAddress(IPAddress source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return source.AddressFamily ==
+            System.Net.Sockets.AddressFamily.InterNetworkV6
+            ? new IPAddress(source.GetAddressBytes(), source.ScopeId)
+            : new IPAddress(source.GetAddressBytes());
+    }
 
     public DateTimeOffset ResolvedAtUtc { get; }
 
