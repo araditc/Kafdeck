@@ -134,7 +134,7 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
     public void Intent_payload_is_immutable_and_never_references_mutable_source()
     {
         var profile = Profile();
-        var source = Encoding.UTF8.GetBytes("{\\"safe\\":true}");
+        var source = Encoding.UTF8.GetBytes("{\"safe\":true}");
         var approved = Request(profile, payload: source);
         var intent = new NotificationWebhookHttpRequestFactory().Create(
             profile, approved);
@@ -143,7 +143,7 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
         var callerCopy = intent.JsonPayload.ToArray();
         callerCopy.AsSpan().Fill((byte)'y');
 
-        Assert.Equal(Encoding.UTF8.GetBytes("{\\"safe\\":true}"),
+        Assert.Equal(Encoding.UTF8.GetBytes("{\"safe\":true}"),
             intent.JsonPayload.ToArray());
     }
 }
