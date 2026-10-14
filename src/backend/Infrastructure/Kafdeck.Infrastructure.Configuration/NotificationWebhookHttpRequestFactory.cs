@@ -48,7 +48,8 @@ public sealed class NotificationWebhookHttpRequestFactory
                 "Webhook request does not match the approved destination identity and revision.");
         }
 
-        if (approvedRequest.Credential is not null)
+        if (profile.CredentialBindingId is not null ||
+            approvedRequest.Credential is not null)
         {
             // An opaque credential value does NOT tell us whether this
             // provider expects Bearer, HMAC, API key or another scheme.
