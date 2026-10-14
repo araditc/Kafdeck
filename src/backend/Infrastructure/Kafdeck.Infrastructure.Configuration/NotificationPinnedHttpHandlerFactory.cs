@@ -67,6 +67,19 @@ public sealed class NotificationPinnedHttpHandlerFactory
         _clock = clock ?? TimeProvider.System;
     }
 
+    /// <summary>
+    /// The admitted non-activated composition for a future physical notifier.
+    /// Check EVERY HTTP request before an inner HTTP/2 connection can be
+    /// reused; the inner SocketsHttpHandler still pins TCP to the approved IP.
+    /// Caller owns/disposes the returned handler. Does not send or register DI.
+    /// </summary>
+    public HttpMessageHandler CreateGuardedHandler(NotificationPinnedEndpoint pinned)
+    {
+        VerifyPinned(pinned);
+        return new NotificationPinnedRequestGuardHandler(
+            pinned, _policy, CreateHandler(pinned), _clock);
+    }
+
     public SocketsHttpHandler CreateHandler(NotificationPinnedEndpoint pinned)
     {
         VerifyPinned(pinned);
