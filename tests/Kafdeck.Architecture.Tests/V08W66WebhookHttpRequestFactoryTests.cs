@@ -56,7 +56,10 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
         Assert.Equal(HttpVersionPolicy.RequestVersionExact, http.VersionPolicy);
         Assert.Null(http.Headers.Host);
         Assert.Null(http.Headers.Authorization);
-        Assert.Single(http.Content!.Headers);
+        Assert.Empty(http.Headers);
+        Assert.All(http.Content!.Headers,
+            header => Assert.Contains(header.Key,
+                new[] { "Content-Type", "Content-Length" }));
         Assert.Equal("application/json", http.Content.Headers.ContentType!.MediaType);
         Assert.Equal(approved.JsonPayload.ToArray(),
             await http.Content.ReadAsByteArrayAsync());
@@ -99,6 +102,15 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
             StringComparison.Ordinal);
         Assert.Contains("not yet admitted", exception.Message,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Credential_bound_destination_cannot_silently_downgrade_to_anonymous()
+    {
+        var profile = Profile(withCredential: true);
+        var request = Request(profile);
+        Assert.Throws<KafdeckConfigurationException>(() =>
+            new NotificationWebhookHttpRequestFactory().Create(profile, request));
     }
 
     [Fact]
