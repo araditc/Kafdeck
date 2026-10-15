@@ -31,12 +31,16 @@ public sealed class NonBrowserPinnedRsaKeyRing
         Issuer = RequireIdentity(approvedIssuer, nameof(approvedIssuer), 2048);
         ApiAudience = RequireIdentity(approvedApiAudience, nameof(approvedApiAudience), 256);
         ArgumentNullException.ThrowIfNull(approvedKeys);
-        if (approvedKeys.Count is < 1 or > 4)
+        // A caller-owned IReadOnlyList may still be mutable or even report a
+        // stale Count. Consume at most five elements into a private snapshot,
+        // then validate snapshot length and never re-enumerate caller input.
+        var snapshot = approvedKeys.Take(5).ToArray();
+        if (snapshot.Length is < 1 or > 4)
             throw new ArgumentException("Pinned RSA trust set must contain 1 to 4 keys.", nameof(approvedKeys));
 
         _keys = new Dictionary<string, StoredKey>(StringComparer.Ordinal);
         var fingerprints = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in approvedKeys)
+        foreach (var item in snapshot)
         {
             ArgumentNullException.ThrowIfNull(item);
             var kid = RequireKeyId(item.KeyId);
