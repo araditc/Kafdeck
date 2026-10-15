@@ -150,6 +150,9 @@ public sealed class V08W67InertRs256EvidenceVerifierTests
             Claims(iat: now + 120, nbf: now + 120, exp: now + 300),
             Claims(iat: now - 1000, nbf: now - 1000, exp: now - 80),
             Claims(iat: now - 20, nbf: now + 120, exp: now + 200),
+            // Both nbf and exp are individually within the skew window, but
+            // the signed token's interval is impossible: nbf follows exp.
+            Claims(iat: now - 10, nbf: now + 20, exp: now + 5),
             Claims(iat: now + 100, nbf: now - 120, exp: now + 180),
         };
         foreach (var claims in cases)
