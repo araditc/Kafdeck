@@ -90,6 +90,31 @@ public sealed class V08W67PinnedRsaKeyRingTests
     }
 
     [Fact]
+    public void Public_exponent_is_admitted_only_from_the_validated_snapshot()
+    {
+        using var rsa = RSA.Create(2048);
+        var parameters = rsa.ExportParameters(false);
+        var expectedFingerprint = Convert.ToHexString(
+            SHA256.HashData(rsa.ExportSubjectPublicKeyInfo()));
+
+        // An otherwise valid public modulus must not make an unsupported
+        // caller-owned exponent acceptable, even under a valid key pin.
+        parameters.Exponent![2] = 0x03;
+        Assert.Throws<ArgumentException>(() =>
+            Ring(new NonBrowserPinnedRsaKeySpec(
+                "key-one", parameters, expectedFingerprint)));
+
+        // Conversely, once the approved snapshot has been constructed,
+        // later writes to the original arrays cannot change its verification.
+        var valid = rsa.ExportParameters(false);
+        var ring = Ring(new NonBrowserPinnedRsaKeySpec(
+            "key-one", valid, expectedFingerprint));
+        valid.Exponent![2] = 0x03;
+        Assert.Equal("service-account-one",
+            ring.Verify(Sign(rsa), "key-one", Candidate(), Now).Subject);
+    }
+
+    [Fact]
     public void Pin_fingerprint_prevents_unreviewed_public_key_substitution()
     {
         using var approved = RSA.Create(2048);
