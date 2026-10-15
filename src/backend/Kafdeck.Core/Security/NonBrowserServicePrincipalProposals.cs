@@ -86,7 +86,11 @@ public sealed class NonBrowserServicePrincipalProposal
             !string.IsNullOrEmpty(uri.UserInfo) ||
             !string.IsNullOrEmpty(uri.Query) ||
             !string.IsNullOrEmpty(uri.Fragment) ||
-            !string.Equals(uri.AbsoluteUri, issuer, StringComparison.Ordinal))
+            // Uri.AbsoluteUri adds '/' to authority-only URLs. Preserve the
+            // exact issuer claim literal without rejecting that valid shape.
+            !(string.Equals(uri.AbsoluteUri, issuer, StringComparison.Ordinal) ||
+              (string.Equals(uri.AbsolutePath, "/", StringComparison.Ordinal) &&
+               string.Equals(uri.AbsoluteUri, issuer + "/", StringComparison.Ordinal))))
         {
             throw new ArgumentException(
                 "Reference issuer must be one exact canonical HTTPS issuer without credentials, query or fragment.",
