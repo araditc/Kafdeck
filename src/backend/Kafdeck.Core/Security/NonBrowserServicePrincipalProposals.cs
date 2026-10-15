@@ -67,8 +67,8 @@ public sealed class NonBrowserServicePrincipalProposal
             value.Length > maxLength ||
             !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
             value.Any(char.IsControl) ||
-            value.Contains('*', StringComparison.Ordinal) ||
-            value.Contains('?', StringComparison.Ordinal))
+            value.Contains('*') ||
+            value.Contains('?'))
         {
             throw new ArgumentException("Non-browser registration identity must be bounded and exact.", field);
         }
