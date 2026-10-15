@@ -3309,6 +3309,8 @@ public sealed class V08W63HistoricalMetricsPersistenceTests
 
     private static void DeleteSqliteFiles(string path)
     {
+        // Match other SQLite fixtures: close idle pooled handles before unlinking.
+        SqliteConnection.ClearAllPools();
         foreach (var candidate in new[]
                  {
                      path,

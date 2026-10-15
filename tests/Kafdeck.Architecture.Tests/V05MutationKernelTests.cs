@@ -830,7 +830,7 @@ public sealed class V05MutationKernelTests
             ["Kafdeck:Administration:Mutations:MaxConcurrentPerCluster"] = "2",
             ["Kafdeck:Administration:Mutations:Persistence:Provider"] = "Sqlite",
             ["Kafdeck:Administration:Mutations:Persistence:ExecutionMode"] = executionMode,
-            ["Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath"] = "/tmp/kafdeck-mutations.db",
+            ["Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath"] = Path.Combine(Path.GetTempPath(), "kafdeck-mutations.db"),
         };
 
         if (string.Equals(accessMode, "Oidc", StringComparison.OrdinalIgnoreCase))

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kafdeck.Infrastructure.Persistence;
 using Kafdeck.Modules.Administration;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -2259,6 +2260,8 @@ public sealed class V06W41FleetPersistenceTests
 
     private static void DeleteSqliteFiles(string path)
     {
+        // Released pooled handles still prevent file deletion on Windows.
+        SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
         {
             var candidate = path + suffix;
