@@ -47,22 +47,29 @@ public sealed record NotificationDeliveryWorkerPolicy
         TimeSpan.FromSeconds(10);
     public static readonly TimeSpan HardMaxStaleInFlightAfter =
         TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan DefaultDispatchTimeout = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan MinimumDispatchTimeout = TimeSpan.FromMilliseconds(100);
+    public static readonly TimeSpan HardMaxDispatchTimeout = TimeSpan.FromMinutes(1);
 
     public NotificationDeliveryWorkerPolicy(
         int maxDuePerCycle = DefaultMaxDuePerCycle,
         int maxRecoveryPerCycle = DefaultMaxRecoveryPerCycle,
-        TimeSpan? staleInFlightAfter = null)
+        TimeSpan? staleInFlightAfter = null,
+        TimeSpan? dispatchTimeout = null)
     {
         var stale =
             staleInFlightAfter ??
             DefaultStaleInFlightAfter;
+        var dispatch = dispatchTimeout ??
+            (stale <= DefaultDispatchTimeout ? stale / 2 : DefaultDispatchTimeout);
 
         if (maxDuePerCycle is < 1 or >
                 HardMaxDuePerCycle ||
             maxRecoveryPerCycle is < 1 or >
                 HardMaxRecoveryPerCycle ||
             stale < MinimumStaleInFlightAfter ||
-            stale > HardMaxStaleInFlightAfter)
+            stale > HardMaxStaleInFlightAfter ||
+            dispatch < MinimumDispatchTimeout || dispatch > HardMaxDispatchTimeout || dispatch >= stale)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(maxDuePerCycle),
@@ -72,11 +79,13 @@ public sealed record NotificationDeliveryWorkerPolicy
         MaxDuePerCycle = maxDuePerCycle;
         MaxRecoveryPerCycle = maxRecoveryPerCycle;
         StaleInFlightAfter = stale;
+        DispatchTimeout = dispatch;
     }
 
     public int MaxDuePerCycle { get; }
     public int MaxRecoveryPerCycle { get; }
     public TimeSpan StaleInFlightAfter { get; }
+    public TimeSpan DispatchTimeout { get; }
 
     public static NotificationDeliveryWorkerPolicy Default { get; } =
         new();
@@ -122,6 +131,10 @@ public sealed class NotificationDeliveryWorker
         _workerPolicy;
     private readonly TimeProvider
         _timeProvider;
+    // A timed-out asynchronous port may ignore cancellation indefinitely.
+    // Retain its admission until its actual task completes; repeated cycles
+    // cannot create an unbounded number of abandoned operations.
+    private readonly SemaphoreSlim _dispatchSlots;
     private readonly object
         _dueCursorGate = new();
     private NotificationDeliveryDueCursor?
@@ -148,6 +161,7 @@ public sealed class NotificationDeliveryWorker
         _workerPolicy =
             workerPolicy ??
             NotificationDeliveryWorkerPolicy.Default;
+        _dispatchSlots = new SemaphoreSlim(_deliveryPolicy.MaxConcurrency, _deliveryPolicy.MaxConcurrency);
         _timeProvider =
             timeProvider ??
             TimeProvider.System;
@@ -388,153 +402,209 @@ public sealed class NotificationDeliveryWorker
                 : NotificationDeliveryWorkItemOutcome.Exhausted;
         }
 
-        var claim =
-            await _store
-                .TryClaimForDispatchAsync(
-                    due.Snapshot.NotificationId,
-                    due.Snapshot.DestinationId,
-                    due.Revision,
-                    now,
-                    due.Snapshot.CreatedAtUtc +
-                    _deliveryPolicy.Lifetime,
-                    _deliveryPolicy.MaxConcurrency,
-                    _deliveryPolicy.RatePerSecond,
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-        if (claim.Outcome is
-            NotificationDeliveryClaimOutcome.RateLimited or
-            NotificationDeliveryClaimOutcome.ConcurrencyLimited)
-        {
-            return NotificationDeliveryWorkItemOutcome
-                .AdmissionDeferred;
-        }
-
-        if (claim.Outcome ==
-            NotificationDeliveryClaimOutcome.Expired)
-        {
-            var expiredLocal =
-                _timeProvider
-                    .GetUtcNow();
-            var expiredAt =
-                await _store
-                    .GetCoordinationUtcNowAsync(
-                        expiredLocal,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            if (expiredAt <
-                due.UpdatedAtUtc)
-            {
-                expiredAt =
-                    due.UpdatedAtUtc;
-            }
-
-            var exhausted =
-                await _store
-                    .ReplaceAsync(
-                        TerminalSnapshot(
-                            due.Snapshot,
-                            NotificationDeliveryState.Exhausted,
-                            NotificationDeliveryOutcomeCodes.Exhausted),
-                        due.Revision,
-                        expiredAt,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-            return exhausted is null
-                ? NotificationDeliveryWorkItemOutcome.CasLost
-                : NotificationDeliveryWorkItemOutcome.Exhausted;
-        }
-
-        if (claim.Outcome !=
-                NotificationDeliveryClaimOutcome.Claimed ||
-            claim.Record is null)
-        {
-            return NotificationDeliveryWorkItemOutcome.CasLost;
-        }
-
-        var claimed =
-            claim.Record;
-
-        NotificationDeliveryDispatchOutcome
-            dispatchOutcome;
+        if (!_dispatchSlots.Wait(0))
+            return NotificationDeliveryWorkItemOutcome.AdmissionDeferred;
+        var dispatchOwnsSlot = false;
         try
         {
-            var dispatch =
-                await _dispatcher
-                    .DispatchAsync(
-                        claimed,
+            var claim =
+                await _store
+                    .TryClaimForDispatchAsync(
+                        due.Snapshot.NotificationId,
+                        due.Snapshot.DestinationId,
+                        due.Revision,
+                        now,
+                        due.Snapshot.CreatedAtUtc +
+                        _deliveryPolicy.Lifetime,
+                        _deliveryPolicy.MaxConcurrency,
+                        _deliveryPolicy.RatePerSecond,
                         cancellationToken)
                     .ConfigureAwait(false);
 
-            dispatchOutcome =
-                dispatch.Outcome;
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-            // Leave the claimed delivery InFlight. Recovery will conservatively
-            // classify it as UnknownExternalEffect because external application
-            // may already have occurred.
-            throw;
-        }
-        catch
-        {
-            dispatchOutcome =
-                NotificationDeliveryDispatchOutcome
-                    .UnknownExternalEffect;
-        }
+            if (claim.Outcome is
+                NotificationDeliveryClaimOutcome.RateLimited or
+                NotificationDeliveryClaimOutcome.ConcurrencyLimited)
+            {
+                return NotificationDeliveryWorkItemOutcome
+                    .AdmissionDeferred;
+            }
 
-        var completedLocal =
-            _timeProvider
-                .GetUtcNow();
-        var completedAt =
-            await _store
-                .GetCoordinationUtcNowAsync(
-                    completedLocal,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        if (completedAt <
-            claimed.UpdatedAtUtc)
-        {
-            completedAt =
-                claimed.UpdatedAtUtc;
+            if (claim.Outcome ==
+                NotificationDeliveryClaimOutcome.Expired)
+            {
+                var expiredLocal =
+                    _timeProvider
+                        .GetUtcNow();
+                var expiredAt =
+                    await _store
+                        .GetCoordinationUtcNowAsync(
+                            expiredLocal,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                if (expiredAt <
+                    due.UpdatedAtUtc)
+                {
+                    expiredAt =
+                        due.UpdatedAtUtc;
+                }
+
+                var exhausted =
+                    await _store
+                        .ReplaceAsync(
+                            TerminalSnapshot(
+                                due.Snapshot,
+                                NotificationDeliveryState.Exhausted,
+                                NotificationDeliveryOutcomeCodes.Exhausted),
+                            due.Revision,
+                            expiredAt,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                return exhausted is null
+                    ? NotificationDeliveryWorkItemOutcome.CasLost
+                    : NotificationDeliveryWorkItemOutcome.Exhausted;
+            }
+
+            if (claim.Outcome !=
+                    NotificationDeliveryClaimOutcome.Claimed ||
+                claim.Record is null)
+            {
+                return NotificationDeliveryWorkItemOutcome.CasLost;
+            }
+
+            var claimed =
+                claim.Record;
+
+            NotificationDeliveryDispatchOutcome
+                dispatchOutcome;
+            var dispatchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            Task<NotificationDeliveryDispatchResult>? dispatchTask = null;
+            Task cancellationCallbacks = Task.CompletedTask;
+            try
+            {
+                // The whole dispatch includes durable-event/profile reads, DNS,
+                // credential admission and HTTPS. HttpClient's own timeout starts
+                // too late to bound a stalled resolver. WaitAsync bounds our wait
+                // even if an underlying asynchronous port ignores cancellation.
+                dispatchTask = _dispatcher.DispatchAsync(claimed, dispatchCancellation.Token)
+                    ?? throw new InvalidOperationException("Notification dispatcher returned no task.");
+                var dispatch =
+                    await dispatchTask
+                        .WaitAsync(_workerPolicy.DispatchTimeout, cancellationToken)
+                        .ConfigureAwait(false);
+
+                dispatchOutcome =
+                    dispatch.Outcome;
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                // Leave the claimed delivery InFlight. Recovery will conservatively
+                // classify it as UnknownExternalEffect because external application
+                // may already have occurred.
+                throw;
+            }
+            catch (TimeoutException)
+            {
+                // Cancellation is best-effort; arbitrary port callbacks must not
+                // hold the worker's finite deadline. Unknown is terminal: a late
+                // completion may already represent an external effect, never a
+                // retryable failure. The adapter checks this token after DNS and
+                // immediately before transport so late DNS cannot begin a send.
+                cancellationCallbacks = dispatchCancellation.CancelAsync();
+                dispatchOutcome = NotificationDeliveryDispatchOutcome.UnknownExternalEffect;
+            }
+            catch
+            {
+                dispatchOutcome =
+                    NotificationDeliveryDispatchOutcome
+                        .UnknownExternalEffect;
+            }
+            finally
+            {
+                if (dispatchTask is null) dispatchCancellation.Dispose();
+                else
+                {
+                    dispatchOwnsSlot = true;
+                    _ = CompleteDispatchAdmissionAsync(dispatchTask, cancellationCallbacks, dispatchCancellation);
+                }
+            }
+
+            var completedLocal =
+                _timeProvider
+                    .GetUtcNow();
+            var completedAt =
+                await _store
+                    .GetCoordinationUtcNowAsync(
+                        completedLocal,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (completedAt <
+                claimed.UpdatedAtUtc)
+            {
+                completedAt =
+                    claimed.UpdatedAtUtc;
+            }
+
+            var finalSnapshot =
+                BuildFinalSnapshot(
+                    claimed.Snapshot,
+                    dispatchOutcome,
+                    completedAt);
+
+            var finalized =
+                await _store
+                    .ReplaceAsync(
+                        finalSnapshot,
+                        claimed.Revision,
+                        completedAt,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            if (finalized is null)
+            {
+                return NotificationDeliveryWorkItemOutcome
+                    .FinalizationConflict;
+            }
+
+            return finalSnapshot.State switch
+            {
+                NotificationDeliveryState.Delivered =>
+                    NotificationDeliveryWorkItemOutcome.Delivered,
+                NotificationDeliveryState.Failed =>
+                    NotificationDeliveryWorkItemOutcome.RetryScheduled,
+                NotificationDeliveryState.Exhausted =>
+                    NotificationDeliveryWorkItemOutcome.Exhausted,
+                NotificationDeliveryState.UnknownExternalEffect =>
+                    NotificationDeliveryWorkItemOutcome.UnknownExternalEffect,
+                _ => throw new InvalidOperationException(
+                    "Notification delivery worker produced a non-terminal/non-retry final state."),
+            };
         }
-
-        var finalSnapshot =
-            BuildFinalSnapshot(
-                claimed.Snapshot,
-                dispatchOutcome,
-                completedAt);
-
-        var finalized =
-            await _store
-                .ReplaceAsync(
-                    finalSnapshot,
-                    claimed.Revision,
-                    completedAt,
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-        if (finalized is null)
+        finally
         {
-            return NotificationDeliveryWorkItemOutcome
-                .FinalizationConflict;
+            if (!dispatchOwnsSlot) _dispatchSlots.Release();
         }
+    }
 
-        return finalSnapshot.State switch
+    private async Task CompleteDispatchAdmissionAsync(Task dispatch, Task cancellationCallbacks,
+        CancellationTokenSource cancellation)
+    {
+        // Observe late faults without logging provider details. Keep both the
+        // token source and admission alive until the real port and any async
+        // cancellation callbacks finish, even after our finite wait expired.
+        try
         {
-            NotificationDeliveryState.Delivered =>
-                NotificationDeliveryWorkItemOutcome.Delivered,
-            NotificationDeliveryState.Failed =>
-                NotificationDeliveryWorkItemOutcome.RetryScheduled,
-            NotificationDeliveryState.Exhausted =>
-                NotificationDeliveryWorkItemOutcome.Exhausted,
-            NotificationDeliveryState.UnknownExternalEffect =>
-                NotificationDeliveryWorkItemOutcome.UnknownExternalEffect,
-            _ => throw new InvalidOperationException(
-                "Notification delivery worker produced a non-terminal/non-retry final state."),
-        };
+            try { await dispatch.ConfigureAwait(false); }
+            catch (Exception) { }
+            try { await cancellationCallbacks.ConfigureAwait(false); }
+            catch (Exception) { }
+        }
+        finally
+        {
+            cancellation.Dispose();
+            _dispatchSlots.Release();
+        }
     }
 
     private NotificationDeliveryDueCursor?

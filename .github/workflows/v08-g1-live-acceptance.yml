@@ -80,7 +80,7 @@ jobs:
           dotnet restore Kafdeck.slnx --locked-mode
           dotnet build Kafdeck.slnx --no-restore -warnaserror
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-build --no-restore \
-            --filter 'FullyQualifiedName~V08W66HostedWebhookTlsTests|FullyQualifiedName~V08W67BearerReadTests|FullyQualifiedName~V08CandidateReadLaneTests' \
+            --filter 'FullyQualifiedName~V08W66HostedWebhookTlsTests|FullyQualifiedName~V08W66DispatchDeadlineTests|FullyQualifiedName~V08W67BearerReadTests|FullyQualifiedName~V08CandidateReadLaneTests' \
             --results-directory artifacts/g1-ci --logger 'trx;LogFileName=g1-live.trx'
           test -s "$GITHUB_WORKSPACE/deploy/dev/.generated/g1/identity/keycloak-evidence.json"
 

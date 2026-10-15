@@ -130,6 +130,8 @@ public sealed class V08W67BearerReadTests
     public async Task Genuine_private_key_jwt_Keycloak_token_reaches_actual_host_allows_GET_and_denies_cross_scope()
     {
         var labPath = Environment.GetEnvironmentVariable("KAFDECK_KEYCLOAK_G1_LAB")!;
+        var evidenceDirectory = Environment.GetEnvironmentVariable("KAFDECK_KEYCLOAK_G1_EVIDENCE_DIRECTORY") ?? Path.GetDirectoryName(labPath)!;
+        Directory.CreateDirectory(evidenceDirectory);
         using var lab = JsonDocument.Parse(await File.ReadAllTextAsync(labPath));
         string Field(string name) => lab.RootElement.GetProperty(name).GetString()!;
         var issuer = Field("issuer");
@@ -232,18 +234,44 @@ public sealed class V08W67BearerReadTests
                 await Task.Delay(250);
             }
             Assert.True(ready, "Actual Kafdeck host failed to become ready; inspect redacted lab host logs.");
-            async Task<int> Get(string path, string bearer, string? extraHeader = null, string? extraValue = null)
+            async Task<int> Get(string path, string bearer, string? extraHeader = null, string? extraValue = null, string scheme = "Bearer")
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, path);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+                request.Headers.Authorization = new AuthenticationHeaderValue(scheme, bearer);
                 if (extraHeader is not null) request.Headers.TryAddWithoutValidation(extraHeader, extraValue);
                 using var response = await api.SendAsync(request);
                 var responseBody = await response.Content.ReadAsStringAsync();
                 Assert.DoesNotContain(token, responseBody);
                 return (int)response.StatusCode;
             }
-            Assert.Equal(200, await Get("/api/v1/system/info", token));
-            Assert.Equal(403, await Get("/api/v1/clusters/denied/health", token));
+            var acceptedSchemes = new[] { "Bearer", "bearer", "BEARER" };
+            foreach (var scheme in acceptedSchemes)
+            {
+                Assert.Equal(200, await Get("/api/v1/system/info", token, scheme: scheme));
+                Assert.Equal(403, await Get("/api/v1/clusters/denied/health", token, scheme: scheme));
+                Assert.Equal(401, await Get("/api/v1/system/info", token, "Cookie", "Kafdeck.Session=sentinel-cookie", scheme));
+                Assert.Equal(401, await Get("/api/v1/system/info", token, "X-Kafdeck-Access-Token", "sentinel-deployment", scheme));
+            }
+            // Only the scheme is case-insensitive. Token bytes and all existing
+            // limits remain exact, and other/malformed schemes never fall back.
+            Assert.False(string.Equals(token, token.ToLowerInvariant(), StringComparison.Ordinal),
+                "The real fixture token must contain case-sensitive characters.");
+            Assert.Equal(401, await Get("/api/v1/system/info", token.ToLowerInvariant(), scheme: "bearer"));
+            Assert.Equal(401, await Get("/api/v1/system/info", token + new string('a', 16 * 1024), scheme: "bearer"));
+            var malformedHeaders = new[]
+            {
+                "Basic " + token, "BearerX " + token, "Bearer" + token,
+                "Bearer\t" + token, "Bearer", "Bearer " + token + ", Bearer " + token,
+            };
+            foreach (var header in malformedHeaders)
+            {
+                using var malformed = new HttpRequestMessage(HttpMethod.Get, "/api/v1/system/info");
+                Assert.True(malformed.Headers.TryAddWithoutValidation("Authorization", header));
+                using var rejected = await api.SendAsync(malformed);
+                Assert.Equal(HttpStatusCode.Unauthorized, rejected.StatusCode);
+                Assert.False((await rejected.Content.ReadAsStringAsync()).Contains(token, StringComparison.Ordinal),
+                    "Rejected response reflected bearer credentials.");
+            }
             Assert.Equal(401, await Get("/api/v1/auth/session", token));
             Assert.Equal(401, await Get("/api/v1/clusters", token));
             Assert.Equal(401, await Get("/api/v1/system/info", token, "Cookie", "Kafdeck.Session=sentinel-cookie"));
@@ -258,10 +286,12 @@ public sealed class V08W67BearerReadTests
             var evidence = new { keycloak = Field("keycloakVersion"), java = Field("javaVersion"),
                 issuer, audience = "kafdeck-api-g1", grant = "client_credentials/private_key_jwt",
                 observedAtUtc = DateTimeOffset.UtcNow, accessTokenHadNbf = claims.RootElement.TryGetProperty("nbf", out _),
-                allowedSystemGet = 200, deniedCrossClusterGet = 403, cookieCollision = 401, deploymentCollision = 401,
+                allowedSystemGet = 200, acceptedBearerSchemes = acceptedSchemes,
+                malformedSchemeCasesRejected = malformedHeaders.Length, alteredTokenCase = 401, oversizedBearer = 401,
+                deniedCrossClusterGet = 403, cookieCollision = 401, deploymentCollision = 401,
                 clientAssertionAsAccessToken = 401, nonAdmittedList = 401, sessionImpersonation = 401, mutation = 401,
                 assertionReplay = (int)replay.StatusCode, caveat = "Single-node local laboratory; A1/A2 partial, HA/rotation/human CLI/mutation remain unaccepted." };
-            await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(labPath)!, "keycloak-evidence.json"),
+            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, "keycloak-evidence.json"),
                 JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
         }
         finally
@@ -272,7 +302,7 @@ public sealed class V08W67BearerReadTests
             var stderr = await stderrTask;
             Assert.DoesNotContain(token, stdout + stderr);
             Assert.DoesNotContain(assertion, stdout + stderr);
-            await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(labPath)!, "kafdeck-host.log"), stdout + stderr);
+            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, "kafdeck-host.log"), stdout + stderr);
         }
     }
 

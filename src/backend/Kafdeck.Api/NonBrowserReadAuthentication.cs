@@ -274,7 +274,9 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         var secureTransport = context.Request.IsHttps ||
             context.Connection.RemoteIpAddress is { } remote && IPAddress.IsLoopback(remote);
         var admitted = secureTransport && HttpMethods.IsGet(context.Request.Method) && route is not null && Routes.Contains(route);
-        var identity = !collision && admitted && header is not null && header.StartsWith("Bearer ", StringComparison.Ordinal) &&
+        // HTTP authentication scheme names are case-insensitive; keep the
+        // credential substring untouched for signature/claim validation.
+        var identity = !collision && admitted && header is not null && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) &&
             header.Length <= 16 * 1024 + 7
             ? await verifier.VerifyAsync(header[7..], context.RequestAborted)
             : null;
