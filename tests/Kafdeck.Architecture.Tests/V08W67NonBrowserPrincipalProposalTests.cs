@@ -109,6 +109,14 @@ public sealed class V08W67NonBrowserPrincipalProposalTests
                 Candidate(),
                 Candidate(registrationId: "automation-b"),
             ]));
+
+        Assert.Throws<ArgumentException>(() =>
+            new NonBrowserPrincipalProposalSet(
+            [
+                Candidate(),
+                // The audience identifies a token target, not a second service identity.
+                Candidate(audience: "another-api", registrationId: "automation-b"),
+            ]));
     }
 
     [Fact]
