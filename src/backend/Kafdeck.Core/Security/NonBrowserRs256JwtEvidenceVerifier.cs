@@ -125,7 +125,8 @@ public static class NonBrowserRs256JwtEvidenceVerifier
             var now = observedAtUtc.ToUnixTimeSeconds();
 
             // Validate ORIGINAL lifetime, not remaining life at request time.
-            if (iat < 0 || exp <= iat || exp - iat > MaxOriginalLifetimeSeconds ||
+            if (iat < 0 || exp <= iat || nbf >= exp ||
+                exp - iat > MaxOriginalLifetimeSeconds ||
                 iat > now + ClockSkewSeconds ||
                 nbf > now + ClockSkewSeconds ||
                 nbf < iat - ClockSkewSeconds ||
