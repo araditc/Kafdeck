@@ -14,18 +14,22 @@ public sealed class NotificationWebhookHttpIntent
     internal NotificationWebhookHttpIntent(
         string destinationId,
         string profileRevisionFingerprint,
-        Uri endpoint,
+        NotificationPinnedEndpoint pinnedEndpoint,
         ImmutableArray<byte> jsonPayload)
     {
         DestinationId = destinationId;
         ProfileRevisionFingerprint = profileRevisionFingerprint;
-        Endpoint = endpoint;
+        PinnedEndpoint = pinnedEndpoint ??
+            throw new ArgumentNullException(nameof(pinnedEndpoint));
         JsonPayload = jsonPayload;
     }
 
     public string DestinationId { get; }
     public string ProfileRevisionFingerprint { get; }
-    public Uri Endpoint { get; }
+    // Carry the exact immutable validated IP/policy/time evidence into
+    // a future transport. Re-resolving DNS from Endpoint is not allowed.
+    public NotificationPinnedEndpoint PinnedEndpoint { get; }
+    public Uri Endpoint => PinnedEndpoint.Endpoint;
     public string Method => "POST";
     public string ContentType => "application/json";
     public ImmutableArray<byte> JsonPayload { get; }
@@ -95,7 +99,7 @@ public sealed class NotificationWebhookHttpRequestFactory
         return new NotificationWebhookHttpIntent(
             profile.DestinationId,
             profile.RevisionFingerprint,
-            profile.ConfiguredEndpoint,
+            approvedRequest.PinnedEndpoint,
             ImmutableArray.CreateRange(approvedRequest.JsonPayload.ToArray()));
     }
 }
