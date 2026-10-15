@@ -62,6 +62,16 @@ public sealed class V08W67NonBrowserPrincipalProposalTests
     }
 
     [Theory]
+    [InlineData("https://sso.example.test")]
+    [InlineData("https://sso.example.test/")]
+    public void Authority_only_https_issuer_preserves_the_exact_approved_literal(
+        string issuer)
+    {
+        var draft = Candidate(issuer: issuer);
+        Assert.Equal(issuer, draft.Issuer);
+    }
+
+    [Theory]
     [InlineData("kafdeck-*")]
     [InlineData("kafdeck-api?admin")]
     [InlineData(" kafdeck-api")]
