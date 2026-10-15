@@ -45,6 +45,15 @@ public sealed class NonBrowserPinnedRsaKeyRing
             ArgumentNullException.ThrowIfNull(item);
             var kid = RequireKeyId(item.KeyId);
             var rsa = item.PublicParameters;
+            // Array lengths cannot change. Bound allocation before cloning;
+            // validate mutable byte content only against private snapshots.
+            if (rsa.Modulus is null || rsa.Modulus.Length is < 256 or > 512 ||
+                rsa.Exponent is null || rsa.Exponent.Length != 3)
+            {
+                throw new ArgumentException(
+                    "Pinned RSA public parameter lengths are unsupported.",
+                    nameof(approvedKeys));
+            }
             // Snapshot all mutable arrays BEFORE evaluating key policy.
             // Checking caller-owned Exponent and copying it later admits
             // a race between validation and key import.

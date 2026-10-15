@@ -221,6 +221,28 @@ public sealed class V08W67PinnedRsaKeyRingTests
     }
 
     [Fact]
+    public void Oversized_public_arrays_are_rejected_before_allocating_snapshots()
+    {
+        using var rsa = RSA.Create(2048);
+        var parameters = rsa.ExportParameters(false);
+        var fingerprint = Convert.ToHexString(SHA256.HashData(rsa.ExportSubjectPublicKeyInfo()));
+        // Allocate caller input before measuring so only the constructor's
+        // additional allocation is counted. A clone would add at least 1 MiB.
+        parameters.Modulus = new byte[1024 * 1024];
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Throws<ArgumentException>(() =>
+            Ring(new NonBrowserPinnedRsaKeySpec("key-one", parameters, fingerprint)));
+        Assert.True(GC.GetAllocatedBytesForCurrentThread() - before < 128 * 1024);
+
+        parameters = rsa.ExportParameters(false);
+        parameters.Exponent = new byte[1024 * 1024];
+        before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Throws<ArgumentException>(() =>
+            Ring(new NonBrowserPinnedRsaKeySpec("key-one", parameters, fingerprint)));
+        Assert.True(GC.GetAllocatedBytesForCurrentThread() - before < 128 * 1024);
+    }
+
+    [Fact]
     public void Test_key_referencing_a_weak_RSA_key_is_not_admitted()
     {
         using var weak = RSA.Create(1024);
