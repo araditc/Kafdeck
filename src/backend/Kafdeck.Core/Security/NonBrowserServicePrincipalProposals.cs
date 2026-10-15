@@ -115,14 +115,14 @@ public sealed class NonBrowserPrincipalProposalSet
                 nameof(proposals), "The registration proposal set exceeds its hard finite limit.");
         }
 
-        var identities = new HashSet<(string Issuer, string Audience, string Subject, string ClientId)>();
+        var identities = new HashSet<(string Issuer, string Subject, string ClientId)>();
         var registrationIds = new HashSet<string>(StringComparer.Ordinal);
         var snapshot = new List<NonBrowserServicePrincipalProposal>(proposals.Count);
         foreach (var proposal in proposals)
         {
             ArgumentNullException.ThrowIfNull(proposal);
             if (!registrationIds.Add(proposal.RegistrationId) ||
-                !identities.Add((proposal.Issuer, proposal.ApiAudience, proposal.Subject, proposal.ClientId)))
+                !identities.Add((proposal.Issuer, proposal.Subject, proposal.ClientId)))
             {
                 throw new ArgumentException(
                     "Duplicate registration identifier or exact machine principal identity.",
