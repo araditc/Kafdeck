@@ -58,6 +58,42 @@ public sealed class V08W67PinnedRsaKeyRingTests
         Assert.Null(typeof(NonBrowserPinnedRsaKeyRing).GetMethod("FetchJwks"));
     }
 
+    private sealed class InconsistentCountKeyList : IReadOnlyList<NonBrowserPinnedRsaKeySpec>
+    {
+        private readonly IReadOnlyList<NonBrowserPinnedRsaKeySpec> _actual;
+
+        public InconsistentCountKeyList(IReadOnlyList<NonBrowserPinnedRsaKeySpec> actual) =>
+            _actual = actual;
+
+        // Deliberately lies about count while enumerating five entries.
+        public int Count => 1;
+        public NonBrowserPinnedRsaKeySpec this[int index] => _actual[index];
+
+        public IEnumerator<NonBrowserPinnedRsaKeySpec> GetEnumerator() =>
+            _actual.GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
+            GetEnumerator();
+    }
+
+    [Fact]
+    public void Snapshot_count_not_retained_mutable_list_count_controls_trust_budget()
+    {
+        using var rsa = RSA.Create(2048);
+        var deceptive = new InconsistentCountKeyList(
+            Enumerable.Range(0, 5)
+                .Select(i => Spec(rsa, "key-" + i))
+                .ToArray());
+
+        // Snapshot reads at most five elements and rejects the fifth;
+        // no expensive RSA import or unbounded enumeration is admitted.
+        Assert.Throws<ArgumentException>(() =>
+            new NonBrowserPinnedRsaKeyRing(
+                "https://sso.test/realms/kafdeck",
+                "kafdeck-api",
+                deceptive));
+    }
+
     [Fact]
     public void Key_input_is_defensively_copied_before_any_future_verification()
     {
