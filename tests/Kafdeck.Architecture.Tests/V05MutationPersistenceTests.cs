@@ -661,8 +661,12 @@ public sealed class V05MutationPersistenceTests
 
             var execution = executor.ExecuteAsync(operation.Snapshot.OperationId);
 
-            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var result = await execution.WaitAsync(TimeSpan.FromSeconds(5));
+            // The production executor's one-second operation deadline is
+            // unchanged; these are test-harness starvation sentinels, not
+            // provider execution timeouts. Parallel release CI may take
+            // several seconds to schedule the bounded blocking callback.
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var result = await execution.WaitAsync(TimeSpan.FromSeconds(20));
 
             Assert.Equal(MutationOperationState.ExecutionUnknown, result.State);
             Assert.Equal("execution_timeout", result.ResultCode);
