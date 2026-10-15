@@ -487,7 +487,22 @@ public sealed class AuthorizationPolicyEvaluator
             return AuthorizationDecision.Denied(AuthorizationDecisionReason.Unauthenticated);
         }
 
-        var roleIds = ResolveRoleIds(identity);
+        return EvaluateRoles(ResolveRoleIds(identity), request);
+    }
+
+    /// <summary>Current direct RBAC bindings for a registered non-browser identity; no external groups or browser session.</summary>
+    public AuthorizationDecision EvaluateDirectSubject(OperatorIdentityKey key, AuthorizationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(request);
+        IReadOnlyList<string> roles = _snapshot.SubjectBindings.TryGetValue(key, out var bound)
+            ? bound.OrderBy(role => role, StringComparer.Ordinal).ToArray()
+            : Array.Empty<string>();
+        return EvaluateRoles(roles, request);
+    }
+
+    private AuthorizationDecision EvaluateRoles(IReadOnlyList<string> roleIds, AuthorizationRequest request)
+    {
         if (roleIds.Count == 0)
         {
             return AuthorizationDecision.Denied(AuthorizationDecisionReason.NoMatchingBinding);

@@ -42,8 +42,8 @@ public enum NotificationExecutionMode
     HighAvailability = 2,
 }
 
-// This slice exposes metadata-only observation. No delivery worker,
-// subscription mutation or provider transport is activated implicitly.
+// Observation, management and physical Webhook delivery have separate opt-ins.
+// No outbound transport is activated implicitly by observation or management.
 public sealed record NotificationReadOptions(
     bool Enabled,
     NotificationPersistenceProvider Provider,
@@ -52,7 +52,8 @@ public sealed record NotificationReadOptions(
     SecretReference? ConnectionString,
     bool ManagementEnabled = false,
     IReadOnlyList<NotificationDestinationProfile>? DestinationProfiles = null,
-    IReadOnlyList<NotificationCredentialReferenceOptions>? CredentialBindings = null);
+    IReadOnlyList<NotificationCredentialReferenceOptions>? CredentialBindings = null,
+    bool WebhookDeliveryEnabled = false);
 
 /// <summary>
 /// Owner-defined binding to an env/file secret locator, not the secret value.

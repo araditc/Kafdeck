@@ -836,6 +836,7 @@ public sealed class WebhookNotificationDeliveryDispatcher :
                     cancellationToken)
                 .ConfigureAwait(false);
         if (notificationEvent is null ||
+            !notificationEvent.Event.IsApprovedForDurability ||
             !string.Equals(
                 notificationEvent.Event.PayloadFingerprint,
                 claimedDelivery.Snapshot.PayloadFingerprint,

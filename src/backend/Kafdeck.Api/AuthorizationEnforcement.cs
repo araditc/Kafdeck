@@ -16,16 +16,25 @@ public sealed class KafdeckAuthorizationService
 {
     private readonly KafdeckOptions _options;
     private readonly AuthorizationPolicyEvaluator _evaluator;
+    private readonly NonBrowserReadRegistry? _nonBrowser;
 
-    public KafdeckAuthorizationService(KafdeckOptions options, AuthorizationPolicyEvaluator evaluator)
+    public KafdeckAuthorizationService(KafdeckOptions options, AuthorizationPolicyEvaluator evaluator,
+        NonBrowserReadRegistry? nonBrowser = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
+        _nonBrowser = nonBrowser;
     }
 
     public KafdeckAuthorizationOutcome Authorize(ClaimsPrincipal? principal, AuthorizationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (principal?.Identity is NonBrowserReadIdentity bearer)
+        {
+            return _nonBrowser?.IsAllowed(bearer, request, _evaluator) == true
+                ? KafdeckAuthorizationOutcome.Allowed : KafdeckAuthorizationOutcome.Forbidden;
+        }
 
         if (_options.Deployment.Mode != AccessMode.Oidc)
         {
@@ -47,6 +56,10 @@ public sealed class KafdeckAuthorizationService
         AuthorizationAction action,
         string? clusterId)
     {
+        // Collection routes are not admitted to the initial bearer surface.
+        if (principal?.Identity is NonBrowserReadIdentity)
+            return KafdeckAuthorizationOutcome.Forbidden;
+
         if (_options.Deployment.Mode != AccessMode.Oidc)
         {
             return KafdeckAuthorizationOutcome.Allowed;
@@ -86,6 +99,7 @@ public static class KafdeckAuthorizationEndpointExtensions
                 var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
                     ? SecurityAuditPrincipal.FromOperator(session.Identity)
                     : SecurityAuditPrincipal.Anonymous;
+                if (http.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
 
                 await audit.WriteAsync(
                     new SecurityAuditEvent(
@@ -149,6 +163,7 @@ public static class KafdeckAuthorizationEndpointExtensions
                 var principal = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null
                     ? SecurityAuditPrincipal.FromOperator(session.Identity)
                     : SecurityAuditPrincipal.Anonymous;
+                if (http.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
                 await audit!.WriteAsync(
                     new SecurityAuditEvent(
                         DateTimeOffset.UtcNow,

@@ -1,7 +1,7 @@
 namespace Kafdeck.Core.Notifications;
 
 /// <summary>
-/// Closed-world, advisory HTTP outcome policy for a future typed webhook transport.
+/// Closed-world HTTP outcome policy for the opt-in typed Webhook transport.
 /// It does NOT activate physical HTTP delivery, prove provider-specific semantics,
 /// or authorize a retry of a possibly committed external side effect.
 /// </summary>

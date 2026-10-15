@@ -7,8 +7,8 @@ using Kafdeck.Core.Notifications;
 namespace Kafdeck.Infrastructure.Configuration;
 
 /// <summary>
-/// Opt-in-by-construction physical Webhook HTTPS transport. It is NOT added
-/// to Kafdeck host DI and therefore cannot activate notification sending.
+/// Physical Webhook HTTPS transport. Host DI activates it only through the
+/// separate default-off standalone WebhookDeliveryEnabled admission.
 ///
 /// Its exact owner-provisioned profile, immutable dispatch intent and
 /// original DNS pin are the only permitted source of HTTP request material.

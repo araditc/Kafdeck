@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using Kafdeck.Core.Notifications;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -43,8 +45,8 @@ public sealed class SocketNotificationPinnedTcpDialer : INotificationPinnedTcpDi
 
 /// <summary>
 /// Creates one locked-down SocketsHttpHandler for one already verified
-/// NotificationPinnedEndpoint. This factory is not wired into the host;
-/// it does not issue requests, attach credentials or activate outbound sends.
+/// NotificationPinnedEndpoint. Host registration requires explicit admission;
+/// this factory itself does not issue requests or attach credentials.
 /// TLS hostname/certificate checks are left to the .NET HTTPS stack and
 /// MUST NOT be disabled by a future physical transport.
 /// </summary>
@@ -56,22 +58,25 @@ public sealed class NotificationPinnedHttpHandlerFactory
     private readonly INotificationPinnedTcpDialer _dialer;
     private readonly NotificationAddressPolicy _policy;
     private readonly TimeProvider _clock;
+    private readonly X509Certificate2Collection? _trustRoots;
 
     public NotificationPinnedHttpHandlerFactory(
         INotificationPinnedTcpDialer dialer,
         NotificationAddressPolicy policy,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        X509Certificate2Collection? trustRoots = null)
     {
         _dialer = dialer ?? throw new ArgumentNullException(nameof(dialer));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _clock = clock ?? TimeProvider.System;
+        _trustRoots = trustRoots is null ? null : new X509Certificate2Collection(trustRoots);
     }
 
     /// <summary>
-    /// The admitted non-activated composition for a future physical notifier.
+    /// The guarded composition used by the admitted physical notifier.
     /// Check EVERY HTTP request before an inner HTTP/2 connection can be
     /// reused; the inner SocketsHttpHandler still pins TCP to the approved IP.
-    /// Caller owns/disposes the returned handler. Does not send or register DI.
+    /// Caller owns/disposes the returned handler. Does not itself send.
     /// </summary>
     public HttpMessageHandler CreateGuardedHandler(NotificationPinnedEndpoint pinned)
     {
@@ -94,6 +99,12 @@ public sealed class NotificationPinnedHttpHandlerFactory
             AutomaticDecompression = DecompressionMethods.None,
             ConnectTimeout = TimeSpan.FromSeconds(5),
             PooledConnectionLifetime = TimeSpan.Zero,
+            // A supplied laboratory/private CA changes chain roots only.
+            // SNI, hostname, expiry and EKU checks remain in SslStream.
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                CertificateChainPolicy = _trustRoots is null ? null : CreateChainPolicy(_trustRoots),
+            },
             ConnectCallback = (context, cancellationToken) =>
             {
                 // This handler is scoped to ONE exact HTTPS destination,
@@ -136,6 +147,18 @@ public sealed class NotificationPinnedHttpHandlerFactory
                     cancellationToken);
             },
         };
+    }
+
+    private static X509ChainPolicy CreateChainPolicy(X509Certificate2Collection roots)
+    {
+        var chain = new X509ChainPolicy
+        {
+            TrustMode = X509ChainTrustMode.CustomRootTrust,
+            RevocationMode = X509RevocationMode.NoCheck,
+        };
+        chain.CustomTrustStore.AddRange(roots);
+        chain.ApplicationPolicy.Add(new System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.1"));
+        return chain;
     }
 
     /// <summary>
