@@ -1,3 +1,4 @@
+using Confluent.Kafka;
 using Kafdeck.Api;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -29,6 +30,28 @@ public sealed class V06FleetCapabilityTests
         Assert.Contains(
             FleetCapabilityCatalog.Require("partition-reassignment").Evidence,
             item => item.Contains("AlterPartitionReassignmentsAsync absent", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Fleet_client_version_provenance_matches_loaded_confluent_assembly()
+    {
+        // The fleet capabilities endpoint is operator-facing truth, not a
+        // frozen copy of evidence from an older dependency pin. Reflection
+        // compile probes in V06W41PinnedClientCapabilityTests separately
+        // establish which typed APIs remain unavailable in this version.
+        var clientVersion = typeof(IAdminClient).Assembly.GetName().Version;
+        Assert.NotNull(clientVersion);
+        Assert.True(clientVersion!.Build >= 0);
+
+        var expected = $"Confluent.Kafka {clientVersion.Major}.{clientVersion.Minor}.{clientVersion.Build}";
+        var claims = FleetCapabilityCatalog.All
+            .SelectMany(item => new[] { item.Reason }.Concat(item.Evidence))
+            .Where(value => value.Contains("Confluent.Kafka", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(claims);
+        Assert.All(claims,
+            claim => Assert.Contains(expected, claim, StringComparison.Ordinal));
     }
 
     [Fact]
