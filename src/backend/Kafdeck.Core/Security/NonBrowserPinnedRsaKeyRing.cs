@@ -41,8 +41,13 @@ public sealed class NonBrowserPinnedRsaKeyRing
             ArgumentNullException.ThrowIfNull(item);
             var kid = RequireKeyId(item.KeyId);
             var rsa = item.PublicParameters;
-            if (rsa.Modulus is null || rsa.Modulus.Length is < 256 or > 512 ||
-                rsa.Exponent is not [0x01, 0x00, 0x01] ||
+            // Snapshot all mutable arrays BEFORE evaluating key policy.
+            // Checking caller-owned Exponent and copying it later admits
+            // a race between validation and key import.
+            var modulus = rsa.Modulus?.ToArray();
+            var exponent = rsa.Exponent?.ToArray();
+            if (modulus is null || modulus.Length is < 256 or > 512 ||
+                exponent is not [0x01, 0x00, 0x01] ||
                 rsa.D is not null || rsa.P is not null ||
                 rsa.Q is not null || rsa.DP is not null ||
                 rsa.DQ is not null || rsa.InverseQ is not null)
@@ -51,10 +56,6 @@ public sealed class NonBrowserPinnedRsaKeyRing
                     "Pinned RSA material must contain only an approved 2048-to-4096-bit public key.",
                     nameof(approvedKeys));
             }
-
-            // Capture from the untrusted mutable RSAParameters exactly once.
-            var modulus = rsa.Modulus.ToArray();
-            var exponent = rsa.Exponent.ToArray();
             byte[] fingerprint;
             try
             {
