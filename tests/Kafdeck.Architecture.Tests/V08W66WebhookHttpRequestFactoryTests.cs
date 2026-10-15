@@ -54,6 +54,13 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
         Assert.Equal("POST", intent.Method);
         Assert.Equal("application/json", intent.ContentType);
         Assert.Equal(profile.ConfiguredEndpoint, intent.Endpoint);
+        Assert.Same(approved.PinnedEndpoint, intent.PinnedEndpoint);
+        Assert.Equal(approved.PinnedEndpoint.ResolvedAtUtc,
+            intent.PinnedEndpoint.ResolvedAtUtc);
+        Assert.Equal(approved.PinnedEndpoint.AddressPolicyFingerprint,
+            intent.PinnedEndpoint.AddressPolicyFingerprint);
+        Assert.Equal(approved.PinnedEndpoint.Addresses[0].ToString(),
+            intent.PinnedEndpoint.Addresses[0].ToString());
         Assert.Equal(profile.DestinationId, intent.DestinationId);
         Assert.Equal(profile.RevisionFingerprint,
             intent.ProfileRevisionFingerprint);
@@ -68,6 +75,29 @@ public sealed class V08W66WebhookHttpRequestFactoryTests
             property => Assert.False(property.SetMethod?.IsPublic ?? false));
         Assert.Null(typeof(NotificationWebhookHttpIntent).GetProperty("Headers"));
         Assert.Null(typeof(NotificationWebhookHttpIntent).GetProperty("Content"));
+    }
+
+    [Fact]
+    public void DNS_pin_remains_identical_to_approved_connection_evidence()
+    {
+        var profile = Profile();
+        var approved = Request(profile);
+        var intent = new NotificationWebhookHttpRequestFactory().Create(
+            profile, approved);
+        Assert.Same(approved.PinnedEndpoint, intent.PinnedEndpoint);
+
+        // The pin returns a defensive IPAddress snapshot; mutating a
+        // returned instance cannot swap the authorized dial target.
+        var externalAddress = intent.PinnedEndpoint.Addresses[0];
+#pragma warning disable CS0618
+        externalAddress.Address = IPAddress.Loopback.Address;
+#pragma warning restore CS0618
+
+        Assert.Equal("1.1.1.1", intent.PinnedEndpoint.Addresses[0].ToString());
+        Assert.Equal(approved.PinnedEndpoint.ResolvedAtUtc,
+            intent.PinnedEndpoint.ResolvedAtUtc);
+        Assert.Equal(approved.PinnedEndpoint.AddressPolicyFingerprint,
+            intent.PinnedEndpoint.AddressPolicyFingerprint);
     }
 
     [Fact]
