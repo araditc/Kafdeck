@@ -84,7 +84,8 @@ public static class KafdeckConfigurationLoader
             ParseOptionalSecret(section["ConnectionString"]),
             ParseOptionalBoolean(section["ManagementEnabled"], false, "Notification management Enabled"),
             LoadConfiguredNotificationDestinations(section.GetSection("Destinations")),
-            LoadNotificationCredentialReferences(section.GetSection("CredentialBindings")));
+            LoadNotificationCredentialReferences(section.GetSection("CredentialBindings")),
+            ParseOptionalBoolean(section["WebhookDeliveryEnabled"], false, "Notification webhook delivery Enabled"));
     }
 
     private static IReadOnlyList<NotificationDestinationProfile>

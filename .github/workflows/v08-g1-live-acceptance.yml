@@ -1,0 +1,94 @@
+name: v08-g1-live-acceptance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v08-g1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-keycloak-and-webhook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download and verify pinned Keycloak distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g1"
+          mkdir -p "$lab"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+            https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip \
+            --output "$lab/keycloak.zip"
+          printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak.zip" | sha256sum --check
+          unzip -q "$lab/keycloak.zip" -d "$lab"
+          chmod +x "$lab/keycloak-26.8.1/bin/kc.sh"
+
+      - name: Prepare ephemeral HTTPS realm and asymmetric client
+        shell: pwsh
+        run: |
+          $env:JAVA_HOME = $env:JAVA_HOME_21_X64
+          $javaVersion = (& "$env:JAVA_HOME/bin/java" -version 2>&1 | Select-Object -First 1).ToString()
+          ./deploy/dev/prepare-keycloak-g1.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g1/keycloak-26.8.1" -JavaVersion $javaVersion
+
+      - name: Start real Keycloak on verified loopback HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g1"
+          export KC_HTTPS_KEY_STORE_PASSWORD="$(cat "$lab/identity/https-password.txt")"
+          nohup "$lab/keycloak-26.8.1/bin/kc.sh" start --http-host=127.0.0.1 --http-enabled=false \
+            --db=dev-file --https-port=18443 --hostname=https://localhost:18443 \
+            --https-key-store-file="$lab/identity/https.p12" --cache=local --import-realm \
+            > "$lab/identity/keycloak-server.log" 2>&1 &
+          printf '%s' "$!" > "$lab/identity/keycloak.pid"
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent --cacert "$lab/identity/ca.pem" --connect-timeout 1 --max-time 2 \
+              https://localhost:18443/realms/kafdeck-g1/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'Keycloak HTTPS discovery did not become ready; laboratory failed.' >&2
+          exit 1
+
+      - name: Restore, build and prove real G1 verticals
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KAFDECK_KEYCLOAK_G1_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/g1/identity/lab.json"
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet build Kafdeck.slnx --no-restore -warnaserror
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08W66HostedWebhookTlsTests|FullyQualifiedName~V08W67BearerReadTests|FullyQualifiedName~V08CandidateReadLaneTests' \
+            --results-directory artifacts/g1-ci --logger 'trx;LogFileName=g1-live.trx'
+          test -s "$GITHUB_WORKSPACE/deploy/dev/.generated/g1/identity/keycloak-evidence.json"
+
+      - name: Stop laboratory process
+        if: always()
+        shell: bash
+        run: |
+          pid_file="$GITHUB_WORKSPACE/deploy/dev/.generated/g1/identity/keycloak.pid"
+          if [ -f "$pid_file" ]; then
+            kill "$(cat "$pid_file")" 2>/dev/null || true
+          fi

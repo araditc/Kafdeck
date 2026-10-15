@@ -5,7 +5,7 @@ using Kafdeck.Core.Notifications;
 namespace Kafdeck.Infrastructure.Configuration;
 
 /// <summary>
-/// Bounded DNS lookup for the not-yet-activated W66 webhook path.
+/// Bounded DNS lookup for the opt-in W66 Webhook path.
 /// DNS is observation, not authority to send: physical transports MUST still
 /// connect only to the returned pinned IP while keeping TLS verification
 /// and the original configured SNI/Host identity.

@@ -6,7 +6,8 @@ namespace Kafdeck.Core.Security;
 
 /// <summary>
 /// Cryptographic evidence only; NOT a Kafdeck principal, authentication scheme,
-/// registration, session or authorization decision. No host or CLI invokes it.
+/// registration, session or authorization decision. The opt-in read host uses
+/// the evidence behind a separate live registration and backend RBAC gate.
 /// Keys must be obtained and pinned through a future, separately admitted IdP
 /// trust configuration. Caller must independently enforce live registration,
 /// grant, revocation, resource authorization and risk approval.
@@ -120,12 +121,15 @@ public static class NonBrowserRs256JwtEvidenceVerifier
 
             RequireExactAudience(claims, proposal.ApiAudience);
             var iat = RequireSeconds(claims, "iat");
-            var nbf = RequireSeconds(claims, "nbf");
+            // Keycloak access tokens can omit the optional JWT nbf claim.
+            // A present nbf must remain a finite valid timestamp; iat and the
+            // original lifetime cap are always mandatory.
+            var nbf = claims.TryGetProperty("nbf", out _) ? RequireSeconds(claims, "nbf") : iat;
             var exp = RequireSeconds(claims, "exp");
             var now = observedAtUtc.ToUnixTimeSeconds();
 
             // Validate ORIGINAL lifetime, not remaining life at request time.
-            if (iat < 0 || exp <= iat || nbf >= exp ||
+            if (iat < 0 || nbf < 0 || exp <= iat || nbf >= exp ||
                 exp - iat > MaxOriginalLifetimeSeconds ||
                 iat > now + ClockSkewSeconds ||
                 nbf > now + ClockSkewSeconds ||

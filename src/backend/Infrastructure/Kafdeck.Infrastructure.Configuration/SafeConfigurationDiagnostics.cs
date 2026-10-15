@@ -31,7 +31,8 @@ public sealed record SafeConfigurationDiagnostic(
     bool NotificationsEnabled = false,
     bool NotificationManagementEnabled = false,
     NotificationPersistenceProvider? NotificationPersistenceProvider = null,
-    NotificationExecutionMode? NotificationExecutionMode = null);
+    NotificationExecutionMode? NotificationExecutionMode = null,
+    bool NotificationWebhookDeliveryEnabled = false);
 
 public sealed record SafeClusterDiagnostic(
     string ClusterId,
@@ -97,6 +98,7 @@ public static class SafeConfigurationDiagnostics
             options.Notifications?.Enabled ?? false,
             options.Notifications?.Enabled == true && options.Notifications.ManagementEnabled,
             options.Notifications?.Provider,
-            options.Notifications?.ExecutionMode);
+            options.Notifications?.ExecutionMode,
+            options.Notifications?.Enabled == true && options.Notifications.WebhookDeliveryEnabled);
     }
 }

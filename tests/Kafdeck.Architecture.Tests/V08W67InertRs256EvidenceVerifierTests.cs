@@ -179,6 +179,22 @@ public sealed class V08W67InertRs256EvidenceVerifierTests
     }
 
     [Fact]
+    public void Keycloak_optional_nbf_uses_mandatory_signed_iat_and_preserves_original_lifetime_cap()
+    {
+        using var rsa = RSA.Create(2048);
+        var now = Now.ToUnixTimeSeconds();
+        var withoutNbf = new { iss = "https://sso.test/realms/kafdeck", sub = "service-account-one",
+            azp = "automation-one", aud = "kafdeck-api", typ = "Bearer", iat = now - 10, exp = now + 180 };
+        Assert.Equal("service-account-one", Verify(rsa, Sign(rsa, payload: withoutNbf)).Subject);
+        var withoutNbfFutureIat = new { iss = "https://sso.test/realms/kafdeck", sub = "service-account-one",
+            azp = "automation-one", aud = "kafdeck-api", typ = "Bearer", iat = now + 120, exp = now + 240 };
+        Assert.Throws<NonBrowserJwtEvidenceException>(() => Verify(rsa, Sign(rsa, payload: withoutNbfFutureIat)));
+        var malformedNbf = new { iss = "https://sso.test/realms/kafdeck", sub = "service-account-one",
+            azp = "automation-one", aud = "kafdeck-api", typ = "Bearer", iat = now - 10, exp = now + 180, nbf = "invalid" };
+        Assert.Throws<NonBrowserJwtEvidenceException>(() => Verify(rsa, Sign(rsa, payload: malformedNbf)));
+    }
+
+    [Fact]
     public void Duplicate_security_critical_claims_are_denied_even_if_signed()
     {
         using var rsa = RSA.Create(2048);

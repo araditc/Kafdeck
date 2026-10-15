@@ -134,6 +134,7 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 }
 
 builder.Services.AddProblemDetails();
+builder.Services.AddKafdeckNonBrowserReads(builder.Configuration);
 builder.Services.AddKafdeckOpenTelemetry(
     observabilityOptions,
     otlpHeaders);
@@ -303,15 +304,16 @@ if (dataQualityOptions?.Enabled == true)
 
 if (notificationReadOptions?.Enabled == true)
 {
-    // Server-owned, exact-case destination catalog only. This registration
-    // never enables provider transport, credential resolution or a send worker.
+    // Server-owned, exact-case destination catalog. Physical sending requires
+    // the separate, default-off WebhookDeliveryEnabled admission below.
     builder.Services.AddSingleton<INotificationDestinationProfileCatalog>(
         _ => new ConfiguredNotificationDestinationProfileCatalog(
             notificationReadOptions.DestinationProfiles ??
             Array.Empty<NotificationDestinationProfile>()));
 
     // Only preprovisioned, revision-bound credential REFERENCES are mapped.
-    // Registration never reads secret material; no worker/transport is wired.
+    // Registration never reads secret material. Credential-bound physical
+    // delivery is not yet admitted by the standalone Webhook host.
     builder.Services.AddSingleton<INotificationCredentialResolver>(services =>
     {
         var profiles = notificationReadOptions.DestinationProfiles ??
@@ -364,6 +366,7 @@ if (notificationReadOptions?.Enabled == true)
         services => services.GetRequiredService<AdoNotificationDeliveryStore>());
     builder.Services.AddSingleton<INotificationDeliveryHistoryReader>(
         services => services.GetRequiredService<AdoNotificationDeliveryStore>());
+    builder.Services.AddKafdeckWebhookDelivery(notificationReadOptions);
 }
 
 builder.Services.AddSingleton<IMetricsObservationPort,
@@ -671,7 +674,7 @@ if (dataQualityOptions?.Enabled == true)
 if (notificationReadOptions?.Enabled == true)
 {
     // Start-up fails closed on incompatible notification schema,
-    // including an unresolved v1 delivery backlog. No send worker runs.
+    // including an unresolved v1 delivery backlog, before hosted workers start.
     await app.Services.GetRequiredService<INotificationDeliveryStore>()
         .InitializeAsync()
         .ConfigureAwait(false);
@@ -680,10 +683,11 @@ if (notificationReadOptions?.Enabled == true)
         .ConfigureAwait(false);
 
     app.Logger.LogInformation(
-        "Kafdeck notification persistence initialized with provider {Provider}, mode {Mode}; subscription management API enabled {ManagementEnabled}; no delivery worker or notification provider transport activated.",
+        "Kafdeck notification persistence initialized with provider {Provider}, mode {Mode}; subscription management API enabled {ManagementEnabled}; physical Webhook delivery enabled {WebhookDeliveryEnabled}.",
         notificationReadOptions.Provider,
         notificationReadOptions.ExecutionMode,
-        notificationReadOptions.ManagementEnabled);
+        notificationReadOptions.ManagementEnabled,
+        notificationReadOptions.WebhookDeliveryEnabled);
 }
 
 app.Logger.LogInformation(
@@ -752,11 +756,12 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseMiddleware<NonBrowserReadBoundaryMiddleware>();
 
 if (deploymentAccessToken is not null)
 {
     app.UseWhen(
-        context => context.Request.Path.StartsWithSegments("/api"),
+        context => context.Request.Path.StartsWithSegments("/api") && context.User.Identity is not NonBrowserReadIdentity,
         branch => branch.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken));
 }
 
