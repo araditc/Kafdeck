@@ -58,7 +58,7 @@ public static class NonBrowserRs256JwtEvidenceVerifier
             if (string.IsNullOrWhiteSpace(compactJwt) ||
                 compactJwt.Length > MaxCompactBytes ||
                 approvedKeyId.Length is < 1 or > 256 ||
-                compactJwt.Any(ch => ch is > (char)127 or < (char)33))
+                compactJwt.Any(ch => ch > 127 || ch < 33))
             {
                 throw new NonBrowserJwtEvidenceException();
             }
