@@ -77,6 +77,38 @@ jobs:
           c=r.find('.//{*}Counters')
           assert c is not None and c.attrib.get('total')=='1' and c.attrib.get('passed')=='1' and c.attrib.get('notExecuted')=='0'
           PY
+      - name: Collect closed bounded upgrade diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2-upgrade-ci/scenarios"
+          $out = "$env:GITHUB_WORKSPACE/artifacts/g2-upgrade-ci"
+          [IO.Directory]::CreateDirectory($out) | Out-Null
+          $files = @(Get-ChildItem -LiteralPath $root -Filter keycloak-upgrade-control-diagnostic.json -File -Recurse -ErrorAction SilentlyContinue)
+          if ($files.Count -gt 1) { throw 'Unexpected diagnostic cardinality.' }
+          $safe = @{formatVersion=1;action='Prove';stage='NotRecorded';state='Missing';failure='MissingDiagnostic';controlExitCode=$null;nodes=@()}
+          if ($files.Count -eq 1) {
+            if ($files[0].Length -gt 4096) { throw 'Diagnostic exceeds finite budget.' }
+            $d = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
+            if ($d.formatVersion -ne 1 -or $d.action -cne 'Prove' -or
+                $d.stage -cnotin @('OldNodes','OldMembership','SameVersionBounce','UpgradeA','MixedReplay','UpgradeB','NewReplay','Complete') -or
+                $d.state -cnotin @('Running','Succeeded','Failed') -or
+                $d.failure -cnotin @('Unclassified','NodeExited','ReadinessDeadline','CompatibilityDeadline','CompatibilityRejected','ReplayAccepted','FreshOAuthRejected','MembershipMissing') -or
+                ($null -ne $d.controlExitCode -and ($d.controlExitCode -isnot [long] -and $d.controlExitCode -isnot [int])) -or @($d.nodes).Count -ne 2) { throw 'Closed diagnostic contract refused.' }
+            $nodes = @()
+            foreach ($node in $d.nodes) {
+              if ($node.node -cnotin @('node-a','node-b') -or $node.version -cnotin @('26.8.0','26.8.1')) { throw 'Closed diagnostic node refused.' }
+              $n = @{node=$node.node;version=$node.version}
+              foreach ($name in @('launcherPresent','httpsPortOpen','recordedPidExists','recordedPathMatches','recordedStartMatches','startupBanner','errorMarker','twoMemberView','nodeALabel','nodeBLabel','unknownOption','realmFilenameMismatch','bindConflict','databaseAuthenticationFailure','databaseConnectionFailure','tlsMaterialFailure')) {
+                if ($node.$name -isnot [bool]) { throw 'Closed diagnostic boolean refused.' }
+                $n[$name] = $node.$name
+              }
+              $nodes += $n
+            }
+            $safe = @{formatVersion=1;action='Prove';stage=$d.stage;state=$d.state;failure=$d.failure;controlExitCode=$d.controlExitCode;nodes=$nodes}
+          }
+          $safe | ConvertTo-Json -Depth 5 | Set-Content "$out/keycloak-upgrade-control-diagnostic.json"
+          [pscustomobject]@{stage=$safe.stage;state=$safe.state;failure=$safe.failure;exitCode=$safe.controlExitCode} | ConvertTo-Json -Compress
       - name: Retain only safe upgrade evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -86,4 +118,5 @@ jobs:
             artifacts/g2-upgrade-ci/keycloak-upgrade.trx
             artifacts/g2-upgrade-ci/keycloak-patch-rolling-upgrade-evidence.json
             artifacts/g2-upgrade-ci/keycloak-patch-upgrade-production-verifier-evidence.json
+            artifacts/g2-upgrade-ci/keycloak-upgrade-control-diagnostic.json
           if-no-files-found: error

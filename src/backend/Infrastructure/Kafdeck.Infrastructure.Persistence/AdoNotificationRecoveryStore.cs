@@ -114,9 +114,14 @@ public sealed class AdoNotificationRecoveryStore(INotificationDeliveryDbConnecti
         await using var t = await c.BeginTransactionAsync(IsolationLevel.Serializable, token).ConfigureAwait(false);
         await LockAsync(c, t, token).ConfigureAwait(false);
         var plan = await ReadPlanAsync(c, t, operationId, token).ConfigureAwait(false);
-        if (!Matches(plan, revision, previewHash, policyFingerprint) || plan!.State != NotificationRecoveryState.Previewed ||
-            plan.RequesterHumanFingerprint == humanFingerprint || plan.ExpiresAtUtc <= await NowAsync(c, t, token).ConfigureAwait(false)) return null;
+        if (plan is null) return null;
+        // Current server policy and authenticated human separation establish
+        // authority independently of the caller's optimistic concurrency token.
+        if (plan.PolicyFingerprint != policyFingerprint || plan.RequesterHumanFingerprint == humanFingerprint) return null;
+        if (plan.State != NotificationRecoveryState.Previewed ||
+            plan.ExpiresAtUtc <= await NowAsync(c, t, token).ConfigureAwait(false)) return null;
         await VerifyAuthorityAsync(plan.Request, token).ConfigureAwait(false);
+        if (!MatchesExpectedRevision(plan, revision, previewHash)) return null;
         var approved = plan with { Revision = checked(plan.Revision + 1), State = NotificationRecoveryState.Approved,
             ApprovedByPrincipalId = approver, ApproverHumanFingerprint = humanFingerprint };
         await SaveAsync(c, t, approved, plan.Revision, token).ConfigureAwait(false);
@@ -135,11 +140,16 @@ public sealed class AdoNotificationRecoveryStore(INotificationDeliveryDbConnecti
         if (connections.SupportsSelectForUpdate)
             await ExecuteAsync(c, t, "LOCK TABLE kafdeck_notification_deliveries IN SHARE ROW EXCLUSIVE MODE", token).ConfigureAwait(false);
         var plan = await ReadPlanAsync(c, t, operationId, token).ConfigureAwait(false);
-        if (!Matches(plan, revision, previewHash, policyFingerprint) || plan!.State != NotificationRecoveryState.Approved ||
-            plan.RequesterHumanFingerprint != requesterHumanFingerprint || plan.ExpiresAtUtc <= await NowAsync(c, t, token).ConfigureAwait(false)) return null;
+        if (plan is null) return null;
+        // The server-owned policy and live authorization guard every apply;
+        // the request revision/hash below can only reject a stale operation.
+        if (plan.PolicyFingerprint != policyFingerprint || plan.RequesterHumanFingerprint != requesterHumanFingerprint) return null;
+        if (plan.State != NotificationRecoveryState.Approved ||
+            plan.ExpiresAtUtc <= await NowAsync(c, t, token).ConfigureAwait(false)) return null;
         var request = plan.Request;
         await VerifyAuthorityAsync(request, token).ConfigureAwait(false);
         if (!currentAuthority()) return null;
+        if (!MatchesExpectedRevision(plan, revision, previewHash)) return null;
         if (await GenerationAsync(c, t, token).ConfigureAwait(false) != request.ExpectedDatabaseGeneration) return null;
         var source = await ReadSourceAsync(token).ConfigureAwait(false);
         if (source.SourceIdentityFingerprint != plan.SourceIdentityFingerprint || source.InventoryHash != plan.SourceInventoryHash) return null;
@@ -365,9 +375,8 @@ public sealed class AdoNotificationRecoveryStore(INotificationDeliveryDbConnecti
         await ExecuteAsync(c, t, "INSERT INTO notification_recovery_audit(operation_id,revision,plan_json) VALUES(@id,@revision,@json)", token,
             ("@id", plan.OperationId.ToString("D")), ("@revision", plan.Revision), ("@json", json)).ConfigureAwait(false);
     }
-    private static bool Matches(NotificationRecoveryPlan? plan, long revision, string hash, string policy) =>
-        plan is not null && revision > 0 && plan.Revision == revision && NotificationRecoveryRequest.Fingerprint(hash) &&
-        plan.PreviewHash == hash && plan.PolicyFingerprint == policy;
+    private static bool MatchesExpectedRevision(NotificationRecoveryPlan plan, long revision, string hash) =>
+        revision > 0 && plan.Revision == revision && NotificationRecoveryRequest.Fingerprint(hash) && plan.PreviewHash == hash;
     private static void ValidateActor(string actor, string human, string policy)
     {
         if (string.IsNullOrWhiteSpace(actor) || actor.Length > 2048 || actor.Any(char.IsControl) ||

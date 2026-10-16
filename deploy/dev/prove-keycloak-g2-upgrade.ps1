@@ -28,8 +28,52 @@ function Save([string]$path,$value){
 function Private([string]$path,[string]$value){[IO.File]::WriteAllText($path,$value,[Text.UTF8Encoding]::new($false));if(!$IsWindows){& chmod 600 $path;if($LASTEXITCODE){throw 'Private upgrade file permission failed.'}}}
 function PrivateLog([string]$path){
     $stream=[IO.FileStream]::new($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+    if($stream.Length -gt 2MB){$stream.Dispose();throw 'Private upgrade log exceeded finite inspection budget.'}
     $reader=[IO.StreamReader]::new($stream)
     try{return $reader.ReadToEnd()}finally{$reader.Dispose();$stream.Dispose()}
+}
+$script:proofFailure='Unclassified';$script:controlExit=$null
+function Diagnostic([string]$stage,[string]$state){
+    $stages=@('OldNodes','OldMembership','SameVersionBounce','UpgradeA','MixedReplay','UpgradeB','NewReplay','Complete')
+    if($stage -cnotin $stages -or $state -cnotin @('Running','Succeeded','Failed')){throw 'Closed upgrade diagnostic state changed.'}
+    $observations=@()
+    foreach($entry in $m.nodes){
+        $text='';$log=Child ($entry.name+'-Start-'+$entry.version+'.log')
+        try{if(Test-Path -LiteralPath $log){$text=PrivateLog $log}}catch{}
+        $pidExists=$false;$pathMatches=$false;$startMatches=$false
+        try{
+            $saved=Get-Content -LiteralPath (Child ($entry.name+'-process.json')) -Raw|ConvertFrom-Json
+            $recorded=Get-Process -Id $saved.processId -ErrorAction SilentlyContinue
+            if($recorded){
+                $pidExists=$true;$pathMatches=[string]::Equals($recorded.Path,$pwsh,$comparison)
+                $time=if($saved.startedAtUtc -is [DateTime]){$saved.startedAtUtc.ToUniversalTime()}else{[DateTimeOffset]::Parse([string]$saved.startedAtUtc,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime}
+                $startMatches=($recorded.StartTime.ToUniversalTime().Ticks -eq $time.Ticks)
+            }
+        }catch{}
+        $observations+=@{node=$entry.name;version=$entry.version;
+            launcherPresent=($null -ne (ExactProcess $entry));httpsPortOpen=(PortOpen $entry.httpsPort);
+            recordedPidExists=$pidExists;recordedPathMatches=$pathMatches;recordedStartMatches=$startMatches;
+            startupBanner=($text -match 'Keycloak 26\.8\.[01] .*started');errorMarker=($text -match '\bERROR\b');
+            twoMemberView=($text -match '\(2\)');nodeALabel=($text -match '\bnode-a\b');nodeBLabel=($text -match '\bnode-b\b');
+            unknownOption=($text -match '(?i)unknown option|unrecognized option');
+            realmFilenameMismatch=($text -match '(?is)realm name.*(match|JSON file)');
+            bindConflict=($text -match '(?i)address already in use|failed to bind');
+            databaseAuthenticationFailure=($text -match '(?i)password authentication failed');
+            databaseConnectionFailure=($text -match '(?i)could not acquire connection|connection refused|failed to obtain JDBC');
+            tlsMaterialFailure=($text -match '(?i)failed to load.*(key|certificate)|keystore.*not found')}
+    }
+    Save (Child 'keycloak-upgrade-control-diagnostic.json') @{formatVersion=1;action='Prove';stage=$stage;state=$state;
+        failure=$script:proofFailure;controlExitCode=$script:controlExit;nodes=$observations}
+}
+function Refuse([string]$code,[string]$message){$script:proofFailure=$code;throw $message}
+function TwoMembers([string]$text){
+    foreach($view in [regex]::Matches($text,'\(2\)\s*\[([^\]\r\n]{1,180})\]')){
+        # Attribute annotations can themselves contain commas. Parse the full
+        # pair instead of splitting its nested annotations into extra members.
+        $pair=[regex]::Match($view.Groups[1].Value,'^\s*(?<first>node-[ab])(?:\([^()\r\n]{1,64}\))?\s*,\s*(?<second>node-[ab])(?:\([^()\r\n]{1,64}\))?\s*$')
+        if($pair.Success -and $pair.Groups['first'].Value -cne $pair.Groups['second'].Value){return $true}
+    }
+    return $false
 }
 function PortOpen([int]$port){
     $c=[Net.Sockets.TcpClient]::new();try{$c.ConnectAsync('127.0.0.1',$port).WaitAsync([TimeSpan]::FromSeconds(1)).GetAwaiter().GetResult();return $true}catch{return $false}finally{$c.Dispose()}
@@ -67,7 +111,7 @@ function Launch($entry,[string]$command='Start',[string]$version=$entry.version)
     }
     # Check includes a cold build of the distinct target distribution. Bound the
     # complete control process separately from verified HTTPS readiness.
-    try{if(!$p.WaitForExit(180000)){$p.Kill($true);throw 'Upgrade compatibility command exceeded its deadline.'};if($p.ExitCode -ne 0){throw ('Keycloak upgrade compatibility command refused; exit '+$p.ExitCode)}}finally{$p.Dispose()}
+    try{if(!$p.WaitForExit(180000)){$p.Kill($true);Refuse 'CompatibilityDeadline' 'Upgrade compatibility command exceeded its deadline.'};$script:controlExit=$p.ExitCode;if($p.ExitCode -ne 0){Refuse 'CompatibilityRejected' ('Keycloak upgrade compatibility command refused; exit '+$p.ExitCode)}}finally{$p.Dispose()}
 }
 if($Action -eq 'Prepare'){
     if(Test-Path -LiteralPath $scope){throw 'A fresh upgrade output directory is required; no old data is replaced or deleted.'}
@@ -185,17 +229,17 @@ function Ready([int]$index){
     # two-CPU laboratory limit; its build is distinct from HTTPS readiness.
     $until=[DateTimeOffset]::UtcNow.AddMinutes(4)
     do{
-        if(!(ExactProcess $m.nodes[$index])){throw 'Owned upgrade node exited before verified TLS readiness.'}
+        if(!(ExactProcess $m.nodes[$index])){Refuse 'NodeExited' 'Owned upgrade node exited before verified TLS readiness.'}
         try{
             $response=$http.GetAsync(('https://localhost:'+$m.nodes[$index].httpsPort+'/realms/kafdeck-g2/.well-known/openid-configuration')).GetAwaiter().GetResult()
             try{if([int]$response.StatusCode -eq 200){$discovery=$response.Content.ReadAsStringAsync().GetAwaiter().GetResult()|ConvertFrom-Json;if($discovery.issuer -cne $m.issuer){throw 'Canonical issuer mismatch.'};return}}finally{$response.Dispose()}
         }catch{}
         Start-Sleep -Milliseconds 250
     }while([DateTimeOffset]::UtcNow -lt $until)
-    throw 'Owned upgrade node failed normal verified TLS discovery readiness.'
+    Refuse 'ReadinessDeadline' 'Owned upgrade node failed normal verified TLS discovery readiness.'
 }
-function ConsumedOnBoth($assertion){foreach($index in @(0,1)){if((Exchange $index $assertion).status -ne 400){throw 'Consumed time-valid assertion replay was accepted across node transition.'}}}
-function Fresh([int]$index){$a=Assertion;$r=Exchange $index $a;if($r.status -ne 200){throw 'Fresh genuine client assertion failed.'};return @{assertion=$a;token=$r.token}}
+function ConsumedOnBoth($assertion){foreach($index in @(0,1)){if((Exchange $index $assertion).status -ne 400){Refuse 'ReplayAccepted' 'Consumed time-valid assertion replay was accepted across node transition.'}}}
+function Fresh([int]$index){$a=Assertion;$r=Exchange $index $a;if($r.status -ne 200){Refuse 'FreshOAuthRejected' 'Fresh genuine client assertion failed.'};return @{assertion=$a;token=$r.token}}
 function PairedFirstUse {
     $a=Assertion;$tasks=@();$contents=@();$success=0;$denied=0;$winner=$null
     try{
@@ -223,40 +267,31 @@ function Membership {
             $log=Child ($entry.name+'-Start-'+$entry.version+'.log');$text=if(Test-Path -LiteralPath $log){PrivateLog $log}else{''}
             # JGroups annotates logical names with bounded address attributes,
             # e.g. node-a(...). Require both exact configured logical names.
-            $views=[regex]::Matches($text,'\(2\)\s*\[([^\]\r\n]{1,160})\]')
-            $observed=$false
-            foreach($view in $views){
-                $names=@();$valid=$true
-                foreach($member in ($view.Groups[1].Value -split ',')){
-                    $name=[regex]::Match($member.Trim(),'^node-(?<node>[ab])(?:\([^(),\r\n]{1,64}\))?$')
-                    if(!$name.Success){$valid=$false;break};$names+=$name.Groups['node'].Value
-                }
-                if($valid -and $names.Count -eq 2 -and $names -contains 'a' -and $names -contains 'b'){$observed=$true;break}
-            }
-            if(!$observed){$joined=$false}
+            if(!(TwoMembers $text)){$joined=$false}
         }
         if($joined){return};Start-Sleep -Milliseconds 200
     }while([DateTimeOffset]::UtcNow -lt $until)
-    throw 'Actual two-node distributed cache membership was not observed.'
+    Refuse 'MembershipMissing' 'Actual two-node distributed cache membership was not observed.'
 }
 $proofStage='OldNodes'
 try{
+    Diagnostic $proofStage 'Running'
     foreach($index in @(0,1)){& $PSCommandPath -Action Start -Node $m.nodes[$index].name -OutputDirectory $scope|Out-Null;Ready $index}
-    $proofStage='OldMembership';Membership
+    $proofStage='OldMembership';Diagnostic $proofStage 'Running';Membership
     $baseline=Fresh 0;ConsumedOnBoth $baseline.assertion
-    $proofStage='SameVersionBounce';StopNode $m.nodes[0];$continuity=Fresh 1;Launch $m.nodes[0];Ready 0;Membership;ConsumedOnBoth $baseline.assertion
+    $proofStage='SameVersionBounce';Diagnostic $proofStage 'Running';StopNode $m.nodes[0];$continuity=Fresh 1;Launch $m.nodes[0];Ready 0;Membership;ConsumedOnBoth $baseline.assertion
     foreach($entry in $m.nodes){$text=PrivateLog (Child ($entry.name+'-Start-26.8.0.log'));if($text -notmatch 'Keycloak 26\.8\.0 .*started'){throw 'Actual old server version startup evidence is missing.'}}
     Write-Output 'UPGRADE_PROOF oldOld=true; sameVersionBounceReplayRejected=true'
-    $proofStage='UpgradeA';$beforeA=Fresh 0
+    $proofStage='UpgradeA';Diagnostic $proofStage 'Running';$beforeA=Fresh 0
     & $PSCommandPath -Action Upgrade -Node node-a -OutputDirectory $scope|Out-Null
     $gapA=Fresh 1;Ready 0;$m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json;Membership;ConsumedOnBoth $beforeA.assertion
-    $proofStage='MixedReplay';$mixed=Fresh 0;ConsumedOnBoth $mixed.assertion
+    $proofStage='MixedReplay';Diagnostic $proofStage 'Running';$mixed=Fresh 0;ConsumedOnBoth $mixed.assertion
     $mixedWinner=PairedFirstUse
     Write-Output 'UPGRADE_PROOF mixedVersions=26.8.1,26.8.0; compatibilityExit=0; replayRejected=true; livePeerIssuedToken=true'
-    $proofStage='UpgradeB';$beforeB=Fresh 1
+    $proofStage='UpgradeB';Diagnostic $proofStage 'Running';$beforeB=Fresh 1
     & $PSCommandPath -Action Upgrade -Node node-b -OutputDirectory $scope|Out-Null
     $gapB=Fresh 0;Ready 1;$m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json;Membership;ConsumedOnBoth $beforeB.assertion
-    $proofStage='NewReplay';$final=Fresh 1;ConsumedOnBoth $final.assertion
+    $proofStage='NewReplay';Diagnostic $proofStage 'Running';$final=Fresh 1;ConsumedOnBoth $final.assertion
     $finalWinner=PairedFirstUse
     foreach($entry in $m.nodes){$text=PrivateLog (Child ($entry.name+'-Start-'+$entry.version+'.log'));if($text -notmatch 'Keycloak 26\.8\.1 .*started'){throw 'Actual new server version startup evidence is missing.'}}
     Private (Child 'final-access-token-private.txt') $finalWinner
@@ -274,7 +309,14 @@ try{
         requestScheduling='both node requests issued before awaiting either response';assertionLifetimeSeconds=300;rawCredentialsInEvidence=$false;
         automaticRollback=$false;operatorOrLoadBalancerTopologyClaimed=$false;productionVerifierChecked=$false}
     Write-Output 'UPGRADE_PROOF allNew=26.8.1,26.8.1; timeValidReplayRejected=true; actualPatchUpgrade=true; safeEvidenceWritten=true'
+    Diagnostic 'Complete' 'Succeeded'
 }catch{
+    # Nested control actions have their own PowerShell script scope. Transfer
+    # only our exact closed failure literals, never exception text, to evidence.
+    $compatibilityExit=[regex]::Match($_.Exception.Message,'^Keycloak upgrade compatibility command refused; exit (-?\d{1,10})$')
+    if($compatibilityExit.Success){$script:proofFailure='CompatibilityRejected';$script:controlExit=[int]::Parse($compatibilityExit.Groups[1].Value,[Globalization.CultureInfo]::InvariantCulture)}
+    elseif($_.Exception.Message -ceq 'Upgrade compatibility command exceeded its deadline.'){$script:proofFailure='CompatibilityDeadline'}
+    Diagnostic $proofStage 'Failed'
     Write-Output ('UPGRADE_PROOF failedStage='+$proofStage+'; exceptionType='+$_.Exception.GetType().Name)
     foreach($entry in $m.nodes){try{StopNode $entry}catch{}}
     throw 'Actual Keycloak patch upgrade proof refused; inspect retained private laboratory diagnostics.'

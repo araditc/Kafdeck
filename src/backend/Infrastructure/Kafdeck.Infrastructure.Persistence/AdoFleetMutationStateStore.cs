@@ -441,7 +441,11 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             FROM kafdeck_fleet_progress AS progress
             INNER JOIN kafdeck_mutation_operations AS parent
               ON parent.operation_id = progress.operation_id
-            WHERE progress.phase IN (1, 2, 3, 4, 5)
+            WHERE (progress.phase IN (1, 2, 3, 4, 5)
+                OR (progress.phase = 8 AND EXISTS (
+                    SELECT 1 FROM kafdeck_fleet_conflict_obligations AS obligation
+                    WHERE obligation.operation_id = progress.operation_id
+                      AND obligation.blocks_conflicting_dispatch = 1)))
               AND parent.state = @parent_state
             ORDER BY progress.updated_at_utc, progress.operation_id
             """;
@@ -503,7 +507,11 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             FROM kafdeck_fleet_progress AS progress
             INNER JOIN kafdeck_mutation_operations AS parent
               ON parent.operation_id = progress.operation_id
-            WHERE progress.phase IN (1, 2, 3, 4, 5)
+            WHERE (progress.phase IN (1, 2, 3, 4, 5)
+                OR (progress.phase = 8 AND EXISTS (
+                    SELECT 1 FROM kafdeck_fleet_conflict_obligations AS obligation
+                    WHERE obligation.operation_id = progress.operation_id
+                      AND obligation.blocks_conflicting_dispatch = 1)))
               AND parent.state = @parent_state
             ORDER BY progress.updated_at_utc, progress.operation_id
             """;

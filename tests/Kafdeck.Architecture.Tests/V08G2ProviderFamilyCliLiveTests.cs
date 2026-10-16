@@ -36,7 +36,7 @@ public sealed class V08G2ProviderFamilyCliLiveTests
         await using var lab=new G2HumanCliLaboratory(Path.Combine(directory,"api"));
         var actions=new[]{"RecordProduce","RecordsPurge","ConsumerOffsetAlter","ConsumerDelete","SchemaCreate","SchemaAlter","SchemaDelete","ConnectCreate","ConnectAlter","ConnectDelete","ConnectRestart","ConnectAutoRestartManage","DataJobPlan","DataJobExecute","DataGeneratorPlan","DataGeneratorExecute","MutationReconcile"};
         lab.RegisterHumans(actions,["SystemRead","ClusterRead","TopicRead","RecordRead","RecordExport","ConsumerRead","SchemaRead","ConnectRead"],actions,"permitted","*");
-        foreach(var grant in lab.Settings.Where(item=>item.Key.EndsWith(":Action",StringComparison.Ordinal)&&item.Value=="ClusterRead").ToArray())
+        foreach(var grant in lab.Settings.Where(item=>item.Key.EndsWith(":Action",StringComparison.Ordinal)&&item.Value is "ClusterRead" or "SchemaRead" or "ConnectRead").ToArray())
             lab.Settings.Remove(grant.Key[..^"Action".Length]+"ResourcePatterns:0");
         var settings=lab.Settings; var broker=Environment.GetEnvironmentVariable("KAFDECK_G2_KAFKA_BOOTSTRAP")!;
         var registry=Environment.GetEnvironmentVariable("KAFDECK_G2_SCHEMA_REGISTRY_URL")!;

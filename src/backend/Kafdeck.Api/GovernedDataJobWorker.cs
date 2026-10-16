@@ -226,6 +226,11 @@ public sealed class GovernedDataJobWorker
         }
 
         var current = loaded.Progress;
+        if (current.Phase == FleetProgressPhase.Completed)
+        {
+            await CompletedJobConflictResolution.ResolveAsync(_fleet, operation, plan, current, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+            return;
+        }
         if (current.Transfer?.PendingBatch?.State == FleetTransferBatchState.DispatchStarted) return;
         if (!IsRunnable(current.Phase))
         {
@@ -437,6 +442,7 @@ public sealed class GovernedDataJobWorker
                     if (current.Phase ==
                         FleetProgressPhase.Completed)
                     {
+                        await CompletedJobConflictResolution.ResolveAsync(_fleet, operation, plan, current, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
                         return;
                     }
 

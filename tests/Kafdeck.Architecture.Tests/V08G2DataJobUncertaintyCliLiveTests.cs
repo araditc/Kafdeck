@@ -87,7 +87,15 @@ public sealed class V08G2DataJobUncertaintyCliLiveTests
                     budget=new{maxBatchRecords=1,maxTotalRecords=1,maxDurationSeconds=120}};
             var family=generator?"generator":"data-jobs";var planCommand=generator?"preview":"forward-preview";
             var parent=await PreviewAsync(lab,[family,planCommand],body,token);
-            Assert.Equal(CliApplication.Success,await lab.RunAsync(token,family,"start",parent.Id.ToString("D")));
+            var startExit=await lab.RunAsync(token,family,"start",parent.Id.ToString("D"));
+            if(startExit!=CliApplication.Success)
+            {
+                var failed=await operations.GetAsync(parent.Id,token);
+                var code=failed?.ResultCode;
+                var safeCode=code is not null&&code.Length<=128&&code.All(c=>c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_')?code:"none";
+                Console.WriteLine($"G2_DATA_START exit={startExit}; state={failed?.State}; resultCode={safeCode}");
+            }
+            Assert.Equal(CliApplication.Success,startExit);
             Assert.Equal(MutationOperationState.AppliedVerified,(await operations.GetAsync(parent.Id,token))!.State);
             await Task.Delay(300,token);Assert.Equal(0,Watermarks(destination,targets[scenario]).High.Value);
             await using(var child=await WorkerAsync(directory,lab.ConfigurationFile,parent.Id,generator,true,token))

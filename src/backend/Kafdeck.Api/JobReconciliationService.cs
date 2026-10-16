@@ -21,12 +21,14 @@ public sealed class JobReconciliationService(IMutationOperationRepository operat
     public async Task<IResult> PreviewAsync(Guid parentId, MutationOperationKind expectedKind, JobReconciliationPreviewRequest request,
         HttpContext context, MutationAdmissionService admission, CancellationToken token)
     {
+        var parent = await operations.GetAsync(parentId, token).ConfigureAwait(false);
+        if (parent is null) return Problem(404, "reconciliation_parent_not_found");
+        if (!OwnerAllowed(context.User, parent)) return Problem(403, "reconciliation_owner_denied");
+        if (parent.OperationKind != expectedKind) return Problem(403, "reconciliation_parent_kind_denied");
+        // Caller fields validate the requested evidence, never the authenticated authority.
         if (request.BatchId == Guid.Empty || request.ExpectedProgressVersion < 0 ||
             !JobReconciliationPlan.IsHash(request.ProofReferenceSha256) || !JobReconciliationPlan.IsHash(request.FencedWorkerEvidenceSha256))
             return Problem(400, "reconciliation_proof_invalid");
-        var parent = await operations.GetAsync(parentId, token).ConfigureAwait(false);
-        if (parent is null) return Problem(404, "reconciliation_parent_not_found");
-        if (parent.OperationKind != expectedKind || !OwnerAllowed(context.User, parent)) return Problem(403, "reconciliation_owner_denied");
         var progress = await fleet.GetProgressAsync(parentId, token).ConfigureAwait(false);
         if (progress is null) return Problem(409, "reconciliation_progress_unavailable");
         var before = JobReconciliationPlan.UnresolvedBoundary(progress, request.BatchId);
@@ -44,9 +46,10 @@ public sealed class JobReconciliationService(IMutationOperationRepository operat
                 before, observation.Boundary!, request.ProofReferenceSha256, request.FencedWorkerEvidenceSha256).Validate();
         }
         catch (MutationStateException) { return Problem(409, "reconciliation_boundary_invalid"); }
-        if (!plan.Matches(parent, progress, _time.GetUtcNow()) || !OwnerAllowed(context.User, parent) ||
-            authorization.AuthorizeProofTargets(context.User, plan.Targets(parent)) != KafdeckAuthorizationOutcome.Allowed)
+        if (!OwnerAllowed(context.User, parent)) return Problem(403, "reconciliation_owner_denied");
+        if (authorization.AuthorizeProofTargets(context.User, plan.Targets(parent)) != KafdeckAuthorizationOutcome.Allowed)
             return Problem(403, "reconciliation_authority_denied");
+        if (!plan.Matches(parent, progress, _time.GetUtcNow())) return Problem(409, "reconciliation_progress_changed");
         return await KafdeckTopicMutationEndpoints.AdmitAsync(context, admission, plan.Intent(parent),
             MutationRiskClassifier.Classify(new(MutationOperationKind.FleetUncertaintyDisposition)), token,
             id => context.User.Identity is NonBrowserReadIdentity ? $"/api/v1/automation/mutations/{id:D}/status" : $"/api/v1/mutations/{id:D}")
