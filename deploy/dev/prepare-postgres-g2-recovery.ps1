@@ -12,6 +12,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $lab = [IO.Path]::GetFullPath($OutputDirectory)
 $manifestFile = Join-Path $lab 'lab.json'
+$script:controlStage = 'RuntimeDiscovery'
+$script:controlNativeExit = $null
+$script:controlDiagnosticWritesAllowed = $false
+trap {
+    # Never export native stderr, SQL, exception text or private filesystem paths.
+    # Cleanup has its own action file and cannot erase a failed Prepare stage.
+    try { SaveControlDiagnostic 'Failed' } catch { }
+    [Console]::Error.WriteLine("G2_RECOVERY_DIAGNOSTIC action=$Action;stage=$script:controlStage;state=Failed")
+    exit 1
+}
 $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
 if (@($PrimaryPort,$StandbyPort,$RestorePort | Sort-Object -Unique).Count -ne 3) { throw 'Each laboratory endpoint requires its own port.' }
 if ([string]::IsNullOrWhiteSpace($BinDirectory)) {
@@ -29,7 +39,12 @@ function Tool([string]$Name) {
     if (!(Test-Path -LiteralPath $path)) { throw "Missing PostgreSQL tool: $Name" }
     return $path
 }
-function NativeOk([string]$Label) { if ($LASTEXITCODE -ne 0) { throw "$Label failed; inspect ignored laboratory logs (exit $LASTEXITCODE)." } }
+function NativeOk([string]$Label) {
+    if ($LASTEXITCODE -ne 0) {
+        $script:controlNativeExit = [int]$LASTEXITCODE
+        throw "$Label failed; inspect ignored laboratory logs (exit $LASTEXITCODE)."
+    }
+}
 function Child([string]$Relative) {
     $path = [IO.Path]::GetFullPath((Join-Path $lab $Relative))
     $prefix = $lab.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
@@ -40,6 +55,21 @@ function SaveJson([string]$Path,$Value) {
     $temporary = $Path + '.tmp-' + [Guid]::NewGuid().ToString('N')
     [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
     [IO.File]::Move($temporary,$Path,$true)
+}
+function SaveControlDiagnostic([ValidateSet('Running','Failed','Succeeded')][string]$State) {
+    if (!$script:controlDiagnosticWritesAllowed -or !(Test-Path -LiteralPath $lab -PathType Container)) { return }
+    SaveJson (Child ('control-' + $Action.ToLowerInvariant() + '-diagnostic.json')) @{
+        formatVersion=1; action=$Action; stage=$script:controlStage; state=$State
+        nativeExitCode=$script:controlNativeExit; observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O')
+    }
+}
+function SetControlStage([ValidateSet('RuntimeDiscovery','PreparePorts','PrepareCredentials','PrimaryInit','PrimaryConfig',
+        'PrimaryStart','ReplicationBootstrap','StandbySeed','StandbyConfig','StandbyStart','ReplicationStreaming',
+        'ReplicationSynchronous','PrepareComplete','ManifestValidation','ActionStart','ActionSync','ActionBackup',
+        'ActionFailover','ActionRestore','ActionStatus','ActionStop')][string]$Stage) {
+    $script:controlStage = $Stage
+    $script:controlNativeExit = $null
+    SaveControlDiagnostic 'Running'
 }
 function PrivateFile([string]$Path,[string]$Value) {
     [IO.File]::WriteAllText($Path,$Value,[Text.UTF8Encoding]::new($false))
@@ -138,7 +168,10 @@ function StartNode($Endpoint) {
     $controlProcess = Start-Process @launch
     try {
         if (!$controlProcess.WaitForExit(45000)) { throw 'Exact laboratory startup exceeded its finite control-process deadline.' }
-        if ($controlProcess.ExitCode -ne 0) { throw 'Exact laboratory startup failed; inspect ignored node/control logs.' }
+        if ($controlProcess.ExitCode -ne 0) {
+            $script:controlNativeExit = [int]$controlProcess.ExitCode
+            throw 'Exact laboratory startup failed; inspect ignored node/control logs.'
+        }
     } finally { $controlProcess.Dispose() }
 }
 function StopNode($Endpoint,[string]$Mode='fast') {
@@ -179,12 +212,15 @@ function BackupFrom([int]$Port,[string]$Directory,[bool]$StandbySeed) {
 }
 
 if ($Action -eq 'Prepare') {
+    SetControlStage 'PreparePorts'
     if (Test-Path -LiteralPath $lab) { throw 'Select a fresh OutputDirectory. Existing laboratories are never reset or deleted.' }
     foreach ($port in @($PrimaryPort,$StandbyPort,$RestorePort)) { if (PortListening $port) { throw "Laboratory port $port is already occupied." } }
     New-Item -ItemType Directory -Path $lab -Force | Out-Null
     if (!$IsWindows) { & chmod 700 $lab; NativeOk 'Private laboratory directory permissions' }
+    $script:controlDiagnosticWritesAllowed = $true
     $version = (& (Tool 'postgres') --version | Out-String).Trim()
     if ($version -notmatch 'PostgreSQL\) (1[6-9])\.') { throw 'This laboratory requires existing PostgreSQL16–19 tools of one identical version.' }
+    SetControlStage 'PrepareCredentials'
     $metadata = [ordered]@{
         formatVersion=1; postgresVersion=$version; binDirectory=$bin; bindAddress='127.0.0.1'; state='Preparing'
         adminPasswordFile=(Child 'admin-password.txt'); replicationPasswordFile=(Child 'replication-password.txt')
@@ -201,11 +237,16 @@ if ($Action -eq 'Prepare') {
         PrivateFile $endpoint.connectionStringFile "Host=127.0.0.1;Port=$($endpoint.port);Username=g2_recovery_owner;Password=$([IO.File]::ReadAllText($metadata.adminPasswordFile));Database=postgres;Pooling=false;Timeout=5;Command Timeout=15"
     }
     SaveJson $manifestFile $metadata
+    SetControlStage 'PrimaryInit'
     & (Tool 'initdb') -D $metadata.primary.dataDirectory -U g2_recovery_owner "--pwfile=$($metadata.adminPasswordFile)" --encoding=UTF8 --locale=C --auth-local=scram-sha-256 --auth-host=scram-sha-256 *> (Child 'initdb.log')
     NativeOk 'Fresh isolated SCRAM primary initialization'
+    SetControlStage 'PrimaryConfig'
     [IO.File]::AppendAllText((Join-Path $metadata.primary.dataDirectory 'postgresql.conf'), @"
 
 listen_addresses = '127.0.0.1'
+# All laboratory clients use explicit loopback TCP. Distro PostgreSQL binaries
+# may otherwise select /var/run/postgresql, which a nonroot CI user cannot own.
+unix_socket_directories = ''
 port = $PrimaryPort
 wal_level = replica
 max_wal_senders = 6
@@ -221,7 +262,9 @@ shared_buffers = '32MB'
 statement_timeout = '20s'
 "@)
     [IO.File]::WriteAllText((Join-Path $metadata.primary.dataDirectory 'pg_hba.conf'), "host all all 127.0.0.1/32 scram-sha-256`nhost replication g2_replicator 127.0.0.1/32 scram-sha-256`n")
+    SetControlStage 'PrimaryStart'
     StartNode $metadata.primary
+    SetControlStage 'ReplicationBootstrap'
     $previous = $env:PGPASSWORD
     try {
         $env:PGPASSWORD = [IO.File]::ReadAllText($metadata.adminPasswordFile)
@@ -229,7 +272,9 @@ statement_timeout = '20s'
             & (Tool 'psql') -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p $PrimaryPort -U g2_recovery_owner -d postgres *> (Child 'bootstrap.log')
         NativeOk 'Dedicated replication role and committed bootstrap marker'
     } finally { $env:PGPASSWORD=$previous }
+    SetControlStage 'StandbySeed'
     BackupFrom $PrimaryPort $metadata.standby.dataDirectory $true
+    SetControlStage 'StandbyConfig'
     [IO.File]::AppendAllText((Join-Path $metadata.standby.dataDirectory 'postgresql.auto.conf'), @"
 
 port = $StandbyPort
@@ -237,7 +282,9 @@ synchronous_standby_names = ''
 primary_conninfo = 'host=127.0.0.1 port=$PrimaryPort user=g2_replicator application_name=g2_standby passfile=''$(PgPath $metadata.replicationPassfile)'' connect_timeout=5 sslmode=disable'
 primary_slot_name = 'g2_standby'
 "@)
+    SetControlStage 'StandbyStart'
     StartNode $metadata.standby
+    SetControlStage 'ReplicationStreaming'
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
     do {
         $streaming = Query $PrimaryPort "SELECT count(*) FROM pg_stat_replication WHERE application_name='g2_standby' AND state='streaming'"
@@ -245,6 +292,7 @@ primary_slot_name = 'g2_standby'
         Start-Sleep -Milliseconds 100
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
     if ($streaming -ne '1') { throw 'The physical standby never entered streaming state.' }
+    SetControlStage 'ReplicationSynchronous'
     Query $PrimaryPort "ALTER SYSTEM SET synchronous_standby_names='FIRST 1 (g2_standby)'" | Out-Null
     Query $PrimaryPort 'SELECT pg_reload_conf()' | Out-Null
     Query $PrimaryPort "INSERT INTO g2_recovery_lab_probe VALUES ('synchronous-commit')" | Out-Null
@@ -256,14 +304,19 @@ primary_slot_name = 'g2_standby'
     $metadata.preparedAtUtc=[DateTimeOffset]::UtcNow.ToString('O')
     SaveJson $manifestFile $metadata
     SaveJson (Child 'replication-evidence.json') @{observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O');postgresVersion=$version;physicalBasebackupVerified=$true;streaming=$true;synchronousCommit='remote_apply';syncState='sync';barrierLsn=$barrier;standbyReplayedBarrier=$true;primaryPort=$PrimaryPort;standbyPort=$StandbyPort}
+    SetControlStage 'PrepareComplete'
+    SaveControlDiagnostic 'Succeeded'
     Write-Output 'Prepared a fresh physical synchronous primary/standby pair. Private connection references are in lab.json.'
     exit
 }
 
+SetControlStage 'ManifestValidation'
 if (!(Test-Path -LiteralPath $manifestFile)) { throw 'Prepare a fresh recovery laboratory first.' }
 $metadata = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
 if (![string]::Equals([IO.Path]::GetFullPath($metadata.binDirectory),$bin,$pathComparison)) { throw 'Use the exact binary directory recorded by this laboratory.' }
 ValidateManifest
+$script:controlDiagnosticWritesAllowed = $true
+SetControlStage ('Action' + $Action)
 switch ($Action) {
     'Start' {
         if ($metadata.oldPrimaryFenced) { StartNode $metadata.standby }
@@ -335,3 +388,5 @@ switch ($Action) {
         Write-Output 'Stopped only this laboratory; all data, backups and fencing evidence are retained.'
     }
 }
+SaveControlDiagnostic 'Succeeded'
+exit 0

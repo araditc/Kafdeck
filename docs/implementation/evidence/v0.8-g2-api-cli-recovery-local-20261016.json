@@ -1,5 +1,5 @@
 {
-  "observedAtUtc": "2026-10-16T08:49:32.816654+00:00",
+  "observedAtUtc": "2026-10-16T12:19:32.816654+03:30",
   "baselineMain": "d762bd4c41e11567afe9ad4996c97f41fd5997f6",
   "acceptance": "Local branch evidence only. Full G2, production HA and safe restore resumption remain open.",
   "build": {
@@ -46,7 +46,7 @@
       "path": "artifacts/g2-next/topic-lifecycle-rerun/topic-cli-lifecycle-evidence.json",
       "sha256": "69616653a21f1937f646325f7338ab7a0c50f732c18fab29374c2f865a888bac",
       "observations": {
-        "observedAtUtc": "2026-10-16T08:40:09.8155548+00:00",
+        "observedAtUtc": "2026-10-16T12:10:09.8155548+03:30",
         "persistence": "SQLite",
         "flow": "real Keycloak human PKCE -> shipped CLI/API -> real Kafka TopicCreate/TopicAlter/partition increase -> cancelled alternate configuration -> independently rejected CRITICAL delete -> durable repository reopen",
         "alterationState": "AppliedVerified",
@@ -76,7 +76,7 @@
       "path": "artifacts/g2-next/topic-lifecycle-rerun/postgres-topic-cli-lifecycle-evidence.json",
       "sha256": "ff3ee47dee00d3aac52dc369eeb37f063591ace81fa45f0bfe38c521df7cd91b",
       "observations": {
-        "observedAtUtc": "2026-10-16T08:37:47.029019+00:00",
+        "observedAtUtc": "2026-10-16T12:07:47.029019+03:30",
         "persistence": "PostgreSQL",
         "flow": "real Keycloak human PKCE -> shipped CLI/API -> real Kafka TopicCreate/TopicAlter/partition increase -> cancelled alternate configuration -> independently rejected CRITICAL delete -> durable repository reopen",
         "alterationState": "AppliedVerified",
@@ -174,5 +174,104 @@
     "Four admitted topic kinds only; remaining 26 mutation kinds and full read/UI/provider/identity lifecycle parity remain required.",
     "Restore refuses stale generation; no governed offline reconciliation, epoch advancement or safe resumption implemented.",
     "Production notifier HA, failback/upgrade, tenant-specific external SaaS acceptance and full G2 N1-N5/A1-A6 exit remain open."
-  ]
+  ],
+  "laboratoryPortability": {
+    "formatVersion": 1,
+    "observedAtUtc": "2026-10-16T12:28:05.2839856+03:30",
+    "runtime": "PostgreSQL 17.11 on Windows",
+    "explicitUnixSocketSettingEmpty": true,
+    "actualFreshSynchronousPrimaryStandbyPrepared": true,
+    "controlPrepareStage": "PrepareComplete",
+    "controlPrepareState": "Succeeded",
+    "validationPorts": [
+      15439,
+      15440,
+      15441
+    ],
+    "allValidationNodesStopped": true,
+    "existingPrepareRefusedWithoutDiagnosticMutation": true,
+    "malformedManifestRefusedWithoutAnyProbeFileMutation": true,
+    "scriptPowerShellSyntaxValid": true,
+    "workflowYamlValid": true,
+    "workflowJobCount": 5,
+    "workflowBashSyntaxValidCount": 15,
+    "workflowPowerShellSyntaxValidCount": 3,
+    "nativeLogsExcluded": true,
+    "linuxRuntimeExecutedLocally": false,
+    "linuxFailureCauseConfirmed": false,
+    "proposedLinuxFailureCause": "Distro Unix-domain socket directory inaccessible to nonroot runner",
+    "scriptSha256": "0a533d2991201c325422893e62abc1c11786a16e8f60c244176534de0cc0a714",
+    "workflowSha256": "d9ff72deff9b86c3f59d3df615a4efebc29f235a1d4d1e5dc3ccdcd3ff92f454",
+    "finalWindowsRecoveryRerun": {
+      "trx": "artifacts/g2-next/recovery-tcp-only/recovery-live.trx",
+      "trxSha256": "26cdc4fb110a541bd45d7bcf957577728b7c4b0678296d40276b726a72114ed6",
+      "skipped": 0,
+      "failed": 0,
+      "passed": 18
+    },
+    "proofs": {
+      "postgres-stale-backup-quarantine-evidence.json": {
+        "observations": {
+          "actualVerifiedPhysicalBackupRestore": true,
+          "originalProviderAccepted": true,
+          "backupState": "Pending",
+          "originalLaterState": "Delivered",
+          "restoredState": "Pending",
+          "restoredAttempts": 0,
+          "externalAnchorOutsideDatabaseBackup": true,
+          "oldConfigurationHashRefused": true,
+          "quarantinedGenerationRefused": true,
+          "activeNewHashStillRefusedByDatabaseEpoch": true,
+          "directProductionGateVerifiedBeforeStartup": true,
+          "databaseEpochUnchangedByReads": true,
+          "refusedReleaseSenderProcesses": 3,
+          "physicalPosts": 1,
+          "automaticResends": 0,
+          "safeResumeImplemented": false,
+          "offlineReconciliationAndAdvancementAccepted": false,
+          "productionHaAdmission": false
+        },
+        "sha256": "4676af52beeba5137e16c6faf073ba9e503b0d8c1adda9ef86148ce7ebfa0c53"
+      },
+      "postgres-crash-after-post-failover-evidence.json": {
+        "observations": {
+          "actualPhysicalTls": true,
+          "independentReleaseSenderProcess": true,
+          "abruptProcessKill": true,
+          "inFlightClaimReadOnPhysicalStandbyBeforeKill": true,
+          "completePostReadBeforeKill": true,
+          "oldPrimaryPhysicallyFenced": true,
+          "physicalStandbyPromoted": true,
+          "syntheticClockAging": false,
+          "realDatabaseStaleMilliseconds": 10540,
+          "physicalPosts": 1,
+          "acceptedTlsConnections": 1,
+          "attempts": 1,
+          "terminalState": "UnknownExternalEffect",
+          "automaticResends": 0,
+          "durableReopen": true,
+          "productionHaAdmission": false,
+          "coversStaleBackupRestore": false
+        },
+        "sha256": "943ce9ceffaf781a4d00edeb350d05053c92c7bbcba2ddc01c7618ea9c853470"
+      },
+      "postgres-before-claim-failover-evidence.json": {
+        "observations": {
+          "actualPhysicalTls": true,
+          "independentReleaseSenderProcess": true,
+          "failoverBeforeClaim": true,
+          "replicatedPendingAttempts": 0,
+          "oldPrimaryPhysicallyFenced": true,
+          "physicalStandbyPromoted": true,
+          "physicalPosts": 1,
+          "attempts": 1,
+          "terminalState": "Delivered",
+          "durableReopen": true,
+          "automaticResends": 0,
+          "productionHaAdmission": false
+        },
+        "sha256": "5450bf17f16019b1adcc1b6467a356352ab080c93ba858ab80cf49bbf13fb817"
+      }
+    }
+  }
 }
