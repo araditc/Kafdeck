@@ -8,7 +8,7 @@ using Kafdeck.Core.Security;
 
 namespace Kafdeck.Api;
 
-/// <summary>Explicitly opt-in, read-only bearer admission. It cannot create an operator session.</summary>
+/// <summary>Default-off registered bearer trust with separate narrow topic effect and approval gates. No operator session.</summary>
 public sealed class NonBrowserReadOptions
 {
     public bool Enabled { get; set; }
@@ -58,11 +58,11 @@ public sealed class NonBrowserReadRegistry
         var proposals = registrations.Select(r => new NonBrowserServicePrincipalProposal(
             r.Id, r.OwnerId, options.Issuer, options.ApiAudience, r.Subject, r.ClientId, r.ReadActions)).ToArray();
         _ = new NonBrowserPrincipalProposalSet(proposals);
-        if (registrations.Any(r => r.MutationActions.Count > 2 || r.MutationActions.Distinct().Count() != r.MutationActions.Count ||
-                r.MutationActions.Any(action => action is not (AuthorizationAction.TopicCreate or AuthorizationAction.TopicDelete))) ||
+        if (registrations.Any(r => r.MutationActions.Count > 3 || r.MutationActions.Distinct().Count() != r.MutationActions.Count ||
+                r.MutationActions.Any(action => !BearerTopicMutationScope.IsAction(action))) ||
             options.Registrations.Any(r => r.ApprovalActions.Count != 0) ||
             options.HumanRegistrations.Any(r => r.ApprovalActions.Count > 1 || r.ApprovalActions.Any(a => a != AuthorizationAction.TopicDelete)))
-            throw new InvalidOperationException("Only explicit TopicCreate/TopicDelete effects and human TopicDelete approvals are admitted.");
+            throw new InvalidOperationException("Only explicit topic mutation actions and human TopicDelete approvals are admitted.");
         return options;
     }
 
@@ -112,11 +112,16 @@ public sealed class NonBrowserReadRegistry
                 Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind) is null ||
                 identity.Evidence.ExpiresAtUtc <= DateTimeOffset.UtcNow) return false;
             var registrations = identity.Kind == NonBrowserPrincipalKind.Human ? current.HumanRegistrations : current.Registrations;
-            return action is AuthorizationAction.TopicCreate or AuthorizationAction.TopicDelete &&
+            return BearerTopicMutationScope.IsAction(action) &&
                 registrations.Single(r => r.Id == identity.RegistrationId).MutationActions.Contains(action);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return false; }
     }
+
+    public bool IsAnyGovernedTopicMutationAllowed(NonBrowserReadIdentity identity) =>
+        IsGovernedMutationAllowed(identity, AuthorizationAction.TopicCreate) ||
+        IsGovernedMutationAllowed(identity, AuthorizationAction.TopicAlter) ||
+        IsGovernedMutationAllowed(identity, AuthorizationAction.TopicDelete);
 
     public bool GovernedApprovalsActive
     {
@@ -323,8 +328,8 @@ public sealed class NonBrowserReadTokenVerifier : IDisposable
 
 public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
 {
-    // First admitted surface only. No collection, protected config, payload,
-    // mutation, operation/status, approval or browser-session route is included.
+    // The service read surface remains separately named. Topic mutation and
+    // human approval admission below never expands this read allowlist.
     private static readonly HashSet<string> Routes = new(StringComparer.Ordinal)
     {
         "v01-system-info", "v01-system-health", "v08-bearer-openapi", "v01-clusters-detail", "v01-clusters-health",
@@ -337,9 +342,10 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         "v04-schema-subjects-list", "v04-schema-versions-list", "v04-schema-version-detail", "v04-schema-compatibility", "v04-schema-diff",
     };
     private static readonly HashSet<string> MutationRoutes = new(StringComparer.Ordinal)
-    { "v08-bearer-topic-create-preview", "v08-bearer-topic-delete-preview", "v08-bearer-mutation-status", "v08-bearer-mutation-confirm", "v08-bearer-mutation-execute" };
+    { "v08-bearer-topic-create-preview", "v08-bearer-topic-alter-preview", "v08-bearer-topic-increase-partitions-preview", "v08-bearer-topic-delete-preview",
+        "v08-bearer-mutation-status", "v08-bearer-mutation-confirm", "v08-bearer-mutation-execute", "v08-bearer-mutation-cancel" };
     private static readonly HashSet<string> ApprovalRoutes = new(StringComparer.Ordinal)
-    { "v08-bearer-mutation-approval", "v08-bearer-mutation-approve" };
+    { "v08-bearer-mutation-approval", "v08-bearer-mutation-approve", "v08-bearer-mutation-reject" };
 
     public async Task InvokeAsync(HttpContext context, NonBrowserReadTokenVerifier verifier, ISecurityAuditSink audit, NonBrowserReadRegistry? registry = null)
     {
@@ -370,10 +376,10 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
             : null;
         if (identity is not null && governedRoute)
         {
+            var previewAction = BearerTopicMutationScope.PreviewAction(route);
             var allowed = approvalRoute ? registry?.IsGovernedApprovalAllowed(identity, AuthorizationAction.TopicDelete) == true :
-                route == "v08-bearer-topic-create-preview" ? registry?.IsGovernedMutationAllowed(identity, AuthorizationAction.TopicCreate) == true :
-                route == "v08-bearer-topic-delete-preview" ? registry?.IsGovernedMutationAllowed(identity, AuthorizationAction.TopicDelete) == true :
-                registry?.IsGovernedMutationAllowed(identity, AuthorizationAction.TopicCreate) == true || registry?.IsGovernedMutationAllowed(identity, AuthorizationAction.TopicDelete) == true;
+                previewAction is { } action ? registry?.IsGovernedMutationAllowed(identity, action) == true :
+                registry?.IsAnyGovernedTopicMutationAllowed(identity) == true;
             if (!allowed) identity = null;
         }
         if (identity is not null && route is not null && !governedRoute && !Routes.Contains(route) && identity.Kind != NonBrowserPrincipalKind.Human)

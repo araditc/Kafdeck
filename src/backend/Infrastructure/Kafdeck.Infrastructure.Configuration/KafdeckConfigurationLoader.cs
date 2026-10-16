@@ -87,7 +87,8 @@ public static class KafdeckConfigurationLoader
             LoadNotificationCredentialReferences(section.GetSection("CredentialBindings")),
             ParseOptionalBoolean(section["WebhookDeliveryEnabled"], false, "Notification webhook delivery Enabled"),
             ParseOptionalBoolean(section["HttpProviderDeliveryEnabled"], false, "Notification HTTP provider delivery Enabled"),
-            ParseOptionalBoolean(section["EmailDeliveryEnabled"], false, "Notification Email delivery Enabled"));
+            ParseOptionalBoolean(section["EmailDeliveryEnabled"], false, "Notification Email delivery Enabled"),
+            NullIfBlank(section["DeliveryInterlockPath"]), NullIfBlank(section["DeliveryInterlockSha256"]));
     }
 
     private static IReadOnlyList<NotificationDestinationProfile>

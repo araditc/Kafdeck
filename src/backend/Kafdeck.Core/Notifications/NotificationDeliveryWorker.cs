@@ -141,6 +141,7 @@ public sealed class NotificationDeliveryWorker
     // Retain its admission until its actual task completes; repeated cycles
     // cannot create an unbounded number of abandoned operations.
     private readonly SemaphoreSlim _dispatchSlots;
+    private readonly INotificationDeliveryActivationGate? _activationGate;
     private readonly object
         _dueCursorGate = new();
     private NotificationDeliveryDueCursor?
@@ -151,7 +152,8 @@ public sealed class NotificationDeliveryWorker
         INotificationDeliveryDispatcher dispatcher,
         NotificationDeliveryPolicy? deliveryPolicy = null,
         NotificationDeliveryWorkerPolicy? workerPolicy = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        INotificationDeliveryActivationGate? activationGate = null)
     {
         _store =
             store ??
@@ -171,6 +173,7 @@ public sealed class NotificationDeliveryWorker
         _timeProvider =
             timeProvider ??
             TimeProvider.System;
+        _activationGate = activationGate;
     }
 
     public async Task<NotificationDeliveryCycleResult>
@@ -178,6 +181,7 @@ public sealed class NotificationDeliveryWorker
             CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (_activationGate is not null) await _activationGate.VerifyAsync(cancellationToken).ConfigureAwait(false);
 
         var localNow =
             _timeProvider
@@ -413,6 +417,7 @@ public sealed class NotificationDeliveryWorker
         var dispatchOwnsSlot = false;
         try
         {
+            if (_activationGate is not null) await _activationGate.VerifyAsync(cancellationToken).ConfigureAwait(false);
             var claim =
                 await _store
                     .TryClaimForDispatchAsync(

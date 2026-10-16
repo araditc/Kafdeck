@@ -63,6 +63,7 @@ public sealed class NotificationPinnedSmtpTransport(NotificationDestinationProfi
             var plain = ehlo.Lines.Any(line => line.StartsWith("AUTH ", StringComparison.OrdinalIgnoreCase) &&
                 line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1).Any(mechanism => mechanism.Equals("PLAIN", StringComparison.OrdinalIgnoreCase)));
             if (!plain) return Rejection(535);
+            await connections.VerifySendAdmissionAsync(token).ConfigureAwait(false);
             await CommandAsync(tls, auth, token).ConfigureAwait(false);
             var authenticated = await ReplyAsync(reader, token).ConfigureAwait(false);
             if (authenticated.Code != 235) return Rejection(authenticated.Code);
@@ -75,6 +76,7 @@ public sealed class NotificationPinnedSmtpTransport(NotificationDestinationProfi
             await CommandAsync(tls, "DATA\r\n", token).ConfigureAwait(false);
             var data = await ReplyAsync(reader, token).ConfigureAwait(false);
             if (data.Code != 354) return Rejection(data.Code);
+            await connections.VerifySendAdmissionAsync(token).ConfigureAwait(false);
             await tls.WriteAsync(message, token).ConfigureAwait(false);
             var receipt = await ReplyAsync(reader, token).ConfigureAwait(false);
             if (receipt.Code != 250) return Rejection(receipt.Code);

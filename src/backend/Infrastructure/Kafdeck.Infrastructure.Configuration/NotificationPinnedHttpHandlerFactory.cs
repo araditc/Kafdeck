@@ -60,17 +60,20 @@ public sealed class NotificationPinnedHttpHandlerFactory
     private readonly NotificationAddressPolicy _policy;
     private readonly TimeProvider _clock;
     private readonly X509Certificate2Collection? _trustRoots;
+    private readonly INotificationDeliveryActivationGate? _activationGate;
 
     public NotificationPinnedHttpHandlerFactory(
         INotificationPinnedTcpDialer dialer,
         NotificationAddressPolicy policy,
         TimeProvider? clock = null,
-        X509Certificate2Collection? trustRoots = null)
+        X509Certificate2Collection? trustRoots = null,
+        INotificationDeliveryActivationGate? activationGate = null)
     {
         _dialer = dialer ?? throw new ArgumentNullException(nameof(dialer));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _clock = clock ?? TimeProvider.System;
         _trustRoots = trustRoots is null ? null : new X509Certificate2Collection(trustRoots);
+        _activationGate = activationGate;
     }
 
     /// <summary>
@@ -82,14 +85,29 @@ public sealed class NotificationPinnedHttpHandlerFactory
     public HttpMessageHandler CreateGuardedHandler(NotificationPinnedEndpoint pinned)
     {
         VerifyPinned(pinned);
-        return new NotificationPinnedRequestGuardHandler(
-            pinned, _policy, CreateHandler(pinned), _clock);
+        HttpMessageHandler inner = CreateHandler(pinned);
+        if (_activationGate is not null) inner = new ActivationGuard(inner, _activationGate);
+        return new NotificationPinnedRequestGuardHandler(pinned, _policy, inner, _clock);
+    }
+
+    internal ValueTask VerifySendAdmissionAsync(CancellationToken token) =>
+        _activationGate?.VerifyAsync(token) ?? ValueTask.CompletedTask;
+
+    private sealed class ActivationGuard(HttpMessageHandler inner, INotificationDeliveryActivationGate gate)
+        : DelegatingHandler(inner)
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            await gate.VerifyAsync(token).ConfigureAwait(false);
+            return await base.SendAsync(request, token).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Opens only the approved pinned TCP endpoint, then performs normal
     /// TLS/SNI/hostname validation without creating HTTP diagnostics or a proxy.</summary>
     public async Task<SslStream> OpenPinnedTlsStreamAsync(NotificationPinnedEndpoint pinned, CancellationToken token)
     {
+        await VerifySendAdmissionAsync(token).ConfigureAwait(false);
         using var connectDeadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         connectDeadline.CancelAfter(TimeSpan.FromSeconds(5));
         var stream = await ConnectPinnedAsync(pinned, pinned.Endpoint.DnsSafeHost, pinned.Endpoint.Port, connectDeadline.Token).ConfigureAwait(false);
