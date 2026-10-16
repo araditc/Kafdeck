@@ -51,7 +51,7 @@ public sealed class MutationCommandService
                 Code: "mutation_confirmation_request_invalid");
         }
 
-        if (!TryGetSession(principal, out var session))
+        if (!MutationActor.TryCreate(principal, out var actor) || actor is null)
         {
             return new MutationCommandResult(MutationCommandOutcome.Unauthenticated);
         }
@@ -64,7 +64,7 @@ public sealed class MutationCommandService
             return new MutationCommandResult(MutationCommandOutcome.NotFound);
         }
 
-        var principalId = SecurityAuditPrincipal.FromOperator(session!.Identity);
+        var principalId = actor.PrincipalId;
         if (!string.Equals(
                 principalId,
                 snapshot.RequesterPrincipalId,
@@ -140,7 +140,7 @@ public sealed class MutationCommandService
                 Code: "mutation_cancel_request_invalid");
         }
 
-        if (!TryGetSession(principal, out var session))
+        if (!MutationActor.TryCreate(principal, out var actor) || actor is null)
         {
             return new MutationCommandResult(MutationCommandOutcome.Unauthenticated);
         }
@@ -153,7 +153,7 @@ public sealed class MutationCommandService
             return new MutationCommandResult(MutationCommandOutcome.NotFound);
         }
 
-        var principalId = SecurityAuditPrincipal.FromOperator(session!.Identity);
+        var principalId = actor.PrincipalId;
         if (!string.Equals(
                 principalId,
                 snapshot.RequesterPrincipalId,
@@ -209,7 +209,8 @@ public sealed class MutationCommandService
                     : "mutation_rejection_request_invalid");
         }
 
-        if (!TryGetSession(principal, out var session))
+        var bearerHuman = principal?.Identity as NonBrowserReadIdentity;
+        if (bearerHuman is null && !TryGetSession(principal, out _))
         {
             return new MutationCommandResult(MutationCommandOutcome.Unauthenticated);
         }
@@ -223,11 +224,18 @@ public sealed class MutationCommandService
         }
 
         MutationApprovalAuthorizationEvidence evidence;
+        var versionedBearerOperation = snapshot.PolicyVersion.StartsWith("v0.8-bearer:", StringComparison.Ordinal);
+        if ((bearerHuman is not null || versionedBearerOperation) && !_requestAuthorization.IsApprovalAllowed(principal, snapshot))
+            return new MutationCommandResult(MutationCommandOutcome.Forbidden);
+        TryGetSession(principal, out var session);
+        if (session is not null && snapshot.RequesterPrincipalId.StartsWith("oidc-cli-human:", StringComparison.Ordinal) &&
+            MutationActor.IsSameHuman(snapshot.RequesterPrincipalId, session.Identity.Key))
+            return new MutationCommandResult(MutationCommandOutcome.Forbidden);
         try
         {
-            evidence = _approvalAuthorizer.Authorize(
-                session!.Identity,
-                snapshot);
+            evidence = bearerHuman is not null
+                ? _approvalAuthorizer.AuthorizeDirectHuman(new(bearerHuman.Evidence.Issuer, bearerHuman.Evidence.Subject), bearerHuman.AuditId, snapshot)
+                : _approvalAuthorizer.Authorize(session!.Identity, snapshot);
         }
         catch (MutationStateException)
         {

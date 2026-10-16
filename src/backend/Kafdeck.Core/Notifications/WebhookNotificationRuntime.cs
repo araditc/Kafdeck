@@ -273,7 +273,7 @@ public sealed class WebhookNotificationAdapter
                 nameof(profile));
         }
 
-        if (!profile.EnabledEvents.Contains(
+        if (!profile.Enabled || !profile.EnabledEvents.Contains(
                 notificationEvent.EventClass))
         {
             throw new InvalidOperationException(

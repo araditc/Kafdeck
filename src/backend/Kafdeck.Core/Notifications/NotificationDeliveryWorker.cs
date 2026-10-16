@@ -11,7 +11,8 @@ public enum NotificationDeliveryDispatchOutcome
 public sealed record NotificationDeliveryDispatchResult
 {
     public NotificationDeliveryDispatchResult(
-        NotificationDeliveryDispatchOutcome outcome)
+        NotificationDeliveryDispatchOutcome outcome,
+        string? providerReceiptFingerprint = null)
     {
         if (!Enum.IsDefined(outcome))
         {
@@ -20,9 +21,14 @@ public sealed record NotificationDeliveryDispatchResult
         }
 
         Outcome = outcome;
+        if (providerReceiptFingerprint is not null &&
+            (providerReceiptFingerprint.Length != 64 || providerReceiptFingerprint.Any(ch => !Uri.IsHexDigit(ch))))
+            throw new ArgumentException("Provider receipt fingerprint must be a SHA-256 digest.", nameof(providerReceiptFingerprint));
+        ProviderReceiptFingerprint = providerReceiptFingerprint?.ToLowerInvariant();
     }
 
     public NotificationDeliveryDispatchOutcome Outcome { get; }
+    public string? ProviderReceiptFingerprint { get; }
 }
 
 public interface INotificationDeliveryDispatcher
@@ -477,6 +483,7 @@ public sealed class NotificationDeliveryWorker
 
             NotificationDeliveryDispatchOutcome
                 dispatchOutcome;
+            string? receiptFingerprint = null;
             var dispatchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             Task<NotificationDeliveryDispatchResult>? dispatchTask = null;
             Task cancellationCallbacks = Task.CompletedTask;
@@ -495,6 +502,7 @@ public sealed class NotificationDeliveryWorker
 
                 dispatchOutcome =
                     dispatch.Outcome;
+                receiptFingerprint = dispatch.ProviderReceiptFingerprint;
             }
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
@@ -550,7 +558,8 @@ public sealed class NotificationDeliveryWorker
                 BuildFinalSnapshot(
                     claimed.Snapshot,
                     dispatchOutcome,
-                    completedAt);
+                    completedAt,
+                    receiptFingerprint);
 
             var finalized =
                 await _store
@@ -630,7 +639,8 @@ public sealed class NotificationDeliveryWorker
         BuildFinalSnapshot(
             NotificationDeliverySnapshot claimed,
             NotificationDeliveryDispatchOutcome outcome,
-            DateTimeOffset completedAtUtc)
+            DateTimeOffset completedAtUtc,
+            string? receiptFingerprint = null)
     {
         return outcome switch
         {
@@ -638,7 +648,8 @@ public sealed class NotificationDeliveryWorker
                 TerminalSnapshot(
                     claimed,
                     NotificationDeliveryState.Delivered,
-                    NotificationDeliveryOutcomeCodes.Delivered),
+                    NotificationDeliveryOutcomeCodes.Delivered,
+                    receiptFingerprint),
 
             NotificationDeliveryDispatchOutcome
                 .UnknownExternalEffect =>
@@ -753,7 +764,8 @@ public sealed class NotificationDeliveryWorker
         TerminalSnapshot(
             NotificationDeliverySnapshot current,
             NotificationDeliveryState state,
-            string outcomeCode) =>
+            string outcomeCode,
+            string? receiptFingerprint = null) =>
         new(
             current.NotificationId,
             current.DestinationId,
@@ -764,5 +776,6 @@ public sealed class NotificationDeliveryWorker
             null,
             outcomeCode,
             routedProfileRevisionFingerprint:
-                current.RoutedProfileRevisionFingerprint);
+                current.RoutedProfileRevisionFingerprint,
+            providerReceiptFingerprint: receiptFingerprint);
 }

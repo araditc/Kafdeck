@@ -1,4 +1,8 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Net;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Kafdeck.Cli;
 
@@ -11,6 +15,8 @@ public sealed class KafdeckCliClient : IDisposable
         TimeSpan.FromSeconds(30);
 
     private readonly HttpClient _httpClient;
+    private CliOidcSession? _oidcSession;
+    private X509Certificate2? _trustedCa;
 
     private KafdeckCliClient(HttpClient httpClient)
     {
@@ -19,18 +25,50 @@ public sealed class KafdeckCliClient : IDisposable
 
     public static async Task<KafdeckCliClient> CreateAsync(
         CliInvocation invocation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<Uri, CancellationToken, Task>? openBrowser = null)
     {
         ArgumentNullException.ThrowIfNull(invocation);
 
-        var token = await ResolveTokenAsync(
-            invocation.TokenFile,
-            cancellationToken);
+        CliOidcSession? session = null;
+        CliOidcProfile? profile = null;
+        string? token = null;
+        if (invocation.OidcProfileFile is not null || invocation.ServiceProfileFile is not null)
+        {
+            if (invocation.OidcProfileFile is not null && invocation.ServiceProfileFile is not null)
+                throw new CliUsageException("Choose one human or service OIDC profile.");
+            if (invocation.TokenFile is not null || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("KAFDECK_ACCESS_TOKEN")))
+                throw new CliUsageException("OIDC sign-in cannot be combined with deployment access-token credentials.");
+            if (invocation.BaseUri.Scheme != "https" && !(IPAddress.TryParse(invocation.BaseUri.Host, out var ip) && IPAddress.IsLoopback(ip)))
+                throw new CliUsageException("OIDC bearer API requests require HTTPS, except numeric loopback laboratory origins.");
+            if (invocation.ServiceProfileFile is not null)
+            {
+                var serviceProfile = await CliServiceOidcProfile.LoadAsync(invocation.ServiceProfileFile, cancellationToken);
+                profile = serviceProfile.Trust;
+                session = await CliServiceOidcAuthenticator.AcquireAsync(serviceProfile, cancellationToken);
+            }
+            else
+            {
+                profile = await CliOidcProfile.LoadAsync(invocation.OidcProfileFile!, cancellationToken);
+                session = await CliOidcPkceAuthenticator.AcquireAsync(profile, openBrowser, cancellationToken);
+            }
+        }
+        else token = await ResolveTokenAsync(invocation.TokenFile, cancellationToken);
 
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
+            UseCookies = false,
+            UseProxy = profile is null,
             ConnectTimeout = TimeSpan.FromSeconds(10),
+        };
+        X509Certificate2? trustedCa;
+        try { trustedCa = profile is not null ? await profile.LoadTrustedCaAsync(cancellationToken) : null; }
+        catch { handler.Dispose(); session?.Dispose(); throw; }
+        if (trustedCa is not null) handler.SslOptions = new SslClientAuthenticationOptions
+        {
+            CertificateChainPolicy = new X509ChainPolicy { TrustMode = X509ChainTrustMode.CustomRootTrust,
+                RevocationMode = X509RevocationMode.NoCheck, CustomTrustStore = { trustedCa } },
         };
 
         var client = new HttpClient(
@@ -53,8 +91,9 @@ public sealed class KafdeckCliClient : IDisposable
                 DeploymentTokenHeader,
                 token);
         }
+        if (session is not null) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
 
-        return new KafdeckCliClient(client);
+        return new KafdeckCliClient(client) { _oidcSession = session, _trustedCa = trustedCa };
     }
 
     public Task<HttpResponseMessage> GetAsync(
@@ -70,8 +109,21 @@ public sealed class KafdeckCliClient : IDisposable
             cancellationToken);
     }
 
-    public void Dispose() =>
+    public async Task<HttpResponseMessage> PostAsync(string relativePath, object? body, string? idempotencyKey, CancellationToken cancellationToken)
+    {
+        if (_oidcSession is null) throw new CliUsageException("Governed mutations require a memory-only OIDC session.");
+        using var request = new HttpRequestMessage(HttpMethod.Post, relativePath);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        if (idempotencyKey is not null) request.Headers.Add("Idempotency-Key", idempotencyKey);
+        return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+    }
+
+    public void Dispose()
+    {
         _httpClient.Dispose();
+        _oidcSession?.Dispose();
+        _trustedCa?.Dispose();
+    }
 
     internal static async Task<string?> ResolveTokenAsync(
         string? tokenFile,

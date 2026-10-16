@@ -1,7 +1,5 @@
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using Kafdeck.Core.Notifications;
 
 namespace Kafdeck.Infrastructure.Configuration;
@@ -12,7 +10,8 @@ namespace Kafdeck.Infrastructure.Configuration;
 ///
 /// Its exact owner-provisioned profile, immutable dispatch intent and
 /// original DNS pin are the only permitted source of HTTP request material.
-/// Provider-specific authentication is intentionally refused until admitted.
+/// Explicit Anonymous/Bearer authentication is revision-bound; no guessed
+/// credential/header semantics or anonymous fallback is permitted.
 /// </summary>
 public sealed class NotificationPinnedWebhookHttpTransport :
     INotificationPinnedWebhookTransport
@@ -48,38 +47,26 @@ public sealed class NotificationPinnedWebhookHttpTransport :
         // Authorization, revision, credential downgrade and finite payload
         // validation happen BEFORE any socket, handler or request creation.
         var intent = _requests.Create(_profile, approved);
-        using var handler = _handlers.CreateGuardedHandler(intent.PinnedEndpoint);
-        using var client = new HttpClient(handler, disposeHandler: false)
-        {
-            Timeout = HardRequestTimeout,
-            DefaultRequestVersion = HttpVersion.Version11,
-            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
-        };
-        using var message = new HttpRequestMessage(HttpMethod.Post, intent.Endpoint)
-        {
-            Version = HttpVersion.Version11,
-            VersionPolicy = HttpVersionPolicy.RequestVersionExact,
-            Content = new ByteArrayContent(intent.JsonPayload.ToArray()),
-        };
-        message.Content.Headers.ContentType =
-            new MediaTypeHeaderValue(intent.ContentType);
+        _handlers.VerifyPinned(intent.PinnedEndpoint);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(HardRequestTimeout);
 
-        // A newly allocated, private HttpClient has no user-supplied default
-        // headers, cookies, credentials or sender-controlled request objects.
-        // The guarded SocketsHttpHandler pins TCP, keeps normal TLS hostname
-        // verification, and refuses redirects/proxies on every connection.
+        // The private wire has no user-supplied headers, cookies or mutable
+        // request objects. It pins TCP, retains normal TLS/SNI checks and
+        // never redirects, proxies, reuses another path or enters HttpClient
+        // URL telemetry (configured paths can themselves be confidential).
         // After SendAsync starts, even connect/timeout/cancellation errors are
         // conservatively UnknownExternalEffect: no blind ledger replay.
         try
         {
-            using var response = await client.SendAsync(
-                message, HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
+            var response = await NotificationPrivateHttpWire.PostAsync(_handlers, intent.PinnedEndpoint,
+                intent.JsonPayload.ToArray(), deadline.Token, readBody: false,
+                bearer: intent.Authentication == NotificationWebhookAuthentication.Bearer ? intent.Credential : null).ConfigureAwait(false);
             return NotificationWebhookHttpOutcomePolicy.FromResponse(
-                (int)response.StatusCode);
+                response.Status);
         }
         catch (Exception error)
-            when (error is HttpRequestException or IOException or
+            when (error is IOException or AuthenticationException or
                   SocketException or OperationCanceledException or
                   KafdeckConfigurationException)
         {

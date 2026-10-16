@@ -16,14 +16,13 @@ internal static class MutationCurrentRequesterAuthorization
 
         var principal = requestContext.CurrentPrincipal;
         if (principal is null ||
-            !OperatorSessionContextFactory.TryCreate(principal, out var session) ||
-            session is null)
+            !MutationActor.TryCreate(principal, out var actor) || actor is null)
         {
             return Denied("current_requester_identity_missing");
         }
 
         var currentPrincipalId =
-            SecurityAuditPrincipal.FromOperator(session.Identity);
+            actor.PrincipalId;
         if (!string.Equals(
                 currentPrincipalId,
                 operation.RequesterPrincipalId,

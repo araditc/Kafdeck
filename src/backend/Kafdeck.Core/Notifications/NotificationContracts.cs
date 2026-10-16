@@ -24,6 +24,12 @@ public enum NotificationEventClass
     DataQuality = 5,
 }
 
+public enum NotificationWebhookAuthentication
+{
+    Anonymous = 1,
+    Bearer = 2,
+}
+
 public sealed class NotificationCredentialBindingId
 {
     public const int MaxLength = 128;
@@ -85,7 +91,7 @@ public sealed record NotificationCredentialResolutionRequest
         ArgumentNullException.ThrowIfNull(
             profile);
 
-        if (profile.CredentialBindingId is null)
+        if (!profile.Enabled || profile.CredentialBindingId is null)
         {
             throw new ArgumentException(
                 "Notification destination does not have a credential binding.",
@@ -161,7 +167,12 @@ public sealed record NotificationDestinationProfile
         IReadOnlyList<NotificationEventClass> enabledEvents,
         Uri? configuredEndpoint = null,
         NotificationCredentialBindingId? credentialBindingId = null,
-        string? emailRecipientAddress = null)
+        string? emailRecipientAddress = null,
+        NotificationWebhookAuthentication webhookAuthentication = NotificationWebhookAuthentication.Anonymous,
+        bool enabled = true,
+        string? providerResourceId = null,
+        string? providerSecondaryResourceId = null,
+        NotificationSmtpProfile? smtp = null)
     {
         var normalizedId =
             NormalizeDestinationId(
@@ -173,6 +184,15 @@ public sealed record NotificationDestinationProfile
         {
             throw new ArgumentOutOfRangeException(nameof(provider));
         }
+        if (!Enum.IsDefined(webhookAuthentication) ||
+            (webhookAuthentication != NotificationWebhookAuthentication.Anonymous &&
+             (provider != NotificationProviderKind.Webhook || credentialBindingId is null)))
+            throw new ArgumentException("Explicit Webhook authentication requires a registered credential binding.", nameof(webhookAuthentication));
+        if ((providerResourceId is not null || providerSecondaryResourceId is not null) &&
+            !NotificationHttpProviderTargetPolicy.IsValid(provider, providerResourceId, providerSecondaryResourceId))
+            throw new ArgumentException("Notification provider target is invalid for its closed provider family.");
+        if (smtp is not null && provider != NotificationProviderKind.Email)
+            throw new ArgumentException("Only Email may configure an SMTP profile.");
 
         var normalizedDisplayName = displayName.Trim();
         if (normalizedDisplayName.Length > MaxDisplayNameLength ||
@@ -247,6 +267,11 @@ public sealed record NotificationDestinationProfile
         ConfiguredEndpoint = normalizedEndpoint;
         CredentialBindingId = credentialBindingId;
         EmailRecipientAddress = emailRecipientAddress;
+        WebhookAuthentication = webhookAuthentication;
+        Enabled = enabled;
+        ProviderResourceId = providerResourceId;
+        ProviderSecondaryResourceId = providerSecondaryResourceId;
+        Smtp = smtp;
         RevisionFingerprint =
             ComputeRevisionFingerprint(
                 DestinationId,
@@ -254,7 +279,12 @@ public sealed record NotificationDestinationProfile
                 ConfiguredEndpoint,
                 CredentialBindingId,
                 EnabledEvents,
-                EmailRecipientAddress);
+                EmailRecipientAddress,
+                WebhookAuthentication,
+                Enabled,
+                ProviderResourceId,
+                ProviderSecondaryResourceId,
+                Smtp);
     }
 
     public string DestinationId { get; }
@@ -264,6 +294,11 @@ public sealed record NotificationDestinationProfile
     public Uri? ConfiguredEndpoint { get; }
     public NotificationCredentialBindingId? CredentialBindingId { get; }
     public string? EmailRecipientAddress { get; }
+    public NotificationWebhookAuthentication WebhookAuthentication { get; }
+    public bool Enabled { get; }
+    public string? ProviderResourceId { get; }
+    public string? ProviderSecondaryResourceId { get; }
+    public NotificationSmtpProfile? Smtp { get; }
 
     public string RevisionFingerprint { get; }
 
@@ -273,7 +308,12 @@ public sealed record NotificationDestinationProfile
         Uri? endpoint,
         NotificationCredentialBindingId? bindingId,
         IReadOnlyList<NotificationEventClass> enabledEvents,
-        string? emailRecipientAddress)
+        string? emailRecipientAddress,
+        NotificationWebhookAuthentication webhookAuthentication,
+        bool enabled,
+        string? providerResourceId,
+        string? providerSecondaryResourceId,
+        NotificationSmtpProfile? smtp)
     {
         var canonical =
             string.Join(
@@ -296,6 +336,13 @@ public sealed record NotificationDestinationProfile
         {
             canonical += "\n" + emailRecipientAddress;
         }
+        // Preserve every existing default/anonymous fingerprint exactly.
+        if (webhookAuthentication != NotificationWebhookAuthentication.Anonymous || !enabled)
+            canonical += "\nwebhook-auth=" + ((int)webhookAuthentication).ToString(
+                System.Globalization.CultureInfo.InvariantCulture) + "\nenabled=" + (enabled ? "1" : "0");
+        if (providerResourceId is not null || providerSecondaryResourceId is not null)
+            canonical += "\nprovider-target=" + providerResourceId + "\n" + providerSecondaryResourceId;
+        if (smtp is not null) canonical += "\nsmtp=" + smtp.Endpoint.AbsoluteUri + "\n" + smtp.SenderAddress + "\n" + smtp.Username;
 
         return Convert
             .ToHexString(
@@ -304,6 +351,24 @@ public sealed record NotificationDestinationProfile
                         canonical)))
             .ToLowerInvariant();
     }
+}
+
+public static class NotificationHttpProviderTargetPolicy
+{
+    public static bool IsValid(NotificationProviderKind provider, string? resource, string? secondary) => provider switch
+    {
+        NotificationProviderKind.Slack => secondary is null && resource is { Length: >= 6 and <= 64 } &&
+            resource[0] is 'C' or 'G' or 'D' && resource.All(ch => char.IsAsciiLetterUpper(ch) || char.IsAsciiDigit(ch)),
+        NotificationProviderKind.MicrosoftTeams => Guid.TryParseExact(resource, "D", out _) &&
+            secondary is { Length: >= 20 and <= 256 } && secondary.StartsWith("19:", StringComparison.Ordinal) &&
+            secondary.EndsWith("@thread.tacv2", StringComparison.Ordinal) &&
+            secondary.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is ':' or '@' or '.' or '-' or '_'),
+        NotificationProviderKind.Telegram => secondary is null && long.TryParse(resource,
+            System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var chat) &&
+            chat != 0 && string.Equals(chat.ToString(System.Globalization.CultureInfo.InvariantCulture), resource, StringComparison.Ordinal),
+        NotificationProviderKind.PagerDuty => resource is null && secondary is null,
+        _ => false,
+    };
 }
 
 public sealed record NotificationDeliveryPolicy
@@ -402,7 +467,8 @@ public sealed record NotificationDeliverySnapshot
         DateTimeOffset? nextAttemptAtUtc = null,
         string? outcomeCode = null,
         string? providerRequestId = null,
-        string? routedProfileRevisionFingerprint = null)
+        string? routedProfileRevisionFingerprint = null,
+        string? providerReceiptFingerprint = null)
     {
         if (routedProfileRevisionFingerprint is not null &&
             !FingerprintPattern.IsMatch(routedProfileRevisionFingerprint))
@@ -411,6 +477,9 @@ public sealed record NotificationDeliverySnapshot
                 "Routed destination profile revision must be a SHA-256 fingerprint.",
                 nameof(routedProfileRevisionFingerprint));
         }
+        if (providerReceiptFingerprint is not null &&
+            (state != NotificationDeliveryState.Delivered || !FingerprintPattern.IsMatch(providerReceiptFingerprint)))
+            throw new ArgumentException("Only a delivered provider SHA-256 receipt fingerprint is admitted.", nameof(providerReceiptFingerprint));
 
         if (notificationId == Guid.Empty)
         {
@@ -472,6 +541,7 @@ public sealed record NotificationDeliverySnapshot
         NextAttemptAtUtc = nextAttemptAtUtc;
         OutcomeCode = ValidateSafeOptional(outcomeCode, 128, nameof(outcomeCode));
         ProviderRequestId = ValidateSafeOptional(providerRequestId, 256, nameof(providerRequestId));
+        ProviderReceiptFingerprint = providerReceiptFingerprint?.ToLowerInvariant();
     }
 
     public Guid NotificationId { get; }
@@ -484,6 +554,7 @@ public sealed record NotificationDeliverySnapshot
     public DateTimeOffset? NextAttemptAtUtc { get; }
     public string? OutcomeCode { get; }
     public string? ProviderRequestId { get; }
+    public string? ProviderReceiptFingerprint { get; }
 
     private static string? ValidateSafeOptional(
         string? value,

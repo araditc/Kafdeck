@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Kafdeck.Core.Notifications;
 using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Infrastructure.Persistence;
@@ -14,13 +15,19 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IMutationDbConnectionFactory _connectionFactory;
     private readonly TimeProvider _timeProvider;
+    private readonly bool _captureProductNotifications;
+    private readonly NotificationProductEventPolicy _notificationProductPolicy;
 
     public AdoMutationOperationRepository(
         IMutationDbConnectionFactory connectionFactory,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        bool captureProductNotifications = false,
+        NotificationProductEventPolicy? notificationProductPolicy = null)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _captureProductNotifications = captureProductNotifications;
+        _notificationProductPolicy = notificationProductPolicy ?? new();
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -120,6 +127,10 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             command.CommandText = statement;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
+
+        if (_captureProductNotifications)
+            await MutationNotificationOutbox.InitializeSchemaAsync(connection, schemaTransaction, cancellationToken)
+                .ConfigureAwait(false);
 
         await schemaTransaction
             .CommitAsync(cancellationToken)
@@ -310,6 +321,9 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         var inserted = await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         if (inserted == 1)
         {
+            if (_captureProductNotifications)
+                await MutationNotificationOutbox.CaptureVerifiedAsync(connection, transaction, operation,
+                    _notificationProductPolicy, _connectionFactory.SupportsSelectForUpdate, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new MutationCreateResult(MutationCreateOutcome.Created, operation);
         }
@@ -455,7 +469,9 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         }
 
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             UPDATE kafdeck_mutation_operations
@@ -483,9 +499,14 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         var updated = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         if (updated == 1)
         {
+            if (_captureProductNotifications)
+                await MutationNotificationOutbox.CaptureVerifiedAsync(connection, transaction, operation,
+                    _notificationProductPolicy, _connectionFactory.SupportsSelectForUpdate, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new MutationSaveResult(MutationSaveOutcome.Saved, operation);
         }
 
+        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
         var current = await GetAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
         return current is null
             ? new MutationSaveResult(MutationSaveOutcome.NotFound, null)

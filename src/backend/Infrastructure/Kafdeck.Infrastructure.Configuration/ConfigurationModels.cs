@@ -53,7 +53,9 @@ public sealed record NotificationReadOptions(
     bool ManagementEnabled = false,
     IReadOnlyList<NotificationDestinationProfile>? DestinationProfiles = null,
     IReadOnlyList<NotificationCredentialReferenceOptions>? CredentialBindings = null,
-    bool WebhookDeliveryEnabled = false);
+    bool WebhookDeliveryEnabled = false,
+    bool HttpProviderDeliveryEnabled = false,
+    bool EmailDeliveryEnabled = false);
 
 /// <summary>
 /// Owner-defined binding to an env/file secret locator, not the secret value.
@@ -62,7 +64,8 @@ public sealed record NotificationReadOptions(
 public sealed record NotificationCredentialReferenceOptions(
     string DestinationId,
     NotificationCredentialBindingId BindingId,
-    SecretReference Secret);
+    SecretReference Secret,
+    bool Enabled = true);
 
 
 public enum DataQualityPersistenceProvider

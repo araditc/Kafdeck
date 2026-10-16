@@ -97,10 +97,11 @@ public sealed class SchemaDeveloperService
         RegexOptions.CultureInvariant | RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(100));
 
-    private static readonly Regex SensitiveNamePattern = new(
-        @"(?:password|passwd|secret|token|credential|api[_-]?key|private[_-]?key|authorization)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(100));
+    private static readonly string[] SensitiveNameFragments =
+    [
+        "password", "passwd", "secret", "token", "credential",
+        "apikey", "api_key", "api-key", "privatekey", "private_key", "private-key", "authorization",
+    ];
 
     private readonly ISchemaCatalogReadPort _schemas;
     private readonly SchemaDeveloperPolicy _policy;
@@ -856,9 +857,18 @@ public sealed class SchemaDeveloperService
         };
     }
 
-    private static bool SensitiveName(string? name) =>
-        !string.IsNullOrWhiteSpace(name) &&
-        SensitiveNamePattern.IsMatch(name);
+    private static bool SensitiveName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        // The fixed literal alternatives need no regex execution deadline.
+        // Names already come from a byte-bounded schema and bounded field tree.
+        // Invariant regex case folding additionally equates Kelvin sign with K;
+        // ordinal ignore-case does not, so retain that existing redaction case.
+        var comparable = name.IndexOf('\u212A') >= 0 ? name.Replace('\u212A', 'k') : name;
+        foreach (var fragment in SensitiveNameFragments)
+            if (comparable.Contains(fragment, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     private static bool HasCycle(
         IReadOnlyList<SchemaReferenceEdge> edges)

@@ -69,8 +69,7 @@ public sealed class MutationAdmissionService
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(risk);
 
-        if (!OperatorSessionContextFactory.TryCreate(principal, out var session) ||
-            session is null)
+        if (!MutationActor.TryCreate(principal, out var actor) || actor is null)
         {
             return new MutationAdmissionResult(MutationAdmissionOutcome.Unauthenticated);
         }
@@ -101,7 +100,7 @@ public sealed class MutationAdmissionService
         }
 
         var requesterPrincipalId =
-            SecurityAuditPrincipal.FromOperator(session.Identity);
+            actor.PrincipalId;
         var effectiveOperationId = operationId;
         try
         {
@@ -166,7 +165,7 @@ public sealed class MutationAdmissionService
                 requesterPrincipalId,
                 intent with { AuthorizationTargets = targets },
                 risk,
-                PolicyVersion,
+                _authorization.PolicyVersionFor(principal),
                 now.Add(_options.PreviewTtl),
                 now,
                 idempotencyKey);

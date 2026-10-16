@@ -195,6 +195,16 @@ public sealed class V08W67InertRs256EvidenceVerifierTests
     }
 
     [Fact]
+    public void Keycloak_access_token_without_its_own_signed_subject_is_never_completed_from_an_id_token()
+    {
+        using var rsa = RSA.Create(2048);
+        var now = Now.ToUnixTimeSeconds();
+        var missingSubject = new { iss = "https://sso.test/realms/kafdeck", azp = "automation-one", aud = "kafdeck-api",
+            typ = "Bearer", iat = now - 10, exp = now + 120 };
+        Assert.Throws<NonBrowserJwtEvidenceException>(() => Verify(rsa, Sign(rsa, payload: missingSubject)));
+    }
+
+    [Fact]
     public void Duplicate_security_critical_claims_are_denied_even_if_signed()
     {
         using var rsa = RSA.Create(2048);

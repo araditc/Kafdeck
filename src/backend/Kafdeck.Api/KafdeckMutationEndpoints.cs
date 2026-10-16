@@ -146,7 +146,7 @@ public static class KafdeckMutationEndpoints
         return app;
     }
 
-    private static IResult MapCommandResult(MutationCommandResult result) =>
+    internal static IResult MapCommandResult(MutationCommandResult result) =>
         result.Outcome switch
         {
             MutationCommandOutcome.Saved when result.Operation is not null =>
@@ -175,7 +175,7 @@ public static class KafdeckMutationEndpoints
                 title: "Mutation command failed"),
         };
 
-    private static IResult MapDispatchResult(MutationDispatchResult result) =>
+    internal static IResult MapDispatchResult(MutationDispatchResult result) =>
         result.Outcome switch
         {
             MutationDispatchOutcome.Executed when result.Operation is not null =>

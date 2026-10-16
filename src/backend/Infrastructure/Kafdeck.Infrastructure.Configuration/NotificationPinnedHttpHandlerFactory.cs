@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Net.Security;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Kafdeck.Core.Notifications;
 
@@ -83,6 +84,27 @@ public sealed class NotificationPinnedHttpHandlerFactory
         VerifyPinned(pinned);
         return new NotificationPinnedRequestGuardHandler(
             pinned, _policy, CreateHandler(pinned), _clock);
+    }
+
+    /// <summary>Opens only the approved pinned TCP endpoint, then performs normal
+    /// TLS/SNI/hostname validation without creating HTTP diagnostics or a proxy.</summary>
+    public async Task<SslStream> OpenPinnedTlsStreamAsync(NotificationPinnedEndpoint pinned, CancellationToken token)
+    {
+        using var connectDeadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        connectDeadline.CancelAfter(TimeSpan.FromSeconds(5));
+        var stream = await ConnectPinnedAsync(pinned, pinned.Endpoint.DnsSafeHost, pinned.Endpoint.Port, connectDeadline.Token).ConfigureAwait(false);
+        var tls = new SslStream(stream, leaveInnerStreamOpen: false);
+        try
+        {
+            await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+            {
+                TargetHost = pinned.Endpoint.DnsSafeHost,
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                CertificateChainPolicy = _trustRoots is null ? null : CreateChainPolicy(_trustRoots),
+            }, token).ConfigureAwait(false);
+            return tls;
+        }
+        catch { await tls.DisposeAsync().ConfigureAwait(false); throw; }
     }
 
     public SocketsHttpHandler CreateHandler(NotificationPinnedEndpoint pinned)
@@ -212,7 +234,7 @@ public sealed class NotificationPinnedHttpHandlerFactory
             "Notification pinned destination could not be reached.");
     }
 
-    private void VerifyPinned(NotificationPinnedEndpoint pinned)
+    internal void VerifyPinned(NotificationPinnedEndpoint pinned)
     {
         ArgumentNullException.ThrowIfNull(pinned);
         var canonical = NotificationHttpsEndpointPolicy.ValidateAndNormalize(pinned.Endpoint);

@@ -49,8 +49,8 @@ public enum AuthorizationAction
     ClusterTransferExecute = 43,
     ReplicationIntegrationAlter = 44,
     MutationReconcile = 45,
-    StreamsRead = 46,
-    LineageRead = 47,
+    // Preserve the original persisted mutation numbers. Read actions added
+    // later must never alias restart authority.
     ConnectRestart = 46,
     ConnectAutoRestartManage = 47,
     DataJobPlan = 48,
@@ -61,6 +61,9 @@ public enum AuthorizationAction
     DataQualityManage = 53,
     NotificationRead = 54,
     NotificationManage = 55,
+    MutationApprove = 56,
+    StreamsRead = 57,
+    LineageRead = 58,
 }
 
 public enum AuthorizationDecisionReason
@@ -154,6 +157,7 @@ internal sealed class BoundedGlob
     public const int MaxWildcards = 8;
 
     private readonly string _pattern;
+    internal string Pattern => _pattern;
 
     public BoundedGlob(string pattern)
     {
@@ -410,7 +414,19 @@ public sealed class AuthorizationPolicyEvaluator
     public AuthorizationPolicyEvaluator(AuthorizationPolicySnapshot snapshot)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+        var canonical = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            Roles = snapshot.Roles.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => new { r.Key,
+                Permissions = r.Value.Permissions.Select(p => new { p.Action, Clusters = p.ClusterIds.Order(StringComparer.Ordinal),
+                    Patterns = p.ResourcePatterns.Select(pattern => pattern.Pattern).Order(StringComparer.Ordinal) }) }),
+            Subjects = snapshot.SubjectBindings.OrderBy(b => b.Key.Issuer, StringComparer.Ordinal).ThenBy(b => b.Key.Subject, StringComparer.Ordinal)
+                .Select(b => new { b.Key.Issuer, b.Key.Subject, Roles = b.Value.Order(StringComparer.Ordinal) }),
+            Groups = snapshot.GroupBindings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => new { b.Key, Roles = b.Value.Order(StringComparer.Ordinal) }),
+        });
+        Fingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(canonical)).ToLowerInvariant();
     }
+
+    public string Fingerprint { get; }
 
     public bool HasApplicablePermission(
         OperatorIdentity? identity,
@@ -499,6 +515,14 @@ public sealed class AuthorizationPolicyEvaluator
             ? bound.OrderBy(role => role, StringComparer.Ordinal).ToArray()
             : Array.Empty<string>();
         return EvaluateRoles(roles, request);
+    }
+
+    public bool HasApplicableDirectSubjectPermission(OperatorIdentityKey key, AuthorizationAction action, string? clusterId)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        if (!_snapshot.SubjectBindings.TryGetValue(key, out var roles)) return false;
+        return roles.SelectMany(role => _snapshot.Roles[role].Permissions).Any(permission => permission.Action == action &&
+            (permission.ClusterIds.Count == 0 || clusterId is not null && permission.ClusterIds.Contains(clusterId)));
     }
 
     private AuthorizationDecision EvaluateRoles(IReadOnlyList<string> roleIds, AuthorizationRequest request)

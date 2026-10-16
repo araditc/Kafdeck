@@ -160,12 +160,13 @@ public static class KafdeckTopicMutationEndpoints
         return app;
     }
 
-    private static async Task<IResult> AdmitAsync(
+    internal static async Task<IResult> AdmitAsync(
         HttpContext context,
         MutationAdmissionService admission,
         MutationIntentDescriptor intent,
         MutationRiskDecision risk,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<Guid, string>? statusLocation = null)
     {
         var idempotencyKey = context.Request.Headers[IdempotencyHeader].ToString();
         var result = await admission
@@ -181,7 +182,7 @@ public static class KafdeckTopicMutationEndpoints
         {
             MutationAdmissionOutcome.Created when result.Operation is not null =>
                 Results.Created(
-                    $"/api/v1/mutations/{result.Operation.OperationId:D}",
+                    statusLocation?.Invoke(result.Operation.OperationId) ?? $"/api/v1/mutations/{result.Operation.OperationId:D}",
                     MutationStatusData.From(result.Operation)),
             MutationAdmissionOutcome.ExistingSameIntent when result.Operation is not null =>
                 Results.Ok(MutationStatusData.From(result.Operation)),
@@ -216,7 +217,7 @@ public static class KafdeckTopicMutationEndpoints
         };
     }
 
-    private static IResult PlanningProblem(TopicMutationPlanningFailure failure)
+    internal static IResult PlanningProblem(TopicMutationPlanningFailure failure)
     {
         var (status, type) = failure.Code switch
         {

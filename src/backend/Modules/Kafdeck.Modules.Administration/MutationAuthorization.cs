@@ -217,6 +217,19 @@ public sealed class MutationApprovalAuthorizer
             evidenceHash);
     }
 
+    /// <summary>Direct scopes for an already authenticated registered CLI human; never creates a browser identity.</summary>
+    public MutationApprovalAuthorizationEvidence AuthorizeDirectHuman(OperatorIdentityKey human, string exactPrincipalId,
+        MutationOperationSnapshot operation)
+    {
+        if (!NonBrowserHumanPrincipalId.TryParse(exactPrincipalId, out var parsed) || parsed!.HumanKey != human ||
+            operation.AuthorizationTargets.Count == 0 || operation.AuthorizationTargets.Any(target =>
+                !_authorization.EvaluateDirectSubject(human, new(AuthorizationAction.MutationApprove, target.ClusterId, target.ResourceName)).IsAllowed ||
+                !_authorization.EvaluateDirectSubject(human, new(target.Action, target.ClusterId, target.ResourceName)).IsAllowed))
+            throw new MutationStateException("The live human does not have current direct approval and resource permissions.");
+        return new(operation.OperationId, exactPrincipalId, operation.PreviewHash,
+            ComputeEvidenceHash(operation.OperationId, exactPrincipalId, operation.PreviewHash, operation.AuthorizationTargets));
+    }
+
     /// <summary>
     /// Rechecks the approved principal against the current direct-subject
     /// authorization policy without reconstructing persisted OIDC groups.
