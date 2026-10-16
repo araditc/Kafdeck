@@ -13,6 +13,10 @@ public static class NotificationWebhookDeliveryHosting
     {
         if (!options.WebhookDeliveryEnabled && !options.HttpProviderDeliveryEnabled && !options.EmailDeliveryEnabled) return services;
         NotificationPhysicalDeliveryAdmission.Validate(options);
+        // Persisted recovery cutoffs survive disabling the maintenance API and
+        // apply to every typed provider, including previously absent ledger rows.
+        services.TryAddSingleton<INotificationRecoveryEventGate>(sp =>
+            new AdoNotificationRecoveryStore(sp.GetRequiredService<INotificationDeliveryDbConnectionFactory>()));
 
         if (options.DeliveryInterlockPath is not null)
         {

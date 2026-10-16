@@ -514,5 +514,7 @@ public sealed class MutationDispatchService
             MutationOperationKind.SchemaDelete or
             MutationOperationKind.RecordsPurge or
             MutationOperationKind.ConnectAutoRestartPolicy or
-            MutationOperationKind.DataJob;
+            MutationOperationKind.DataJob or
+            MutationOperationKind.DataGenerator or
+            MutationOperationKind.FleetUncertaintyDisposition;
 }

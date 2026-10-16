@@ -1,0 +1,7 @@
+{
+  "name": "kafdeck-g2-browser-laboratory",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Test-only rendered Chromium Keycloak authorization-code acceptance",
+  "dependencies": { "playwright": "1.62.1" }
+}

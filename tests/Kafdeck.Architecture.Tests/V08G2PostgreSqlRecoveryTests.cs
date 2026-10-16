@@ -23,7 +23,7 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
     [PostgreSqlRecoveryFact]
     public async Task Abrupt_sender_crash_after_replicated_claim_and_complete_POST_survives_real_primary_promotion_without_resend()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var token = deadline.Token;
         await using var lab = await PostgreSqlRecoveryScenario.CreateAsync(token);
         await using var peer = new NotificationRecoveryTlsPeer(holdReceipt: true);
@@ -45,7 +45,7 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
         await survivor.WaitReadyAsync(token);
         var unknown = await WaitAsync(lab, "standby", id, NotificationDeliveryState.UnknownExternalEffect, token);
         var elapsed = unknown.UpdatedAtUtc - replicated.UpdatedAtUtc;
-        Assert.True(elapsed >= TimeSpan.FromSeconds(10), "Recovery must wait for actual PostgreSQL stale time.");
+        Assert.True(elapsed >= TimeSpan.FromSeconds(30), "Recovery must wait for actual PostgreSQL stale time.");
         await Task.Delay(1200, token);
         var durable = await (await lab.StoreAsync("standby", token)).GetAsync(id, "recovery-webhook", token);
         Assert.NotNull(durable);
@@ -62,7 +62,8 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
             realDatabaseStaleMilliseconds = (long)elapsed.TotalMilliseconds, physicalPosts = peer.PhysicalPosts,
             acceptedTlsConnections = peer.AcceptedConnections, attempts = durable.Snapshot.AttemptCount,
             terminalState = durable.Snapshot.State.ToString(), automaticResends = 0, durableReopen = true,
-            productionHaAdmission = false, coversStaleBackupRestore = false,
+            executionMode = "HighAvailability", explicitInterlockRequired = true, automaticFailover = false,
+            defaultEnabled = false, coversStaleBackupRestore = false,
         }, token);
         output.WriteLine($"REAL_PG_ABRUPT_CRASH_PROMOTION replicatedInFlight=true; senderProcessKilled=true; oldPrimaryFenced=true; standbyPromoted=true; physicalPOSTs=1; attempts=1; ledger=UnknownExternalEffect; realDBStaleMs={(long)elapsed.TotalMilliseconds}; blindResends=0");
     }
@@ -70,7 +71,7 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
     [PostgreSqlRecoveryFact]
     public async Task Real_primary_failover_before_any_claim_delivers_exactly_once_on_promoted_node()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var token = deadline.Token;
         await using var lab = await PostgreSqlRecoveryScenario.CreateAsync(token);
         await using var peer = new NotificationRecoveryTlsPeer(holdReceipt: false);
@@ -102,7 +103,7 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
             replicatedPendingAttempts = 0, oldPrimaryPhysicallyFenced = true, physicalStandbyPromoted = true,
             physicalPosts = peer.PhysicalPosts, attempts = durable.Snapshot.AttemptCount,
             terminalState = durable.Snapshot.State.ToString(), durableReopen = true, automaticResends = 0,
-            productionHaAdmission = false,
+            executionMode = "HighAvailability", explicitInterlockRequired = true, automaticFailover = false, defaultEnabled = false,
         }, token);
         output.WriteLine("REAL_PG_BEFORE_CLAIM_PROMOTION replicatedPending=true; oldPrimaryFenced=true; standbyPromoted=true; physicalPOSTs=1; HTTP204=1; attempts=1; ledger=Delivered; blindResends=0");
     }
@@ -110,7 +111,7 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
     [PostgreSqlRecoveryFact]
     public async Task Physical_stale_Pending_backup_restore_cannot_replay_with_new_active_anchor_or_old_configuration()
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var token = deadline.Token;
         await using var lab = await PostgreSqlRecoveryScenario.CreateAsync(token);
         await using var peer = new NotificationRecoveryTlsPeer(holdReceipt: false);
@@ -120,7 +121,7 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
         await lab.ActionAsync("Backup", token);
         var sender = await lab.StartSenderAsync("primary", peer, originalHash, token);
         await sender.WaitReadyAsync(token);
-        await WaitAsync(lab, "primary", id, NotificationDeliveryState.Delivered, token);
+        await WaitAsync(lab, "primary", id, NotificationDeliveryState.Delivered, token, peer);
         Assert.Equal(id, await peer.CompletePost.Task.WaitAsync(token));
         await sender.KillAbruptlyAsync(token);
         var nextGeneration = Guid.NewGuid();
@@ -167,19 +168,25 @@ public sealed class V08G2PostgreSqlRecoveryTests(ITestOutputHelper output)
             activeNewHashStillRefusedByDatabaseEpoch = true, directProductionGateVerifiedBeforeStartup = true,
             databaseEpochUnchangedByReads = true, refusedReleaseSenderProcesses = 3,
             physicalPosts = peer.PhysicalPosts, automaticResends = 0,
-            safeResumeImplemented = false, offlineReconciliationAndAdvancementAccepted = false, productionHaAdmission = false,
+            safeResumeExercisedByThisCase = false, offlineReconciliationExercisedByThisCase = false,
+            executionMode = "HighAvailability", explicitInterlockRequired = true, automaticFailover = false, defaultEnabled = false,
         }, token);
         output.WriteLine("REAL_PG_STALE_BACKUP_QUARANTINE physicalBackupVerified=true; originalDelivered=true; restoredPending=true; restoredAttempts=0; oldHashRefused=true; activeNewHashEpochMismatch=true; senderProcessesRefused=3; physicalPOSTs=1; blindResends=0; safeResumeAccepted=false");
     }
 
-    private static async Task<NotificationDeliveryRecord> WaitAsync(PostgreSqlRecoveryScenario lab, string endpoint,
-        Guid id, NotificationDeliveryState state, CancellationToken token)
+    private async Task<NotificationDeliveryRecord> WaitAsync(PostgreSqlRecoveryScenario lab, string endpoint,
+        Guid id, NotificationDeliveryState state, CancellationToken token, NotificationRecoveryTlsPeer? peer = null)
     {
         var store = await lab.StoreAsync(endpoint, token);
         while (true)
         {
             var row = await store.GetAsync(id, "recovery-webhook", token);
             if (row?.Snapshot.State == state) return row;
+            if (row?.Snapshot.State is NotificationDeliveryState.UnknownExternalEffect or NotificationDeliveryState.Exhausted)
+            {
+                if (peer is not null) output.WriteLine($"SAFE_RECOVERY_FAILURE state={row.Snapshot.State}; attempts={row.Snapshot.AttemptCount}; TLS={peer.AcceptedConnections}; POSTs={peer.PhysicalPosts}; invalidWire={peer.InvalidWire}");
+                throw new InvalidOperationException("Recovery sender reached unexpected terminal state: " + row.Snapshot.State);
+            }
             await Task.Delay(25, token);
         }
     }

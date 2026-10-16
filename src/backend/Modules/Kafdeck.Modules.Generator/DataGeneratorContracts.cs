@@ -303,8 +303,8 @@ public static class DataGeneratorPolicy
             {
                 physicalResource,
                 generatorResource,
-            },
-            preconditions,
+            }.OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            preconditions.OrderBy(item => item.Key, StringComparer.Ordinal).ToArray(),
             AuthorizationTargets: authorization
                 .Distinct()
                 .OrderBy(item => item.Action)

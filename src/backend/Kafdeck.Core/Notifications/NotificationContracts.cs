@@ -172,7 +172,8 @@ public sealed record NotificationDestinationProfile
         bool enabled = true,
         string? providerResourceId = null,
         string? providerSecondaryResourceId = null,
-        NotificationSmtpProfile? smtp = null)
+        NotificationSmtpProfile? smtp = null,
+        long? governanceGeneration = null)
     {
         var normalizedId =
             NormalizeDestinationId(
@@ -193,6 +194,8 @@ public sealed record NotificationDestinationProfile
             throw new ArgumentException("Notification provider target is invalid for its closed provider family.");
         if (smtp is not null && provider != NotificationProviderKind.Email)
             throw new ArgumentException("Only Email may configure an SMTP profile.");
+        if (governanceGeneration is < 1)
+            throw new ArgumentOutOfRangeException(nameof(governanceGeneration));
 
         var normalizedDisplayName = displayName.Trim();
         if (normalizedDisplayName.Length > MaxDisplayNameLength ||
@@ -272,6 +275,7 @@ public sealed record NotificationDestinationProfile
         ProviderResourceId = providerResourceId;
         ProviderSecondaryResourceId = providerSecondaryResourceId;
         Smtp = smtp;
+        GovernanceGeneration = governanceGeneration;
         RevisionFingerprint =
             ComputeRevisionFingerprint(
                 DestinationId,
@@ -284,7 +288,8 @@ public sealed record NotificationDestinationProfile
                 Enabled,
                 ProviderResourceId,
                 ProviderSecondaryResourceId,
-                Smtp);
+                Smtp,
+                GovernanceGeneration);
     }
 
     public string DestinationId { get; }
@@ -299,6 +304,7 @@ public sealed record NotificationDestinationProfile
     public string? ProviderResourceId { get; }
     public string? ProviderSecondaryResourceId { get; }
     public NotificationSmtpProfile? Smtp { get; }
+    public long? GovernanceGeneration { get; }
 
     public string RevisionFingerprint { get; }
 
@@ -313,7 +319,8 @@ public sealed record NotificationDestinationProfile
         bool enabled,
         string? providerResourceId,
         string? providerSecondaryResourceId,
-        NotificationSmtpProfile? smtp)
+        NotificationSmtpProfile? smtp,
+        long? governanceGeneration)
     {
         var canonical =
             string.Join(
@@ -343,6 +350,8 @@ public sealed record NotificationDestinationProfile
         if (providerResourceId is not null || providerSecondaryResourceId is not null)
             canonical += "\nprovider-target=" + providerResourceId + "\n" + providerSecondaryResourceId;
         if (smtp is not null) canonical += "\nsmtp=" + smtp.Endpoint.AbsoluteUri + "\n" + smtp.SenderAddress + "\n" + smtp.Username;
+        if (governanceGeneration is not null)
+            canonical += "\ngovernance-generation=" + governanceGeneration.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         return Convert
             .ToHexString(

@@ -139,6 +139,7 @@ public static class KafdeckSchemaDeveloperEndpoints
                                     ? SecurityAuditPrincipal.FromOperator(
                                         session.Identity)
                                     : SecurityAuditPrincipal.Anonymous;
+                            if (context.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
 
                             await audit
                                 .WriteAsync(
@@ -225,6 +226,7 @@ public static class KafdeckSchemaDeveloperEndpoints
                 ? SecurityAuditPrincipal.FromOperator(
                     session.Identity)
                 : SecurityAuditPrincipal.Anonymous;
+        if (context.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
 
         await audit
             .WriteAsync(

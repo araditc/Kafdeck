@@ -96,12 +96,17 @@ public static class DataGeneratorProgress
         DataGeneratorPlan plan,
         long recordIndex,
         long rawBytes,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc, DestinationDispatchBoundary? destinationBoundary = null)
     {
         DataGeneratorPolicy.ValidatePlan(plan);
         var progress =
             FleetOperationProgress.Restore(snapshot);
         RequirePlan(progress, plan);
+
+        if (destinationBoundary is not null && (destinationBoundary.Validate().ClusterId != plan.Destination.ClusterId ||
+            destinationBoundary.KafkaClusterId != plan.Destination.KafkaClusterId || destinationBoundary.TopicName != plan.Destination.TopicName ||
+            destinationBoundary.Partition != plan.Destination.Partition || destinationBoundary.WorkerGeneration != progress.Snapshot.WorkerGeneration))
+            throw new MutationStateException("Generator destination observation does not match its immutable plan and worker.");
 
         if (progress.Snapshot.WorkerGeneration <= 0)
         {
@@ -159,10 +164,10 @@ public static class DataGeneratorProgress
             recordIndex,
             plan.Destination.Partition,
             rawBytes,
-            nowUtc);
+            nowUtc, destinationBoundary);
 
         return Next(
-            progress.Snapshot,
+            progress.Snapshot with { SchemaVersion = destinationBoundary is null ? progress.Snapshot.SchemaVersion : FleetOperationProgressSnapshot.CurrentSchemaVersion },
             generator.Snapshot,
             FleetProgressPhase.Submitting,
             nowUtc);

@@ -8,12 +8,13 @@ public static class KafdeckRecordsPurgeEndpoints
     private const string IdempotencyHeader = "Idempotency-Key";
 
     public static WebApplication MapKafdeckRecordsPurgeEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer) app.MapKafdeckRecordsPurgeEndpoints(bearer: true);
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/records/purge/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/records/purge/preview"),
                 async (
                     string clusterId,
                     RecordsPurgePreviewRequest request,
@@ -106,8 +107,8 @@ public static class KafdeckRecordsPurgeEndpoints
                             title: "Records purge admission failed"),
                     };
                 })
-            .WithName("v05-records-purge-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-records-purge-preview"))
+            .RequireFamilyBoundary(bearer, "v05-records-purge-preview");
 
         return app;
     }

@@ -226,6 +226,7 @@ public sealed class GovernedDataJobWorker
         }
 
         var current = loaded.Progress;
+        if (current.Transfer?.PendingBatch?.State == FleetTransferBatchState.DispatchStarted) return;
         if (!IsRunnable(current.Phase))
         {
             return;

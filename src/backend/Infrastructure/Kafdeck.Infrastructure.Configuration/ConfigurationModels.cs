@@ -387,7 +387,8 @@ public sealed record OidcProfile(
     string ClientId,
     SecretReference? ClientSecret,
     string? GroupClaim,
-    IReadOnlyList<string> Scopes);
+    IReadOnlyList<string> Scopes,
+    string? TrustedCaPemFile = null);
 
 public sealed record ClusterProfile(
     string Id,

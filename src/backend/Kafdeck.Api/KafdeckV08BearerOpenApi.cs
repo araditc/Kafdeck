@@ -10,7 +10,8 @@ public static class KafdeckV08BearerOpenApi
         return app;
     }
 
-    public const string Document = """
+    public static readonly string Document = BearerFamilyOpenApi.Extend(TopicDocument);
+    private const string TopicDocument = """
 {
   "openapi": "3.1.0",
   "info": {

@@ -96,11 +96,17 @@ public static class GovernedDataJobProgress
         long sourceOffset,
         int destinationPartition,
         long rawBytes,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc, DestinationDispatchBoundary? destinationBoundary = null)
     {
         GovernedDataJobPolicy.ValidatePlan(plan);
         var progress = FleetOperationProgress.Restore(snapshot);
         RequirePlan(progress, plan);
+
+        if (destinationBoundary is not null && (destinationBoundary.Validate().ClusterId != plan.Destination.ClusterId ||
+            destinationBoundary.KafkaClusterId != plan.Destination.KafkaClusterId || rangeIndex < 0 || rangeIndex >= plan.Ranges.Count ||
+            destinationBoundary.TopicName != plan.Ranges[rangeIndex].DestinationTopic || destinationBoundary.Partition != destinationPartition ||
+            destinationBoundary.WorkerGeneration != progress.Snapshot.WorkerGeneration))
+            throw new MutationStateException("Data-job destination observation does not match its immutable plan and worker.");
 
         if (progress.Snapshot.WorkerGeneration <= 0)
         {
@@ -153,10 +159,10 @@ public static class GovernedDataJobProgress
             sourceOffset,
             destinationPartition,
             rawBytes,
-            nowUtc);
+            nowUtc, destinationBoundary);
 
         return Next(
-            progress.Snapshot,
+            progress.Snapshot with { SchemaVersion = destinationBoundary is null ? progress.Snapshot.SchemaVersion : FleetOperationProgressSnapshot.CurrentSchemaVersion },
             transfer.Snapshot,
             FleetProgressPhase.Submitting,
             nowUtc);

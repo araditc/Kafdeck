@@ -10,36 +10,41 @@ public static class KafdeckDataJobEndpoints
         "Idempotency-Key";
 
     public static WebApplication MapKafdeckDataJobEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer)
+        {
+            app.MapKafdeckDataJobEndpoints(bearer: true);
+            app.MapKafdeckJobReconciliationEndpoints(generator: false);
+        }
 
         MapPreview(
             app,
             "/api/v1/data-jobs/replay/preview",
             "v07-data-job-replay-preview",
-            GovernedDataJobKind.Replay);
+            GovernedDataJobKind.Replay, bearer);
 
         MapPreview(
             app,
             "/api/v1/data-jobs/forward/preview",
             "v07-data-job-forward-preview",
-            GovernedDataJobKind.Forward);
+            GovernedDataJobKind.Forward, bearer);
 
         MapPreview(
             app,
             "/api/v1/data-jobs/reprocess/preview",
             "v07-data-job-reprocess-preview",
-            GovernedDataJobKind.Reprocess);
+            GovernedDataJobKind.Reprocess, bearer);
 
         MapPreview(
             app,
             "/api/v1/data-jobs/dlq-forward/preview",
             "v07-data-job-dlq-forward-preview",
-            GovernedDataJobKind.DlqForward);
+            GovernedDataJobKind.DlqForward, bearer);
 
         app.MapPost(
-                "/api/v1/data-jobs/{operationId:guid}/start",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/{operationId:guid}/start"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -55,11 +60,10 @@ public static class KafdeckDataJobEndpoints
 
                     return MapDispatchResult(result);
                 })
-            .WithName("v07-data-job-start")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-job-start")).RequireFamilyBoundary(bearer, "v07-data-job-start");
 
         app.MapGet(
-                "/api/v1/data-jobs/{operationId:guid}",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/{operationId:guid}"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -147,10 +151,10 @@ public static class KafdeckDataJobEndpoints
                             plan,
                             progress));
                 })
-            .WithName("v07-data-job-status");
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-job-status")).RequireFamilyBoundary(bearer, "v07-data-job-status");
 
         app.MapPost(
-                "/api/v1/data-jobs/{operationId:guid}/cancel",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/{operationId:guid}/cancel"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -201,11 +205,10 @@ public static class KafdeckDataJobEndpoints
                         result,
                         "cancel");
                 })
-            .WithName("v07-data-job-cancel")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-job-cancel")).RequireFamilyBoundary(bearer, "v07-data-job-cancel");
 
         app.MapPost(
-                "/api/v1/data-jobs/{operationId:guid}/reconcile",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/{operationId:guid}/reconcile"),
                 async (
                     Guid operationId,
                     DataJobReconcileRequest request,
@@ -275,8 +278,7 @@ public static class KafdeckDataJobEndpoints
                         result,
                         "reconcile");
                 })
-            .WithName("v07-data-job-reconcile")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-job-reconcile")).RequireFamilyBoundary(bearer, "v07-data-job-reconcile");
 
         return app;
     }
@@ -431,14 +433,8 @@ public static class KafdeckDataJobEndpoints
         string outcomeCode,
         CancellationToken cancellationToken)
     {
-        var principal =
-            OperatorSessionContextFactory.TryCreate(
-                context.User,
-                out var session) &&
-            session is not null
-                ? SecurityAuditPrincipal.FromOperator(
-                    session.Identity)
-                : SecurityAuditPrincipal.LegacyDeployment;
+        var principal = MutationActor.TryCreate(context.User, out var actor) && actor is not null
+            ? actor.PrincipalId : SecurityAuditPrincipal.LegacyDeployment;
 
         await audit.WriteAsync(
                 new MutationAuditEvent(
@@ -493,10 +489,10 @@ public static class KafdeckDataJobEndpoints
         WebApplication app,
         string pattern,
         string name,
-        GovernedDataJobKind kind)
+        GovernedDataJobKind kind, bool bearer)
     {
         app.MapPost(
-                pattern,
+                BearerFamilyRoutes.Path(bearer, pattern),
                 async (
                     DataJobPreviewRequest request,
                     HttpContext context,
@@ -542,8 +538,7 @@ public static class KafdeckDataJobEndpoints
 
                     return MapAdmissionResult(admitted);
                 })
-            .WithName(name)
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, name)).RequireFamilyBoundary(bearer, name);
     }
 
     private static GovernedDataJobPlanningRequest?
@@ -948,7 +943,8 @@ public sealed record DataJobStatusData(
     long AcknowledgedBytes,
     long ActiveRuntimeMilliseconds,
     IReadOnlyList<DataJobRangeStatusData> Ranges,
-    DataJobPendingBatchStatusData? PendingBatch)
+    DataJobPendingBatchStatusData? PendingBatch,
+    long? ProgressVersion = null)
 {
     public static DataJobStatusData From(
         MutationOperationSnapshot operation,
@@ -1009,7 +1005,8 @@ public sealed record DataJobStatusData(
                 .ActiveObservationElapsed
                 .TotalMilliseconds ?? 0),
             ranges,
-            pendingData);
+            pendingData,
+            progress?.Version);
     }
 }
 

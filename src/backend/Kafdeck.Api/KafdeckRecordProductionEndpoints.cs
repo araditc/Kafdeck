@@ -10,12 +10,13 @@ public static class KafdeckRecordProductionEndpoints
     private const string IdempotencyHeader = "Idempotency-Key";
 
     public static WebApplication MapKafdeckRecordProductionEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer) app.MapKafdeckRecordProductionEndpoints(bearer: true);
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/topics/{topicName}/mutations/produce/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/topics/{topicName}/mutations/produce/preview"),
                 async (
                     string clusterId,
                     string topicName,
@@ -63,15 +64,15 @@ public static class KafdeckRecordProductionEndpoints
                         ZeroRequestMaterial(request.Records);
                     }
                 })
-            .WithName("v05-record-production-preview")
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-record-production-preview"))
             .RequireKafdeckAuthorization(
                 AuthorizationAction.RecordProduce,
                 "clusterId",
                 "topicName")
-            .RequireKafdeckAntiforgery();
+            .RequireFamilyBoundary(bearer, "v05-record-production-preview");
 
         app.MapPost(
-                "/api/v1/mutations/{operationId:guid}/record-production/execute",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/mutations/{operationId:guid}/record-production/execute"),
                 async (
                     Guid operationId,
                     RecordProductionExecuteRequest request,
@@ -101,8 +102,8 @@ public static class KafdeckRecordProductionEndpoints
                         ZeroRequestMaterial(request.Records);
                     }
                 })
-            .WithName("v05-record-production-execute")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-record-production-execute"))
+            .RequireFamilyBoundary(bearer, "v05-record-production-execute");
 
         return app;
     }

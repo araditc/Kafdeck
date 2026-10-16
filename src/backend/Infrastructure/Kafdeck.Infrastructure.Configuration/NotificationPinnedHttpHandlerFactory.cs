@@ -61,19 +61,22 @@ public sealed class NotificationPinnedHttpHandlerFactory
     private readonly TimeProvider _clock;
     private readonly X509Certificate2Collection? _trustRoots;
     private readonly INotificationDeliveryActivationGate? _activationGate;
+    private readonly INotificationPhysicalRevisionGate? _revisionGate;
 
     public NotificationPinnedHttpHandlerFactory(
         INotificationPinnedTcpDialer dialer,
         NotificationAddressPolicy policy,
         TimeProvider? clock = null,
         X509Certificate2Collection? trustRoots = null,
-        INotificationDeliveryActivationGate? activationGate = null)
+        INotificationDeliveryActivationGate? activationGate = null,
+        INotificationPhysicalRevisionGate? revisionGate = null)
     {
         _dialer = dialer ?? throw new ArgumentNullException(nameof(dialer));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _clock = clock ?? TimeProvider.System;
         _trustRoots = trustRoots is null ? null : new X509Certificate2Collection(trustRoots);
         _activationGate = activationGate;
+        _revisionGate = revisionGate;
     }
 
     /// <summary>
@@ -82,32 +85,39 @@ public sealed class NotificationPinnedHttpHandlerFactory
     /// reused; the inner SocketsHttpHandler still pins TCP to the approved IP.
     /// Caller owns/disposes the returned handler. Does not itself send.
     /// </summary>
-    public HttpMessageHandler CreateGuardedHandler(NotificationPinnedEndpoint pinned)
+    public HttpMessageHandler CreateGuardedHandler(NotificationPinnedEndpoint pinned, NotificationDestinationProfile? profile = null)
     {
         VerifyPinned(pinned);
-        HttpMessageHandler inner = CreateHandler(pinned);
-        if (_activationGate is not null) inner = new ActivationGuard(inner, _activationGate);
+        HttpMessageHandler inner = CreateHandler(pinned, profile);
+        if (_activationGate is not null || _revisionGate is not null)
+            inner = new ActivationGuard(inner, token => VerifySendAdmissionAsync(token, profile));
         return new NotificationPinnedRequestGuardHandler(pinned, _policy, inner, _clock);
     }
 
-    internal ValueTask VerifySendAdmissionAsync(CancellationToken token) =>
-        _activationGate?.VerifyAsync(token) ?? ValueTask.CompletedTask;
+    internal async ValueTask VerifySendAdmissionAsync(CancellationToken token, NotificationDestinationProfile? profile = null)
+    {
+        if (_activationGate is not null) await _activationGate.VerifyAsync(token).ConfigureAwait(false);
+        if (_revisionGate is null) return;
+        if (profile is null) throw new KafdeckConfigurationException("Governed physical delivery requires an exact destination revision.");
+        await _revisionGate.VerifyAsync(profile.DestinationId, profile.RevisionFingerprint, token).ConfigureAwait(false);
+    }
 
-    private sealed class ActivationGuard(HttpMessageHandler inner, INotificationDeliveryActivationGate gate)
+    private sealed class ActivationGuard(HttpMessageHandler inner, Func<CancellationToken, ValueTask> verify)
         : DelegatingHandler(inner)
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
-            await gate.VerifyAsync(token).ConfigureAwait(false);
+            await verify(token).ConfigureAwait(false);
             return await base.SendAsync(request, token).ConfigureAwait(false);
         }
     }
 
     /// <summary>Opens only the approved pinned TCP endpoint, then performs normal
     /// TLS/SNI/hostname validation without creating HTTP diagnostics or a proxy.</summary>
-    public async Task<SslStream> OpenPinnedTlsStreamAsync(NotificationPinnedEndpoint pinned, CancellationToken token)
+    public async Task<SslStream> OpenPinnedTlsStreamAsync(NotificationPinnedEndpoint pinned, CancellationToken token,
+        NotificationDestinationProfile? profile = null)
     {
-        await VerifySendAdmissionAsync(token).ConfigureAwait(false);
+        await VerifySendAdmissionAsync(token, profile).ConfigureAwait(false);
         using var connectDeadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         connectDeadline.CancelAfter(TimeSpan.FromSeconds(5));
         var stream = await ConnectPinnedAsync(pinned, pinned.Endpoint.DnsSafeHost, pinned.Endpoint.Port, connectDeadline.Token).ConfigureAwait(false);
@@ -120,12 +130,15 @@ public sealed class NotificationPinnedHttpHandlerFactory
                 EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                 CertificateChainPolicy = _trustRoots is null ? null : CreateChainPolicy(_trustRoots),
             }, token).ConfigureAwait(false);
+            // DNS, TCP and TLS can outlive a shared credential revocation.
+            // Recheck before returning any writable application stream.
+            await VerifySendAdmissionAsync(token, profile).ConfigureAwait(false);
             return tls;
         }
         catch { await tls.DisposeAsync().ConfigureAwait(false); throw; }
     }
 
-    public SocketsHttpHandler CreateHandler(NotificationPinnedEndpoint pinned)
+    public SocketsHttpHandler CreateHandler(NotificationPinnedEndpoint pinned, NotificationDestinationProfile? profile = null)
     {
         VerifyPinned(pinned);
         // The request URI retains its approved DNS name, allowing normal
@@ -139,6 +152,17 @@ public sealed class NotificationPinnedHttpHandlerFactory
             AutomaticDecompression = DecompressionMethods.None,
             ConnectTimeout = TimeSpan.FromSeconds(5),
             PooledConnectionLifetime = TimeSpan.Zero,
+            PlaintextStreamFilter = async (context, token) =>
+            {
+                // This callback receives the established TLS plaintext stream,
+                // before HTTP headers or credential-bearing bodies are written.
+                try
+                {
+                    await VerifySendAdmissionAsync(token, profile).ConfigureAwait(false);
+                    return context.PlaintextStream;
+                }
+                catch { await context.PlaintextStream.DisposeAsync().ConfigureAwait(false); throw; }
+            },
             // A supplied laboratory/private CA changes chain roots only.
             // SNI, hostname, expiry and EKU checks remain in SslStream.
             SslOptions = new SslClientAuthenticationOptions

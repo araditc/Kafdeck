@@ -9,6 +9,7 @@ public enum SecurityAuditEventType
     SensitiveRead = 5,
     LegacyTokenRequest = 6,
     MetricsScrapeRequest = 7,
+    NotificationManagementChanged = 8,
 }
 
 public enum SecurityAuditOutcome

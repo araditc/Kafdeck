@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterProductCommands, productCommands } from '../dist/test-source/app/commandPalette.js';
+import { filterProductCommands, productCommands } from '../dist/test-source/app/commandPaletteModel.js';
 
 test('command registry has stable unique product action identifiers', () => {
   const ids = productCommands.map(command => command.id);

@@ -151,6 +151,9 @@ public static class KafdeckConfigurationValidator
 
     private static void ValidateOidc(OidcProfile oidc, ICollection<string> errors)
     {
+        if (oidc.TrustedCaPemFile is { } ca && (string.IsNullOrWhiteSpace(ca) || ca.Length > 2048 ||
+            !Path.IsPathFullyQualified(ca) || ca.Any(char.IsControl)))
+            errors.Add("OIDC trusted CA must be an explicit bounded absolute server-owned PEM file path.");
         if (!Uri.TryCreate(oidc.Issuer, UriKind.Absolute, out var issuer) ||
             !(string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
               string.Equals(issuer.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)))

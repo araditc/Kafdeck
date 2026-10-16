@@ -58,6 +58,7 @@ public sealed class V08W66SmtpPhysicalTlsTests(ITestOutputHelper output)
             builder.Services.AddSingleton(new NotificationPinnedHttpHandlerFactory(network, NotificationAddressPolicy.NoConfiguredNat64,
                 trustRoots: new X509Certificate2Collection(tls.Root)));
             var connections = new SqliteNotificationDeliveryDbConnectionFactory(path);
+            builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(connections);
             var routing = new AdoNotificationRoutingStore(connections);
             var store = new AdoNotificationDeliveryStore(connections);
             builder.Services.AddSingleton<INotificationRoutingStore>(routing);

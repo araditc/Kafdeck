@@ -18,7 +18,8 @@ public sealed record FleetTransferPendingBatch(
     long RawBytes,
     FleetTransferBatchState State,
     DateTimeOffset ReservedAtUtc,
-    DateTimeOffset? DispatchStartedAtUtc = null);
+    DateTimeOffset? DispatchStartedAtUtc = null,
+    DestinationDispatchBoundary? DestinationBoundary = null);
 
 public sealed record FleetTransferProgressSnapshot(
     string PlanFingerprint,
@@ -68,7 +69,7 @@ public sealed class FleetTransferProgress
         long sourceOffset,
         int destinationPartition,
         long rawBytes,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc, DestinationDispatchBoundary? destinationBoundary = null)
     {
         if (Snapshot.PendingBatch is not null)
             throw new MutationStateException("At most one transfer batch may be unresolved.");
@@ -88,7 +89,7 @@ public sealed class FleetTransferProgress
             destinationPartition,
             rawBytes,
             FleetTransferBatchState.ReservedBeforeDispatch,
-            nowUtc);
+            nowUtc, DestinationBoundary: destinationBoundary?.Validate());
         Snapshot = Snapshot with
         {
             PendingBatch = pending,
@@ -181,6 +182,8 @@ public sealed class FleetTransferProgress
 
         if (snapshot.PendingBatch is { } pending)
         {
+            if (pending.DestinationBoundary is { } boundary && boundary.Validate().Partition != pending.DestinationPartition)
+                throw new MutationStateException("Transfer destination boundary does not match its partition.");
             if (pending.BatchId == Guid.Empty ||
                 pending.MappingIndex < 0 ||
                 pending.MappingIndex >= ordered.Length ||

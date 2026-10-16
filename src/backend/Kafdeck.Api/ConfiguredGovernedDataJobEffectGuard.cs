@@ -8,14 +8,16 @@ public sealed class ConfiguredGovernedDataJobEffectGuard :
     IGovernedDataJobEffectGuard
 {
     private readonly AuthorizationPolicyEvaluator _authorization;
+    private readonly BearerRuntimeAuthorization? _bearerAuthorization;
     private readonly MutationApprovalAuthorizer _approval;
     private readonly GovernedDataJobPreconditionValidator _preconditions;
 
     public ConfiguredGovernedDataJobEffectGuard(
         AuthorizationPolicyEvaluator authorization,
         MutationApprovalAuthorizer approval,
-        GovernedDataJobPreconditionValidator preconditions)
+        GovernedDataJobPreconditionValidator preconditions, BearerRuntimeAuthorization? bearerAuthorization = null)
     {
+        _bearerAuthorization = bearerAuthorization;
         _authorization =
             authorization ??
             throw new ArgumentNullException(
@@ -95,6 +97,8 @@ public sealed class ConfiguredGovernedDataJobEffectGuard :
     private bool RequesterAllowed(
         MutationOperationSnapshot operation)
     {
+        if (RegisteredBearerPrincipal.HasBearerPrefix(operation.RequesterPrincipalId))
+            return _bearerAuthorization?.IsRequesterAllowed(operation) == true;
         foreach (var target in
                  operation.AuthorizationTargets)
         {
@@ -119,6 +123,8 @@ public sealed class ConfiguredGovernedDataJobEffectGuard :
     private bool ApproverAllowed(
         MutationOperationSnapshot operation)
     {
+        if (RegisteredBearerPrincipal.HasBearerPrefix(operation.RequesterPrincipalId))
+            return _bearerAuthorization?.IsApproverAllowed(operation) == true;
         if (!operation.Risk
                 .RequiresIndependentApproval)
         {

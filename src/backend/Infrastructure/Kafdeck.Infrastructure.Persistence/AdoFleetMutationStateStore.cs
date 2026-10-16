@@ -566,11 +566,12 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
             """
             UPDATE kafdeck_fleet_progress
             SET version = @new_version,
+                schema_version = @schema_version,
                 phase = @phase,
                 snapshot_json = @snapshot_json,
                 updated_at_utc = @updated_at_utc
             WHERE operation_id = @operation_id
-              AND schema_version = @schema_version
+              AND (schema_version = @schema_version OR (schema_version = 1 AND @schema_version = 2))
               AND version = @expected_version
             """;
         AddParameter(command, "@new_version", normalized.Version);

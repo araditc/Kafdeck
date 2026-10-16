@@ -10,6 +10,8 @@ public static class KafdeckBearerMutationEndpoints
 {
     public static WebApplication MapKafdeckBearerMutations(this WebApplication app)
     {
+        app.MapGet("/api/v1/automation/capabilities/reads", () => Results.Ok(new NamedReadInventoryData(1, false, Kafdeck.Contracts.KafdeckReadContracts.All)))
+            .WithName("v08-bearer-read-capabilities").RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
         app.MapPost("/api/v1/automation/clusters/{clusterId}/topics/{topicName}/create/preview", async (
             string clusterId, string topicName, BearerTopicCreateRequest request, HttpContext context,
             TopicMutationPlanner planner, MutationAdmissionService admission, CancellationToken cancellationToken) =>
@@ -144,7 +146,7 @@ public static class KafdeckBearerMutationEndpoints
         var operation = await repository.GetAsync(id, token);
         if (operation is null) return (null, Results.Problem(statusCode: 404, title: "Mutation not found"));
         var decision = cancellation ? authorization.AuthorizeForLifecycle(context.User, operation) : authorization.AuthorizeForDispatch(context.User, operation);
-        if (!BearerTopicMutationScope.IsKind(operation.OperationKind) || operation.RequesterPrincipalId != actor.PrincipalId || decision != KafdeckAuthorizationOutcome.Allowed)
+        if (!BearerFamilyRoutes.IsKind(operation.OperationKind) || operation.RequesterPrincipalId != actor.PrincipalId || decision != KafdeckAuthorizationOutcome.Allowed)
             return (null, Results.Problem(statusCode: 403, title: "Mutation access denied"));
         return (operation, null);
     }
@@ -158,7 +160,7 @@ public static class KafdeckBearerMutationEndpoints
     {
         var http = context.HttpContext;
         if (http.User.Identity is not NonBrowserReadIdentity identity ||
-            !http.RequestServices.GetRequiredService<NonBrowserReadRegistry>().IsGovernedApprovalAllowed(identity, AuthorizationAction.TopicDelete))
+            !http.RequestServices.GetRequiredService<NonBrowserReadRegistry>().IsAnyGovernedApprovalAllowed(identity))
         {
             http.Response.Headers.WWWAuthenticate = "Bearer";
             return ValueTask.FromResult<object?>(Results.Problem(statusCode: 401, title: "A live registered human approval identity is required."));

@@ -40,7 +40,7 @@ internal sealed class PostgreSqlRecoveryScenario(string repository, string direc
         catch { await scenario.DisposeAsync(); throw; }
     }
 
-    internal async Task ActionAsync(string action, CancellationToken token)
+    internal async Task ActionAsync(string action, CancellationToken token, Guid? targetGeneration = null, string? anchorSha256 = null)
     {
         var start = new ProcessStartInfo("pwsh")
         {
@@ -52,6 +52,8 @@ internal sealed class PostgreSqlRecoveryScenario(string repository, string direc
         var binary = Environment.GetEnvironmentVariable("KAFDECK_G2_RECOVERY_BIN");
         if (!string.IsNullOrWhiteSpace(binary)) { start.ArgumentList.Add("-BinDirectory"); start.ArgumentList.Add(binary); }
         if (action == "Failover") { start.ArgumentList.Add("-PrimaryStopMode"); start.ArgumentList.Add("immediate"); }
+        if (targetGeneration is not null) { start.ArgumentList.Add("-TargetGeneration"); start.ArgumentList.Add(targetGeneration.Value.ToString("D")); }
+        if (anchorSha256 is not null) { start.ArgumentList.Add("-ExternalAnchorSha256"); start.ArgumentList.Add(anchorSha256); }
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Recovery tool process did not start.");
         using var captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         var output = Task.WhenAll(ReadBoundedAsync(process.StandardOutput, captureCancellation.Token),
@@ -131,11 +133,14 @@ internal sealed class PostgreSqlRecoveryScenario(string repository, string direc
         var now = await deliveries.GetCoordinationUtcNowAsync(DateTimeOffset.UtcNow, token);
         var notification = NotificationSafeEvent.Approved(Guid.NewGuid(), NotificationApprovedEventKind.ConsumerLagAlert, now);
         var profile = new NotificationDestinationProfile("recovery-webhook", NotificationProviderKind.Webhook, "Recovery fixture",
-            [NotificationEventClass.Operational], new Uri(peer.Endpoint));
+            [NotificationEventClass.Operational, NotificationEventClass.Mutation], new Uri(peer.Endpoint));
         await routing.CreateOrGetEventAsync(notification, now, token);
         await deliveries.CreateOrGetAsync(new NotificationDeliverySnapshot(notification.EventId, profile.DestinationId,
             notification.PayloadFingerprint, NotificationDeliveryState.Pending, 0, now,
             routedProfileRevisionFingerprint: profile.RevisionFingerprint), now, token);
+        if (!await new AdoNotificationRecoveryStore(connections).CheckAsync(notification.EventId, profile.DestinationId,
+            notification.OccurredAtUtc, token))
+            throw new InvalidOperationException("Legacy recovery fixture unexpectedly denied before sender startup.");
         return notification.EventId;
     }
 

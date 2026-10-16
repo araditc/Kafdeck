@@ -9,12 +9,13 @@ public static class KafdeckConnectAutoRestartEndpoints
     private const string IdempotencyHeader = "Idempotency-Key";
 
     public static WebApplication MapKafdeckConnectAutoRestartEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer) app.MapKafdeckConnectAutoRestartEndpoints(bearer: true);
 
         app.MapGet(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -66,10 +67,10 @@ public static class KafdeckConnectAutoRestartEndpoints
                             runtime,
                             current));
                 })
-            .WithName("v07-connect-auto-restart-policy-read");
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-auto-restart-policy-read")).RequireFamilyBoundary(bearer, "v07-connect-auto-restart-policy-read");
 
         app.MapPut(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy/preview"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -92,10 +93,7 @@ public static class KafdeckConnectAutoRestartEndpoints
                             "Connect auto-restart target is invalid.");
                     }
 
-                    if (!OperatorSessionContextFactory.TryCreate(
-                            context.User,
-                            out var session) ||
-                        session is null)
+                    if (!MutationActor.TryCreate(context.User, out var actor) || actor is null)
                     {
                         return Results.Problem(
                             statusCode:
@@ -133,8 +131,7 @@ public static class KafdeckConnectAutoRestartEndpoints
                                 request.ActivationLifetimeSeconds,
                                 request.MaxActivePoliciesPerProfile,
                                 request.JitterBasisPoints),
-                            SecurityAuditPrincipal.FromOperator(
-                                session.Identity),
+                            actor.PrincipalId,
                             cancellationToken)
                         .ConfigureAwait(false);
 
@@ -157,11 +154,10 @@ public static class KafdeckConnectAutoRestartEndpoints
 
                     return AdmissionResult(admitted);
                 })
-            .WithName("v07-connect-auto-restart-policy-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-auto-restart-policy-preview")).RequireFamilyBoundary(bearer, "v07-connect-auto-restart-policy-preview");
 
         app.MapPut(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/restart-policy"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -223,8 +219,7 @@ public static class KafdeckConnectAutoRestartEndpoints
 
                     return DispatchResult(result);
                 })
-            .WithName("v07-connect-auto-restart-policy-apply")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-auto-restart-policy-apply")).RequireFamilyBoundary(bearer, "v07-connect-auto-restart-policy-apply");
 
         return app;
     }

@@ -142,6 +142,7 @@ public sealed class NotificationDeliveryWorker
     // cannot create an unbounded number of abandoned operations.
     private readonly SemaphoreSlim _dispatchSlots;
     private readonly INotificationDeliveryActivationGate? _activationGate;
+    private readonly INotificationDeliveryClaimGate? _claimGate;
     private readonly object
         _dueCursorGate = new();
     private NotificationDeliveryDueCursor?
@@ -153,7 +154,8 @@ public sealed class NotificationDeliveryWorker
         NotificationDeliveryPolicy? deliveryPolicy = null,
         NotificationDeliveryWorkerPolicy? workerPolicy = null,
         TimeProvider? timeProvider = null,
-        INotificationDeliveryActivationGate? activationGate = null)
+        INotificationDeliveryActivationGate? activationGate = null,
+        INotificationDeliveryClaimGate? claimGate = null)
     {
         _store =
             store ??
@@ -174,6 +176,7 @@ public sealed class NotificationDeliveryWorker
             timeProvider ??
             TimeProvider.System;
         _activationGate = activationGate;
+        _claimGate = claimGate;
     }
 
     public async Task<NotificationDeliveryCycleResult>
@@ -418,6 +421,8 @@ public sealed class NotificationDeliveryWorker
         try
         {
             if (_activationGate is not null) await _activationGate.VerifyAsync(cancellationToken).ConfigureAwait(false);
+            if (_claimGate is not null && !await _claimGate.CanClaimAsync(due.Snapshot.DestinationId, cancellationToken).ConfigureAwait(false))
+                return NotificationDeliveryWorkItemOutcome.AdmissionDeferred;
             var claim =
                 await _store
                     .TryClaimForDispatchAsync(

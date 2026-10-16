@@ -9,12 +9,13 @@ public static class KafdeckConnectMutationEndpoints
     private const string IdempotencyHeader = "Idempotency-Key";
 
     public static WebApplication MapKafdeckConnectMutationEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer) app.MapKafdeckConnectMutationEndpoints(bearer: true);
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/create/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/create/preview"),
                 async (
                     string clusterId,
                     string connectorName,
@@ -61,11 +62,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-connect-create-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-connect-create-preview"))
+            .RequireFamilyBoundary(bearer, "v05-connect-create-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/update/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/update/preview"),
                 async (
                     string clusterId,
                     string connectorName,
@@ -112,11 +113,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-connect-update-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-connect-update-preview"))
+            .RequireFamilyBoundary(bearer, "v05-connect-update-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/control/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/control/preview"),
                 async (
                     string clusterId,
                     string connectorName,
@@ -158,11 +159,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-connect-control-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-connect-control-preview"))
+            .RequireFamilyBoundary(bearer, "v05-connect-control-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/delete/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/delete/preview"),
                 async (
                     string clusterId,
                     string connectorName,
@@ -199,11 +200,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-connect-delete-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-connect-delete-preview"))
+            .RequireFamilyBoundary(bearer, "v05-connect-delete-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/create/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/create/preview"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -253,11 +254,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v07-connect-profile-create-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-profile-create-preview"))
+            .RequireFamilyBoundary(bearer, "v07-connect-profile-create-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/update/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/update/preview"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -307,11 +308,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v07-connect-profile-update-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-profile-update-preview"))
+            .RequireFamilyBoundary(bearer, "v07-connect-profile-update-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/control/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/control/preview"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -356,11 +357,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v07-connect-profile-control-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-profile-control-preview"))
+            .RequireFamilyBoundary(bearer, "v07-connect-profile-control-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/delete/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/connect/profiles/{connectProfileId}/connectors/{connectorName}/mutations/delete/preview"),
                 async (
                     string clusterId,
                     string connectProfileId,
@@ -402,11 +403,11 @@ public static class KafdeckConnectMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v07-connect-profile-delete-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-connect-profile-delete-preview"))
+            .RequireFamilyBoundary(bearer, "v07-connect-profile-delete-preview");
 
         app.MapPost(
-                "/api/v1/mutations/{operationId:guid}/connect-configuration/execute",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/mutations/{operationId:guid}/connect-configuration/execute"),
                 async (
                     Guid operationId,
                     ConnectConfigurationExecuteRequest request,
@@ -423,11 +424,11 @@ public static class KafdeckConnectMutationEndpoints
                         .ConfigureAwait(false);
                     return MapDispatchResult(result);
                 })
-            .WithName("v05-connect-configuration-execute")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-connect-configuration-execute"))
+            .RequireFamilyBoundary(bearer, "v05-connect-configuration-execute");
 
         app.MapPost(
-                "/api/v1/mutations/{operationId:guid}/connect/execute",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/mutations/{operationId:guid}/connect/execute"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -442,8 +443,8 @@ public static class KafdeckConnectMutationEndpoints
                         .ConfigureAwait(false);
                     return MapDispatchResult(result);
                 })
-            .WithName("v05-connect-control-delete-execute")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-connect-control-delete-execute"))
+            .RequireFamilyBoundary(bearer, "v05-connect-control-delete-execute");
 
         return app;
     }

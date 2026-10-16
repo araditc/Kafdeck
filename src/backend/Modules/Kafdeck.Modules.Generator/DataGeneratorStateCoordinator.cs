@@ -615,7 +615,7 @@ public sealed class DataGeneratorStateCoordinator
             long rawBytes,
             DateTimeOffset nowUtc,
             CancellationToken cancellationToken =
-                default) =>
+                default, DestinationDispatchBoundary? destinationBoundary = null) =>
         MutateAsync(
             operationId,
             plan,
@@ -627,7 +627,7 @@ public sealed class DataGeneratorStateCoordinator
                         plan,
                         recordIndex,
                         rawBytes,
-                        nowUtc),
+                        nowUtc, destinationBoundary),
             "data_generator_batch_reserved",
             cancellationToken);
 

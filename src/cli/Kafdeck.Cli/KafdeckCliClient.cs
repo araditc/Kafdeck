@@ -109,10 +109,16 @@ public sealed class KafdeckCliClient : IDisposable
             cancellationToken);
     }
 
-    public async Task<HttpResponseMessage> PostAsync(string relativePath, object? body, string? idempotencyKey, CancellationToken cancellationToken)
+    public Task<HttpResponseMessage> PostAsync(string relativePath, object? body, string? idempotencyKey, CancellationToken cancellationToken) =>
+        SendMutationAsync(HttpMethod.Post, relativePath, body, idempotencyKey, cancellationToken);
+
+    public Task<HttpResponseMessage> PutAsync(string relativePath, object? body, string? idempotencyKey, CancellationToken cancellationToken) =>
+        SendMutationAsync(HttpMethod.Put, relativePath, body, idempotencyKey, cancellationToken);
+
+    private async Task<HttpResponseMessage> SendMutationAsync(HttpMethod method, string relativePath, object? body, string? idempotencyKey, CancellationToken cancellationToken)
     {
         if (_oidcSession is null) throw new CliUsageException("Governed mutations require a memory-only OIDC session.");
-        using var request = new HttpRequestMessage(HttpMethod.Post, relativePath);
+        using var request = new HttpRequestMessage(method, relativePath);
         if (body is not null) request.Content = JsonContent.Create(body);
         if (idempotencyKey is not null) request.Headers.Add("Idempotency-Key", idempotencyKey);
         return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);

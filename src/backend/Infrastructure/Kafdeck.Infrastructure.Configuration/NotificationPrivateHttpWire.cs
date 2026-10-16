@@ -13,7 +13,7 @@ internal static class NotificationPrivateHttpWire
 
     internal static async Task<Response> PostAsync(NotificationPinnedHttpHandlerFactory connections,
         NotificationPinnedEndpoint pinned, byte[] body, CancellationToken token,
-        bool readBody = true, NotificationCredentialValue? bearer = null)
+        bool readBody = true, NotificationCredentialValue? bearer = null, NotificationDestinationProfile? profile = null)
     {
         // HTTP Host is ASCII IDNA, even when the approved URI used a Unicode
         // hostname. Preserve IPv6 brackets and the exact non-default port.
@@ -28,8 +28,8 @@ internal static class NotificationPrivateHttpWire
             (bearer is null ? string.Empty : "Authorization: Bearer " + bearer.Reveal() + "\r\n") +
             "Connection: close\r\n\r\n");
         if (headers.Length > 8192) throw new IOException("Provider request headers exceed finite budget.");
-        await using var tls = await connections.OpenPinnedTlsStreamAsync(pinned, token).ConfigureAwait(false);
-        await connections.VerifySendAdmissionAsync(token).ConfigureAwait(false);
+        await using var tls = await connections.OpenPinnedTlsStreamAsync(pinned, token, profile).ConfigureAwait(false);
+        await connections.VerifySendAdmissionAsync(token, profile).ConfigureAwait(false);
         await tls.WriteAsync(headers, token).ConfigureAwait(false);
         await tls.WriteAsync(body, token).ConfigureAwait(false);
         var reader = new BoundedLineReader(tls);

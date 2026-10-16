@@ -243,6 +243,9 @@ public sealed class DataGeneratorWorker
         }
 
         var current = loaded.Progress;
+        // An unresolved dispatched batch must stay byte-for-byte stable for
+        // governed review. A restart/lease expiry never authorizes blind replay.
+        if (current.Generator?.PendingBatch?.State == FleetGeneratorBatchState.DispatchStarted) return;
         if (!IsRunnable(current.Phase))
         {
             return;

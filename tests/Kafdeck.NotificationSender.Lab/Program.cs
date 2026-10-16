@@ -18,6 +18,7 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "data-worker") return await DataJobWorkerMode.RunAsync(args[1]);
         if (args.Length != 1) return 2;
         try
         {
@@ -33,9 +34,9 @@ internal static class Program
             var builder = Host.CreateApplicationBuilder();
             builder.Logging.ClearProviders();
             var profile = new NotificationDestinationProfile("recovery-webhook", NotificationProviderKind.Webhook,
-                "Recovery fixture", [NotificationEventClass.Operational], endpoint);
+                "Recovery fixture", [NotificationEventClass.Operational, NotificationEventClass.Mutation], endpoint);
             var options = new NotificationReadOptions(true, NotificationPersistenceProvider.PostgreSql,
-                NotificationExecutionMode.Standalone, null, SecretReference.Parse("env:KAFDECK_TEST_POSTGRES"),
+                NotificationExecutionMode.HighAvailability, null, SecretReference.Parse("env:KAFDECK_TEST_POSTGRES"),
                 DestinationProfiles: [profile], WebhookDeliveryEnabled: true,
                 DeliveryInterlockPath: config.InterlockPath, DeliveryInterlockSha256: config.InterlockSha256);
             var connections = new PostgreSqlNotificationDeliveryDbConnectionFactory(connectionString);
@@ -51,8 +52,8 @@ internal static class Program
             builder.Services.AddSingleton<INotificationPinnedTcpDialer>(network);
             builder.Services.AddSingleton(new NotificationPinnedHttpHandlerFactory(network,
                 NotificationAddressPolicy.NoConfiguredNat64, trustRoots: new X509Certificate2Collection(certificate), activationGate: gate));
-            builder.Services.AddSingleton(new NotificationDeliveryWorkerPolicy(staleInFlightAfter: TimeSpan.FromSeconds(10),
-                dispatchTimeout: TimeSpan.FromSeconds(5)));
+            builder.Services.AddSingleton(new NotificationDeliveryWorkerPolicy(staleInFlightAfter: TimeSpan.FromSeconds(30),
+                dispatchTimeout: TimeSpan.FromSeconds(20)));
             builder.Services.AddSingleton<INotificationRoutingStore>(new AdoNotificationRoutingStore(connections));
             builder.Services.AddSingleton<INotificationDeliveryStore>(new AdoNotificationDeliveryStore(connections));
             builder.Services.AddKafdeckWebhookDelivery(options);

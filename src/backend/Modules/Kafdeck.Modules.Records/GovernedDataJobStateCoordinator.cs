@@ -609,7 +609,7 @@ public sealed class GovernedDataJobStateCoordinator
             long rawBytes,
             DateTimeOffset nowUtc,
             CancellationToken cancellationToken =
-                default) =>
+                default, DestinationDispatchBoundary? destinationBoundary = null) =>
         MutateAsync(
             operationId,
             plan,
@@ -623,7 +623,7 @@ public sealed class GovernedDataJobStateCoordinator
                         sourceOffset,
                         destinationPartition,
                         rawBytes,
-                        nowUtc),
+                        nowUtc, destinationBoundary),
             "data_job_batch_reserved",
             cancellationToken);
 

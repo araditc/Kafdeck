@@ -45,7 +45,9 @@ var dataQualityOptions =
     kafdeckOptions.DataQuality;
 var notificationReadOptions =
     kafdeckOptions.Notifications;
+var notificationGovernance = NotificationGovernanceOptions.Read(builder.Configuration, kafdeckOptions);
 var productEventsEnabled = NotificationProductEventHosting.ReadActivation(builder.Configuration, kafdeckOptions);
+var notificationRecovery = NotificationRecoveryOptions.Read(builder.Configuration, kafdeckOptions, productEventsEnabled);
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -149,10 +151,11 @@ builder.Services.AddSingleton(kafdeckOptions);
 builder.Services.AddSingleton(secretResolver);
 builder.Services.AddSingleton(maskingPolicy);
 builder.Services.AddSingleton<IRecordMaskingPolicyProvider>(new StaticRecordMaskingPolicyProvider(maskingPolicy));
-var authorizationPolicy = AuthorizationPolicyCompiler.Compile(
-    AuthorizationPolicyConfigurationLoader.Load(builder.Configuration));
+var authorizationPolicies = new ReloadingAuthorizationPolicy(builder.Configuration);
+var authorizationPolicy = authorizationPolicies.Current;
+builder.Services.AddSingleton(authorizationPolicies);
 builder.Services.AddSingleton(authorizationPolicy);
-builder.Services.AddSingleton<AuthorizationPolicyEvaluator>();
+builder.Services.AddSingleton(new AuthorizationPolicyEvaluator(authorizationPolicy, () => authorizationPolicies.Current));
 builder.Services.AddSingleton<KafdeckAuthorizationService>();
 builder.Services.AddSingleton<ISecurityAuditSink, LoggingSecurityAuditSink>();
 builder.Services.AddSingleton<ApiTelemetry>();
@@ -627,16 +630,39 @@ if (mutationOptions?.Enabled == true)
             mutationOptions.MaxConcurrentPerCluster,
             TimeSpan.FromSeconds(30),
             TimeSpan.FromMinutes(2)));
+    builder.Services.AddSingleton<IDestinationDispatchObserver>(services => new ConfluentDestinationDispatchObserver(
+        kafdeckOptions.Clusters, services.GetRequiredService<SecretResolver>()));
+    builder.Services.AddSingleton<JobReconciliationService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler>(services => services.GetRequiredService<JobReconciliationService>());
     builder.Services.AddSingleton<MutationExecutor>();
     builder.Services.AddSingleton<MutationRecoveryCoordinator>();
     builder.Services.AddHostedService<MutationRecoveryHostedService>();
-    builder.Services.AddHostedService<GovernedDataJobHostedService>();
-    builder.Services.AddHostedService<DataGeneratorHostedService>();
+    if (builder.Configuration.GetValue("Kafdeck:Administration:Mutations:BackgroundDataWorkersEnabled", true))
+    {
+        builder.Services.AddHostedService<GovernedDataJobHostedService>();
+        builder.Services.AddHostedService<DataGeneratorHostedService>();
+    }
+    builder.Services.AddHostedService<ConnectAutoRestartHostedService>();
 }
 
 builder.Services.AddKafdeckNotificationProductEvents(productEventsEnabled);
+if (notificationGovernance is not null) builder.Services.AddKafdeckNotificationGovernance(notificationGovernance);
+if (notificationRecovery is not null)
+{
+    var recoverySource = mutationOptions?.Persistence ?? throw new KafdeckConfigurationException(
+        "Notification recovery requires an explicit server-owned mutation source inventory.");
+    builder.Services.AddSingleton<INotificationRecoverySourceInventory>(services => recoverySource.Provider switch
+    {
+        MutationPersistenceProvider.Sqlite => AdoNotificationRecoverySourceInventory.ForSqlite(recoverySource.SqliteDatabasePath!),
+        MutationPersistenceProvider.PostgreSql => AdoNotificationRecoverySourceInventory.ForPostgreSql(
+            services.GetRequiredService<SecretResolver>().Resolve(recoverySource.ConnectionString!).Reveal()),
+        _ => throw new KafdeckConfigurationException("Notification recovery source provider is unsupported."),
+    });
+    builder.Services.AddKafdeckNotificationRecovery(notificationRecovery);
+}
 
 var app = builder.Build();
+if (notificationGovernance is not null) await app.Services.InitializeKafdeckNotificationGovernanceAsync();
 
 if (historicalMetricsOptions?.Enabled == true)
 {
@@ -688,6 +714,7 @@ if (notificationReadOptions?.Enabled == true)
     await app.Services.GetRequiredService<INotificationRoutingStore>()
         .InitializeAsync()
         .ConfigureAwait(false);
+    if (notificationRecovery is not null) await app.Services.InitializeKafdeckNotificationRecoveryAsync();
 
     app.Logger.LogInformation(
         "Kafdeck notification persistence initialized with provider {Provider}, mode {Mode}; subscription management API enabled {ManagementEnabled}; physical Webhook delivery enabled {WebhookDeliveryEnabled}; typed HTTP provider delivery enabled {HttpProviderDeliveryEnabled}; Email delivery enabled {EmailDeliveryEnabled}; verified product event capture enabled {ProductEventsEnabled}.",
@@ -817,12 +844,15 @@ if (notificationReadOptions?.Enabled == true)
     if (notificationReadOptions.ManagementEnabled)
     {
         app.MapKafdeckV08NotificationManagement();
+        if (notificationGovernance is not null) app.MapKafdeckNotificationGovernance();
+        if (notificationRecovery is not null) app.MapKafdeckNotificationRecovery();
     }
 }
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
 app.MapKafdeckV08BearerOpenApi();
+app.MapKafdeckBearerCapabilities();
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();

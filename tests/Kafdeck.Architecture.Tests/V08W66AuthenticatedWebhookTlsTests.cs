@@ -260,6 +260,7 @@ public sealed class V08W66AuthenticatedWebhookTlsTests(ITestOutputHelper output)
         builder.Services.AddSingleton(new NotificationPinnedHttpHandlerFactory(tls, NotificationAddressPolicy.NoConfiguredNat64,
             trustRoots: new X509Certificate2Collection(tls.Root)));
         var connections = new SqliteNotificationDeliveryDbConnectionFactory(path);
+        builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(connections);
         builder.Services.AddSingleton<INotificationRoutingStore>(new AdoNotificationRoutingStore(connections));
         builder.Services.AddSingleton<INotificationDeliveryStore>(new AdoNotificationDeliveryStore(connections));
         builder.Services.AddKafdeckWebhookDelivery(options);

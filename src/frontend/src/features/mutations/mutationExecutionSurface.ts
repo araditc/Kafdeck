@@ -18,12 +18,14 @@ const genericNoMaterialKinds = new Set([
   'schemaAlter',
   'schemaDelete',
   'recordsPurge',
+  'fleetUncertaintyDisposition',
 ]);
 
 export function mutationExecutionSurface(
-  operation: Pick<MutationStatus, 'state' | 'operationKind' | 'requiresExecutionMaterial'>,
+  operation: Pick<MutationStatus, 'state' | 'operationKind' | 'requiresExecutionMaterial' | 'reconciliationReview'>,
 ): MutationExecutionSurface {
   if (operation.state !== 'ready') return 'none';
+  if (operation.operationKind === 'fleetUncertaintyDisposition' && !operation.reconciliationReview) return 'none';
 
   if (operation.operationKind === 'recordProduce') {
     return operation.requiresExecutionMaterial ? 'recordMaterial' : 'none';

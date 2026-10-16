@@ -154,11 +154,16 @@ test('v0.7 W57 data-job UI uses finite governed routes and explicit reconciliati
 
   assert.match(apiSource, /\/api\/v1\/data-jobs\/\$\{encodeURIComponent\(kind\)\}\/preview/);
   assert.match(apiSource, /\/api\/v1\/data-jobs\/\$\{encodeURIComponent\(operationId\)\}\/cancel/);
-  assert.match(apiSource, /provenNonApplication/);
+  assert.match(apiSource, /expectedProgressVersion/);
+  assert.match(apiSource, /proofReferenceSha256/);
+  assert.match(apiSource, /fencedWorkerEvidenceSha256/);
+  assert.match(apiSource, /reconcile\/preview/);
+  assert.doesNotMatch(apiSource, /disposition: 'provenNonApplication'/);
 
   assert.match(panelSource, /selected\.operationKind !== 'dataJob'/);
   assert.match(panelSource, /Start governed data job/);
   assert.match(panelSource, /Unresolved external write/);
   assert.match(panelSource, /must not be blindly replayed/);
-  assert.match(panelSource, /Reconcile proven non-application/);
+  assert.match(panelSource, /Create CRITICAL reconciliation preview/);
+  assert.match(panelSource, /distinct authorized human approval/);
 });

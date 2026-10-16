@@ -83,16 +83,24 @@ public sealed class V08W67NonBrowserPrincipalProposalTests
 
     [Theory]
     [InlineData(AuthorizationAction.TopicDelete)]
-    [InlineData(AuthorizationAction.RecordRead)]
     [InlineData(AuthorizationAction.MutationReconcile)]
     [InlineData(AuthorizationAction.NotificationManage)]
-    [InlineData(AuthorizationAction.RecordExport)]
     [InlineData(AuthorizationAction.DataQualityManage)]
-    public void Sensitive_read_or_mutation_permission_cannot_be_proposed_by_initial_contract(
+    public void Mutation_permission_cannot_be_proposed_as_a_read_registration(
         AuthorizationAction action)
     {
         Assert.Throws<ArgumentException>(
             () => Candidate(actions: [action]));
+    }
+
+    [Theory]
+    [InlineData(AuthorizationAction.RecordRead)]
+    [InlineData(AuthorizationAction.RecordExport)]
+    public void Explicit_bounded_sensitive_read_proposal_is_not_an_authorization_grant(AuthorizationAction action)
+    {
+        var proposal = Candidate(actions: [action]);
+        Assert.Equal(action, Assert.Single(proposal.RequestedReadActions));
+        Assert.Null(proposal.GetType().GetMethod("Authorize"));
     }
 
     [Fact]

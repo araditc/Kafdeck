@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Authentication;
@@ -96,6 +97,7 @@ public static class KafdeckOidcServiceCollectionExtensions
                     Uri.UriSchemeHttps,
                     StringComparison.OrdinalIgnoreCase);
                 options.BackchannelTimeout = TimeSpan.FromSeconds(10);
+                if (oidc.TrustedCaPemFile is { } caPath) options.BackchannelHttpHandler = OidcTrustedCaHandler.Create(caPath);
                 options.RemoteAuthenticationTimeout = TimeSpan.FromMinutes(5);
 
                 options.Scope.Clear();
@@ -118,7 +120,10 @@ public static class KafdeckOidcServiceCollectionExtensions
                     NameClaimType = "name",
                 };
 
-                options.ProtocolValidator.RequireStateValidation = true;
+                // ASP.NET authenticates protected state and the correlation cookie
+                // before protocol validation; that context deliberately has no
+                // caller-supplied State. Retain the framework's matching default.
+                options.ProtocolValidator.RequireStateValidation = false;
                 options.ProtocolValidator.RequireNonce = true;
 
                 options.CorrelationCookie.HttpOnly = true;
@@ -236,6 +241,8 @@ public static class OidcIdentityNormalizer
 
         var claims = new List<Claim>
         {
+            new(ClaimTypes.NameIdentifier, "oidc-key:" + Convert.ToHexString(SHA256.HashData(
+                JsonSerializer.SerializeToUtf8Bytes(new[] { identity.Key.Issuer, identity.Key.Subject }))).ToLowerInvariant()),
             new(KafdeckOidcDefaults.IssuerClaim, identity.Key.Issuer),
             new(KafdeckOidcDefaults.SubjectClaim, identity.Key.Subject),
             new(KafdeckOidcDefaults.SessionIdClaim, sessionId.Value.ToString("N", CultureInfo.InvariantCulture)),

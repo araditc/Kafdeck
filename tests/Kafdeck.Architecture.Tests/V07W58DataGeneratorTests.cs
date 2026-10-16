@@ -82,6 +82,23 @@ public sealed class V07W58DataGeneratorTests
     }
 
     [Fact]
+    public void Intent_ordering_matches_durable_preview_for_current_precondition_validation()
+    {
+        var plan = DataGeneratorPolicy.CreatePlan(
+            Destination(), BuiltInSource(), 1, 123, new DataGeneratorBudget());
+        var intent = DataGeneratorPolicy.BuildIntent(plan);
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://issuer.example|operator", intent,
+            DataGeneratorPolicy.ClassifyRisk(plan), "policy-v1",
+            Now.AddMinutes(5), Now, "generator-canonical-order");
+
+        Assert.Equal(intent.ResourceKeys, operation.Snapshot.ResourceKeys);
+        Assert.Equal(intent.Preconditions, operation.Snapshot.Preconditions);
+        Assert.Equal(intent.AuthorizationTargets, operation.Snapshot.AuthorizationTargets);
+        Assert.Equal(intent.CanonicalIntent, operation.Snapshot.CanonicalIntent);
+    }
+
+    [Fact]
     public void Schema_source_binds_schema_read_and_fingerprint()
     {
         var source =
