@@ -18,9 +18,9 @@
     "passed": 1809
   },
   "source": {
-    "digest": "2dfd67bf1478b390e55379e945f0a0a753935665b2abdce62f8ecb2505c8b418",
+    "algorithm": "SHA256 of ordinal-sorted tracked C# path + space + SHA256(UTF8 text without BOM, CRLF normalized to LF) + LF",
     "fileCount": 503,
-    "algorithm": "SHA256 over sorted tracked C# path + space + file SHA256, LF-terminated"
+    "digest": "6972cfa67d3cd2d31c9aa321d42218549027ec2dc6a47981ea86ec499a324e83"
   },
   "physical": {
     "productionHAAdmitted": false,
