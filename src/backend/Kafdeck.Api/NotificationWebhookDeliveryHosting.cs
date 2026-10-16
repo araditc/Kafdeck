@@ -1,5 +1,6 @@
 using Kafdeck.Core.Notifications;
 using Kafdeck.Infrastructure.Configuration;
+using Kafdeck.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Kafdeck.Api;
@@ -12,6 +13,15 @@ public static class NotificationWebhookDeliveryHosting
     {
         if (!options.WebhookDeliveryEnabled && !options.HttpProviderDeliveryEnabled && !options.EmailDeliveryEnabled) return services;
         NotificationPhysicalDeliveryAdmission.Validate(options);
+
+        if (options.DeliveryInterlockPath is not null)
+        {
+            services.TryAddSingleton<INotificationDeliveryGenerationReader>(sp =>
+                new AdoNotificationDeliveryGenerationReader(sp.GetRequiredService<INotificationDeliveryDbConnectionFactory>()));
+            services.TryAddSingleton<INotificationDeliveryActivationGate>(sp =>
+                new ConfiguredNotificationDeliveryInterlock(options.DeliveryInterlockPath,
+                    options.DeliveryInterlockSha256!, sp.GetRequiredService<INotificationDeliveryGenerationReader>()));
+        }
 
         services.TryAddSingleton(NotificationAddressPolicy.NoConfiguredNat64);
         services.TryAddSingleton<INotificationHostAddressLookup, SystemNotificationHostAddressLookup>();
@@ -91,8 +101,15 @@ public sealed class NotificationWebhookDeliveryHostedService(
     NotificationDeliveryWorker worker,
     INotificationDeliveryStore deliveries,
     INotificationRoutingStore routing,
-    ILogger<NotificationWebhookDeliveryHostedService> logger) : BackgroundService
+    ILogger<NotificationWebhookDeliveryHostedService> logger,
+    INotificationDeliveryActivationGate? activationGate = null) : BackgroundService
 {
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (activationGate is not null) await activationGate.VerifyAsync(cancellationToken).ConfigureAwait(false);
+        await base.StartAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Also initialize here so this hosted service is safe in a laboratory

@@ -55,7 +55,9 @@ public sealed record NotificationReadOptions(
     IReadOnlyList<NotificationCredentialReferenceOptions>? CredentialBindings = null,
     bool WebhookDeliveryEnabled = false,
     bool HttpProviderDeliveryEnabled = false,
-    bool EmailDeliveryEnabled = false);
+    bool EmailDeliveryEnabled = false,
+    string? DeliveryInterlockPath = null,
+    string? DeliveryInterlockSha256 = null);
 
 /// <summary>
 /// Owner-defined binding to an env/file secret locator, not the secret value.

@@ -162,6 +162,10 @@ public sealed class MutationCommandService
             return new MutationCommandResult(MutationCommandOutcome.Forbidden);
         }
 
+        if (principal?.Identity is NonBrowserReadIdentity &&
+            _requestAuthorization.AuthorizeForLifecycle(principal, snapshot) != KafdeckAuthorizationOutcome.Allowed)
+            return new MutationCommandResult(MutationCommandOutcome.Forbidden);
+
         if (!string.Equals(
                 previewHash,
                 snapshot.PreviewHash,

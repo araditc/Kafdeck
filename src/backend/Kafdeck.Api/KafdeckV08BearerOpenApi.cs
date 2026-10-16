@@ -16,7 +16,7 @@ public static class KafdeckV08BearerOpenApi
   "info": {
     "title": "Kafdeck v0.8 governed bearer topic integration",
     "version": "0.8.0-candidate",
-    "description": "Default-off TopicCreate/TopicDelete contract, not full W67 acceptance or publication. Requires enabled mutation engine, NonBrowserRead.Enabled, GovernedMutationsEnabled, active exact principal/client registration with the matching mutation grant AND current backend action/resource RBAC. TopicDelete is always CRITICAL with typed confirmation and a distinct eligible human. Approval additionally requires GovernedApprovalsEnabled, a current human ApprovalActions grant, MutationApprove and underlying TopicDelete resource scopes. Cookie/deployment credential collisions are rejected. Existing browser mutation routes retain antiforgery. Every plan is server-stored and bound to original principal, immutable preview and current policy fingerprint; dispatch rechecks rights, approver eligibility and provider state. Other mutation families remain unavailable. Never replay ExecutionUnknown."
+    "description": "Default-off topic create/alter/increase/delete contract, not full W67 acceptance or publication. Requires enabled mutation engine, NonBrowserRead.Enabled, GovernedMutationsEnabled, active exact principal/client registration with the matching TopicCreate/TopicAlter/TopicDelete grant AND current backend action/resource RBAC. Partition increase uses TopicAlter and is always at least HIGH; durability-sensitive config changes may raise risk. TopicDelete is always CRITICAL with typed confirmation and a distinct eligible human. Approval/rejection additionally require GovernedApprovalsEnabled, a current human ApprovalActions grant, MutationApprove and underlying TopicDelete resource scopes. Cookie/deployment credential collisions are rejected. Existing browser mutation routes retain antiforgery. Every plan is server-stored and bound to original principal, immutable preview and current policy fingerprint; dispatch rechecks rights, approver eligibility and provider state. Cancellation stops only a permitted pre-dispatch state and never clears unknown effects. Other mutation families remain unavailable. Never replay ExecutionUnknown."
   },
   "servers": [{ "url": "/" }],
   "security": [{ "bearerAuth": [] }],
@@ -40,6 +40,24 @@ public static class KafdeckV08BearerOpenApi
           "413": { "$ref": "#/components/responses/TooLarge" }, "501": { "$ref": "#/components/responses/Unsupported" },
           "503": { "$ref": "#/components/responses/Unavailable" }, "default": { "$ref": "#/components/responses/Failure" }
         }
+      }
+    },
+    "/api/v1/automation/clusters/{clusterId}/topics/{topicName}/alter/preview": {
+      "post": {
+        "operationId": "v08-bearer-topic-alter-preview", "summary": "Plan a closed topic configuration patch or reset",
+        "description": "Exact TopicAlter registration and current backend resource scopes required. Null resets an admitted key. Current configuration/metadata fingerprints and server-owned risk bind the immutable plan; no provider effect is dispatched.",
+        "parameters": [{ "$ref": "#/components/parameters/ClusterId" }, { "$ref": "#/components/parameters/TopicName" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TopicAlterRequest" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Status" }, "200": { "$ref": "#/components/responses/Status" }, "400": { "$ref": "#/components/responses/Invalid" }, "401": { "$ref": "#/components/responses/Unauthenticated" }, "403": { "$ref": "#/components/responses/Denied" }, "409": { "$ref": "#/components/responses/Conflict" }, "413": { "$ref": "#/components/responses/TooLarge" }, "default": { "$ref": "#/components/responses/Failure" } }
+      }
+    },
+    "/api/v1/automation/clusters/{clusterId}/topics/{topicName}/increase-partitions/preview": {
+      "post": {
+        "operationId": "v08-bearer-topic-increase-partitions-preview", "summary": "Plan an explicit higher partition target",
+        "description": "Exact TopicAlter registration/resource permission. Backend rejects a target that is not above observed count, binds metadata, enforces HIGH risk and exact typed target confirmation. No reduction or arbitrary provider command.",
+        "parameters": [{ "$ref": "#/components/parameters/ClusterId" }, { "$ref": "#/components/parameters/TopicName" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TopicIncreasePartitionsRequest" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Status" }, "200": { "$ref": "#/components/responses/Status" }, "400": { "$ref": "#/components/responses/Invalid" }, "401": { "$ref": "#/components/responses/Unauthenticated" }, "403": { "$ref": "#/components/responses/Denied" }, "409": { "$ref": "#/components/responses/Conflict" }, "413": { "$ref": "#/components/responses/TooLarge" }, "default": { "$ref": "#/components/responses/Failure" } }
       }
     },
     "/api/v1/automation/clusters/{clusterId}/topics/{topicName}/delete/preview": {
@@ -71,6 +89,24 @@ public static class KafdeckV08BearerOpenApi
         "responses": { "200": { "$ref": "#/components/responses/Status" }, "400": { "$ref": "#/components/responses/Invalid" }, "401": { "$ref": "#/components/responses/Unauthenticated" }, "403": { "$ref": "#/components/responses/Denied" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "413": { "$ref": "#/components/responses/TooLarge" } }
       }
     },
+    "/api/v1/automation/mutations/{operationId}/cancel": {
+      "parameters": [{ "$ref": "#/components/parameters/OperationId" }],
+      "post": {
+        "operationId": "v08-bearer-mutation-cancel", "summary": "Stop the original actor's permitted pre-dispatch topic plan",
+        "description": "Exact original actor, current topic registration/action scopes, policy and preview hash required. Permitted only for Previewed/AwaitingConfirmation/AwaitingApproval/Ready. Current approval is not required to stop; no effect is authorized. Executing, unknown and terminal states cannot be cancelled.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApprovalRequest" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Status" }, "400": { "$ref": "#/components/responses/Invalid" }, "401": { "$ref": "#/components/responses/Unauthenticated" }, "403": { "$ref": "#/components/responses/Denied" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "413": { "$ref": "#/components/responses/TooLarge" } }
+      }
+    },
+    "/api/v1/automation/mutations/{operationId}/reject": {
+      "parameters": [{ "$ref": "#/components/parameters/OperationId" }],
+      "post": {
+        "operationId": "v08-bearer-mutation-reject", "summary": "Reject an awaiting CRITICAL topic deletion as a distinct eligible human",
+        "description": "Same live registered human, direct approval/resource authority and exact preview hash as approve. Rejection records the actual human and durable evidence; it is not a provider effect or uncertainty disposition.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApprovalRequest" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Status" }, "400": { "$ref": "#/components/responses/Invalid" }, "401": { "$ref": "#/components/responses/Unauthenticated" }, "403": { "$ref": "#/components/responses/Denied" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "413": { "$ref": "#/components/responses/TooLarge" } }
+      }
+    },
     "/api/v1/automation/mutations/{operationId}/status": {
       "parameters": [{ "$ref": "#/components/parameters/OperationId" }],
       "get": {
@@ -90,7 +126,7 @@ public static class KafdeckV08BearerOpenApi
     "/api/v1/automation/mutations/{operationId}/execute": {
       "parameters": [{ "$ref": "#/components/parameters/OperationId" }],
       "post": {
-        "operationId": "v08-bearer-mutation-execute", "summary": "Dispatch a Ready topic create/delete through the existing guarded durable engine",
+        "operationId": "v08-bearer-mutation-execute", "summary": "Dispatch a Ready admitted topic plan through the existing guarded durable engine",
         "description": "No caller body or generic provider command is accepted. Current principal, permissions, policy, expiry, immutable preview and provider preconditions are rechecked. HTTP 200 carries the actual typed outcome and never converts ExecutionUnknown to successful completion. Repeat execution cannot authorize a blind resend.",
         "responses": { "200": { "$ref": "#/components/responses/Status" }, "401": { "$ref": "#/components/responses/Unauthenticated" }, "403": { "$ref": "#/components/responses/Denied" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "default": { "$ref": "#/components/responses/Failure" } }
       }
@@ -98,7 +134,12 @@ public static class KafdeckV08BearerOpenApi
   },
   "components": {
     "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "Registered service or independently registered CLI human. Access-token audience is the deployment's exact Kafdeck API audience; ID tokens and client assertions are rejected." } },
-    "parameters": { "OperationId": { "name": "operationId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } } },
+    "parameters": {
+      "OperationId": { "name": "operationId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+      "ClusterId": { "name": "clusterId", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 256 } },
+      "TopicName": { "name": "topicName", "in": "path", "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 249, "pattern": "^[a-zA-Z0-9._-]+$", "not": { "enum": [".", ".."] } } },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 256 } }
+    },
     "schemas": {
       "TopicCreateRequest": { "type": "object", "additionalProperties": false, "required": ["partitionCount", "replicationFactor"], "properties": {
         "partitionCount": { "type": "integer", "minimum": 1, "maximum": 100000 },
@@ -109,6 +150,16 @@ public static class KafdeckV08BearerOpenApi
           "max.message.bytes": { "type": "string" }, "delete.retention.ms": { "type": "string" }, "min.cleanable.dirty.ratio": { "type": "string" }
         } }
       } },
+      "TopicAlterRequest": { "type": "object", "additionalProperties": false, "required": ["changes"], "properties": {
+        "changes": { "type": "object", "additionalProperties": false, "minProperties": 1, "maxProperties": 9, "description": "Existing backend planner validates exact key/value semantics; null requests safe reset to provider default.", "properties": {
+          "cleanup.policy": { "type": ["string", "null"] }, "retention.ms": { "type": ["string", "null"] }, "retention.bytes": { "type": ["string", "null"] },
+          "segment.ms": { "type": ["string", "null"] }, "segment.bytes": { "type": ["string", "null"] }, "min.insync.replicas": { "type": ["string", "null"] },
+          "max.message.bytes": { "type": ["string", "null"] }, "delete.retention.ms": { "type": ["string", "null"] }, "min.cleanable.dirty.ratio": { "type": ["string", "null"] }
+        } }
+      } },
+      "TopicIncreasePartitionsRequest": { "type": "object", "additionalProperties": false, "required": ["newPartitionCount"], "properties": {
+        "newPartitionCount": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "Must also exceed the current observed count." }
+      } },
       "ConfirmRequest": { "type": "object", "additionalProperties": false, "required": ["previewHash"], "properties": {
         "previewHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-fA-F0-9]{64}$" },
         "typedTargetChallenge": { "type": ["string", "null"], "maxLength": 512 }
@@ -117,7 +168,7 @@ public static class KafdeckV08BearerOpenApi
         "previewHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-fA-F0-9]{64}$" }
       } },
       "MutationStatus": { "type": "object", "required": ["operationId", "clusterId", "operationKind", "riskClass", "confirmationMode", "requiresIndependentApproval", "requiresExecutionMaterial", "state", "previewHash", "previewExpiresAtUtc", "safeProviderEvidence", "version", "createdAtUtc", "updatedAtUtc"], "properties": {
-        "operationId": { "type": "string", "format": "uuid" }, "clusterId": { "type": "string" }, "operationKind": { "enum": ["topicCreate", "topicDelete"] },
+        "operationId": { "type": "string", "format": "uuid" }, "clusterId": { "type": "string" }, "operationKind": { "enum": ["topicCreate", "topicAlter", "topicIncreasePartitions", "topicDelete"] },
         "riskClass": { "enum": ["low", "moderate", "high", "critical"] }, "confirmationMode": { "enum": ["explicit", "typedTarget"] },
         "requiresIndependentApproval": { "type": "boolean" }, "requiresExecutionMaterial": { "type": "boolean" },
         "state": { "enum": ["previewed", "awaitingConfirmation", "awaitingApproval", "ready", "executing", "appliedVerified", "appliedUnverified", "partiallyApplied", "executionUnknown", "rejected", "expired", "cancelled", "stalePreview", "failedBeforeDispatch", "failedDefinitive"], "description": "Exact durable state. AwaitingApproval and ExecutionUnknown are never relabeled applied; no client retries an unknown effect automatically." },

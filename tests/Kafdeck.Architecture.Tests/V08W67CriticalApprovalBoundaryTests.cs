@@ -88,7 +88,7 @@ public sealed class V08W67CriticalApprovalBoundaryTests
         Assert.Throws<Kafdeck.Cli.CliUsageException>(() => Kafdeck.Cli.CliParser.Parse(["--oidc-profile", "human.json", "operations", "approve", id, "wrong"]));
     }
 
-    private static MutationOperation Operation(MutationRequestAuthorizationService authorization, ClaimsPrincipal requester)
+    internal static MutationOperation Operation(MutationRequestAuthorizationService authorization, ClaimsPrincipal requester)
     {
         var now = DateTimeOffset.UtcNow;
         var operation = MutationOperation.CreatePreview(((NonBrowserReadIdentity)requester.Identity!).AuditId,
@@ -100,7 +100,7 @@ public sealed class V08W67CriticalApprovalBoundaryTests
         return operation;
     }
 
-    private static (IConfigurationRoot Configuration, AuthorizationPolicyEvaluator Evaluator, MutationRequestAuthorizationService Authorization,
+    internal static (IConfigurationRoot Configuration, AuthorizationPolicyEvaluator Evaluator, MutationRequestAuthorizationService Authorization,
         ClaimsPrincipal Requester, ClaimsPrincipal Approver, ClaimsPrincipal Service) Fixture(bool grantApproval = true, string approverPattern = "orders*")
     {
         var config = new Dictionary<string, string?>
@@ -133,7 +133,7 @@ public sealed class V08W67CriticalApprovalBoundaryTests
             Principal("approver", "bob", NonBrowserPrincipalKind.Human), Principal("service", "machine", NonBrowserPrincipalKind.Service));
     }
 
-    private sealed class MemoryRepository(MutationOperationSnapshot current) : IMutationOperationRepository
+    internal sealed class MemoryRepository(MutationOperationSnapshot current) : IMutationOperationRepository
     {
         public MutationOperationSnapshot Current { get; private set; } = current;
         public Task InitializeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

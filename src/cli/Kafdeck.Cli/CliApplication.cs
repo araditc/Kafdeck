@@ -67,11 +67,17 @@ public static class CliApplication
             {
                 CliCommand.TopicCreatePreview => await client.PostAsync(CliRouteBuilder.Build(invocation),
                     new { partitionCount = invocation.PartitionCount, replicationFactor = invocation.ReplicationFactor,
-                        configurations = new Dictionary<string, string>() }, invocation.IdempotencyKey, requestToken),
+                        configurations = invocation.TopicConfigurations ?? new Dictionary<string, string?>() }, invocation.IdempotencyKey, requestToken),
+                CliCommand.TopicAlterPreview => await client.PostAsync(CliRouteBuilder.Build(invocation),
+                    new { changes = invocation.TopicConfigurations }, invocation.IdempotencyKey, requestToken),
+                CliCommand.TopicIncreasePartitionsPreview => await client.PostAsync(CliRouteBuilder.Build(invocation),
+                    new { newPartitionCount = invocation.PartitionCount }, invocation.IdempotencyKey, requestToken),
                 CliCommand.OperationConfirm => await client.PostAsync(CliRouteBuilder.Build(invocation),
                     new { previewHash = invocation.PreviewHash, typedTargetChallenge = invocation.TypedTargetChallenge }, null, requestToken),
                 CliCommand.TopicDeletePreview => await client.PostAsync(CliRouteBuilder.Build(invocation), null, invocation.IdempotencyKey, requestToken),
                 CliCommand.OperationApprove => await client.PostAsync(CliRouteBuilder.Build(invocation), new { previewHash = invocation.PreviewHash }, null, requestToken),
+                CliCommand.OperationCancel or CliCommand.OperationReject => await client.PostAsync(CliRouteBuilder.Build(invocation),
+                    new { previewHash = invocation.PreviewHash }, null, requestToken),
                 CliCommand.OperationExecute => await client.PostAsync(CliRouteBuilder.Build(invocation), null, null, requestToken),
                 _ => await client.GetAsync(CliRouteBuilder.Build(invocation), requestToken),
             };
@@ -105,7 +111,7 @@ public static class CliApplication
             }
 
             await WriteJsonAsync(output, body, requestToken);
-            return IsMutation(invocation.Command) ? MutationOutcomeCategory(body) : Success;
+            return IsMutation(invocation.Command) ? MutationOutcomeCategory(body, invocation.Command) : Success;
         }
         catch (CliUsageException exception)
         {
@@ -165,9 +171,10 @@ public static class CliApplication
             : RemoteError;
 
     public static bool IsMutation(CliCommand command) => command is CliCommand.TopicCreatePreview or CliCommand.OperationStatus or
-        CliCommand.OperationConfirm or CliCommand.OperationExecute or CliCommand.TopicDeletePreview or CliCommand.OperationApproval or CliCommand.OperationApprove;
+        CliCommand.OperationConfirm or CliCommand.OperationExecute or CliCommand.TopicDeletePreview or CliCommand.OperationApproval or CliCommand.OperationApprove or
+        CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview or CliCommand.OperationCancel or CliCommand.OperationReject;
 
-    public static int MutationOutcomeCategory(string json)
+    public static int MutationOutcomeCategory(string json, CliCommand command = CliCommand.None)
     {
         using var document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.String)
@@ -177,6 +184,8 @@ public static class CliApplication
             "awaitingapproval" => PendingApproval, "executionunknown" or "executing" => UnknownEffect,
             "stalepreview" => Conflict, "expired" => Expired,
             "appliedunverified" or "partiallyapplied" => PartialOrUnverified,
+            "cancelled" when command == CliCommand.OperationCancel => Success,
+            "rejected" when command == CliCommand.OperationReject => Success,
             "failedbeforedispatch" or "faileddefinitive" or "rejected" or "cancelled" => RemoteError,
             "previewed" or "awaitingconfirmation" or "ready" or "appliedverified" => Success,
             _ => RemoteError,
@@ -227,6 +236,10 @@ public enum CliCommand
     TopicDeletePreview = 19,
     OperationApproval = 20,
     OperationApprove = 21,
+    TopicAlterPreview = 22,
+    TopicIncreasePartitionsPreview = 23,
+    OperationCancel = 24,
+    OperationReject = 25,
 }
 
 public enum CliOutputFormat
@@ -253,7 +266,8 @@ public sealed record CliInvocation(
     string? TypedTargetChallenge = null,
     int? PartitionCount = null,
     short? ReplicationFactor = null,
-    string? ServiceProfileFile = null);
+    string? ServiceProfileFile = null,
+    IReadOnlyDictionary<string, string?>? TopicConfigurations = null);
 
 public static class CliRouteBuilder
 {
@@ -297,11 +311,15 @@ public static class CliRouteBuilder
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/diff?leftVersion={RequireVersion(invocation)}&rightVersion={RequireRightVersion(invocation)}",
             CliCommand.TopicCreatePreview => $"/api/v1/automation/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}/create/preview",
             CliCommand.TopicDeletePreview => $"/api/v1/automation/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}/delete/preview",
+            CliCommand.TopicAlterPreview => $"/api/v1/automation/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}/alter/preview",
+            CliCommand.TopicIncreasePartitionsPreview => $"/api/v1/automation/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}/increase-partitions/preview",
             CliCommand.OperationStatus => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/status",
             CliCommand.OperationConfirm => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/confirm",
             CliCommand.OperationExecute => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/execute",
             CliCommand.OperationApproval => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/approval",
             CliCommand.OperationApprove => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/approve",
+            CliCommand.OperationCancel => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/cancel",
+            CliCommand.OperationReject => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/reject",
             _ => throw new InvalidOperationException(
                 "CLI invocation contains an unsupported command."),
         };
@@ -430,8 +448,12 @@ public static class CliParser
           kafdeck --oidc-profile <profile> [global-options] operations confirm <operation-id> <preview-hash> [--challenge <typed-target>]
           kafdeck --oidc-profile <profile> [global-options] operations execute <operation-id>
           kafdeck --oidc-profile <profile> [global-options] topics delete-preview <cluster-id> <topic-name> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> [global-options] topics alter-preview <cluster-id> <topic-name> --config <key=value> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> [global-options] topics increase-partitions-preview <cluster-id> <topic-name> <target-count> --idempotency-key <key>
           kafdeck --oidc-profile <profile> [global-options] operations approval <operation-id>
           kafdeck --oidc-profile <profile> [global-options] operations approve <operation-id> <preview-hash>
+          kafdeck --oidc-profile <profile> [global-options] operations reject <operation-id> <preview-hash>
+          kafdeck --oidc-profile <profile> [global-options] operations cancel <operation-id> <preview-hash>
           kafdeck --help
 
         Global options:
@@ -442,6 +464,8 @@ public static class CliParser
           --output json
           --idempotency-key <key>  Required only for a new topic preview.
           --challenge <target>    Admitted only for operation confirmation.
+          --config <key=value>   Repeat unique allowed keys for topic create/alter preview.
+          --reset-config <key>   Reset a unique allowed topic key; alter preview only.
 
         Environment:
           KAFDECK_URL
@@ -481,6 +505,7 @@ public static class CliParser
         string? serviceProfileFile = null;
         string? idempotencyKey = null;
         string? typedChallenge = null;
+        var topicConfigurations = new Dictionary<string, string?>(StringComparer.Ordinal);
         string? search = null;
         string? cursor = null;
         int? limit = null;
@@ -528,6 +553,12 @@ public static class CliParser
                     break;
                 case "--challenge":
                     typedChallenge = ValidateBoundedOption(RequireValue(args, ref index, "--challenge"), "--challenge", 512);
+                    break;
+                case "--config":
+                    CliTopicConfiguration.Add(topicConfigurations, RequireValue(args, ref index, "--config"), reset: false);
+                    break;
+                case "--reset-config":
+                    CliTopicConfiguration.Add(topicConfigurations, RequireValue(args, ref index, "--reset-config"), reset: true);
                     break;
                 case "--output":
                 {
@@ -636,14 +667,21 @@ public static class CliParser
             throw new CliUsageException("OIDC sign-in cannot be combined with a deployment access-token source.");
         if (CliApplication.IsMutation(invocation.Command) && oidcProfileFile is null && serviceProfileFile is null)
             throw new CliUsageException("Governed operation commands require --oidc-profile or --service-profile; deployment credentials never acquire mutation authority.");
-        if (invocation.Command is CliCommand.OperationApproval or CliCommand.OperationApprove && oidcProfileFile is null)
+        if (invocation.Command is CliCommand.OperationApproval or CliCommand.OperationApprove or CliCommand.OperationReject && oidcProfileFile is null)
             throw new CliUsageException("Human approval commands require --oidc-profile; a service cannot become a human approver.");
-        if (invocation.Command is CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview && idempotencyKey is null)
+        var isTopicPreview = invocation.Command is CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview or
+            CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview;
+        if (isTopicPreview && idempotencyKey is null)
             throw new CliUsageException("A topic mutation preview requires --idempotency-key.");
-        if (invocation.Command is not (CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview) && idempotencyKey is not null ||
+        if (!isTopicPreview && idempotencyKey is not null ||
             invocation.Command != CliCommand.OperationConfirm && typedChallenge is not null)
             throw new CliUsageException("Mutation options must match their named command.");
-        return invocation with { OidcProfileFile = oidcProfileFile, ServiceProfileFile = serviceProfileFile, IdempotencyKey = idempotencyKey, TypedTargetChallenge = typedChallenge };
+        if (topicConfigurations.Count > 0 && invocation.Command is not (CliCommand.TopicCreatePreview or CliCommand.TopicAlterPreview) ||
+            invocation.Command == CliCommand.TopicCreatePreview && topicConfigurations.Values.Any(v => v is null) ||
+            invocation.Command == CliCommand.TopicAlterPreview && topicConfigurations.Count == 0)
+            throw new CliUsageException("Topic create accepts config values; topic alter requires config values or resets; other commands accept neither.");
+        return invocation with { OidcProfileFile = oidcProfileFile, ServiceProfileFile = serviceProfileFile, IdempotencyKey = idempotencyKey, TypedTargetChallenge = typedChallenge,
+            TopicConfigurations = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string?>(topicConfigurations) };
     }
 
     private static CliInvocation ParseCommand(
@@ -655,6 +693,19 @@ public static class CliParser
         int? limit,
         CliOutputFormat output)
     {
+        if (positionals.Count == 4 && positionals[0] == "topics" && positionals[1] == "alter-preview")
+        {
+            ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);
+            return Create(baseUri, tokenFile, CliCommand.TopicAlterPreview, positionals[2], positionals[3], output: output);
+        }
+        if (positionals.Count == 5 && positionals[0] == "topics" && positionals[1] == "increase-partitions-preview")
+        {
+            ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);
+            if (!int.TryParse(positionals[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
+                out var target) || target is < 1 or > 100000)
+                throw new CliUsageException("Partition increase requires a target count between 1 and 100000; the backend validates current state.");
+            return Create(baseUri, tokenFile, CliCommand.TopicIncreasePartitionsPreview, positionals[2], positionals[3], output: output) with { PartitionCount = target };
+        }
         if (positionals.Count == 4 && positionals[0] == "topics" && positionals[1] == "delete-preview")
         {
             ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);
@@ -664,21 +715,22 @@ public static class CliParser
         {
             ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);
             if (!int.TryParse(positionals[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var partitions) ||
-                partitions is < 1 or > 10000 || !short.TryParse(positionals[5], System.Globalization.NumberStyles.None,
+                partitions is < 1 or > 100000 || !short.TryParse(positionals[5], System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out var replicas) || replicas < 1)
-                throw new CliUsageException("TopicCreate requires 1..10000 partitions and a positive bounded replication factor.");
+                throw new CliUsageException("TopicCreate requires 1..100000 partitions and a positive bounded replication factor.");
             return Create(baseUri, tokenFile, CliCommand.TopicCreatePreview, positionals[2], positionals[3], output: output)
                 with { PartitionCount = partitions, ReplicationFactor = replicas };
         }
-        if (positionals.Count is 3 or 4 && positionals[0] == "operations" && positionals[1] is "status" or "confirm" or "execute" or "approval" or "approve")
+        if (positionals.Count is 3 or 4 && positionals[0] == "operations" && positionals[1] is "status" or "confirm" or "execute" or "approval" or "approve" or "cancel" or "reject")
         {
-            var needsHash = positionals[1] is "confirm" or "approve";
+            var needsHash = positionals[1] is "confirm" or "approve" or "cancel" or "reject";
             if (!Guid.TryParseExact(positionals[2], "D", out _) || (needsHash ? positionals.Count != 4 : positionals.Count != 3))
                 throw new CliUsageException("A canonical operation UUID and the command's exact arguments are required.");
             if (needsHash && (positionals[3].Length != 64 || !positionals[3].All(char.IsAsciiHexDigit)))
                 throw new CliUsageException("Confirmation requires the exact 64-character preview hash returned by the backend.");
             var command = positionals[1] switch { "status" => CliCommand.OperationStatus, "confirm" => CliCommand.OperationConfirm,
-                "approval" => CliCommand.OperationApproval, "approve" => CliCommand.OperationApprove, _ => CliCommand.OperationExecute };
+                "approval" => CliCommand.OperationApproval, "approve" => CliCommand.OperationApprove,
+                "cancel" => CliCommand.OperationCancel, "reject" => CliCommand.OperationReject, _ => CliCommand.OperationExecute };
             return Create(baseUri, tokenFile, command, positionals[2], output: output)
                 with { PreviewHash = needsHash ? positionals[3] : null };
         }

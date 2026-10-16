@@ -6,6 +6,7 @@ public static class NotificationPhysicalDeliveryAdmission
 {
     public static void Validate(NotificationReadOptions options)
     {
+        ConfiguredNotificationDeliveryInterlock.ValidateOptions(options.DeliveryInterlockPath, options.DeliveryInterlockSha256);
         if (!options.Enabled || options.ExecutionMode != NotificationExecutionMode.Standalone ||
             options.DestinationProfiles is not { Count: > 0 and <= 500 })
             throw new KafdeckConfigurationException("Physical notification delivery requires standalone persistence and bounded server-owned profiles.");

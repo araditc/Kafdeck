@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Kafdeck.NotificationSender.Lab</AssemblyName>
+    <RootNamespace>Kafdeck.NotificationSender.Lab</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../src/backend/Kafdeck.Api/Kafdeck.Api.csproj" />
+  </ItemGroup>
+</Project>

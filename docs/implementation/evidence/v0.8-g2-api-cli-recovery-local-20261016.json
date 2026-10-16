@@ -1,0 +1,178 @@
+{
+  "observedAtUtc": "2026-10-16T08:49:32.816654+00:00",
+  "baselineMain": "d762bd4c41e11567afe9ad4996c97f41fd5997f6",
+  "acceptance": "Local branch evidence only. Full G2, production HA and safe restore resumption remain open.",
+  "build": {
+    "configuration": "Release",
+    "sdk": "10.0.402",
+    "runtime": "10.0.13",
+    "warnings": 0,
+    "errors": 0,
+    "lockedRestore": true
+  },
+  "source": {
+    "algorithm": "SHA256 of ordinal-sorted tracked and staged-for-inclusion C# path + space + SHA256(UTF8 text without BOM, CRLF normalized to LF) + LF",
+    "fileCount": 516,
+    "digest": "21e8e2187c11823901fce28ff6cf7ccd53cf7c8d7e2135bbb89feae0cf0a8a13"
+  },
+  "suites": {
+    "topicLifecycle": {
+      "total": 22,
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "trx": "artifacts/g2-next/topic-lifecycle-rerun/topic-lifecycle.trx",
+      "trxSha256": "955b8014baceda242fd9d36cfebcc5611e0f4d6ef63b44794b0f3f94823d259d"
+    },
+    "recovery": {
+      "total": 18,
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "trx": "artifacts/g2-next/recovery-rerun/recovery-live.trx",
+      "trxSha256": "9731568314654371c0274cd2448a04bb7f0b541121dfe560e41c6309de713687"
+    },
+    "regressionExceptRecovery": {
+      "total": 1847,
+      "passed": 1846,
+      "failed": 0,
+      "skipped": 1,
+      "trx": "artifacts/g2-next/full-regression/full-regression.trx",
+      "trxSha256": "3fe4750662592f7b60130e0420bb98c541988a75384c9c03f97ef06b78a60e14"
+    }
+  },
+  "proofs": {
+    "topic-cli-lifecycle-evidence.json": {
+      "path": "artifacts/g2-next/topic-lifecycle-rerun/topic-cli-lifecycle-evidence.json",
+      "sha256": "69616653a21f1937f646325f7338ab7a0c50f732c18fab29374c2f865a888bac",
+      "observations": {
+        "observedAtUtc": "2026-10-16T08:40:09.8155548+00:00",
+        "persistence": "SQLite",
+        "flow": "real Keycloak human PKCE -> shipped CLI/API -> real Kafka TopicCreate/TopicAlter/partition increase -> cancelled alternate configuration -> independently rejected CRITICAL delete -> durable repository reopen",
+        "alterationState": "AppliedVerified",
+        "retentionMs": 60000,
+        "partitionIncreaseState": "AppliedVerified",
+        "partitions": 2,
+        "decreaseRefused": true,
+        "unsupportedConfigRefused": true,
+        "cancelCommandExit": 0,
+        "cancelledStatusExit": 4,
+        "rejectCommandExit": 0,
+        "rejectedStatusExit": 4,
+        "sameHumanRejectExit": 3,
+        "wrongRejectionHashExit": 8,
+        "cancelledAndRejectedExecutionExit": 8,
+        "exactRequesterAndRejector": true,
+        "cancelledAndRejectedEffectsAbsent": true,
+        "createConfigurationObserved": true,
+        "resetToObservedDefault": true,
+        "durableOperationCount": 5,
+        "actualApiProcessRestarts": 1,
+        "immutablePreviewSurvivedRestart": true,
+        "caveat": "Four admitted topic families only; this case never executes delete. It does not establish mutation primary failover, restore resumption, other-family parity or the complete G2 exit."
+      }
+    },
+    "postgres-topic-cli-lifecycle-evidence.json": {
+      "path": "artifacts/g2-next/topic-lifecycle-rerun/postgres-topic-cli-lifecycle-evidence.json",
+      "sha256": "ff3ee47dee00d3aac52dc369eeb37f063591ace81fa45f0bfe38c521df7cd91b",
+      "observations": {
+        "observedAtUtc": "2026-10-16T08:37:47.029019+00:00",
+        "persistence": "PostgreSQL",
+        "flow": "real Keycloak human PKCE -> shipped CLI/API -> real Kafka TopicCreate/TopicAlter/partition increase -> cancelled alternate configuration -> independently rejected CRITICAL delete -> durable repository reopen",
+        "alterationState": "AppliedVerified",
+        "retentionMs": 60000,
+        "partitionIncreaseState": "AppliedVerified",
+        "partitions": 2,
+        "decreaseRefused": true,
+        "unsupportedConfigRefused": true,
+        "cancelCommandExit": 0,
+        "cancelledStatusExit": 4,
+        "rejectCommandExit": 0,
+        "rejectedStatusExit": 4,
+        "sameHumanRejectExit": 3,
+        "wrongRejectionHashExit": 8,
+        "cancelledAndRejectedExecutionExit": 8,
+        "exactRequesterAndRejector": true,
+        "cancelledAndRejectedEffectsAbsent": true,
+        "createConfigurationObserved": true,
+        "resetToObservedDefault": true,
+        "durableOperationCount": 5,
+        "actualApiProcessRestarts": 1,
+        "immutablePreviewSurvivedRestart": true,
+        "caveat": "Four admitted topic families only; this case never executes delete. It does not establish mutation primary failover, restore resumption, other-family parity or the complete G2 exit."
+      }
+    },
+    "postgres-before-claim-failover-evidence.json": {
+      "path": "artifacts/g2-next/recovery-rerun/postgres-before-claim-failover-evidence.json",
+      "sha256": "5450bf17f16019b1adcc1b6467a356352ab080c93ba858ab80cf49bbf13fb817",
+      "observations": {
+        "actualPhysicalTls": true,
+        "independentReleaseSenderProcess": true,
+        "failoverBeforeClaim": true,
+        "replicatedPendingAttempts": 0,
+        "oldPrimaryPhysicallyFenced": true,
+        "physicalStandbyPromoted": true,
+        "physicalPosts": 1,
+        "attempts": 1,
+        "terminalState": "Delivered",
+        "durableReopen": true,
+        "automaticResends": 0,
+        "productionHaAdmission": false
+      }
+    },
+    "postgres-crash-after-post-failover-evidence.json": {
+      "path": "artifacts/g2-next/recovery-rerun/postgres-crash-after-post-failover-evidence.json",
+      "sha256": "7ec29cef4d2650894f4176a1ce4ef7233610c18bc121af754c5cbd6dd4847f70",
+      "observations": {
+        "actualPhysicalTls": true,
+        "independentReleaseSenderProcess": true,
+        "abruptProcessKill": true,
+        "inFlightClaimReadOnPhysicalStandbyBeforeKill": true,
+        "completePostReadBeforeKill": true,
+        "oldPrimaryPhysicallyFenced": true,
+        "physicalStandbyPromoted": true,
+        "syntheticClockAging": false,
+        "realDatabaseStaleMilliseconds": 10742,
+        "physicalPosts": 1,
+        "acceptedTlsConnections": 1,
+        "attempts": 1,
+        "terminalState": "UnknownExternalEffect",
+        "automaticResends": 0,
+        "durableReopen": true,
+        "productionHaAdmission": false,
+        "coversStaleBackupRestore": false
+      }
+    },
+    "postgres-stale-backup-quarantine-evidence.json": {
+      "path": "artifacts/g2-next/recovery-rerun/postgres-stale-backup-quarantine-evidence.json",
+      "sha256": "4676af52beeba5137e16c6faf073ba9e503b0d8c1adda9ef86148ce7ebfa0c53",
+      "observations": {
+        "actualVerifiedPhysicalBackupRestore": true,
+        "originalProviderAccepted": true,
+        "backupState": "Pending",
+        "originalLaterState": "Delivered",
+        "restoredState": "Pending",
+        "restoredAttempts": 0,
+        "externalAnchorOutsideDatabaseBackup": true,
+        "oldConfigurationHashRefused": true,
+        "quarantinedGenerationRefused": true,
+        "activeNewHashStillRefusedByDatabaseEpoch": true,
+        "directProductionGateVerifiedBeforeStartup": true,
+        "databaseEpochUnchangedByReads": true,
+        "refusedReleaseSenderProcesses": 3,
+        "physicalPosts": 1,
+        "automaticResends": 0,
+        "safeResumeImplemented": false,
+        "offlineReconciliationAndAdvancementAccepted": false,
+        "productionHaAdmission": false
+      }
+    }
+  },
+  "limitations": [
+    "Current Linux exact-head and protected-main checks still required.",
+    "Native Windows actual delete case deliberately skipped; mandatory Linux CI executes it. Prior protected main passed it.",
+    "Four admitted topic kinds only; remaining 26 mutation kinds and full read/UI/provider/identity lifecycle parity remain required.",
+    "Restore refuses stale generation; no governed offline reconciliation, epoch advancement or safe resumption implemented.",
+    "Production notifier HA, failback/upgrade, tenant-specific external SaaS acceptance and full G2 N1-N5/A1-A6 exit remain open."
+  ]
+}

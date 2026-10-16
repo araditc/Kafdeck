@@ -54,16 +54,26 @@ public sealed class MutationRequestAuthorizationService
         MutationOperationSnapshot operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
+        var lifecycle = AuthorizeForLifecycle(principal, operation);
+        if (lifecycle != KafdeckAuthorizationOutcome.Allowed) return lifecycle;
         if (principal?.Identity is NonBrowserReadIdentity)
         {
-            if (operation.OperationKind is not (MutationOperationKind.TopicCreate or MutationOperationKind.TopicDelete) || operation.PolicyVersion != PolicyVersionFor(principal))
-                return KafdeckAuthorizationOutcome.Forbidden;
             if (operation.Risk.RequiresIndependentApproval && operation.State is MutationOperationState.Ready or MutationOperationState.Executing &&
                 (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
                  operation.AuthorizationTargets.Any(target => !_authorization.IsCurrentApprovalAllowed(operation.ApprovedByPrincipalId,
                      new AuthorizationRequest(target.Action, target.ClusterId, target.ResourceName)))))
                 return KafdeckAuthorizationOutcome.Forbidden;
         }
+        return KafdeckAuthorizationOutcome.Allowed;
+    }
+
+    /// <summary>Current kind, policy and target authority; callers separately require exact plan ownership.</summary>
+    public KafdeckAuthorizationOutcome AuthorizeForLifecycle(ClaimsPrincipal? principal, MutationOperationSnapshot operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (principal?.Identity is NonBrowserReadIdentity &&
+            (!BearerTopicMutationScope.IsKind(operation.OperationKind) || operation.PolicyVersion != PolicyVersionFor(principal)))
+            return KafdeckAuthorizationOutcome.Forbidden;
         return AuthorizeTargets(principal, operation.AuthorizationTargets);
     }
 

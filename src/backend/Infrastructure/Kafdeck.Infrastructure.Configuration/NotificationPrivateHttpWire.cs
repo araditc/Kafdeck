@@ -29,6 +29,7 @@ internal static class NotificationPrivateHttpWire
             "Connection: close\r\n\r\n");
         if (headers.Length > 8192) throw new IOException("Provider request headers exceed finite budget.");
         await using var tls = await connections.OpenPinnedTlsStreamAsync(pinned, token).ConfigureAwait(false);
+        await connections.VerifySendAdmissionAsync(token).ConfigureAwait(false);
         await tls.WriteAsync(headers, token).ConfigureAwait(false);
         await tls.WriteAsync(body, token).ConfigureAwait(false);
         var reader = new BoundedLineReader(tls);

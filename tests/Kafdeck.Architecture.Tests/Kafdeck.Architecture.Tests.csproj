@@ -17,6 +17,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../Kafdeck.NotificationSender.Lab/Kafdeck.NotificationSender.Lab.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/backend/Kafdeck.Api/Kafdeck.Api.csproj" />
     <ProjectReference Include="../../src/cli/Kafdeck.Cli/Kafdeck.Cli.csproj" />
     <ProjectReference Include="../../src/backend/Kafdeck.Core/Kafdeck.Core.csproj" />

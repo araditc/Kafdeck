@@ -259,6 +259,7 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
         private readonly Func<string, string>? _responseBody;
         private readonly Func<SslStream, CancellationToken, Task>? _session;
         public X509Certificate2 Root { get; }
+        internal X509Certificate2 ServerCertificate => _server;
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
         public string? ServerName { get; private set; }
         public string? LastError { get; private set; }

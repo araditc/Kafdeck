@@ -47,6 +47,17 @@ public sealed class KeycloakG2CriticalKafkaFactAttribute : FactAttribute
     }
 }
 
+public sealed class KeycloakG2PostgreSqlKafkaFactAttribute : FactAttribute
+{
+    public KeycloakG2PostgreSqlKafkaFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KAFDECK_KEYCLOAK_G2_LAB")) ||
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KAFDECK_G2_KAFKA_BOOTSTRAP")) ||
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES")))
+            Skip = "Requires genuine Keycloak, Kafka and PostgreSQL for an actual shipped CLI/API/provider effect.";
+    }
+}
+
 public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
 {
     [KeycloakG2Fact]
@@ -61,7 +72,13 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
     [KeycloakG2CriticalKafkaFact]
     public Task Real_human_CLI_CRITICAL_topic_delete_requires_distinct_registered_human_approval() => RunScenarioAsync(true, critical: true);
 
-    private async Task RunScenarioAsync(bool includeEffect, bool service = false, bool critical = false)
+    [KeycloakG2KafkaFact]
+    public Task Real_human_CLI_alters_and_increases_real_Kafka_topic_and_preserves_cancel_reject_outcomes() => RunScenarioAsync(true, extendedTopics: true);
+
+    [KeycloakG2PostgreSqlKafkaFact]
+    public Task Real_PostgreSql_API_and_human_CLI_preserve_actual_Kafka_effects_and_durable_cancel_reject_outcomes() => RunScenarioAsync(true, extendedTopics: true, postgres: true);
+
+    private async Task RunScenarioAsync(bool includeEffect, bool service = false, bool critical = false, bool extendedTopics = false, bool postgres = false)
     {
         var labFile = Environment.GetEnvironmentVariable("KAFDECK_KEYCLOAK_G2_LAB")!;
         using var lab = JsonDocument.Parse(await File.ReadAllTextAsync(labFile));
@@ -93,6 +110,7 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
         var apiBase = $"http://127.0.0.1:{apiPort}";
         var topicName = "g2-cli-proof-" + Guid.NewGuid().ToString("N");
         var mutationDb = Path.Combine(evidenceDirectory, "mutation-" + Guid.NewGuid().ToString("N") + ".db");
+        await using var postgresDatabase = postgres ? await G2CliPostgreSqlDatabase.CreateAsync() : null;
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = Path.GetDirectoryName(apiDll)!, UseShellExecute = false, CreateNoWindow = true,
@@ -147,7 +165,14 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
             }
             start.Environment["KAFDECK_G2_FIXTURE_DIGEST_KEY"] = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         }
-        if (critical)
+        if (postgresDatabase is not null)
+        {
+            configuration["Kafdeck:Administration:Mutations:Persistence:Provider"] = "PostgreSql";
+            configuration.Remove("Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath");
+            configuration["Kafdeck:Administration:Mutations:Persistence:ConnectionString"] = "env:KAFDECK_G2_CLI_DATABASE_CONNECTION";
+            start.Environment["KAFDECK_G2_CLI_DATABASE_CONNECTION"] = postgresDatabase.ConnectionString;
+        }
+        if (critical || extendedTopics)
         {
             configuration["Kafdeck:NonBrowserRead:GovernedApprovalsEnabled"] = "true";
             configuration["Kafdeck:NonBrowserRead:HumanRegistrations:0:MutationActions:1"] = "TopicDelete";
@@ -177,15 +202,23 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
             configuration["Kafdeck:Authorization:SubjectBindings:1:Subject"] = Field("approverSubject");
             configuration["Kafdeck:Authorization:SubjectBindings:1:RoleIds:0"] = "g2-independent-approver";
         }
-        await using var productBridge = includeEffect && !service && !critical
+        if (extendedTopics)
+        {
+            configuration["Kafdeck:NonBrowserRead:HumanRegistrations:0:MutationActions:2"] = "TopicAlter";
+            configuration["Kafdeck:Authorization:Roles:0:Permissions:6:Action"] = "TopicAlter";
+            configuration["Kafdeck:Authorization:Roles:0:Permissions:6:ClusterIds:0"] = "permitted";
+            configuration["Kafdeck:Authorization:Roles:0:Permissions:6:ResourcePatterns:0"] = topicName;
+        }
+        await using var productBridge = includeEffect && !service && !critical && !extendedTopics
             ? await G2KafkaProductNotificationBridge.PrepareAsync(evidenceDirectory, configuration) : null;
         foreach (var setting in configuration)
             start.Environment[setting.Key.Replace(":", "__", StringComparison.Ordinal)] = setting.Value;
-        using var host = Process.Start(start)!;
+        var host = Process.Start(start)!;
         var stdout = host.StandardOutput.ReadToEndAsync();
         var stderr = host.StandardError.ReadToEndAsync();
+        var completedHostLogs = "";
         var password = await File.ReadAllTextAsync(Field("humanPasswordFile"));
-        var approverPassword = critical ? await File.ReadAllTextAsync(Field("approverPasswordFile")) : null;
+        var approverPassword = critical || extendedTopics ? await File.ReadAllTextAsync(Field("approverPasswordFile")) : null;
         var asApprover = false;
         var browserLogins = 0;
         var browserNavigations = 0;
@@ -193,7 +226,7 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
         var transcripts = new List<string>();
         var browserMode = "normal";
         var rejectedCallbacks = 0;
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(extendedTopics ? 5 : 3));
         var lastOutput = "";
         try
         {
@@ -289,7 +322,11 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                 Assert.False(transcript.Contains(password, StringComparison.Ordinal), "CLI output reflected the disposable login password.");
                 if (approverPassword is not null) Assert.False(transcript.Contains(approverPassword, StringComparison.Ordinal),
                     "CLI output reflected the disposable approver password.");
-                Assert.False(new[] { "access_token", "id_token", "code_verifier" }.Any(marker =>
+                // Usage text legitimately names KAFDECK_ACCESS_TOKEN. Match
+                // serialized credential fields/assignments, not that public
+                // environment-variable name; JWT material remains forbidden.
+                Assert.False(new[] { "\"access_token\"", "\"id_token\"", "\"code_verifier\"",
+                    "access_token=", "id_token=", "code_verifier=", "Bearer eyJ" }.Any(marker =>
                     transcript.Contains(marker, StringComparison.OrdinalIgnoreCase)), "CLI output exposed a protected OIDC field.");
                 transcripts.Add(transcript);
                 lastOutput = output.ToString();
@@ -298,20 +335,49 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                 return result;
             }
 
+            async Task RestartApi()
+            {
+                host.Kill(entireProcessTree: true);
+                await host.WaitForExitAsync(deadline.Token);
+                var previousLogs = await stdout + await stderr;
+                Assert.False(previousLogs.Contains(password, StringComparison.Ordinal), "The previous API log exposed the lab password.");
+                if (approverPassword is not null) Assert.False(previousLogs.Contains(approverPassword, StringComparison.Ordinal),
+                    "The previous API log exposed the approver password.");
+                Assert.False(previousLogs.Contains("Bearer eyJ", StringComparison.Ordinal), "The previous API log exposed JWT material.");
+                completedHostLogs += previousLogs;
+                host.Dispose();
+                host = Process.Start(start)!;
+                stdout = host.StandardOutput.ReadToEndAsync();
+                stderr = host.StandardError.ReadToEndAsync();
+                var restarted = false;
+                for (var attempt = 0; attempt < 100 && !host.HasExited; attempt++)
+                {
+                    try { using var response = await api.GetAsync("/healthz", deadline.Token); restarted = response.IsSuccessStatusCode; if (restarted) break; }
+                    catch (HttpRequestException) { }
+                    catch (OperationCanceledException) when (!deadline.IsCancellationRequested) { }
+                    await Task.Delay(200, deadline.Token);
+                }
+                Assert.True(restarted, "The actual API did not become ready after the preview-preserving process restart.");
+            }
+
             Assert.Equal(CliApplication.Success, await Run("system", "info"));
             Assert.Equal(CliApplication.AuthenticationOrAuthorizationError, await Run("clusters", "get", "denied"));
             if (includeEffect)
             {
                 var idempotency = "g2-create-" + Guid.NewGuid().ToString("N");
-                Assert.Equal(CliApplication.Success, await Run("topics", "create-preview", "permitted", topicName, "1", "1", "--idempotency-key", idempotency));
+                var createRequest = new[] { "topics", "create-preview", "permitted", topicName, "1", "1", "--idempotency-key", idempotency };
+                if (extendedTopics) createRequest = createRequest.Concat(["--config", "segment.bytes=1048576"]).ToArray();
+                Assert.Equal(CliApplication.Success, await Run(createRequest));
                 using var preview = JsonDocument.Parse(lastOutput);
                 var operationId = preview.RootElement.GetProperty("operationId").GetGuid();
                 var previewHash = preview.RootElement.GetProperty("previewHash").GetString()!;
                 var challenge = preview.RootElement.GetProperty("confirmationChallenge").GetString();
                 Assert.False(preview.RootElement.GetProperty("requiresIndependentApproval").GetBoolean());
-                Assert.Equal(CliApplication.Success, await Run("topics", "create-preview", "permitted", topicName, "1", "1", "--idempotency-key", idempotency));
+                Assert.Equal(CliApplication.Success, await Run(createRequest));
                 using (var duplicate = JsonDocument.Parse(lastOutput)) Assert.Equal(operationId, duplicate.RootElement.GetProperty("operationId").GetGuid());
-                Assert.Equal(CliApplication.Conflict, await Run("topics", "create-preview", "permitted", topicName, "2", "1", "--idempotency-key", idempotency));
+                var changedCreateRequest = (string[])createRequest.Clone();
+                changedCreateRequest[4] = "2";
+                Assert.Equal(CliApplication.Conflict, await Run(changedCreateRequest));
                 Assert.Equal(CliApplication.Conflict, await Run("operations", "confirm", operationId.ToString("D"), new string('a', 64)));
                 var confirm = new[] { "operations", "confirm", operationId.ToString("D"), previewHash };
                 if (challenge is not null) confirm = confirm.Concat(new[] { "--challenge", challenge }).ToArray();
@@ -340,7 +406,9 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                     Assert.Contains(topicName, lastOutput, StringComparison.Ordinal);
                 }
                 // Reopen the production repository independently of the HTTP host.
-                var reopened = new AdoMutationOperationRepository(new SqliteMutationDbConnectionFactory(mutationDb));
+                var reopened = new AdoMutationOperationRepository(postgresDatabase is null
+                    ? new SqliteMutationDbConnectionFactory(mutationDb)
+                    : new PostgreSqlMutationDbConnectionFactory(postgresDatabase.ConnectionString));
                 var persisted = await reopened.GetAsync(operationId, deadline.Token);
                 Assert.NotNull(persisted);
                 Assert.Equal(MutationOperationState.AppliedVerified, persisted.State);
@@ -349,6 +417,14 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                 Assert.StartsWith("v0.8-bearer:", persisted.PolicyVersion, StringComparison.Ordinal);
                 Assert.Equal(previewHash, persisted.PreviewHash);
                 if (service) Assert.Equal(0, browserNavigations);
+                if (extendedTopics)
+                {
+                    await G2ExtendedTopicCliScenario.RunAsync(command => Run(command), () => lastOutput,
+                        value => asApprover = value, reopened, topicName, persisted.RequesterPrincipalId,
+                        "oidc-cli-human:" + Uri.EscapeDataString(Field("issuer")) + "|" + Uri.EscapeDataString(Field("approverSubject")) +
+                        "|" + Uri.EscapeDataString(Field("cliClientId")) + "|g2-approver", postgres ? "PostgreSQL" : "SQLite", evidenceDirectory, RestartApi, deadline.Token);
+                    return;
+                }
                 if (critical)
                 {
                     Assert.Equal(CliApplication.Success, await Run("topics", "delete-preview", "permitted", topicName,
@@ -460,12 +536,13 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
         {
             if (!host.HasExited) host.Kill(entireProcessTree: true);
             await host.WaitForExitAsync(CancellationToken.None);
-            var logs = await stdout + await stderr;
+            var logs = completedHostLogs + await stdout + await stderr;
+            host.Dispose();
             Assert.False(logs.Contains(password, StringComparison.Ordinal), "The API log reflected the lab password.");
             if (approverPassword is not null) Assert.False(logs.Contains(approverPassword, StringComparison.Ordinal),
                 "The API log reflected the disposable approver password.");
             Assert.False(logs.Contains("Bearer eyJ", StringComparison.Ordinal), "The API log exposed bearer JWT material.");
-            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, critical ? "g2-critical-api.log" : service ? "g2-service-effect-api.log" : includeEffect ? "g2-human-effect-api.log" : "g2-human-api.log"), logs);
+            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, postgres ? "g2-postgres-topic-lifecycle-api.log" : extendedTopics ? "g2-topic-lifecycle-api.log" : critical ? "g2-critical-api.log" : service ? "g2-service-effect-api.log" : includeEffect ? "g2-human-effect-api.log" : "g2-human-api.log"), logs);
         }
     }
 
