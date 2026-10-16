@@ -32,6 +32,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly IAclEffectAuthorizationGuard? _aclAuthorization;
     private readonly ScramMutationPreconditionValidator? _scram;
     private readonly IScramEffectAuthorizationGuard? _scramAuthorization;
+    private readonly JobReconciliationService? _reconciliation;
 
     public W39MutationPreDispatchGuard(
         MutationExecutionRequestContextAccessor requestContext,
@@ -48,7 +49,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         AclMutationPreconditionValidator? acls = null,
         IAclEffectAuthorizationGuard? aclAuthorization = null,
         ScramMutationPreconditionValidator? scram = null,
-        IScramEffectAuthorizationGuard? scramAuthorization = null)
+        IScramEffectAuthorizationGuard? scramAuthorization = null, JobReconciliationService? reconciliation = null)
     {
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -65,6 +66,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _aclAuthorization = aclAuthorization;
         _scram = scram;
         _scramAuthorization = scramAuthorization;
+        _reconciliation = reconciliation;
     }
 
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(
@@ -83,6 +85,10 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         MutationPreDispatchGuardResult preconditions;
         switch (operation.OperationKind)
         {
+            case MutationOperationKind.FleetUncertaintyDisposition:
+                if (_reconciliation is null) return Unsupported();
+                preconditions = await _reconciliation.ValidateAsync(operation, cancellationToken).ConfigureAwait(false);
+                break;
             case MutationOperationKind.TopicCreate:
             case MutationOperationKind.TopicAlter:
             case MutationOperationKind.TopicIncreasePartitions:

@@ -10,12 +10,17 @@ public static class KafdeckDataGeneratorEndpoints
         "Idempotency-Key";
 
     public static WebApplication MapKafdeckDataGeneratorEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer)
+        {
+            app.MapKafdeckDataGeneratorEndpoints(bearer: true);
+            app.MapKafdeckJobReconciliationEndpoints(generator: true);
+        }
 
         app.MapPost(
-                "/api/v1/data-jobs/generator/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/generator/preview"),
                 async (
                     DataGeneratorPreviewRequest request,
                     HttpContext context,
@@ -60,11 +65,10 @@ public static class KafdeckDataGeneratorEndpoints
 
                     return MapAdmissionResult(admitted);
                 })
-            .WithName("v07-data-generator-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-generator-preview")).RequireFamilyBoundary(bearer, "v07-data-generator-preview");
 
         app.MapPost(
-                "/api/v1/data-jobs/generator/{operationId:guid}/start",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/generator/{operationId:guid}/start"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -80,11 +84,10 @@ public static class KafdeckDataGeneratorEndpoints
 
                     return MapDispatchResult(result);
                 })
-            .WithName("v07-data-generator-start")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-generator-start")).RequireFamilyBoundary(bearer, "v07-data-generator-start");
 
         app.MapGet(
-                "/api/v1/data-jobs/generator/{operationId:guid}",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/generator/{operationId:guid}"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -120,10 +123,10 @@ public static class KafdeckDataGeneratorEndpoints
                             access.Plan!,
                             progress));
                 })
-            .WithName("v07-data-generator-status");
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-generator-status")).RequireFamilyBoundary(bearer, "v07-data-generator-status");
 
         app.MapPost(
-                "/api/v1/data-jobs/generator/{operationId:guid}/cancel",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/generator/{operationId:guid}/cancel"),
                 async (
                     Guid operationId,
                     HttpContext context,
@@ -175,11 +178,10 @@ public static class KafdeckDataGeneratorEndpoints
                         result,
                         "cancel");
                 })
-            .WithName("v07-data-generator-cancel")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-generator-cancel")).RequireFamilyBoundary(bearer, "v07-data-generator-cancel");
 
         app.MapPost(
-                "/api/v1/data-jobs/generator/{operationId:guid}/reconcile",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/data-jobs/generator/{operationId:guid}/reconcile"),
                 async (
                     Guid operationId,
                     DataGeneratorReconcileRequest request,
@@ -250,8 +252,7 @@ public static class KafdeckDataGeneratorEndpoints
                         result,
                         "reconcile");
                 })
-            .WithName("v07-data-generator-reconcile")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v07-data-generator-reconcile")).RequireFamilyBoundary(bearer, "v07-data-generator-reconcile");
 
         return app;
     }
@@ -510,14 +511,8 @@ public static class KafdeckDataGeneratorEndpoints
         string outcomeCode,
         CancellationToken cancellationToken)
     {
-        var principal =
-            OperatorSessionContextFactory.TryCreate(
-                context.User,
-                out var session) &&
-            session is not null
-                ? SecurityAuditPrincipal.FromOperator(
-                    session.Identity)
-                : SecurityAuditPrincipal.LegacyDeployment;
+        var principal = MutationActor.TryCreate(context.User, out var actor) && actor is not null
+            ? actor.PrincipalId : SecurityAuditPrincipal.LegacyDeployment;
 
         await audit.WriteAsync(
                 new MutationAuditEvent(
@@ -813,7 +808,8 @@ public sealed record DataGeneratorStatusData(
     long AcknowledgedRecords,
     long AcknowledgedBytes,
     long ActiveRuntimeMilliseconds,
-    DataGeneratorPendingStatusData? PendingBatch)
+    DataGeneratorPendingStatusData? PendingBatch,
+    long? ProgressVersion = null)
 {
     public static DataGeneratorStatusData From(
         MutationOperationSnapshot operation,
@@ -852,7 +848,8 @@ public sealed record DataGeneratorStatusData(
                     pending.RawBytes,
                     pending.State.ToString(),
                     pending.ReservedAtUtc,
-                    pending.DispatchStartedAtUtc));
+                    pending.DispatchStartedAtUtc),
+            progress?.Version);
     }
 }
 

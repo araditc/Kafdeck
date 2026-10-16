@@ -11,12 +11,13 @@ public static class KafdeckSchemaMutationEndpoints
     private const string IdempotencyHeader = "Idempotency-Key";
 
     public static WebApplication MapKafdeckSchemaMutationEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer) app.MapKafdeckSchemaMutationEndpoints(bearer: true);
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/mutations/register/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/mutations/register/preview"),
                 async (
                     string clusterId,
                     string subject,
@@ -65,11 +66,11 @@ public static class KafdeckSchemaMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-schema-register-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-schema-register-preview"))
+            .RequireFamilyBoundary(bearer, "v05-schema-register-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/mutations/compatibility/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/mutations/compatibility/preview"),
                 async (
                     string clusterId,
                     string subject,
@@ -111,11 +112,11 @@ public static class KafdeckSchemaMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-schema-subject-compatibility-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-schema-subject-compatibility-preview"))
+            .RequireFamilyBoundary(bearer, "v05-schema-subject-compatibility-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/schemas/mutations/compatibility/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/schemas/mutations/compatibility/preview"),
                 async (
                     string clusterId,
                     SchemaCompatibilityPreviewRequest request,
@@ -156,11 +157,11 @@ public static class KafdeckSchemaMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-schema-global-compatibility-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-schema-global-compatibility-preview"))
+            .RequireFamilyBoundary(bearer, "v05-schema-global-compatibility-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/mutations/delete/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/schemas/subjects/{subject}/mutations/delete/preview"),
                 async (
                     string clusterId,
                     string subject,
@@ -205,11 +206,11 @@ public static class KafdeckSchemaMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-schema-delete-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-schema-delete-preview"))
+            .RequireFamilyBoundary(bearer, "v05-schema-delete-preview");
 
         app.MapPost(
-                "/api/v1/mutations/{operationId:guid}/schema-create/execute",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/mutations/{operationId:guid}/schema-create/execute"),
                 async (
                     Guid operationId,
                     SchemaCreateExecuteRequest request,
@@ -226,8 +227,8 @@ public static class KafdeckSchemaMutationEndpoints
                         .ConfigureAwait(false);
                     return MapDispatchResult(result);
                 })
-            .WithName("v05-schema-create-execute")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-schema-create-execute"))
+            .RequireFamilyBoundary(bearer, "v05-schema-create-execute");
 
         return app;
     }

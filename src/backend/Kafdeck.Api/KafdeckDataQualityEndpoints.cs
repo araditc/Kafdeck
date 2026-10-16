@@ -667,6 +667,7 @@ public static class KafdeckDataQualityEndpoints
                 ? SecurityAuditPrincipal.FromOperator(
                     session.Identity)
                 : SecurityAuditPrincipal.Anonymous;
+        if (context.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
 
         await audit.WriteAsync(
                 new SecurityAuditEvent(

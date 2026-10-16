@@ -801,11 +801,13 @@ public sealed class WebhookNotificationDeliveryDispatcher :
         _profileCatalog;
     private readonly WebhookNotificationAdapter
         _adapter;
+    private readonly INotificationRecoveryEventGate? _recoveryEvents;
 
     public WebhookNotificationDeliveryDispatcher(
         INotificationRoutingStore routingStore,
         INotificationDestinationProfileCatalog profileCatalog,
-        WebhookNotificationAdapter adapter)
+        WebhookNotificationAdapter adapter,
+        INotificationRecoveryEventGate? recoveryEvents = null)
     {
         _routingStore =
             routingStore ??
@@ -819,6 +821,7 @@ public sealed class WebhookNotificationDeliveryDispatcher :
             adapter ??
             throw new ArgumentNullException(
                 nameof(adapter));
+        _recoveryEvents = recoveryEvents;
     }
 
     public async Task<NotificationDeliveryDispatchResult>
@@ -873,6 +876,10 @@ public sealed class WebhookNotificationDeliveryDispatcher :
             return new NotificationDeliveryDispatchResult(
                 NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
         }
+
+        if (_recoveryEvents is not null && !await _recoveryEvents.CheckAsync(notificationEvent.Event.EventId,
+            profile.DestinationId, notificationEvent.Event.OccurredAtUtc, cancellationToken).ConfigureAwait(false))
+            return new NotificationDeliveryDispatchResult(NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
 
         var result =
             await _adapter

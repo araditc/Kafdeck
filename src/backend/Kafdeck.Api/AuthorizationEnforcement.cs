@@ -215,6 +215,7 @@ public static class KafdeckAuthorizationEndpointExtensions
                 var principal = OperatorSessionContextFactory.TryCreate(http.User, out var sensitiveSession) && sensitiveSession is not null
                     ? SecurityAuditPrincipal.FromOperator(sensitiveSession.Identity)
                     : SecurityAuditPrincipal.LegacyDeployment;
+                if (http.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
                 await audit!.WriteAsync(
                     new SecurityAuditEvent(
                         DateTimeOffset.UtcNow,

@@ -38,7 +38,7 @@ public sealed record FleetPostCapReadReservation(
 
 public sealed record FleetOperationProgressSnapshot
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public required Guid OperationId { get; init; }
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
@@ -283,7 +283,7 @@ public sealed class FleetOperationProgress
             throw new MutationStateException("Fleet progress requires a parent operation ID.");
         }
 
-        if (snapshot.SchemaVersion != FleetOperationProgressSnapshot.CurrentSchemaVersion)
+        if (snapshot.SchemaVersion is < 1 or > FleetOperationProgressSnapshot.CurrentSchemaVersion)
         {
             throw new MutationStateException(
                 $"Fleet progress schema version '{snapshot.SchemaVersion}' is unsupported.");
@@ -294,6 +294,10 @@ public sealed class FleetOperationProgress
             throw new MutationStateException(
                 "Fleet progress requires a positive worker generation.");
         }
+        var boundary = snapshot.Transfer?.PendingBatch?.DestinationBoundary ?? snapshot.Generator?.PendingBatch?.DestinationBoundary;
+        if (boundary is not null && (snapshot.SchemaVersion != FleetOperationProgressSnapshot.CurrentSchemaVersion ||
+            boundary.Validate().WorkerGeneration > snapshot.WorkerGeneration))
+            throw new MutationStateException("A destination boundary requires current-schema fenced progress.");
 
         if (snapshot.ActiveObservationElapsedTicks < 0 ||
             snapshot.ActiveObservationElapsedTicks > FleetRuntimeLimits.MaxActiveObservationWindow.Ticks)

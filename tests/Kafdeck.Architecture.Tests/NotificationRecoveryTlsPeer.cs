@@ -22,6 +22,7 @@ internal sealed class NotificationRecoveryTlsPeer(bool holdReceipt) : IAsyncDisp
     private int _posts;
     private int _accepted;
     private int _invalid;
+    internal ConcurrentQueue<Guid> PostedIds { get; } = new();
     internal int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
     internal int PhysicalPosts => Volatile.Read(ref _posts);
     internal int AcceptedConnections => Volatile.Read(ref _accepted);
@@ -78,6 +79,7 @@ internal sealed class NotificationRecoveryTlsPeer(bool holdReceipt) : IAsyncDisp
                     using var body = JsonDocument.Parse(text[(boundary + 4)..]);
                     var id = body.RootElement.GetProperty("eventId").GetGuid();
                     Interlocked.Increment(ref _posts);
+                    PostedIds.Enqueue(id);
                     CompletePost.TrySetResult(id);
                     if (holdReceipt) await Task.Delay(Timeout.InfiniteTimeSpan, _stop.Token);
                     else await stream.WriteAsync(Encoding.ASCII.GetBytes("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"), _stop.Token);

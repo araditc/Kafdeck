@@ -33,6 +33,8 @@ public static class NotificationProductEventHosting
             provider.GetRequiredService<IMutationDbConnectionFactory>(), provider.GetRequiredService<NotificationProductEventPolicy>()));
         services.TryAddSingleton<INotificationProductEventBackpressure, NotificationProductEventBackpressure>();
         services.TryAddSingleton<NotificationRoutingCoordinator>();
+        services.TryAddSingleton<INotificationRecoverySourceEvidence>(sp => new AdoNotificationRecoveryStore(
+            sp.GetRequiredService<INotificationDeliveryDbConnectionFactory>()));
         services.TryAddSingleton<NotificationProductEventPump>();
         services.AddHostedService<NotificationProductEventHostedService>();
         return services;

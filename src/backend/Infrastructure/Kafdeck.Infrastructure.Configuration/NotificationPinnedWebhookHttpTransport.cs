@@ -61,7 +61,7 @@ public sealed class NotificationPinnedWebhookHttpTransport :
         {
             var response = await NotificationPrivateHttpWire.PostAsync(_handlers, intent.PinnedEndpoint,
                 intent.JsonPayload.ToArray(), deadline.Token, readBody: false,
-                bearer: intent.Authentication == NotificationWebhookAuthentication.Bearer ? intent.Credential : null).ConfigureAwait(false);
+                bearer: intent.Authentication == NotificationWebhookAuthentication.Bearer ? intent.Credential : null, profile: _profile).ConfigureAwait(false);
             return NotificationWebhookHttpOutcomePolicy.FromResponse(
                 response.Status);
         }

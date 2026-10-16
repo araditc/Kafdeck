@@ -510,7 +510,8 @@ public static class KafdeckConfigurationLoader
             section["ClientId"] ?? string.Empty,
             ParseOptionalSecret(section["ClientSecret"]),
             string.IsNullOrWhiteSpace(section["GroupClaim"]) ? null : section["GroupClaim"]!.Trim(),
-            Array.AsReadOnly(scopes));
+            Array.AsReadOnly(scopes),
+            section["TrustedCaPemFile"]);
     }
 
     private static ClusterProfile LoadCluster(IConfigurationSection section)

@@ -292,6 +292,7 @@ public sealed class V08G2ProductNotificationTests(ITestOutputHelper output)
             trustRoots: new X509Certificate2Collection(tls.Root)));
         builder.Services.AddSingleton<INotificationRoutingStore>(routing);
         builder.Services.AddSingleton<INotificationDeliveryStore>(deliveries);
+        builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(deliveryConnections);
         builder.Services.AddKafdeckWebhookDelivery(new(true, NotificationPersistenceProvider.Sqlite,
             NotificationExecutionMode.Standalone, deliveryPath, null, DestinationProfiles: [profile], WebhookDeliveryEnabled: true));
         using var host = builder.Build();

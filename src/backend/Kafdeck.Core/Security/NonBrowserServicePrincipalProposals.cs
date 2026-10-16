@@ -21,6 +21,16 @@ public sealed class NonBrowserServicePrincipalProposal
         AuthorizationAction.KsqlRead,
         AuthorizationAction.DataQualityRead,
         AuthorizationAction.NotificationRead,
+        AuthorizationAction.TopicConfigRead,
+        AuthorizationAction.BrokerConfigRead,
+        AuthorizationAction.RecordRead,
+        AuthorizationAction.RecordExport,
+        AuthorizationAction.AclRead,
+        AuthorizationAction.ScramRead,
+        AuthorizationAction.QuotaRead,
+        AuthorizationAction.ClusterConfigRead,
+        AuthorizationAction.StreamsRead,
+        AuthorizationAction.LineageRead,
     ];
 
     public NonBrowserServicePrincipalProposal(
@@ -40,7 +50,7 @@ public sealed class NonBrowserServicePrincipalProposal
         ClientId = RequireIdentifier(clientId, nameof(clientId), 256);
 
         ArgumentNullException.ThrowIfNull(requestedReadActions);
-        if (requestedReadActions.Count is < 1 or > 16 ||
+        if (requestedReadActions.Count is < 1 or > 32 ||
             requestedReadActions.Any(action => !InitialReadCandidates.Contains(action)) ||
             requestedReadActions.Distinct().Count() != requestedReadActions.Count)
         {

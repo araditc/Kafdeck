@@ -244,7 +244,8 @@ public sealed record MutationStatusData(
     IReadOnlyDictionary<string, string> SafeProviderEvidence,
     long Version,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc)
+    DateTimeOffset UpdatedAtUtc,
+    JobReconciliationPlan? ReconciliationReview = null)
 {
     public static MutationStatusData From(MutationOperationSnapshot operation)
     {
@@ -266,6 +267,14 @@ public sealed record MutationStatusData(
             operation.SafeProviderEvidence,
             operation.Version,
             operation.CreatedAtUtc,
-            operation.UpdatedAtUtc);
+            operation.UpdatedAtUtc,
+            ReadReconciliation(operation));
+    }
+
+    private static JobReconciliationPlan? ReadReconciliation(MutationOperationSnapshot operation)
+    {
+        if (operation.OperationKind != MutationOperationKind.FleetUncertaintyDisposition) return null;
+        try { return JobReconciliationPlan.Deserialize(operation.CanonicalIntent); }
+        catch (MutationStateException) { return null; }
     }
 }

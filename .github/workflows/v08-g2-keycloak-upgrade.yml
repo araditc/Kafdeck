@@ -1,0 +1,122 @@
+name: v08-g2-keycloak-upgrade
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v08-g2-keycloak-upgrade-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actual-patch-rolling-upgrade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: kafdeck
+          POSTGRES_PASSWORD: kafdeck-g2-ci-only
+          POSTGRES_DB: kafdeck
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kafdeck -d kafdeck"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download both pinned actual server versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-upgrade-ci"
+          mkdir -p "$lab"
+          for version in 26.8.0 26.8.1; do
+            curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+              "https://github.com/keycloak/keycloak/releases/download/$version/keycloak-$version.zip" --output "$lab/keycloak-$version.zip"
+          done
+          printf '%s  %s\n' 7ed1de3fda2598369262613bf682aab7e233d80a38c405e91588f7a7454370a1 "$lab/keycloak-26.8.0.zip" | sha256sum --check
+          printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak-26.8.1.zip" | sha256sum --check
+          unzip -q "$lab/keycloak-26.8.1.zip" -d "$lab"
+      - name: Prepare isolated identity and private fixture inputs
+        shell: pwsh
+        run: |
+          $lab = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2-upgrade-ci"
+          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$lab/keycloak-26.8.1" -OutputDirectory "$lab/identity" -HttpsPort 20443
+          $bin = (& pg_config --bindir).Trim()
+          [IO.File]::WriteAllText("$lab/admin-private.txt", 'Host=127.0.0.1;Port=5432;Username=kafdeck;Password=kafdeck-g2-ci-only;Database=kafdeck')
+          @{user='kafdeck';bindAddress='127.0.0.1';port=5432;database='kafdeck';binDirectory=$bin;connectionStringFile="$lab/admin-private.txt"} | ConvertTo-Json | Set-Content "$lab/postgres-private.json"
+          @{RootDirectory="$lab/scenarios";IdentityDirectory="$lab/identity";PostgresManifest="$lab/postgres-private.json";OldArchive="$lab/keycloak-26.8.0.zip";NewArchive="$lab/keycloak-26.8.1.zip";JavaHome=$env:JAVA_HOME_21_X64} | ConvertTo-Json | Set-Content "$lab/inputs-private.json"
+          & chmod 600 "$lab/admin-private.txt" "$lab/postgres-private.json" "$lab/inputs-private.json"
+          if ($LASTEXITCODE) { throw 'Private fixture file permissions failed.' }
+      - name: Prove real old mixed and new servers with production token verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KAFDECK_KEYCLOAK_UPGRADE_INPUTS="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-upgrade-ci/inputs-private.json"
+          export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-upgrade-ci"
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08G2KeycloakPatchUpgradeTests' --results-directory artifacts/g2-upgrade-ci --logger 'trx;LogFileName=keycloak-upgrade.trx'
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/keycloak-patch-rolling-upgrade-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/keycloak-patch-upgrade-production-verifier-evidence.json"
+          python3 - <<'PY'
+          import xml.etree.ElementTree as E
+          r=E.parse('artifacts/g2-upgrade-ci/keycloak-upgrade.trx').getroot()
+          c=r.find('.//{*}Counters')
+          assert c is not None and c.attrib.get('total')=='1' and c.attrib.get('passed')=='1' and c.attrib.get('notExecuted')=='0'
+          PY
+      - name: Collect closed bounded upgrade diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2-upgrade-ci/scenarios"
+          $out = "$env:GITHUB_WORKSPACE/artifacts/g2-upgrade-ci"
+          [IO.Directory]::CreateDirectory($out) | Out-Null
+          $files = @(Get-ChildItem -LiteralPath $root -Filter keycloak-upgrade-control-diagnostic.json -File -Recurse -ErrorAction SilentlyContinue)
+          if ($files.Count -gt 1) { throw 'Unexpected diagnostic cardinality.' }
+          $safe = @{formatVersion=1;action='Prove';stage='NotRecorded';state='Missing';failure='MissingDiagnostic';controlExitCode=$null;nodes=@()}
+          if ($files.Count -eq 1) {
+            if ($files[0].Length -gt 4096) { throw 'Diagnostic exceeds finite budget.' }
+            $d = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
+            if ($d.formatVersion -ne 1 -or $d.action -cne 'Prove' -or
+                $d.stage -cnotin @('OldNodes','OldMembership','SameVersionBounce','UpgradeA','MixedReplay','UpgradeB','NewReplay','Complete') -or
+                $d.state -cnotin @('Running','Succeeded','Failed') -or
+                $d.failure -cnotin @('Unclassified','NodeExited','ReadinessDeadline','CompatibilityDeadline','CompatibilityRejected','ReplayAccepted','FreshOAuthRejected','MembershipMissing') -or
+                ($null -ne $d.controlExitCode -and ($d.controlExitCode -isnot [long] -and $d.controlExitCode -isnot [int])) -or @($d.nodes).Count -ne 2) { throw 'Closed diagnostic contract refused.' }
+            $nodes = @()
+            foreach ($node in $d.nodes) {
+              if ($node.node -cnotin @('node-a','node-b') -or $node.version -cnotin @('26.8.0','26.8.1')) { throw 'Closed diagnostic node refused.' }
+              $n = @{node=$node.node;version=$node.version}
+              foreach ($name in @('launcherPresent','httpsPortOpen','recordedPidExists','recordedPathMatches','recordedStartMatches','startupBanner','errorMarker','twoMemberView','nodeALabel','nodeBLabel','unknownOption','realmFilenameMismatch','bindConflict','databaseAuthenticationFailure','databaseConnectionFailure','tlsMaterialFailure')) {
+                if ($node.$name -isnot [bool]) { throw 'Closed diagnostic boolean refused.' }
+                $n[$name] = $node.$name
+              }
+              $nodes += $n
+            }
+            $safe = @{formatVersion=1;action='Prove';stage=$d.stage;state=$d.state;failure=$d.failure;controlExitCode=$d.controlExitCode;nodes=$nodes}
+          }
+          $safe | ConvertTo-Json -Depth 5 | Set-Content "$out/keycloak-upgrade-control-diagnostic.json"
+          [pscustomobject]@{stage=$safe.stage;state=$safe.state;failure=$safe.failure;exitCode=$safe.controlExitCode} | ConvertTo-Json -Compress
+      - name: Retain only safe upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g2-actual-keycloak-patch-upgrade
+          path: |
+            artifacts/g2-upgrade-ci/keycloak-upgrade.trx
+            artifacts/g2-upgrade-ci/keycloak-patch-rolling-upgrade-evidence.json
+            artifacts/g2-upgrade-ci/keycloak-patch-upgrade-production-verifier-evidence.json
+            artifacts/g2-upgrade-ci/keycloak-upgrade-control-diagnostic.json
+          if-no-files-found: error

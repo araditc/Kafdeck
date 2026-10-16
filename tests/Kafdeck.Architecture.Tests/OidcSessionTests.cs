@@ -179,7 +179,8 @@ public sealed class OidcSessionTests
         Assert.False(oidc.GetClaimsFromUserInfoEndpoint);
         Assert.Equal("code", oidc.ResponseType);
         Assert.Equal("query", oidc.ResponseMode);
-        Assert.True(oidc.ProtocolValidator.RequireStateValidation);
+        // The handler authenticates protected state and its correlation cookie.
+        Assert.False(oidc.ProtocolValidator.RequireStateValidation);
         Assert.True(oidc.ProtocolValidator.RequireNonce);
         Assert.True(oidc.TokenValidationParameters.ValidateIssuer);
         Assert.True(oidc.TokenValidationParameters.ValidateAudience);

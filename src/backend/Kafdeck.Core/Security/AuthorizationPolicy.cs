@@ -410,10 +410,14 @@ public static class AuthorizationPolicyCompiler
 public sealed class AuthorizationPolicyEvaluator
 {
     private readonly AuthorizationPolicySnapshot _snapshot;
+    private readonly Func<AuthorizationPolicySnapshot>? _currentSnapshot;
+    private readonly string _fingerprint;
+    private AuthorizationPolicyEvaluator? _cachedCurrent;
 
-    public AuthorizationPolicyEvaluator(AuthorizationPolicySnapshot snapshot)
+    public AuthorizationPolicyEvaluator(AuthorizationPolicySnapshot snapshot, Func<AuthorizationPolicySnapshot>? currentSnapshot = null)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+        _currentSnapshot = currentSnapshot;
         var canonical = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
         {
             Roles = snapshot.Roles.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => new { r.Key,
@@ -423,16 +427,29 @@ public sealed class AuthorizationPolicyEvaluator
                 .Select(b => new { b.Key.Issuer, b.Key.Subject, Roles = b.Value.Order(StringComparer.Ordinal) }),
             Groups = snapshot.GroupBindings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => new { b.Key, Roles = b.Value.Order(StringComparer.Ordinal) }),
         });
-        Fingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(canonical)).ToLowerInvariant();
+        _fingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(canonical)).ToLowerInvariant();
     }
 
-    public string Fingerprint { get; }
+    private AuthorizationPolicyEvaluator Current
+    {
+        get
+        {
+            var snapshot = _currentSnapshot!();
+            var cached = Volatile.Read(ref _cachedCurrent);
+            if (cached is not null && ReferenceEquals(cached._snapshot, snapshot)) return cached;
+            var evaluator = new AuthorizationPolicyEvaluator(snapshot);
+            Volatile.Write(ref _cachedCurrent, evaluator);
+            return evaluator;
+        }
+    }
+    public string Fingerprint => _currentSnapshot is null ? _fingerprint : Current.Fingerprint;
 
     public bool HasApplicablePermission(
         OperatorIdentity? identity,
         AuthorizationAction action,
         string? clusterId = null)
     {
+        if (_currentSnapshot is not null) return Current.HasApplicablePermission(identity, action, clusterId);
         if (identity is null)
         {
             return false;
@@ -472,6 +489,7 @@ public sealed class AuthorizationPolicyEvaluator
         string canonicalPrincipalId,
         AuthorizationRequest request)
     {
+        if (_currentSnapshot is not null) return Current.EvaluateCanonicalDirectSubject(canonicalPrincipalId, request);
         ArgumentException.ThrowIfNullOrWhiteSpace(canonicalPrincipalId);
         ArgumentNullException.ThrowIfNull(request);
 
@@ -496,6 +514,7 @@ public sealed class AuthorizationPolicyEvaluator
 
     public AuthorizationDecision Evaluate(OperatorIdentity? identity, AuthorizationRequest request)
     {
+        if (_currentSnapshot is not null) return Current.Evaluate(identity, request);
         ArgumentNullException.ThrowIfNull(request);
 
         if (identity is null)
@@ -509,6 +528,7 @@ public sealed class AuthorizationPolicyEvaluator
     /// <summary>Current direct RBAC bindings for a registered non-browser identity; no external groups or browser session.</summary>
     public AuthorizationDecision EvaluateDirectSubject(OperatorIdentityKey key, AuthorizationRequest request)
     {
+        if (_currentSnapshot is not null) return Current.EvaluateDirectSubject(key, request);
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(request);
         IReadOnlyList<string> roles = _snapshot.SubjectBindings.TryGetValue(key, out var bound)
@@ -519,6 +539,7 @@ public sealed class AuthorizationPolicyEvaluator
 
     public bool HasApplicableDirectSubjectPermission(OperatorIdentityKey key, AuthorizationAction action, string? clusterId)
     {
+        if (_currentSnapshot is not null) return Current.HasApplicableDirectSubjectPermission(key, action, clusterId);
         ArgumentNullException.ThrowIfNull(key);
         if (!_snapshot.SubjectBindings.TryGetValue(key, out var roles)) return false;
         return roles.SelectMany(role => _snapshot.Roles[role].Permissions).Any(permission => permission.Action == action &&

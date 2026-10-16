@@ -184,6 +184,7 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
         builder.Services.AddSingleton(new NotificationPinnedHttpHandlerFactory(fixture,
             NotificationAddressPolicy.NoConfiguredNat64, trustRoots: new X509Certificate2Collection(fixture.Root)));
         var connections = new SqliteNotificationDeliveryDbConnectionFactory(path);
+        builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(connections);
         builder.Services.AddSingleton<INotificationRoutingStore>(new AdoNotificationRoutingStore(connections));
         builder.Services.AddSingleton<INotificationDeliveryStore>(new AdoNotificationDeliveryStore(connections));
         if (now is not null)

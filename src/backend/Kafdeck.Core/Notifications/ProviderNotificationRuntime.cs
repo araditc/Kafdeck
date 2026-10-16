@@ -543,6 +543,7 @@ public sealed class NotificationProviderDeliveryDispatcher :
     private readonly TelegramNotificationAdapter _telegram;
     private readonly PagerDutyNotificationAdapter _pagerDuty;
     private readonly WebhookNotificationDeliveryDispatcher _webhook;
+    private readonly INotificationRecoveryEventGate? _recoveryEvents;
 
     public NotificationProviderDeliveryDispatcher(
         INotificationRoutingStore routingStore,
@@ -552,7 +553,8 @@ public sealed class NotificationProviderDeliveryDispatcher :
         TeamsNotificationAdapter teams,
         TelegramNotificationAdapter telegram,
         PagerDutyNotificationAdapter pagerDuty,
-        WebhookNotificationDeliveryDispatcher webhook)
+        WebhookNotificationDeliveryDispatcher webhook,
+        INotificationRecoveryEventGate? recoveryEvents = null)
     {
         _routingStore = routingStore ??
             throw new ArgumentNullException(nameof(routingStore));
@@ -570,6 +572,7 @@ public sealed class NotificationProviderDeliveryDispatcher :
             throw new ArgumentNullException(nameof(pagerDuty));
         _webhook = webhook ??
             throw new ArgumentNullException(nameof(webhook));
+        _recoveryEvents = recoveryEvents;
     }
 
     public async Task<NotificationDeliveryDispatchResult> DispatchAsync(
@@ -620,6 +623,10 @@ public sealed class NotificationProviderDeliveryDispatcher :
             return new NotificationDeliveryDispatchResult(
                 NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
         }
+
+        if (_recoveryEvents is not null && !await _recoveryEvents.CheckAsync(stored.Event.EventId,
+            profile.DestinationId, stored.Event.OccurredAtUtc, cancellationToken).ConfigureAwait(false))
+            return new NotificationDeliveryDispatchResult(NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
 
         // The existing Webhook dispatcher is a required dependency.
         if (profile.Provider == NotificationProviderKind.Webhook)

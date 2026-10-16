@@ -273,7 +273,7 @@ public sealed class V08W67BearerReadTests
                     "Rejected response reflected bearer credentials.");
             }
             Assert.Equal(401, await Get("/api/v1/auth/session", token));
-            Assert.Equal(401, await Get("/api/v1/clusters", token));
+            Assert.Equal(403, await Get("/api/v1/clusters", token));
             Assert.Equal(401, await Get("/api/v1/system/info", token, "Cookie", "Kafdeck.Session=sentinel-cookie"));
             Assert.Equal(401, await Get("/api/v1/system/info", token, "X-Kafdeck-Access-Token", "sentinel-deployment"));
             Assert.Equal(401, await Get("/api/v1/system/info", "sentinel-invalid-token"));

@@ -104,7 +104,7 @@ public sealed class NotificationPinnedProviderHttpTransport
         {
             try
             {
-                var response = await NotificationPrivateHttpWire.PostAsync(_handlers, pinned, body, cancellationToken).ConfigureAwait(false);
+                var response = await NotificationPrivateHttpWire.PostAsync(_handlers, pinned, body, cancellationToken, profile: _profile).ConfigureAwait(false);
                 if (response.Status is 400 or 401 or 403 or 404 or 405 or 410 or 413 or 415 or 422)
                     return Result(NotificationProviderTransportOutcome.PermanentFailure, "provider_definitive_reject");
                 if (response.Status is < 200 or >= 300) return Unknown();
@@ -114,7 +114,7 @@ public sealed class NotificationPinnedProviderHttpTransport
             catch (Exception error) when (error is IOException or SocketException or AuthenticationException or OperationCanceledException or JsonException or KafdeckConfigurationException)
             { return Unknown(); }
         }
-        using var handler = _handlers.CreateGuardedHandler(pinned);
+        using var handler = _handlers.CreateGuardedHandler(pinned, _profile);
         using var client = new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(15) };
         using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {

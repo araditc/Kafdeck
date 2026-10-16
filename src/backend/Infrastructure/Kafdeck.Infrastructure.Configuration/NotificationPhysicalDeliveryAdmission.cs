@@ -7,9 +7,13 @@ public static class NotificationPhysicalDeliveryAdmission
     public static void Validate(NotificationReadOptions options)
     {
         ConfiguredNotificationDeliveryInterlock.ValidateOptions(options.DeliveryInterlockPath, options.DeliveryInterlockSha256);
-        if (!options.Enabled || options.ExecutionMode != NotificationExecutionMode.Standalone ||
+        var standalone = options.ExecutionMode == NotificationExecutionMode.Standalone;
+        var admittedHa = options.ExecutionMode == NotificationExecutionMode.HighAvailability &&
+            options.Provider == NotificationPersistenceProvider.PostgreSql && options.ConnectionString is not null &&
+            string.IsNullOrWhiteSpace(options.SqliteDatabasePath) && options.DeliveryInterlockPath is not null;
+        if (!options.Enabled || (!standalone && !admittedHa) ||
             options.DestinationProfiles is not { Count: > 0 and <= 500 })
-            throw new KafdeckConfigurationException("Physical notification delivery requires standalone persistence and bounded server-owned profiles.");
+            throw new KafdeckConfigurationException("Physical notification delivery requires standalone persistence or PostgreSQL HA with an explicit external generation interlock, and bounded server-owned profiles.");
         foreach (var profile in options.DestinationProfiles)
         {
             if (profile is null) throw new KafdeckConfigurationException("Physical destination catalog contains an invalid profile.");

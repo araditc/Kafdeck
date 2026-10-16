@@ -44,7 +44,7 @@ public static class KafdeckNotificationManagementEndpoints
                     await audit.WriteAsync(new SecurityAuditEvent(
                         DateTimeOffset.UtcNow,
                         SecurityAuditEventType.AuthorizationDenied,
-                        sessionValid && session is not null
+                        context.User.Identity is NonBrowserReadIdentity bearer ? bearer.AuditId : sessionValid && session is not null
                             ? SecurityAuditPrincipal.FromOperator(session.Identity)
                             : SecurityAuditPrincipal.Anonymous,
                         session?.SessionId.Value.ToString("N"),
@@ -114,6 +114,7 @@ public static class KafdeckNotificationManagementEndpoints
                                 var created = await store.CreateSubscriptionAsync(
                                     definition, request.State, DateTimeOffset.UtcNow, cancellationToken)
                                     .ConfigureAwait(false);
+                                await AuditChangedAsync(context, audit, definition.DestinationId, "notification_subscription_created");
                                 return Results.Created(
                                     $"/api/v1/notifications/subscriptions/{Uri.EscapeDataString(subscriptionId)}",
                                     NotificationSubscriptionWriteReceipt.From(created));
@@ -137,6 +138,8 @@ public static class KafdeckNotificationManagementEndpoints
                         var updated = await store.ReplaceSubscriptionAsync(
                             definition, request.State, request.ExpectedRevision.Value,
                             DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                        if (updated is not null)
+                            await AuditChangedAsync(context, audit, definition.DestinationId, "notification_subscription_replaced");
                         return updated is null ? Conflict() : Results.Ok(
                             NotificationSubscriptionWriteReceipt.From(updated));
                     }
@@ -179,12 +182,22 @@ public static class KafdeckNotificationManagementEndpoints
         await audit.WriteAsync(new SecurityAuditEvent(
             DateTimeOffset.UtcNow,
             SecurityAuditEventType.AuthorizationDenied,
-            hasOperator && session is not null
+            context.User.Identity is NonBrowserReadIdentity bearer ? bearer.AuditId : hasOperator && session is not null
                 ? SecurityAuditPrincipal.FromOperator(session.Identity)
                 : SecurityAuditPrincipal.Anonymous,
             session?.SessionId.Value.ToString("N"),
             null, destinationId, SecurityAuditOutcome.Denied, code),
             context.RequestAborted).ConfigureAwait(false);
+    }
+
+    private static async Task AuditChangedAsync(HttpContext context, ISecurityAuditSink audit, string destinationId, string code)
+    {
+        var hasOperator = OperatorSessionContextFactory.TryCreate(context.User, out var session);
+        var principal = context.User.Identity is NonBrowserReadIdentity bearer ? bearer.AuditId :
+            hasOperator && session is not null ? SecurityAuditPrincipal.FromOperator(session.Identity) : SecurityAuditPrincipal.Anonymous;
+        await audit.WriteAsync(new SecurityAuditEvent(DateTimeOffset.UtcNow,
+            SecurityAuditEventType.NotificationManagementChanged, principal, session?.SessionId.Value.ToString("N"),
+            null, destinationId, SecurityAuditOutcome.Succeeded, code), context.RequestAborted).ConfigureAwait(false);
     }
 
     private static bool Allowed(

@@ -18,6 +18,7 @@ import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
 import { NotificationObservationPanel } from '../features/notifications/NotificationObservationPanel.js';
 import { NotificationSubscriptionManagementPanel } from '../features/notifications/NotificationSubscriptionManagementPanel.js';
+import { NotificationDestinationManagementPanel } from '../features/notifications/NotificationDestinationManagementPanel.js';
 import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 import { CommandPalette } from './CommandPalette.js';
@@ -354,6 +355,8 @@ export function AppShell() {
           {visibleNotificationPage && <NotificationObservationPanel key={notificationSessionKey ?? undefined}
               initialPage={visibleNotificationPage}
               canManageSubscriptions={managementSurfaces.insideRead} />}
+          {(managementSurfaces.insideRead || managementSurfaces.standalone) &&
+            <NotificationDestinationManagementPanel key={'destinations-' + (notificationSessionKey ?? '')} />}
           {managementSurfaces.standalone && <section className="card kafdeck-card"
             id="notifications" aria-label="Authorized notification subscription management">
             <NotificationSubscriptionManagementPanel key={notificationSessionKey ?? undefined}

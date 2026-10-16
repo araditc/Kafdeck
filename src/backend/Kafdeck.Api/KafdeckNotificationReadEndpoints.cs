@@ -274,8 +274,7 @@ public static class KafdeckNotificationReadEndpoints
         KafdeckAuthorizationService authorization,
         string? destinationId)
     {
-        if (!OperatorSessionContextFactory.TryCreate(
-                context.User, out var operatorSession) || operatorSession is null)
+        if (!MutationActor.TryCreate(context.User, out var actor) || actor is null)
         {
             return Results.Problem(
                 statusCode: StatusCodes.Status401Unauthorized,
@@ -311,12 +310,14 @@ public static class KafdeckNotificationReadEndpoints
                 title: "Authentication required");
 
         var audit = context.RequestServices.GetRequiredService<ISecurityAuditSink>();
+        OperatorSessionContextFactory.TryCreate(context.User, out var operatorSession);
         await audit.WriteAsync(
             new SecurityAuditEvent(
                 DateTimeOffset.UtcNow,
                 SecurityAuditEventType.AuthorizationDenied,
-                SecurityAuditPrincipal.FromOperator(operatorSession.Identity),
-                operatorSession.SessionId.Value.ToString("N"),
+                context.User.Identity is NonBrowserReadIdentity bearer ? bearer.AuditId :
+                    operatorSession is not null ? SecurityAuditPrincipal.FromOperator(operatorSession.Identity) : SecurityAuditPrincipal.Anonymous,
+                operatorSession?.SessionId.Value.ToString("N"),
                 null, destinationId, SecurityAuditOutcome.Denied,
                 "rbac_denied_notification_destination_query_read"),
             context.RequestAborted).ConfigureAwait(false);
@@ -356,7 +357,7 @@ public static class KafdeckNotificationReadEndpoints
                 new SecurityAuditEvent(
                     DateTimeOffset.UtcNow,
                     SecurityAuditEventType.AuthorizationDenied,
-                    hasOperator && operatorSession is not null
+                    context.User.Identity is NonBrowserReadIdentity bearer ? bearer.AuditId : hasOperator && operatorSession is not null
                         ? SecurityAuditPrincipal.FromOperator(
                             operatorSession.Identity)
                         : SecurityAuditPrincipal.Anonymous,

@@ -5,6 +5,8 @@ import {
   type DataGeneratorStatus,
   type DataJobStatus,
   type MutationStatus,
+  type DataReconciliationPreviewInput,
+  validateDataReconciliationPreview,
 } from './mutationApi.js';
 import { mutationExecutionSurface } from './mutationExecutionSurface.js';
 import { MutationPreviewWorkflows } from './MutationPreviewWorkflows.js';
@@ -67,6 +69,17 @@ function MutationSummary({ operation }: { operation: MutationStatus }) {
       {operation.resultCode && <><dt>Result code</dt><dd>{operation.resultCode}</dd></>}
     </dl>
     {operation.riskClass === 'critical' && <p role="alert"><strong>Critical mutation.</strong> Independent approval by a distinct eligible operator is mandatory.</p>}
+    {operation.operationKind === 'fleetUncertaintyDisposition' && (operation.reconciliationReview ? <section aria-label="Server-bound reconciliation review">
+      <h4>Immutable reconciliation observation</h4>
+      <dl><dt>Parent operation</dt><dd>{operation.reconciliationReview.parentOperationId}</dd><dt>Batch</dt><dd>{operation.reconciliationReview.batchId}</dd>
+        <dt>Progress version</dt><dd>{operation.reconciliationReview.expectedProgressVersion}</dd><dt>Fenced worker generation</dt><dd>{operation.reconciliationReview.workerGeneration}</dd>
+        <dt>Proof SHA256</dt><dd>{operation.reconciliationReview.proofReferenceSha256}</dd><dt>Worker fence SHA256</dt><dd>{operation.reconciliationReview.fencedWorkerEvidenceSha256}</dd></dl>
+      <table><caption>Provider evidence bound by the server</caption><thead><tr><th>Observation</th><th>Physical Kafka identity</th><th>Topic identity and partition</th><th>Low / high watermarks</th><th>Observed UTC</th></tr></thead>
+        <tbody>{[operation.reconciliationReview.beforeDispatch,operation.reconciliationReview.reviewedObservation].map((item,index)=><tr key={index}>
+          <th>{index===0?'Before dispatch':'Reviewed'}</th><td>{item.clusterId} / {item.kafkaClusterId}</td><td>{item.topicName} / {item.topicId} [{item.partition}]</td>
+          <td>{item.lowWatermark} / {item.highWatermark}</td><td>{item.observedAtUtc}</td></tr>)}</tbody></table>
+      <p>Confirm and obtain independent approval for this exact immutable preview. Successful reconciliation only fences the unresolved batch; it does not claim the background job has completed.</p>
+    </section> : <p role="alert">Reconciliation review is unavailable. Reload the complete server-bound preview before execution.</p>)}
     {warning && <p role="alert"><StatusBadge kind={mutationStateStatusKind(operation.state)} />{' '}<strong>Outcome guidance:</strong> {warning}</p>}
     {evidence.length > 0 && <details><summary>Safe provider evidence</summary><dl>{evidence.map(([key, value]) => <span key={key}><dt>{key}</dt><dd>{value}</dd></span>)}</dl></details>}
   </article>;
@@ -103,6 +116,12 @@ type MutationOperationsPanelProps = {
   enabled?: boolean;
 };
 
+type ReconciliationReview = DataReconciliationPreviewInput & {
+  parentOperationId: string;
+  generator: boolean;
+  idempotencyKey: string;
+};
+
 export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }: MutationOperationsPanelProps) {
   const [mutationAvailable, setMutationAvailable] = useState<boolean | null>(enabled ?? null);
   const [approvals, setApprovals] = useState<MutationStatus[]>([]);
@@ -118,6 +137,9 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
   const [dataJobReconcileBatchId, setDataJobReconcileBatchId] = useState('');
   const [dataGeneratorStatus, setDataGeneratorStatus] = useState<DataGeneratorStatus | null>(null);
   const [dataGeneratorReconcileBatchId, setDataGeneratorReconcileBatchId] = useState('');
+  const [proofReference, setProofReference] = useState('');
+  const [workerFenceReference, setWorkerFenceReference] = useState('');
+  const [reconciliationReview, setReconciliationReview] = useState<ReconciliationReview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,6 +158,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     setDataJobReconcileBatchId('');
     setDataGeneratorStatus(null);
     setDataGeneratorReconcileBatchId('');
+    setProofReference(''); setWorkerFenceReference(''); setReconciliationReview(null);
     clearExecutionMaterial();
   };
 
@@ -173,6 +196,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
 
   const refreshSelected = async () => {
     if (!selected) return;
+    setReconciliationReview(null);
     setLoading(true);
     setError(null);
     try {
@@ -218,6 +242,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
 
   const loadDataGeneratorStatus = async () => {
     if (!selected || selected.operationKind !== 'dataGenerator') return;
+    setReconciliationReview(null);
     setLoading(true);
     setError(null);
     try {
@@ -260,17 +285,35 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     }
   };
 
-  const reconcileDataGenerator = async () => {
-    if (!selected || selected.operationKind !== 'dataGenerator' || !dataGeneratorReconcileBatchId.trim()) return;
+  const prepareReconciliation = (generator: boolean) => {
+    if (!selected || selected.operationKind !== (generator ? 'dataGenerator' : 'dataJob')) return;
+    setError(null); setReconciliationReview(null);
+    try {
+      const status = generator ? dataGeneratorStatus : dataJobStatus;
+      const batchId = (generator ? dataGeneratorReconcileBatchId : dataJobReconcileBatchId).trim();
+      if (!status?.pendingBatch || batchId !== status.pendingBatch.batchId) throw new Error('Reload the exact unresolved batch before review.');
+      if (typeof globalThis.crypto?.randomUUID !== 'function') throw new Error('Secure randomness is required for the reconciliation Idempotency-Key.');
+      if (status.progressVersion === null || status.progressVersion === undefined) throw new Error('Reload durable progress before preparing a reconciliation.');
+      const request: DataReconciliationPreviewInput = { batchId, expectedProgressVersion: status.progressVersion,
+        proofReferenceSha256: proofReference.trim().toLowerCase(), fencedWorkerEvidenceSha256: workerFenceReference.trim().toLowerCase() };
+      const idempotencyKey = globalThis.crypto.randomUUID();
+      validateDataReconciliationPreview(selected.operationId, request, idempotencyKey);
+      setReconciliationReview({ ...request, parentOperationId: selected.operationId, generator, idempotencyKey });
+    } catch (reason) { setError(describeProblem(reason)); }
+  };
+
+  const createReconciliationPreview = async () => {
+    if (!selected || !reconciliationReview || selected.operationId !== reconciliationReview.parentOperationId || loading) return;
     setLoading(true);
     setError(null);
     try {
-      const status = await mutationApi.reconcileDataGenerator(
-        selected.operationId,
-        dataGeneratorReconcileBatchId.trim(),
-      );
-      setDataGeneratorStatus(status);
-      setDataGeneratorReconcileBatchId(status.pendingBatch?.batchId ?? '');
+      const { parentOperationId, generator, idempotencyKey, ...request } = reconciliationReview;
+      const operation = await (generator ? mutationApi.previewDataGeneratorReconciliation(parentOperationId, request, idempotencyKey)
+        : mutationApi.previewDataJobReconciliation(parentOperationId, request, idempotencyKey));
+      if (operation.operationKind !== 'fleetUncertaintyDisposition' || operation.riskClass !== 'critical' || !operation.requiresIndependentApproval)
+        throw new Error('The server did not return the required independently approved CRITICAL reconciliation plan.');
+      selectOperation(operation);
+      await loadApprovals();
     } catch (reason) {
       setError(describeProblem(reason));
     } finally {
@@ -302,6 +345,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
 
   const loadDataJobStatus = async () => {
     if (!selected || selected.operationKind !== 'dataJob') return;
+    setReconciliationReview(null);
     setLoading(true);
     setError(null);
     try {
@@ -337,24 +381,6 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     setError(null);
     try {
       setDataJobStatus(await mutationApi.cancelDataJob(selected.operationId));
-    } catch (reason) {
-      setError(describeProblem(reason));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reconcileDataJob = async () => {
-    if (!selected || selected.operationKind !== 'dataJob' || !dataJobReconcileBatchId.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const status = await mutationApi.reconcileDataJob(
-        selected.operationId,
-        dataJobReconcileBatchId.trim(),
-      );
-      setDataJobStatus(status);
-      setDataJobReconcileBatchId(status.pendingBatch?.batchId ?? '');
     } catch (reason) {
       setError(describeProblem(reason));
     } finally {
@@ -427,9 +453,9 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
         <button type="button" disabled={loading || dataJobStatus.progressPhase === 'Stopped' || dataJobStatus.pendingBatch !== null} onClick={() => void cancelDataJob()}>Cancel future effects</button>
         {dataJobStatus.pendingBatch && <div role="alert">
           <p><strong>Unresolved external write.</strong> Batch <code>{dataJobStatus.pendingBatch.batchId}</code> remains durable and must not be blindly replayed.</p>
-          <label htmlFor="data-job-reconcile-batch">Batch ID proven not applied</label>{' '}
-          <input id="data-job-reconcile-batch" value={dataJobReconcileBatchId} onChange={event => setDataJobReconcileBatchId(event.target.value)} autoComplete="off" />{' '}
-          <button type="button" disabled={loading || dataJobReconcileBatchId.trim() !== dataJobStatus.pendingBatch.batchId} onClick={() => void reconcileDataJob()}>Reconcile proven non-application</button>
+          <label htmlFor="data-job-reconcile-batch">Exact unresolved batch ID</label>{' '}
+          <input id="data-job-reconcile-batch" maxLength={256} value={dataJobReconcileBatchId} onChange={event => { setDataJobReconcileBatchId(event.target.value); setReconciliationReview(null); }} autoComplete="off" />{' '}
+          <button type="button" disabled={loading || dataJobReconcileBatchId.trim() !== dataJobStatus.pendingBatch.batchId || dataJobStatus.progressVersion == null} onClick={() => prepareReconciliation(false)}>Review governed reconciliation</button>
         </div>}
         <table><thead><tr><th>Range</th><th>Source</th><th>Destination</th><th>Frozen offsets</th><th>Next offset</th></tr></thead><tbody>
           {dataJobStatus.ranges.map(range => <tr key={range.rangeIndex}><td>{range.rangeIndex}</td><td>{range.sourceTopic}[{range.sourcePartition}]</td><td>{range.destinationTopic}[{range.destinationPartition}]</td><td>[{range.startInclusive}, {range.endExclusive})</td><td>{range.nextSourceOffset ?? 'Not started'}</td></tr>)}
@@ -464,22 +490,43 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
         </button>
         {dataGeneratorStatus.pendingBatch && <div role="alert">
           <p><strong>Unresolved generator write.</strong> Batch <code>{dataGeneratorStatus.pendingBatch.batchId}</code>, record index {dataGeneratorStatus.pendingBatch.recordIndex}, remains durable and must not be replayed automatically.</p>
-          <label htmlFor="data-generator-reconcile-batch">Batch ID proven not applied</label>{' '}
+          <label htmlFor="data-generator-reconcile-batch">Exact unresolved generator batch ID</label>{' '}
           <input
             id="data-generator-reconcile-batch"
             value={dataGeneratorReconcileBatchId}
-            onChange={event => setDataGeneratorReconcileBatchId(event.target.value)}
+            onChange={event => { setDataGeneratorReconcileBatchId(event.target.value); setReconciliationReview(null); }}
+            maxLength={256}
             autoComplete="off"
           />{' '}
           <button
             type="button"
-            disabled={loading || dataGeneratorReconcileBatchId.trim() !== dataGeneratorStatus.pendingBatch.batchId}
-            onClick={() => void reconcileDataGenerator()}
+            disabled={loading || dataGeneratorReconcileBatchId.trim() !== dataGeneratorStatus.pendingBatch.batchId || dataGeneratorStatus.progressVersion == null}
+            onClick={() => prepareReconciliation(true)}
           >
-            Reconcile proven non-application
+            Review governed reconciliation
           </button>
         </div>}
       </section>}
+
+      {((selected.operationKind === 'dataJob' && dataJobStatus?.pendingBatch) ||
+        (selected.operationKind === 'dataGenerator' && dataGeneratorStatus?.pendingBatch)) && <fieldset disabled={loading}>
+        <legend>Reconciliation proof references</legend>
+        <p>A hash is a reference, not proof that no write occurred. Physically fence the old worker and obtain independent provider evidence first.
+          The server binds the current batch, worker generation, topic identity and both watermarks. Reconciliation requires CRITICAL confirmation and a distinct authorized human approval.</p>
+        <label htmlFor="reconciliation-proof">External proof SHA256</label>{' '}
+        <input id="reconciliation-proof" value={proofReference} maxLength={64} autoComplete="off" onChange={event => { setProofReference(event.target.value); setReconciliationReview(null); }} />{' '}
+        <label htmlFor="reconciliation-fence">Physically fenced worker evidence SHA256</label>{' '}
+        <input id="reconciliation-fence" value={workerFenceReference} maxLength={64} autoComplete="off" onChange={event => { setWorkerFenceReference(event.target.value); setReconciliationReview(null); }} />
+      </fieldset>}
+      {reconciliationReview && <aside aria-label="Reviewed reconciliation request">
+        <h4>Review reconciliation references</h4>
+        <dl><dt>Parent operation</dt><dd>{reconciliationReview.parentOperationId}</dd><dt>Exact batch</dt><dd>{reconciliationReview.batchId}</dd>
+          <dt>Expected progress version</dt><dd>{reconciliationReview.expectedProgressVersion}</dd>
+          <dt>External proof SHA256</dt><dd>{reconciliationReview.proofReferenceSha256}</dd>
+          <dt>Fenced worker evidence SHA256</dt><dd>{reconciliationReview.fencedWorkerEvidenceSha256}</dd></dl>
+        <p>This creates an immutable CRITICAL preview. It does not clear a batch or resume a worker.</p>
+        <button type="button" disabled={loading} onClick={() => void createReconciliationPreview()}>Create CRITICAL reconciliation preview</button>
+      </aside>}
 
       {executionSurface === 'recordMaterial' && <fieldset disabled={loading}><legend>Re-submit record execution material</legend><p>This material must digest-match the preview and is cleared from UI state after execution.</p><label htmlFor="execute-record-key">UTF-8 key (optional)</label>{' '}<input id="execute-record-key" value={recordKey} onChange={event => setRecordKey(event.target.value)} autoComplete="off" /><br /><label htmlFor="execute-record-value">UTF-8 value</label><br /><textarea id="execute-record-value" value={recordValue} onChange={event => setRecordValue(event.target.value)} rows={5} /><br /><label htmlFor="execute-record-headers">Headers, one name=value per line</label><br /><textarea id="execute-record-headers" value={recordHeaders} onChange={event => setRecordHeaders(event.target.value)} rows={4} /><br /><button type="button" disabled={!recordValue} onClick={executeRecord}>Execute with matching record material</button></fieldset>}
 

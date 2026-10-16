@@ -82,6 +82,44 @@ public sealed class V07W58DataGeneratorTests
     }
 
     [Fact]
+    public void Intent_ordering_matches_durable_preview_for_current_precondition_validation()
+    {
+        var plan = DataGeneratorPolicy.CreatePlan(
+            Destination(), BuiltInSource(), 1, 123, new DataGeneratorBudget());
+        var intent = DataGeneratorPolicy.BuildIntent(plan);
+        var operation = MutationOperation.CreatePreview(
+            "oidc:https://issuer.example|operator", intent,
+            DataGeneratorPolicy.ClassifyRisk(plan), "policy-v1",
+            Now.AddMinutes(5), Now, "generator-canonical-order");
+
+        Assert.Equal(intent.ResourceKeys, operation.Snapshot.ResourceKeys);
+        Assert.Equal(intent.Preconditions, operation.Snapshot.Preconditions);
+        Assert.Equal(intent.AuthorizationTargets, operation.Snapshot.AuthorizationTargets);
+        Assert.Equal(intent.CanonicalIntent, operation.Snapshot.CanonicalIntent);
+    }
+
+    [Fact]
+    public void Durable_canonical_plan_roundtrip_preserves_the_exact_nondefault_budget_and_binding()
+    {
+        var budget = new DataGeneratorBudget(
+            maxBatchRecords: 1, maxBatchBytes: 512, maxTotalRecords: 1,
+            maxTotalBytes: 1024, maxDuration: TimeSpan.FromSeconds(120),
+            maxRecordsPerSecond: 2, maxBytesPerSecond: 2048);
+        var plan = DataGeneratorPolicy.CreatePlan(Destination(), BuiltInSource(), 1, 123, budget);
+        var intent = DataGeneratorPolicy.BuildIntent(plan);
+
+        var reopened = DataGeneratorPolicy.DeserializePlan(intent.CanonicalIntent);
+        var rebound = DataGeneratorPolicy.BuildIntent(reopened);
+
+        Assert.Equal(plan, reopened);
+        Assert.Equal(budget, reopened.Budget);
+        Assert.Equal(intent.CanonicalIntent, rebound.CanonicalIntent);
+        Assert.Equal(intent.ResourceKeys, rebound.ResourceKeys);
+        Assert.Equal(intent.Preconditions, rebound.Preconditions);
+        Assert.Equal(intent.AuthorizationTargets, rebound.AuthorizationTargets);
+    }
+
+    [Fact]
     public void Schema_source_binds_schema_read_and_fingerprint()
     {
         var source =

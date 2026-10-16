@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { filterProductCommands, type ProductCommand } from './commandPalette.js';
+import { filterProductCommands, type ProductCommand } from './commandPaletteModel.js';
 
 function focusElement(id: string | undefined) {
   if (!id) return;

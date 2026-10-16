@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Security;
 using Kafdeck.Modules.Administration;
@@ -67,6 +68,21 @@ public sealed record DataGeneratorBudget
 
     public const long DefaultMaxBytesPerSecond = 1L * 1024 * 1024;
     public const long HardMaxBytesPerSecond = 10L * 1024 * 1024;
+
+    // JSON constructor parameters must match the property types exactly.
+    [JsonConstructor]
+    public DataGeneratorBudget(
+        int maxBatchRecords,
+        long maxBatchBytes,
+        int maxTotalRecords,
+        long maxTotalBytes,
+        TimeSpan maxDuration,
+        int maxRecordsPerSecond,
+        long maxBytesPerSecond)
+        : this(maxBatchRecords, maxBatchBytes, maxTotalRecords, maxTotalBytes,
+            (TimeSpan?)maxDuration, maxRecordsPerSecond, maxBytesPerSecond)
+    {
+    }
 
     public DataGeneratorBudget(
         int maxBatchRecords = DefaultMaxBatchRecords,
@@ -303,8 +319,8 @@ public static class DataGeneratorPolicy
             {
                 physicalResource,
                 generatorResource,
-            },
-            preconditions,
+            }.OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            preconditions.OrderBy(item => item.Key, StringComparer.Ordinal).ToArray(),
             AuthorizationTargets: authorization
                 .Distinct()
                 .OrderBy(item => item.Action)

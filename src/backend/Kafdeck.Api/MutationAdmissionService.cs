@@ -143,9 +143,9 @@ public sealed class MutationAdmissionService
                 Code: "mutation_admission_invalid");
         }
 
-        var authorization = _authorization.AuthorizeTargets(
-            principal,
-            targets);
+        var authorization = intent.Kind == MutationOperationKind.FleetUncertaintyDisposition
+            ? _authorization.AuthorizeProofTargets(principal, targets)
+            : _authorization.AuthorizeTargets(principal, targets);
         if (authorization == KafdeckAuthorizationOutcome.Unauthenticated)
         {
             return new MutationAdmissionResult(MutationAdmissionOutcome.Unauthenticated);
@@ -165,7 +165,7 @@ public sealed class MutationAdmissionService
                 requesterPrincipalId,
                 intent with { AuthorizationTargets = targets },
                 risk,
-                _authorization.PolicyVersionFor(principal),
+                _authorization.PolicyVersionFor(principal, intent.Kind),
                 now.Add(_options.PreviewTtl),
                 now,
                 idempotencyKey);

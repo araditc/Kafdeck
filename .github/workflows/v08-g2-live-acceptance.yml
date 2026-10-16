@@ -40,7 +40,7 @@ jobs:
 
   real-human-cli-and-transports:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:18.6-alpine
@@ -79,7 +79,7 @@ jobs:
         run: |
           $env:JAVA_HOME = $env:JAVA_HOME_21_X64
           $javaVersion = (& "$env:JAVA_HOME/bin/java" -version 2>&1 | Select-Object -First 1).ToString()
-          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2/keycloak-26.8.1" -JavaVersion $javaVersion
+          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2/keycloak-26.8.1" -JavaVersion $javaVersion -IncludeBrowserSignIn
       - name: Start isolated Keycloak HTTPS
         shell: bash
         run: |
@@ -106,6 +106,60 @@ jobs:
       - name: Start disposable real Kafka effect fixture
         shell: bash
         run: docker compose -f deploy/dev/docker-compose.kafka.yml up -d --wait --wait-timeout 120
+      - name: Start real Schema Registry and Connect family providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          provider_root="$GITHUB_WORKSPACE/deploy/dev/.generated/g2/providers"
+          mkdir -p "$provider_root"
+          cat > "$provider_root/connect.properties" <<'CONNECT'
+          bootstrap.servers=127.0.0.1:9092
+          group.id=g2-ci-connect
+          listeners=http://127.0.0.1:18083
+          rest.advertised.host.name=127.0.0.1
+          rest.advertised.port=18083
+          config.storage.topic=_g2_ci_connect_config
+          offset.storage.topic=_g2_ci_connect_offsets
+          status.storage.topic=_g2_ci_connect_status
+          config.storage.replication.factor=1
+          offset.storage.replication.factor=1
+          status.storage.replication.factor=1
+          offset.storage.partitions=1
+          status.storage.partitions=1
+          key.converter=org.apache.kafka.connect.storage.StringConverter
+          value.converter=org.apache.kafka.connect.storage.StringConverter
+          CONNECT
+          docker run -d --name kafdeck-g2-schema --network host \
+            -e SCHEMA_REGISTRY_HOST_NAME=localhost \
+            -e SCHEMA_REGISTRY_LISTENERS=http://127.0.0.1:18081 \
+            -e SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://127.0.0.1:9092 \
+            -e SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR=1 \
+            confluentinc/cp-schema-registry:8.3.2
+          docker run -d --name kafdeck-g2-connect --network host \
+            -v "$provider_root/connect.properties:/opt/kafka/config/g2-connect.properties:ro" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            --entrypoint /opt/kafka/bin/connect-distributed.sh \
+            apache/kafka:4.3.1 /opt/kafka/config/g2-connect.properties
+          docker run -d --name kafdeck-g2-destination --network host \
+            -e KAFKA_NODE_ID=2 -e KAFKA_PROCESS_ROLES=broker,controller \
+            -e KAFKA_LISTENERS=PLAINTEXT://127.0.0.1:9094,CONTROLLER://127.0.0.1:9095 \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9094 \
+            -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+            -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
+            -e KAFKA_CONTROLLER_QUORUM_VOTERS=2@127.0.0.1:9095 \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+            -e CLUSTER_ID=VjBHNnpPVUR5T1RncHRLZg apache/kafka:4.3.1
+          for attempt in $(seq 1 150); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:18081/subjects > /dev/null && \
+               curl --fail --silent --max-time 2 http://127.0.0.1:18083/connectors > /dev/null && \
+               docker exec kafdeck-g2-destination /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9094 --list > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo 'Actual Schema Registry/Connect readiness failed.' >&2
+          exit 1
       - name: Build and prove actual PKCE CLI and provider sockets
         shell: bash
         env:
@@ -116,10 +170,13 @@ jobs:
           export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-ci/identity"
           export KAFDECK_G2_KAFKA_BOOTSTRAP=127.0.0.1:9092
           export KAFDECK_G2_KAFKA_DELETE_CAPABLE=1
+          export KAFDECK_G2_KAFKA_DESTINATION_BOOTSTRAP=127.0.0.1:9094
+          export KAFDECK_G2_SCHEMA_REGISTRY_URL=http://127.0.0.1:18081/
+          export KAFDECK_G2_CONNECT_URL=http://127.0.0.1:18083/
           dotnet restore Kafdeck.slnx --locked-mode
           dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
-            --filter 'FullyQualifiedName~V08G2HumanCliLiveTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08W66PrivateHttpWireTests|FullyQualifiedName~V08W66ProviderCredentialLifecycleTlsTests|FullyQualifiedName~V08W66AuthenticatedWebhookTlsTests|FullyQualifiedName~V08W66ProviderPhysicalTlsTests|FullyQualifiedName~V08W66SmtpPhysicalTlsTests|FullyQualifiedName~V08W66ReceiptPersistenceTests|FullyQualifiedName~V08G2ProductNotificationTests' \
+            --filter 'FullyQualifiedName~V08G2HumanCliLiveTests|FullyQualifiedName~V08G2ProviderFamilyCliLiveTests|FullyQualifiedName~V08G2DataJobUncertaintyCliLiveTests|FullyQualifiedName~V08G2HumanRecoveryCliLiveTests|FullyQualifiedName~V08W67FamilyBoundaryTests|FullyQualifiedName~V08FleetCapabilityParityTests|FullyQualifiedName~V08W67BearerOpenApiTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08W66PrivateHttpWireTests|FullyQualifiedName~V08W66ProviderCredentialLifecycleTlsTests|FullyQualifiedName~V08W66AuthenticatedWebhookTlsTests|FullyQualifiedName~V08W66ProviderPhysicalTlsTests|FullyQualifiedName~V08W66SmtpPhysicalTlsTests|FullyQualifiedName~V08W66ReceiptPersistenceTests|FullyQualifiedName~V08G2ProductNotificationTests' \
             --results-directory artifacts/g2-ci --logger 'trx;LogFileName=g2-live.trx'
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-cli-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-cli-kafka-effect-evidence.json"
@@ -128,6 +185,13 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/critical-human-approval-kafka-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/topic-cli-lifecycle-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-topic-cli-lifecycle-evidence.json"
+          for provider in sqlite postgres; do
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-real-provider-family-cli-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-keycloak-human-cli-recovery-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-generator-uncertainty-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-data-job-uncertainty-evidence.json"
+          done
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-human-kafka-product-notification-evidence.json"
       - name: Retain sanitized live acceptance evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -143,6 +207,7 @@ jobs:
         run: |
           pid_file="$GITHUB_WORKSPACE/deploy/dev/.generated/g2/identity/keycloak.pid"
           if [ -f "$pid_file" ]; then kill "$(cat "$pid_file")" 2>/dev/null || true; fi
+          docker rm -f kafdeck-g2-schema kafdeck-g2-connect kafdeck-g2-destination 2>/dev/null || true
           docker compose -f deploy/dev/docker-compose.kafka.yml down --volumes --remove-orphans
 
   real-postgresql-fencing:
@@ -178,7 +243,7 @@ jobs:
         run: >-
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release --no-restore --results-directory artifacts/g2-ci/postgres --logger 'trx;LogFileName=postgres-live.trx'
-          --filter 'FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
+          --filter 'FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08NotificationGovernanceTests|FullyQualifiedName~V08NotificationGovernanceHttpTests|FullyQualifiedName~V08NotificationGovernancePostgreSqlTests|FullyQualifiedName~V08NotificationHaAdmissionTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
       - name: Require real PostgreSQL evidence
         shell: bash
         run: |
@@ -187,6 +252,10 @@ jobs:
           test -s artifacts/g2-ci/postgres/postgres-rate-clock-evidence.json
           test -s artifacts/g2-ci/postgres/postgres-product-outbox-evidence.json
           test -s artifacts/g2-ci/postgres/product-source-tls-evidence.json
+          test -s artifacts/g2-ci/postgres/postgres-governance-fairness-evidence.json
+          for provider in webhook email slack microsoftteams telegram pagerduty; do
+            test -s "artifacts/g2-ci/postgres/notification-governance-$provider-evidence.json"
+          done
       - name: Retain sanitized PostgreSQL evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -234,22 +303,24 @@ jobs:
           export KAFDECK_G2_RECOVERY_ROOT="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-recovery/ci"
           export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-ci/recovery"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
-            --filter 'FullyQualifiedName~V08G2PostgreSqlRecoveryTests|FullyQualifiedName~V08W66DeliveryInterlockTests' \
+            --filter 'FullyQualifiedName~V08G2PostgreSqlRecoveryTests|FullyQualifiedName~V08G2PostgreSqlSafeResumeTests|FullyQualifiedName~V08W66GovernedRecoveryTests|FullyQualifiedName~V08W66SqliteRestoreResumeTests|FullyQualifiedName~V08W66RecoveryHttpBoundaryTests|FullyQualifiedName~V08W66DeliveryInterlockTests' \
             --results-directory artifacts/g2-ci/recovery --logger 'trx;LogFileName=recovery-live.trx'
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-before-claim-failover-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-crash-after-post-failover-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-stale-backup-quarantine-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-governed-restore-safe-resume-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-governed-restore-safe-resume-evidence.json"
       - name: Retain bounded PostgreSQL control stage diagnostics
         if: always()
         shell: pwsh
         run: |
           $root = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2-recovery/ci"
           $target = "$env:GITHUB_WORKSPACE/artifacts/g2-ci/recovery"
-          $actions = @('Prepare','Start','Status','Sync','Backup','Failover','Restore','Stop')
+          $actions = @('Prepare','Start','Status','Sync','Backup','Failover','Restore','FenceOriginalNodes','AdmitRestoreMaintenance','Stop')
           $stages = @('RuntimeDiscovery','PreparePorts','PrepareCredentials','PrimaryInit','PrimaryConfig',
             'PrimaryStart','ReplicationBootstrap','StandbySeed','StandbyConfig','StandbyStart','ReplicationStreaming',
             'ReplicationSynchronous','PrepareComplete','ManifestValidation','ActionStart','ActionSync','ActionBackup',
-            'ActionFailover','ActionRestore','ActionStatus','ActionStop')
+            'ActionFailover','ActionRestore','ActionStatus','ActionStop','ActionFenceOriginalNodes','ActionAdmitRestoreMaintenance')
           $records = @()
           if (Test-Path -LiteralPath $root) {
             $scenarios = @(Get-ChildItem -LiteralPath $root -Directory -Filter 'scenario-*' | Select-Object -First 32)

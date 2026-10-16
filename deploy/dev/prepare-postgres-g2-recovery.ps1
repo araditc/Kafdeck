@@ -1,13 +1,15 @@
 #requires -Version 7.0
 param(
-    [ValidateSet('Prepare','Start','Status','Sync','Backup','Failover','Restore','Stop')][string]$Action = 'Prepare',
+    [ValidateSet('Prepare','Start','Status','Sync','Backup','Failover','Restore','FenceOriginalNodes','AdmitRestoreMaintenance','Stop')][string]$Action = 'Prepare',
     [string]$OutputDirectory = "$PSScriptRoot/.generated/g2-recovery/postgres",
     [string]$BinDirectory,
     [ValidateRange(1024,65535)][int]$PrimaryPort = 15433,
     [ValidateRange(1024,65535)][int]$StandbyPort = 15434,
     [ValidateRange(1024,65535)][int]$RestorePort = 15435,
     [ValidatePattern('^[0-9A-Fa-f]+/[0-9A-Fa-f]+$')][string]$TargetLsn,
-    [ValidateSet('fast','immediate')][string]$PrimaryStopMode = 'fast'
+    [ValidateSet('fast','immediate')][string]$PrimaryStopMode = 'fast',
+    [string]$ExternalAnchorSha256,
+    [Guid]$TargetGeneration = [Guid]::Empty
 )
 $ErrorActionPreference = 'Stop'
 $lab = [IO.Path]::GetFullPath($OutputDirectory)
@@ -66,7 +68,7 @@ function SaveControlDiagnostic([ValidateSet('Running','Failed','Succeeded')][str
 function SetControlStage([ValidateSet('RuntimeDiscovery','PreparePorts','PrepareCredentials','PrimaryInit','PrimaryConfig',
         'PrimaryStart','ReplicationBootstrap','StandbySeed','StandbyConfig','StandbyStart','ReplicationStreaming',
         'ReplicationSynchronous','PrepareComplete','ManifestValidation','ActionStart','ActionSync','ActionBackup',
-        'ActionFailover','ActionRestore','ActionStatus','ActionStop')][string]$Stage) {
+        'ActionFailover','ActionRestore','ActionStatus','ActionStop','ActionFenceOriginalNodes','ActionAdmitRestoreMaintenance')][string]$Stage) {
     $script:controlStage = $Stage
     $script:controlNativeExit = $null
     SaveControlDiagnostic 'Running'
@@ -319,6 +321,7 @@ $script:controlDiagnosticWritesAllowed = $true
 SetControlStage ('Action' + $Action)
 switch ($Action) {
     'Start' {
+        if (Test-Path -LiteralPath (Child 'original-nodes-fenced.json')) { throw 'Both original nodes are fenced for restore maintenance; automatic restart is forbidden.' }
         if ($metadata.oldPrimaryFenced) { StartNode $metadata.standby }
         else { StartNode $metadata.primary; StartNode $metadata.standby }
         Write-Output 'Started only the admitted recorded node(s); a fenced old primary is never restarted.'
@@ -376,6 +379,78 @@ switch ($Action) {
         if ((Query $metadata.restore.port 'SHOW default_transaction_read_only') -ne 'on') { throw 'Restored database is not quarantined read-only.' }
         SaveJson (Child 'restore-evidence.json') @{observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O');physicalBackupVerified=$true;restorePort=$metadata.restore.port;standaloneRecoveryComplete=((Query $metadata.restore.port 'SELECT pg_is_in_recovery()') -eq 'f');quarantined=$true;automaticSenderActivationAllowed=$false;backupManifestSha256=$backup.manifestSha256}
         Write-Output 'Restored a verified physical backup into a fresh read-only quarantined node. Automatic sending is forbidden.'
+    }
+    'FenceOriginalNodes' {
+        # Independent persisted fence wins even if the manifest update is interrupted.
+        AssertNodeIdentity $metadata.primary
+        AssertNodeIdentity $metadata.standby
+        StopNode $metadata.primary 'immediate'
+        StopNode $metadata.standby 'immediate'
+        if ((PortListening $metadata.primary.port) -or (PortListening $metadata.standby.port)) {
+            throw 'Original node ports remain reachable; restore maintenance is forbidden.'
+        }
+        SaveJson (Child 'original-nodes-fenced.json') @{formatVersion=1;systemIdentifier=$metadata.systemIdentifier;
+            primaryPort=$metadata.primary.port;standbyPort=$metadata.standby.port;bothOriginalPortsClosed=$true;
+            observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O');originalNodesRestartAllowed=$false}
+        SaveJson $metadata.fenceFile @{observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O');oldPrimaryPort=$metadata.primary.port;
+            oldPrimaryDataDirectory=$metadata.primary.dataDirectory;stopMode='immediate';oldPrimaryStopped=$true;oldPrimaryPortClosed=$true;replayedBarrier=$null}
+        $metadata.oldPrimaryFenced=$true; $metadata.state='OriginalNodesFenced'; SaveJson $manifestFile $metadata
+        Write-Output 'Both original PostgreSQL nodes are stopped and independently fenced; restored node is unchanged.'
+    }
+    'AdmitRestoreMaintenance' {
+        # Closed lab transition: never clears the outside quarantine or authorizes a sender.
+        if ($ExternalAnchorSha256 -cnotmatch '^[0-9a-f]{64}$' -or $TargetGeneration -eq [Guid]::Empty) {
+            throw 'Explicit quarantined outside authority generation and SHA256 are required.'
+        }
+        $originalFence=Child 'original-nodes-fenced.json'
+        if (!(Test-Path -LiteralPath $originalFence -PathType Leaf)) { throw 'Both original nodes must be fenced first.' }
+        AssertExactPath $originalFence 'original-nodes-fenced.json'
+        $fence=Get-Content -LiteralPath $originalFence -Raw | ConvertFrom-Json
+        if ($fence.systemIdentifier -ne $metadata.systemIdentifier -or $fence.bothOriginalPortsClosed -ne $true -or
+            $fence.primaryPort -ne $metadata.primary.port -or $fence.standbyPort -ne $metadata.standby.port -or
+            (PortListening $metadata.primary.port) -or (PortListening $metadata.standby.port)) { throw 'Original-node fence verification failed.' }
+        AssertNodeIdentity $metadata.restore
+        $quarantine=Get-Content -LiteralPath $metadata.restoreQuarantineFile -Raw | ConvertFrom-Json
+        if ($quarantine.state -ne 'Quarantined' -or $quarantine.databaseDefaultReadOnly -ne $true -or
+            $quarantine.restoredPort -ne $metadata.restore.port -or
+            (Query $metadata.restore.port 'SHOW default_transaction_read_only') -ne 'on') { throw 'Restore read-only quarantine is required.' }
+        $anchorPath=Child 'operator-anchor.json'
+        AssertExactPath $anchorPath 'operator-anchor.json'
+        $anchorBytes=[IO.File]::ReadAllBytes($anchorPath)
+        if ($anchorBytes.Length -lt 1 -or $anchorBytes.Length -gt 1024 -or
+            [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($anchorBytes)).ToLowerInvariant() -cne $ExternalAnchorSha256) {
+            throw 'Outside quarantine anchor changed.'
+        }
+        # PowerShell cannot bind byte[] to JsonDocument's ReadOnlyMemory<byte>
+        # overload. Decode strictly after the exact-byte hash/size checks.
+        $anchorText=[Text.UTF8Encoding]::new($false,$true).GetString($anchorBytes)
+        $anchorDocument=[Text.Json.JsonDocument]::Parse($anchorText)
+        try {
+            $anchor=$anchorDocument.RootElement
+            $fields=@($anchor.EnumerateObject())
+            if ($anchor.ValueKind -ne 'Object' -or $fields.Count -ne 3 -or
+                @($fields.Name | Sort-Object -Unique).Count -ne 3 -or
+                @($fields.Name | Where-Object { $_ -cnotin @('version','generation','state') }).Count -ne 0 -or
+                $anchor.GetProperty('version').GetInt32() -ne 1 -or $anchor.GetProperty('state').GetString() -cne 'quarantined' -or
+                $anchor.GetProperty('generation').GetString() -cne $TargetGeneration.ToString('D')) { throw 'Outside authority must remain strictly quarantined.' }
+        } finally { $anchorDocument.Dispose() }
+        # ALTER SYSTEM is explicitly scoped to the already validated restored node.
+        $previousMaintenanceOptions=$env:PGOPTIONS
+        try {
+            $env:PGOPTIONS='-c default_transaction_read_only=off'
+            Query $metadata.restore.port "ALTER SYSTEM SET default_transaction_read_only = 'off'" | Out-Null
+        } finally { $env:PGOPTIONS=$previousMaintenanceOptions }
+        Query $metadata.restore.port 'SELECT pg_reload_conf()' | Out-Null
+        $maintenanceDeadline=[DateTimeOffset]::UtcNow.AddSeconds(10)
+        while ((Query $metadata.restore.port 'SHOW default_transaction_read_only') -ne 'off') {
+            if ([DateTimeOffset]::UtcNow -gt $maintenanceDeadline) { throw 'Explicit maintenance writable transition did not complete.' }
+            Start-Sleep -Milliseconds 100
+        }
+        SaveJson (Child 'restore-maintenance-evidence.json') @{formatVersion=1;restoredPort=$metadata.restore.port;
+            targetGeneration=$TargetGeneration.ToString('D');anchorSha256=$ExternalAnchorSha256;outsideAuthorityState='quarantined';
+            bothOriginalPortsClosed=$true;databaseWritableForReconciliation=$true;automaticSenderActivationAllowed=$false;
+            observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O')}
+        Write-Output 'Restored node is explicitly writable for governed reconciliation; outside quarantine still forbids all sending.'
     }
     'Status' {
         foreach ($endpoint in @($metadata.primary,$metadata.standby,$metadata.restore)) { Write-Output "$($endpoint.name) port=$($endpoint.port) running=$(Running $endpoint)" }
