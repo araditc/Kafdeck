@@ -14,7 +14,8 @@ public sealed record ConfiguredNotificationCredentialBinding(
     NotificationProviderKind Provider,
     string ProfileRevisionFingerprint,
     NotificationCredentialBindingId BindingId,
-    SecretReference Secret);
+    SecretReference Secret,
+    bool Enabled = true);
 
 public sealed class ConfiguredNotificationCredentialResolver :
     INotificationCredentialResolver
@@ -58,7 +59,7 @@ public sealed class ConfiguredNotificationCredentialResolver :
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!_bindings.TryGetValue(request.DestinationId, out var binding) ||
+        if (!_bindings.TryGetValue(request.DestinationId, out var binding) || !binding.Enabled ||
             binding.Provider != request.Provider ||
             !string.Equals(binding.BindingId.Value, request.BindingId.Value, StringComparison.Ordinal) ||
             !string.Equals(binding.ProfileRevisionFingerprint,

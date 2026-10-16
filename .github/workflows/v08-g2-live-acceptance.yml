@@ -1,0 +1,307 @@
+name: v08-g2-live-acceptance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v08-g2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  loopback-boundaries:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore locked dependencies
+        run: dotnet restore Kafdeck.slnx --locked-mode
+      - name: Prove actual numeric-loopback listener boundaries
+        run: >-
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
+          --configuration Release --no-restore
+          --filter 'FullyQualifiedName~V08W67CliPkceLoopbackBoundaryTests|FullyQualifiedName~V08W67CliSocketCallbackTests|FullyQualifiedName~V08W67HumanCliBoundaryTests|FullyQualifiedName~V08W67GovernedBearerBoundaryTests|FullyQualifiedName~V08W67CriticalApprovalBoundaryTests|FullyQualifiedName~V08AuthorizationActionIsolationTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests'
+
+  real-human-cli-and-transports:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download and verify pinned Keycloak
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2"
+          mkdir -p "$lab"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+            https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip \
+            --output "$lab/keycloak.zip"
+          printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak.zip" | sha256sum --check
+          unzip -q "$lab/keycloak.zip" -d "$lab"
+          chmod +x "$lab/keycloak-26.8.1/bin/kc.sh"
+      - name: Prepare genuine human and service identities
+        shell: pwsh
+        run: |
+          $env:JAVA_HOME = $env:JAVA_HOME_21_X64
+          $javaVersion = (& "$env:JAVA_HOME/bin/java" -version 2>&1 | Select-Object -First 1).ToString()
+          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2/keycloak-26.8.1" -JavaVersion $javaVersion
+      - name: Start isolated Keycloak HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2"
+          export KC_HTTPS_KEY_STORE_PASSWORD="$(cat "$lab/identity/https-password.txt")"
+          export KC_DB_URL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["databaseUrl"])' "$lab/identity/lab.json")"
+          nohup "$lab/keycloak-26.8.1/bin/kc.sh" start --http-host=127.0.0.1 --http-enabled=false \
+            --db=dev-file --https-port=18444 --hostname=https://localhost:18444 \
+            --https-key-store-file="$lab/identity/https.p12" --cache=local --import-realm \
+            > "$lab/identity/keycloak-server.log" 2>&1 &
+          printf '%s' "$!" > "$lab/identity/keycloak.pid"
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent --cacert "$lab/identity/ca.pem" --connect-timeout 1 --max-time 2 \
+              https://localhost:18444/realms/kafdeck-g2/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'G2 Keycloak HTTPS discovery did not become ready.' >&2
+          exit 1
+      - name: Start disposable real Kafka effect fixture
+        shell: bash
+        run: docker compose -f deploy/dev/docker-compose.kafka.yml up -d --wait --wait-timeout 120
+      - name: Build and prove actual PKCE CLI and provider sockets
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KAFDECK_KEYCLOAK_G2_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/g2/identity/lab.json"
+          export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-ci/identity"
+          export KAFDECK_G2_KAFKA_BOOTSTRAP=127.0.0.1:9092
+          export KAFDECK_G2_KAFKA_DELETE_CAPABLE=1
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08G2HumanCliLiveTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08W66PrivateHttpWireTests|FullyQualifiedName~V08W66ProviderCredentialLifecycleTlsTests|FullyQualifiedName~V08W66AuthenticatedWebhookTlsTests|FullyQualifiedName~V08W66ProviderPhysicalTlsTests|FullyQualifiedName~V08W66SmtpPhysicalTlsTests|FullyQualifiedName~V08W66ReceiptPersistenceTests|FullyQualifiedName~V08G2ProductNotificationTests' \
+            --results-directory artifacts/g2-ci --logger 'trx;LogFileName=g2-live.trx'
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-cli-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-cli-kafka-effect-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/service-cli-kafka-effect-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-kafka-product-notification-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/critical-human-approval-kafka-evidence.json"
+      - name: Retain sanitized live acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g2-live-acceptance
+          path: |
+            artifacts/g2-ci/g2-live.trx
+            artifacts/g2-ci/identity/*-evidence.json
+          if-no-files-found: error
+      - name: Stop isolated identity process
+        if: always()
+        shell: bash
+        run: |
+          pid_file="$GITHUB_WORKSPACE/deploy/dev/.generated/g2/identity/keycloak.pid"
+          if [ -f "$pid_file" ]; then kill "$(cat "$pid_file")" 2>/dev/null || true; fi
+          docker compose -f deploy/dev/docker-compose.kafka.yml down --volumes --remove-orphans
+
+  real-postgresql-fencing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: kafdeck
+          POSTGRES_PASSWORD: kafdeck-g2-ci-only
+          POSTGRES_DB: kafdeck
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kafdeck -d kafdeck"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore locked dependencies
+        run: dotnet restore Kafdeck.slnx --locked-mode
+      - name: Prove durable independent-worker concurrency and recovery
+        env:
+          KAFDECK_TEST_POSTGRES: 'Host=127.0.0.1;Port=5432;Username=kafdeck;Password=kafdeck-g2-ci-only;Database=kafdeck;Pooling=false'
+          KAFDECK_G2_EVIDENCE_DIRECTORY: '${{ github.workspace }}/artifacts/g2-ci/postgres'
+        run: >-
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
+          --configuration Release --no-restore --results-directory artifacts/g2-ci/postgres --logger 'trx;LogFileName=postgres-live.trx'
+          --filter 'FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
+      - name: Require real PostgreSQL evidence
+        shell: bash
+        run: |
+          test -s artifacts/g2-ci/postgres/postgres-worker-cas-evidence.json
+          test -s artifacts/g2-ci/postgres/postgres-recovery-fence-evidence.json
+          test -s artifacts/g2-ci/postgres/postgres-rate-clock-evidence.json
+          test -s artifacts/g2-ci/postgres/postgres-product-outbox-evidence.json
+          test -s artifacts/g2-ci/postgres/product-source-tls-evidence.json
+      - name: Retain sanitized PostgreSQL evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g2-postgresql-acceptance
+          path: |
+            artifacts/g2-ci/postgres/*-evidence.json
+            artifacts/g2-ci/postgres/postgres-live.trx
+          if-no-files-found: error
+
+  real-keycloak-ha-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: kafdeck
+          POSTGRES_PASSWORD: kafdeck-g2-ci-only
+          POSTGRES_DB: keycloak
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kafdeck -d keycloak"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Prepare two independent verified Keycloak runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-ha"
+          mkdir -p "$lab/node-a" "$lab/node-b"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+            https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip \
+            --output "$lab/keycloak.zip"
+          printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak.zip" | sha256sum --check
+          unzip -q "$lab/keycloak.zip" -d "$lab/node-a"
+          unzip -q "$lab/keycloak.zip" -d "$lab/node-b"
+          chmod +x "$lab"/node-*/keycloak-26.8.1/bin/kc.sh
+      - name: Prepare isolated shared realm and public topology metadata
+        shell: pwsh
+        run: |
+          $base = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2-ha"
+          $javaVersion = (& "$env:JAVA_HOME_21_X64/bin/java" -version 2>&1 | Select-Object -First 1).ToString()
+          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$base/node-a/keycloak-26.8.1" -OutputDirectory "$base/identity" -JavaVersion $javaVersion
+          $identity = Get-Content "$base/identity/lab.json" -Raw | ConvertFrom-Json
+          New-Item -ItemType Directory -Path "$base/node-b/keycloak-26.8.1/data/import" -Force | Out-Null
+          Copy-Item -LiteralPath $identity.realmImportFile -Destination "$base/node-b/keycloak-26.8.1/data/import/kafdeck-g2-realm.json"
+          @{
+            keycloakVersion = '26.8.1'; issuer = 'https://localhost:19443/realms/kafdeck-g2'
+            clientId = $identity.clientId; subject = $identity.subject; audience = $identity.audience
+            caPemFile = $identity.caPemFile; clientPrivateKeyFile = $identity.clientPrivateKeyFile
+            cache = 'ispn'; stack = 'jdbc-ping'; clusterMtls = $true
+            nodes = @(
+              @{ name = 'node-a'; endpoint = 'https://localhost:19443/realms/kafdeck-g2' },
+              @{ name = 'node-b'; endpoint = 'https://localhost:19444/realms/kafdeck-g2' }
+            )
+          } | ConvertTo-Json -Depth 6 | Set-Content "$base/ha-lab.json" -Encoding utf8
+      - name: Form genuine shared PostgreSQL distributed cache cluster
+        shell: bash
+        env:
+          KC_DB_USERNAME: kafdeck
+          KC_DB_PASSWORD: kafdeck-g2-ci-only
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          export JAVA_OPTS_APPEND='-Xms128m -Xmx512m'
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-ha"
+          export KC_HTTPS_KEY_STORE_PASSWORD="$(cat "$lab/identity/https-password.txt")"
+          start_node() {
+            node="$1"; https_port="$2"; cluster_port="$3"
+            nohup "$lab/$node/keycloak-26.8.1/bin/kc.sh" start --db=postgres \
+              --db-url-host=127.0.0.1 --db-url-port=5432 --db-url-database=keycloak \
+              --db-pool-initial-size=2 --db-pool-min-size=2 --db-pool-max-size=8 \
+              --http-enabled=false --http-host=127.0.0.1 --https-port="$https_port" \
+              --hostname=https://localhost:19443 --https-key-store-file="$lab/identity/https.p12" \
+              --cache=ispn --cache-embedded-node-name="$node" --cache-embedded-mtls-enabled=true \
+              --cache-embedded-network-bind-address=127.0.0.1 --cache-embedded-network-bind-port="$cluster_port" \
+              --import-realm > "$lab/$node.log" 2>&1 &
+            printf '%s' "$!" > "$lab/$node.pid"
+            for attempt in $(seq 1 150); do
+              if curl --fail --silent --cacert "$lab/identity/ca.pem" --connect-timeout 1 --max-time 2 \
+                "https://localhost:$https_port/realms/kafdeck-g2/.well-known/openid-configuration" > /dev/null; then return 0; fi
+              sleep 1
+            done
+            echo 'Genuine clustered Keycloak node did not become ready.' >&2
+            return 1
+          }
+          start_node node-a 19443 7800
+          start_node node-b 19444 7810
+          for attempt in $(seq 1 30); do
+            if grep -Eq '\(2\).*node-a.*node-b' "$lab/node-a.log" && grep -Eq '\(2\).*node-a.*node-b' "$lab/node-b.log"; then exit 0; fi
+            sleep 1
+          done
+          echo 'Both nodes must report the two-member distributed cache view.' >&2
+          exit 1
+      - name: Prove synchronized fresh assertion races and time-valid replays
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KAFDECK_KEYCLOAK_G2_HA_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-ha/ha-lab.json"
+          export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-ci/ha"
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
+            --filter 'FullyQualifiedName~V08G2KeycloakHaReplayTests' --results-directory artifacts/g2-ci/ha --logger 'trx;LogFileName=ha-replay.trx'
+          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["rounds"] == 10 and p["firstUseSuccessesPerRound"] == [1]*10 and p["timeValidConsumedReplayRejections"] == 20' \
+            "$KAFDECK_G2_EVIDENCE_DIRECTORY/keycloak-ha-first-use-replay-evidence.json"
+      - name: Retain sanitized identity cluster evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g2-keycloak-ha-replay
+          path: |
+            artifacts/g2-ci/ha/ha-replay.trx
+            artifacts/g2-ci/ha/*-evidence.json
+          if-no-files-found: error
+      - name: Stop both isolated cluster nodes
+        if: always()
+        shell: bash
+        run: |
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-ha"
+          for node in node-a node-b; do
+            if [ -f "$lab/$node.pid" ]; then kill "$(cat "$lab/$node.pid")" 2>/dev/null || true; fi
+          done

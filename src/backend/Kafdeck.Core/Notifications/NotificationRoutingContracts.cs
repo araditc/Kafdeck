@@ -712,7 +712,7 @@ public sealed class NotificationRoutingCoordinator
                         subscription.Definition.DestinationId,
                         cancellationToken)
                     .ConfigureAwait(false);
-            if (profile is null)
+            if (profile is null || !profile.Enabled)
             {
                 missing++;
                 continue;
@@ -852,7 +852,7 @@ public sealed class WebhookNotificationDeliveryDispatcher :
                     claimedDelivery.Snapshot.DestinationId,
                     cancellationToken)
                 .ConfigureAwait(false);
-        if (profile is null ||
+        if (profile is null || !profile.Enabled ||
             profile.Provider !=
                 NotificationProviderKind.Webhook ||
             !profile.EnabledEvents.Contains(

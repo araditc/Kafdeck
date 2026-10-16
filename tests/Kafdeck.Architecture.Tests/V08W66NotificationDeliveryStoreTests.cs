@@ -183,7 +183,7 @@ public sealed class V08W66NotificationDeliveryStoreTests
                 await using var version = verified.CreateCommand();
                 version.CommandText =
                     "SELECT schema_version FROM kafdeck_schema_info WHERE component = 'notification-delivery'";
-                Assert.Equal(2L, Convert.ToInt64(
+                Assert.Equal(3L, Convert.ToInt64(
                     await version.ExecuteScalarAsync()));
 
                 // A still-running v1 binary omits the new revision column.

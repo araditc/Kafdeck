@@ -408,8 +408,7 @@ public sealed class MutationDispatchService
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        if (!OperatorSessionContextFactory.TryCreate(principal, out var session) ||
-            session is null)
+        if (!MutationActor.TryCreate(principal, out var actor) || actor is null)
         {
             return (null, new MutationDispatchResult(
                 MutationDispatchOutcome.Unauthenticated));
@@ -424,7 +423,7 @@ public sealed class MutationDispatchService
                 MutationDispatchOutcome.NotFound));
         }
 
-        var currentPrincipalId = SecurityAuditPrincipal.FromOperator(session.Identity);
+        var currentPrincipalId = actor.PrincipalId;
         if (!string.Equals(
                 currentPrincipalId,
                 operation.RequesterPrincipalId,

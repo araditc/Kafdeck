@@ -85,7 +85,9 @@ public static class KafdeckConfigurationLoader
             ParseOptionalBoolean(section["ManagementEnabled"], false, "Notification management Enabled"),
             LoadConfiguredNotificationDestinations(section.GetSection("Destinations")),
             LoadNotificationCredentialReferences(section.GetSection("CredentialBindings")),
-            ParseOptionalBoolean(section["WebhookDeliveryEnabled"], false, "Notification webhook delivery Enabled"));
+            ParseOptionalBoolean(section["WebhookDeliveryEnabled"], false, "Notification webhook delivery Enabled"),
+            ParseOptionalBoolean(section["HttpProviderDeliveryEnabled"], false, "Notification HTTP provider delivery Enabled"),
+            ParseOptionalBoolean(section["EmailDeliveryEnabled"], false, "Notification Email delivery Enabled"));
     }
 
     private static IReadOnlyList<NotificationDestinationProfile>
@@ -101,7 +103,8 @@ public static class KafdeckConfigurationLoader
         var allowedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "DestinationId", "Provider", "DisplayName", "EnabledEvents",
-            "ConfiguredEndpoint", "CredentialBindingId", "EmailRecipientAddress",
+            "ConfiguredEndpoint", "CredentialBindingId", "EmailRecipientAddress", "WebhookAuthentication", "Enabled",
+            "ProviderResourceId", "ProviderSecondaryResourceId", "Smtp",
         };
 
         foreach (var item in section.GetChildren())
@@ -119,7 +122,7 @@ public static class KafdeckConfigurationLoader
             if (item.Value is not null ||
                 properties.Any(child =>
                     !allowedKeys.Contains(child.Key) ||
-                    (child.Key.Equals("EnabledEvents", StringComparison.OrdinalIgnoreCase)
+                    (child.Key.Equals("EnabledEvents", StringComparison.OrdinalIgnoreCase) || child.Key.Equals("Smtp", StringComparison.OrdinalIgnoreCase)
                         ? child.Value is not null
                         : child.GetChildren().Any())))
                 throw new KafdeckConfigurationException(
@@ -183,7 +186,11 @@ public static class KafdeckConfigurationLoader
                         ? null : new Uri(endpointText, UriKind.Absolute),
                     string.IsNullOrWhiteSpace(bindingText)
                         ? null : new NotificationCredentialBindingId(bindingText),
-                    recipient);
+                    recipient,
+                    ParseEnum(item["WebhookAuthentication"], NotificationWebhookAuthentication.Anonymous,
+                        "Webhook authentication"),
+                    ParseOptionalBoolean(item["Enabled"], true, "Notification destination Enabled"),
+                    item["ProviderResourceId"], item["ProviderSecondaryResourceId"], LoadSmtp(item.GetSection("Smtp")));
                 if (!ids.Add(profile.DestinationId))
                     throw new KafdeckConfigurationException(
                         "Duplicate exact notification destination identity.");
@@ -196,6 +203,18 @@ public static class KafdeckConfigurationLoader
             }
         }
         return Array.AsReadOnly(result.ToArray());
+    }
+
+    private static NotificationSmtpProfile? LoadSmtp(IConfigurationSection section)
+    {
+        var children = section.GetChildren().ToArray();
+        if (children.Length == 0 && section.Value is null) return null;
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Host", "Port", "SenderAddress", "Username" };
+        if (section.Value is not null || children.Any(child => !allowed.Contains(child.Key) || child.GetChildren().Any()) ||
+            string.IsNullOrEmpty(section["Host"]) || string.IsNullOrEmpty(section["SenderAddress"]) || string.IsNullOrEmpty(section["Username"]))
+            throw new KafdeckConfigurationException("SMTP requires only server-owned host, port, sender and username fields.");
+        return new NotificationSmtpProfile(section["Host"]!, section["SenderAddress"]!, section["Username"]!,
+            ParseOptionalInt(section["Port"], 465, "SMTP port"));
     }
 
     private static IReadOnlyList<NotificationCredentialReferenceOptions>
@@ -216,14 +235,15 @@ public static class KafdeckConfigurationLoader
                 throw new KafdeckConfigurationException(
                     "Notification credential bindings must use canonical bounded array indices.");
             var children = entry.GetChildren().ToArray();
-            if (entry.Value is not null || children.Length != 3 ||
+            if (entry.Value is not null || children.Length is < 3 or > 4 ||
                 children.Any(child =>
                     child.GetChildren().Any() ||
                     !(string.Equals(child.Key, "DestinationId", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(child.Key, "BindingId", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(child.Key, "SecretReference", StringComparison.OrdinalIgnoreCase))))
+                      string.Equals(child.Key, "SecretReference", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(child.Key, "Enabled", StringComparison.OrdinalIgnoreCase))))
                 throw new KafdeckConfigurationException(
-                    "Notification credential bindings require exactly three scalar fields.");
+                    "Notification credential bindings require three identity/reference fields and optional Enabled scalar.");
             var id = entry["DestinationId"];
             var bindingText = entry["BindingId"];
             var secretText = entry["SecretReference"];
@@ -241,7 +261,8 @@ public static class KafdeckConfigurationLoader
                     throw new KafdeckConfigurationException(
                         "Duplicate exact notification credential destination identity.");
                 results.Add(new NotificationCredentialReferenceOptions(
-                    identity, binding, reference));
+                    identity, binding, reference,
+                    ParseOptionalBoolean(entry["Enabled"], true, "Notification credential binding Enabled")));
             }
             catch (ArgumentException error)
             {

@@ -9,12 +9,19 @@ public static class CliApplication
     public const int AuthenticationOrAuthorizationError = 3;
     public const int RemoteError = 4;
     public const int TransportError = 5;
+    public const int PendingApproval = 6;
+    public const int UnknownEffect = 7;
+    public const int Conflict = 8;
+    public const int Expired = 9;
+    public const int PartialOrUnverified = 10;
 
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
         TextWriter output,
         TextWriter error,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<Uri, CancellationToken, Task>? openBrowser = null,
+        Action<CliOidcFailureStage>? oidcFailureDiagnostic = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
@@ -44,17 +51,30 @@ public static class CliApplication
                 CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken);
             deadline.CancelAfter(
-                KafdeckCliClient.RequestTimeout);
+                invocation.OidcProfileFile is not null ? CliOidcPkceAuthenticator.FlowTimeout + KafdeckCliClient.RequestTimeout :
+                    invocation.ServiceProfileFile is not null ? CliServiceOidcAuthenticator.FlowTimeout + KafdeckCliClient.RequestTimeout :
+                    KafdeckCliClient.RequestTimeout);
             var requestToken =
                 deadline.Token;
 
             using var client = await KafdeckCliClient.CreateAsync(
                 invocation,
-                requestToken);
+                requestToken,
+                openBrowser);
+            deadline.CancelAfter(KafdeckCliClient.RequestTimeout);
 
-            using var response = await client.GetAsync(
-                CliRouteBuilder.Build(invocation),
-                requestToken);
+            using var response = invocation.Command switch
+            {
+                CliCommand.TopicCreatePreview => await client.PostAsync(CliRouteBuilder.Build(invocation),
+                    new { partitionCount = invocation.PartitionCount, replicationFactor = invocation.ReplicationFactor,
+                        configurations = new Dictionary<string, string>() }, invocation.IdempotencyKey, requestToken),
+                CliCommand.OperationConfirm => await client.PostAsync(CliRouteBuilder.Build(invocation),
+                    new { previewHash = invocation.PreviewHash, typedTargetChallenge = invocation.TypedTargetChallenge }, null, requestToken),
+                CliCommand.TopicDeletePreview => await client.PostAsync(CliRouteBuilder.Build(invocation), null, invocation.IdempotencyKey, requestToken),
+                CliCommand.OperationApprove => await client.PostAsync(CliRouteBuilder.Build(invocation), new { previewHash = invocation.PreviewHash }, null, requestToken),
+                CliCommand.OperationExecute => await client.PostAsync(CliRouteBuilder.Build(invocation), null, null, requestToken),
+                _ => await client.GetAsync(CliRouteBuilder.Build(invocation), requestToken),
+            };
 
             // A non-success response is untrusted remote text and may echo
             // Authorization credentials, connection strings or protected
@@ -64,6 +84,10 @@ public static class CliApplication
             {
                 await error.WriteLineAsync(
                     $"Kafdeck returned HTTP {(int)response.StatusCode}.");
+                if (IsMutation(invocation.Command) && response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                    return Conflict;
+                if (IsMutation(invocation.Command) && response.StatusCode == System.Net.HttpStatusCode.Gone)
+                    return Expired;
                 return CategorizeHttpFailure(response.StatusCode);
             }
 
@@ -81,7 +105,7 @@ public static class CliApplication
             }
 
             await WriteJsonAsync(output, body, requestToken);
-            return Success;
+            return IsMutation(invocation.Command) ? MutationOutcomeCategory(body) : Success;
         }
         catch (CliUsageException exception)
         {
@@ -89,10 +113,16 @@ public static class CliApplication
             await error.WriteLineAsync(CliParser.Usage);
             return UsageError;
         }
-        catch (JsonException exception)
+        catch (CliOidcAuthenticationException exception)
+        {
+            oidcFailureDiagnostic?.Invoke(exception.Stage);
+            await error.WriteLineAsync("Kafdeck CLI OIDC sign-in was rejected.");
+            return AuthenticationOrAuthorizationError;
+        }
+        catch (JsonException)
         {
             await error.WriteLineAsync(
-                $"Kafdeck CLI received invalid JSON from the governed API: {exception.Message}");
+                "Kafdeck CLI received invalid JSON from the governed API or public profile.");
             return RemoteError;
         }
         catch (OperationCanceledException)
@@ -134,6 +164,25 @@ public static class CliApplication
             ? AuthenticationOrAuthorizationError
             : RemoteError;
 
+    public static bool IsMutation(CliCommand command) => command is CliCommand.TopicCreatePreview or CliCommand.OperationStatus or
+        CliCommand.OperationConfirm or CliCommand.OperationExecute or CliCommand.TopicDeletePreview or CliCommand.OperationApproval or CliCommand.OperationApprove;
+
+    public static int MutationOutcomeCategory(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.String)
+            return RemoteError;
+        return state.GetString()?.ToLowerInvariant() switch
+        {
+            "awaitingapproval" => PendingApproval, "executionunknown" or "executing" => UnknownEffect,
+            "stalepreview" => Conflict, "expired" => Expired,
+            "appliedunverified" or "partiallyapplied" => PartialOrUnverified,
+            "failedbeforedispatch" or "faileddefinitive" or "rejected" or "cancelled" => RemoteError,
+            "previewed" or "awaitingconfirmation" or "ready" or "appliedverified" => Success,
+            _ => RemoteError,
+        };
+    }
+
     private static async Task WriteJsonAsync(
         TextWriter output,
         string body,
@@ -171,6 +220,13 @@ public enum CliCommand
     SchemaVersionGet = 12,
     SchemaCompatibilityGet = 13,
     SchemaDiff = 14,
+    TopicCreatePreview = 15,
+    OperationStatus = 16,
+    OperationConfirm = 17,
+    OperationExecute = 18,
+    TopicDeletePreview = 19,
+    OperationApproval = 20,
+    OperationApprove = 21,
 }
 
 public enum CliOutputFormat
@@ -190,7 +246,14 @@ public sealed record CliInvocation(
     int? Limit = null,
     CliOutputFormat Output = CliOutputFormat.Json,
     int? Version = null,
-    int? RightVersion = null);
+    int? RightVersion = null,
+    string? OidcProfileFile = null,
+    string? IdempotencyKey = null,
+    string? PreviewHash = null,
+    string? TypedTargetChallenge = null,
+    int? PartitionCount = null,
+    short? ReplicationFactor = null,
+    string? ServiceProfileFile = null);
 
 public static class CliRouteBuilder
 {
@@ -232,6 +295,13 @@ public static class CliRouteBuilder
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/compatibility",
             CliCommand.SchemaDiff =>
                 $"/api/v1/clusters/{RequirePrimary(invocation)}/schemas/subjects/{RequireSecondary(invocation)}/diff?leftVersion={RequireVersion(invocation)}&rightVersion={RequireRightVersion(invocation)}",
+            CliCommand.TopicCreatePreview => $"/api/v1/automation/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}/create/preview",
+            CliCommand.TopicDeletePreview => $"/api/v1/automation/clusters/{RequirePrimary(invocation)}/topics/{RequireSecondary(invocation)}/delete/preview",
+            CliCommand.OperationStatus => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/status",
+            CliCommand.OperationConfirm => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/confirm",
+            CliCommand.OperationExecute => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/execute",
+            CliCommand.OperationApproval => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/approval",
+            CliCommand.OperationApprove => $"/api/v1/automation/mutations/{RequirePrimary(invocation)}/approve",
             _ => throw new InvalidOperationException(
                 "CLI invocation contains an unsupported command."),
         };
@@ -355,12 +425,23 @@ public static class CliParser
           kafdeck [global-options] schemas version <cluster-id> <subject> <version>
           kafdeck [global-options] schemas compatibility <cluster-id> <subject>
           kafdeck [global-options] schemas diff <cluster-id> <subject> <left-version> <right-version>
+          kafdeck --oidc-profile <profile> [global-options] topics create-preview <cluster-id> <topic-name> <partitions> <replication-factor> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> [global-options] operations status <operation-id>
+          kafdeck --oidc-profile <profile> [global-options] operations confirm <operation-id> <preview-hash> [--challenge <typed-target>]
+          kafdeck --oidc-profile <profile> [global-options] operations execute <operation-id>
+          kafdeck --oidc-profile <profile> [global-options] topics delete-preview <cluster-id> <topic-name> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> [global-options] operations approval <operation-id>
+          kafdeck --oidc-profile <profile> [global-options] operations approve <operation-id> <preview-hash>
           kafdeck --help
 
         Global options:
           --url <base-url>
           --token-file <path>
+          --oidc-profile <public-profile.json>  Sign in using browser PKCE; memory-only bearer for this command.
+          --service-profile <public-profile.json>  Sign in with a referenced RSA private key; memory-only service bearer.
           --output json
+          --idempotency-key <key>  Required only for a new topic preview.
+          --challenge <target>    Admitted only for operation confirmation.
 
         Environment:
           KAFDECK_URL
@@ -370,8 +451,8 @@ public static class CliParser
           Access tokens are intentionally not accepted as command-line arguments.
           Use KAFDECK_ACCESS_TOKEN or --token-file.
           The CLI exposes only typed governed API routes; there is no arbitrary HTTP path passthrough.
-          Mutation status and approval commands are withheld until the CLI has a
-          governed non-browser OIDC authentication flow compatible with mutation mode.
+          Governed TopicCreate commands require non-browser OIDC and explicit backend admission.
+          Approval commands require a separate eligible human. Other mutation families remain unavailable.
         """;
 
     public static CliInvocation Parse(
@@ -396,6 +477,10 @@ public static class CliParser
 
         string? url = null;
         string? tokenFile = null;
+        string? oidcProfileFile = null;
+        string? serviceProfileFile = null;
+        string? idempotencyKey = null;
+        string? typedChallenge = null;
         string? search = null;
         string? cursor = null;
         int? limit = null;
@@ -431,6 +516,18 @@ public static class CliParser
                             "--token-file requires a non-empty path.");
                     }
 
+                    break;
+                case "--oidc-profile":
+                    oidcProfileFile = ValidateBoundedOption(RequireValue(args, ref index, "--oidc-profile"), "--oidc-profile", 2048);
+                    break;
+                case "--service-profile":
+                    serviceProfileFile = ValidateBoundedOption(RequireValue(args, ref index, "--service-profile"), "--service-profile", 2048);
+                    break;
+                case "--idempotency-key":
+                    idempotencyKey = ValidateBoundedOption(RequireValue(args, ref index, "--idempotency-key"), "--idempotency-key", 256);
+                    break;
+                case "--challenge":
+                    typedChallenge = ValidateBoundedOption(RequireValue(args, ref index, "--challenge"), "--challenge", 512);
                     break;
                 case "--output":
                 {
@@ -533,7 +630,20 @@ public static class CliParser
                 "--search, --cursor and --limit are admitted only for 'topics list'.");
         }
 
-        return invocation;
+        if (oidcProfileFile is not null && serviceProfileFile is not null)
+            throw new CliUsageException("Choose one human or service OIDC profile.");
+        if ((oidcProfileFile is not null || serviceProfileFile is not null) && (tokenFile is not null || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("KAFDECK_ACCESS_TOKEN"))))
+            throw new CliUsageException("OIDC sign-in cannot be combined with a deployment access-token source.");
+        if (CliApplication.IsMutation(invocation.Command) && oidcProfileFile is null && serviceProfileFile is null)
+            throw new CliUsageException("Governed operation commands require --oidc-profile or --service-profile; deployment credentials never acquire mutation authority.");
+        if (invocation.Command is CliCommand.OperationApproval or CliCommand.OperationApprove && oidcProfileFile is null)
+            throw new CliUsageException("Human approval commands require --oidc-profile; a service cannot become a human approver.");
+        if (invocation.Command is CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview && idempotencyKey is null)
+            throw new CliUsageException("A topic mutation preview requires --idempotency-key.");
+        if (invocation.Command is not (CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview) && idempotencyKey is not null ||
+            invocation.Command != CliCommand.OperationConfirm && typedChallenge is not null)
+            throw new CliUsageException("Mutation options must match their named command.");
+        return invocation with { OidcProfileFile = oidcProfileFile, ServiceProfileFile = serviceProfileFile, IdempotencyKey = idempotencyKey, TypedTargetChallenge = typedChallenge };
     }
 
     private static CliInvocation ParseCommand(
@@ -545,6 +655,33 @@ public static class CliParser
         int? limit,
         CliOutputFormat output)
     {
+        if (positionals.Count == 4 && positionals[0] == "topics" && positionals[1] == "delete-preview")
+        {
+            ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);
+            return Create(baseUri, tokenFile, CliCommand.TopicDeletePreview, positionals[2], positionals[3], output: output);
+        }
+        if (positionals.Count == 6 && positionals[0] == "topics" && positionals[1] == "create-preview")
+        {
+            ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);
+            if (!int.TryParse(positionals[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var partitions) ||
+                partitions is < 1 or > 10000 || !short.TryParse(positionals[5], System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var replicas) || replicas < 1)
+                throw new CliUsageException("TopicCreate requires 1..10000 partitions and a positive bounded replication factor.");
+            return Create(baseUri, tokenFile, CliCommand.TopicCreatePreview, positionals[2], positionals[3], output: output)
+                with { PartitionCount = partitions, ReplicationFactor = replicas };
+        }
+        if (positionals.Count is 3 or 4 && positionals[0] == "operations" && positionals[1] is "status" or "confirm" or "execute" or "approval" or "approve")
+        {
+            var needsHash = positionals[1] is "confirm" or "approve";
+            if (!Guid.TryParseExact(positionals[2], "D", out _) || (needsHash ? positionals.Count != 4 : positionals.Count != 3))
+                throw new CliUsageException("A canonical operation UUID and the command's exact arguments are required.");
+            if (needsHash && (positionals[3].Length != 64 || !positionals[3].All(char.IsAsciiHexDigit)))
+                throw new CliUsageException("Confirmation requires the exact 64-character preview hash returned by the backend.");
+            var command = positionals[1] switch { "status" => CliCommand.OperationStatus, "confirm" => CliCommand.OperationConfirm,
+                "approval" => CliCommand.OperationApproval, "approve" => CliCommand.OperationApprove, _ => CliCommand.OperationExecute };
+            return Create(baseUri, tokenFile, command, positionals[2], output: output)
+                with { PreviewHash = needsHash ? positionals[3] : null };
+        }
         if (positionals.SequenceEqual(
                 new[] { "system", "info" },
                 StringComparer.Ordinal))

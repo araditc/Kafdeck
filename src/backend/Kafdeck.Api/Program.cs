@@ -45,6 +45,7 @@ var dataQualityOptions =
     kafdeckOptions.DataQuality;
 var notificationReadOptions =
     kafdeckOptions.Notifications;
+var productEventsEnabled = NotificationProductEventHosting.ReadActivation(builder.Configuration, kafdeckOptions);
 var maskingPolicy = RecordMaskingPolicyCompiler.Compile(
     kafdeckOptions.Records?.MaskingPolicy ??
     new RecordMaskingPolicyDefinition("default", 1));
@@ -147,6 +148,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddSingleton(kafdeckOptions);
 builder.Services.AddSingleton(secretResolver);
 builder.Services.AddSingleton(maskingPolicy);
+builder.Services.AddSingleton<IRecordMaskingPolicyProvider>(new StaticRecordMaskingPolicyProvider(maskingPolicy));
 var authorizationPolicy = AuthorizationPolicyCompiler.Compile(
     AuthorizationPolicyConfigurationLoader.Load(builder.Configuration));
 builder.Services.AddSingleton(authorizationPolicy);
@@ -312,8 +314,8 @@ if (notificationReadOptions?.Enabled == true)
             Array.Empty<NotificationDestinationProfile>()));
 
     // Only preprovisioned, revision-bound credential REFERENCES are mapped.
-    // Registration never reads secret material. Credential-bound physical
-    // delivery is not yet admitted by the standalone Webhook host.
+    // Registration never reads secret material. The standalone Webhook host
+    // admits only an explicit authentication mode and exact credential binding.
     builder.Services.AddSingleton<INotificationCredentialResolver>(services =>
     {
         var profiles = notificationReadOptions.DestinationProfiles ??
@@ -333,7 +335,7 @@ if (notificationReadOptions?.Enabled == true)
             return new ConfiguredNotificationCredentialBinding(
                 profile.DestinationId, profile.Provider,
                 profile.RevisionFingerprint, reference.BindingId,
-                reference.Secret);
+                reference.Secret, reference.Enabled);
         }).ToArray();
         return new ConfiguredNotificationCredentialResolver(
             approved, services.GetRequiredService<SecretResolver>());
@@ -464,7 +466,10 @@ if (mutationOptions?.Enabled == true)
 
     builder.Services.AddSingleton<IMutationOperationRepository>(services =>
         new AdoMutationOperationRepository(
-            services.GetRequiredService<IMutationDbConnectionFactory>()));
+            services.GetRequiredService<IMutationDbConnectionFactory>(),
+            captureProductNotifications: productEventsEnabled,
+            notificationProductPolicy: productEventsEnabled
+                ? services.GetRequiredService<NotificationProductEventPolicy>() : null));
     builder.Services.AddSingleton<IFleetMutationStateStore>(services =>
         new AdoFleetMutationStateStore(
             services.GetRequiredService<IMutationDbConnectionFactory>()));
@@ -629,6 +634,8 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddHostedService<DataGeneratorHostedService>();
 }
 
+builder.Services.AddKafdeckNotificationProductEvents(productEventsEnabled);
+
 var app = builder.Build();
 
 if (historicalMetricsOptions?.Enabled == true)
@@ -683,11 +690,14 @@ if (notificationReadOptions?.Enabled == true)
         .ConfigureAwait(false);
 
     app.Logger.LogInformation(
-        "Kafdeck notification persistence initialized with provider {Provider}, mode {Mode}; subscription management API enabled {ManagementEnabled}; physical Webhook delivery enabled {WebhookDeliveryEnabled}.",
+        "Kafdeck notification persistence initialized with provider {Provider}, mode {Mode}; subscription management API enabled {ManagementEnabled}; physical Webhook delivery enabled {WebhookDeliveryEnabled}; typed HTTP provider delivery enabled {HttpProviderDeliveryEnabled}; Email delivery enabled {EmailDeliveryEnabled}; verified product event capture enabled {ProductEventsEnabled}.",
         notificationReadOptions.Provider,
         notificationReadOptions.ExecutionMode,
         notificationReadOptions.ManagementEnabled,
-        notificationReadOptions.WebhookDeliveryEnabled);
+        notificationReadOptions.WebhookDeliveryEnabled,
+        notificationReadOptions.HttpProviderDeliveryEnabled,
+        notificationReadOptions.EmailDeliveryEnabled,
+        productEventsEnabled);
 }
 
 app.Logger.LogInformation(
@@ -803,6 +813,7 @@ if (dataQualityOptions?.Enabled == true)
 if (notificationReadOptions?.Enabled == true)
 {
     app.MapKafdeckV08NotificationReads();
+    if (productEventsEnabled) app.MapKafdeckNotificationProductEventStatus();
     if (notificationReadOptions.ManagementEnabled)
     {
         app.MapKafdeckV08NotificationManagement();
@@ -811,10 +822,12 @@ if (notificationReadOptions?.Enabled == true)
 app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
+app.MapKafdeckV08BearerOpenApi();
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();
     app.MapKafdeckTopicMutationEndpoints();
+    app.MapKafdeckBearerMutations();
     app.MapKafdeckRecordProductionEndpoints();
     app.MapKafdeckDataJobEndpoints();
     app.MapKafdeckDataGeneratorEndpoints();

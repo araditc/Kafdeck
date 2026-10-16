@@ -533,7 +533,7 @@ public static class KafdeckConfigurationValidator
 
         if (!notification.Enabled)
         {
-            if (notification.WebhookDeliveryEnabled)
+            if (notification.WebhookDeliveryEnabled || notification.HttpProviderDeliveryEnabled || notification.EmailDeliveryEnabled)
                 errors.Add("Webhook delivery requires explicitly enabled notification persistence.");
             if (notification.ManagementEnabled)
             {
@@ -549,15 +549,10 @@ public static class KafdeckConfigurationValidator
             return;
         }
 
-        if (notification.WebhookDeliveryEnabled)
+        if (notification.WebhookDeliveryEnabled || notification.HttpProviderDeliveryEnabled || notification.EmailDeliveryEnabled)
         {
-            if (notification.ExecutionMode != NotificationExecutionMode.Standalone)
-                errors.Add("Physical webhook delivery is currently admitted for standalone execution only.");
-            var deliveryProfiles = notification.DestinationProfiles ?? Array.Empty<NotificationDestinationProfile>();
-            if (deliveryProfiles.Count == 0 || deliveryProfiles.Any(profile => profile is null ||
-                    profile.Provider != NotificationProviderKind.Webhook ||
-                    profile.CredentialBindingId is not null))
-                errors.Add("Physical webhook delivery requires anonymous Webhook profiles only; authenticated providers require separate credential admission.");
+            try { NotificationPhysicalDeliveryAdmission.Validate(notification); }
+            catch (KafdeckConfigurationException error) { errors.Add(error.Message); }
         }
 
         // An operator's principal is mandatory even for metadata-only

@@ -1091,7 +1091,7 @@ public sealed class V08W66DeliveryWorkerTests
     }
 
     [Fact]
-    public async Task PostgreSql_rate_admission_uses_database_clock_across_skewed_replicas_when_available()
+    public async Task PostgreSql_admission_records_database_clock_and_shared_concurrency_across_skewed_replicas_when_available()
     {
         var baseConnectionString =
             Environment.GetEnvironmentVariable(
@@ -1179,7 +1179,7 @@ public sealed class V08W66DeliveryWorkerTests
                     dispatcher,
                     policy,
                     new NotificationDeliveryWorkerPolicy(
-                        maxDuePerCycle: 2),
+                        maxDuePerCycle: 1),
                     timeA);
             var workerB =
                 new NotificationDeliveryWorker(
@@ -1187,7 +1187,7 @@ public sealed class V08W66DeliveryWorkerTests
                     dispatcher,
                     policy,
                     new NotificationDeliveryWorkerPolicy(
-                        maxDuePerCycle: 2),
+                        maxDuePerCycle: 1),
                     timeB);
 
             var firstCycle =
@@ -1204,20 +1204,24 @@ public sealed class V08W66DeliveryWorkerTests
                 1,
                 dispatcher.ActiveDispatches);
 
+            // A real one-second rate window can expire during several physical
+            // connection round trips. Check database-clock provenance directly;
+            // the separate test below observes the actual claim interval.
+            await using (var rateConnection = new NpgsqlConnection(scoped.ConnectionString))
+            {
+                await rateConnection.OpenAsync();
+                await using var rateQuery = rateConnection.CreateCommand();
+                rateQuery.CommandText = "SELECT started_at_utc FROM kafdeck_notification_dispatch_attempts WHERE destination_id = 'ops-webhook'";
+                var recorded = DateTimeOffset.Parse((string)(await rateQuery.ExecuteScalarAsync())!,
+                    System.Globalization.CultureInfo.InvariantCulture);
+                var databaseNow = await storeB.GetCoordinationUtcNowAsync(timeB.GetUtcNow());
+                Assert.InRange(recorded, coordinationNow, databaseNow);
+            }
+
             dispatcher.Release();
             Assert.Equal(
                 1,
                 (await firstCycle).Delivered);
-
-            var sameWindow =
-                await workerB.RunDueCycleAsync();
-
-            Assert.Equal(
-                1,
-                sameWindow.AdmissionDeferred);
-            Assert.Equal(
-                1,
-                dispatcher.DispatchCount);
 
             await Task.Delay(
                 TimeSpan.FromMilliseconds(1100));

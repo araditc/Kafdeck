@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Kafdeck.Core.ReadViews;
 using Kafdeck.Core.Records;
 using Kafdeck.Core.Schemas;
@@ -9,6 +10,33 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class V07SchemaDeveloperToolingTests
 {
+    [Fact]
+    public void Sensitive_name_literal_scan_preserves_invariant_regex_redaction_semantics()
+    {
+        var legacy = new Regex(
+            @"(?:password|passwd|secret|token|credential|api[_-]?key|private[_-]?key|authorization)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        string[] literals = ["password", "passwd", "secret", "token", "credential", "apikey", "api_key", "api-key",
+            "privatekey", "private_key", "private-key", "authorization"];
+        string[] unicodeAndNearMisses = ["to\u212Aen", "api\u212Aey", "PRIVATE\u212AEY", "ap\u0130Key", "ap\u0131Key",
+            "pr\u0130vateKey", "pr\u0131vateKey", "\u017Fecret", "pa\u017F\u017Fword", "api__key", "api--key", "publickey", "username", "é-secret-é"];
+        var names = literals.SelectMany(literal => new[] { literal, literal.ToUpperInvariant(), "prefix_" + literal + "_suffix" })
+            .Concat(unicodeAndNearMisses);
+        var service = new SchemaDeveloperService(new FakeSchemaCatalog(new Dictionary<(string Subject, int Version), SchemaVersionDetail>()));
+        foreach (var name in names)
+        {
+            var schema = JsonSerializer.Serialize(new
+            {
+                type = "object", properties = new Dictionary<string, object> { [name] = new { type = "string" } },
+            });
+            var result = service.GenerateMockFromDocument("equivalence", 1,
+                Detail("equivalence", 1, 1, RecordSchemaFormat.JsonSchema, schema).Schema, 1, 42);
+            Assert.True(result.IsSuccess, result.Failure?.Code);
+            using var generated = JsonDocument.Parse(Assert.Single(result.Value!.Examples).Json);
+            Assert.Equal(legacy.IsMatch(name), generated.RootElement.GetProperty(name).GetString() == "[REDACTED]");
+        }
+    }
+
     [Fact]
     public async Task Reference_graph_is_bounded_deterministic_and_cycle_aware()
     {

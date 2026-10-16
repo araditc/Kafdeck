@@ -194,7 +194,8 @@ public sealed record NotificationEmailTransportRequest(
     string RecipientAddress,
     string Subject,
     string Body,
-    NotificationCredentialValue Credential);
+    NotificationCredentialValue Credential,
+    NotificationSafeEvent? Event = null);
 
 public sealed record NotificationBoundTransportRequest(
     string DestinationId,
@@ -307,7 +308,7 @@ public sealed class EmailNotificationAdapter
                         destination.RecipientAddress,
                         subject,
                         body,
-                        credential),
+                        credential, notificationEvent),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -522,7 +523,7 @@ internal sealed class ProviderNotificationAdapter
         NotificationDestinationProfile profile,
         NotificationSafeEvent notificationEvent)
     {
-        if (!profile.EnabledEvents.Contains(
+        if (!profile.Enabled || !profile.EnabledEvents.Contains(
                 notificationEvent.EventClass))
         {
             throw new InvalidOperationException(
@@ -597,7 +598,7 @@ public sealed class NotificationProviderDeliveryDispatcher :
                 claimedDelivery.Snapshot.DestinationId,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (profile is null ||
+        if (profile is null || !profile.Enabled ||
             !string.Equals(
                 profile.DestinationId,
                 claimedDelivery.Snapshot.DestinationId,
@@ -693,7 +694,8 @@ public sealed class NotificationProviderDeliveryDispatcher :
                 NotificationDeliveryDispatchOutcome.UnknownExternalEffect);
         }
 
-        return new NotificationDeliveryDispatchResult(
-            result.DeliveryOutcome);
+        var receipt = result.TransportResult.ProviderRequestId;
+        return new NotificationDeliveryDispatchResult(result.DeliveryOutcome,
+            receipt is { Length: 64 } && receipt.All(Uri.IsHexDigit) ? receipt : null);
     }
 }

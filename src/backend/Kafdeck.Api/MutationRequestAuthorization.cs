@@ -54,6 +54,29 @@ public sealed class MutationRequestAuthorizationService
         MutationOperationSnapshot operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
+        if (principal?.Identity is NonBrowserReadIdentity)
+        {
+            if (operation.OperationKind is not (MutationOperationKind.TopicCreate or MutationOperationKind.TopicDelete) || operation.PolicyVersion != PolicyVersionFor(principal))
+                return KafdeckAuthorizationOutcome.Forbidden;
+            if (operation.Risk.RequiresIndependentApproval && operation.State is MutationOperationState.Ready or MutationOperationState.Executing &&
+                (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
+                 operation.AuthorizationTargets.Any(target => !_authorization.IsCurrentApprovalAllowed(operation.ApprovedByPrincipalId,
+                     new AuthorizationRequest(target.Action, target.ClusterId, target.ResourceName)))))
+                return KafdeckAuthorizationOutcome.Forbidden;
+        }
         return AuthorizeTargets(principal, operation.AuthorizationTargets);
     }
+
+    public bool IsApprovalAllowed(ClaimsPrincipal? principal, MutationOperationSnapshot operation)
+    {
+        return operation.OperationKind == MutationOperationKind.TopicDelete && operation.Risk.RequiresIndependentApproval &&
+            operation.PolicyVersion == "v0.8-bearer:" + _authorization.PolicyFingerprint &&
+            MutationActor.TryCreate(principal, out var actor) && actor?.HumanKey is not null &&
+            !MutationActor.IsSameHuman(operation.RequesterPrincipalId, actor.HumanKey) &&
+            operation.AuthorizationTargets.Count > 0 && operation.AuthorizationTargets.All(target =>
+                _authorization.IsLiveApprovalAllowed(principal, new(target.Action, target.ClusterId, target.ResourceName)));
+    }
+
+    public string PolicyVersionFor(ClaimsPrincipal? principal) => principal?.Identity is NonBrowserReadIdentity
+        ? "v0.8-bearer:" + _authorization.PolicyFingerprint : MutationAdmissionService.PolicyVersion;
 }

@@ -248,7 +248,7 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
     // Test-only network virtualization: the approved public pin is dialed to
     // an isolated loopback TCP listener. TLS and HTTP are real, not mocks.
     // Production DI uses System DNS and SocketNotificationPinnedTcpDialer.
-    private sealed class TlsProvider : IAsyncDisposable, INotificationPinnedTcpDialer, INotificationHostAddressLookup
+    internal sealed class TlsProvider : IAsyncDisposable, INotificationPinnedTcpDialer, INotificationHostAddressLookup
     {
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource _stop = new();
@@ -256,18 +256,25 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
         private readonly Task _serve;
         private readonly bool _holdResponse;
         private readonly int _statusCode;
+        private readonly Func<string, string>? _responseBody;
+        private readonly Func<SslStream, CancellationToken, Task>? _session;
         public X509Certificate2 Root { get; }
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
         public string? ServerName { get; private set; }
         public string? LastError { get; private set; }
         public int RequestCount { get; private set; }
         public List<string> Dialed { get; } = [];
+        public System.Collections.Concurrent.ConcurrentQueue<string> Requests { get; } = new();
         public TaskCompletionSource<string> Received { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public TlsProvider(bool holdResponse = false, string certificateName = "hooks.example.org", int statusCode = 204)
+        public TlsProvider(bool holdResponse = false, string certificateName = "hooks.example.org", int statusCode = 204,
+            Func<string, string>? responseBody = null,
+            Func<SslStream, CancellationToken, Task>? session = null)
         {
             _holdResponse = holdResponse;
             _statusCode = statusCode;
+            _responseBody = responseBody;
+            _session = session;
             using var rootKey = RSA.Create(2048);
             var rootRequest = new CertificateRequest("CN=Kafdeck ephemeral Webhook laboratory CA", rootKey,
                 HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -277,7 +284,8 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
             using var serverKey = RSA.Create(2048);
             var request = new CertificateRequest($"CN={certificateName}", serverKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             var san = new SubjectAlternativeNameBuilder();
-            san.AddDnsName(certificateName);
+            if (IPAddress.TryParse(certificateName, out var certificateAddress)) san.AddIpAddress(certificateAddress);
+            else san.AddDnsName(certificateName);
             request.CertificateExtensions.Add(san.Build());
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
@@ -323,6 +331,11 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
                             ServerCertificateSelectionCallback = (_, host) => { ServerName = host; return _server; },
                             EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                         }, _stop.Token);
+                        if (_session is not null)
+                        {
+                            await _session(tls, _stop.Token);
+                            continue;
+                        }
                         using var content = new MemoryStream();
                         var buffer = new byte[4096];
                         while (content.Length < 65_536)
@@ -338,8 +351,15 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
                             var length = int.Parse(lengthHeader[(lengthHeader.IndexOf(':') + 1)..], System.Globalization.CultureInfo.InvariantCulture);
                             if (content.Length < headerEnd + 4 + length) continue;
                             RequestCount++;
+                            Requests.Enqueue(text);
                             Received.TrySetResult(text);
                             if (_holdResponse) await Task.Delay(Timeout.InfiniteTimeSpan, _stop.Token);
+                            else if (_responseBody is not null)
+                            {
+                                var response = Encoding.UTF8.GetBytes(_responseBody(text));
+                                await tls.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 {_statusCode} Fixture\r\nContent-Type: application/json\r\nContent-Length: {response.Length}\r\nConnection: close\r\n\r\n"), _stop.Token);
+                                await tls.WriteAsync(response, _stop.Token);
+                            }
                             else await tls.WriteAsync(Encoding.ASCII.GetBytes(_statusCode == 204
                                 ? "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                                 : $"HTTP/1.1 {_statusCode} Redirect\r\nLocation: http://127.0.0.1:1/blocked\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"), _stop.Token);

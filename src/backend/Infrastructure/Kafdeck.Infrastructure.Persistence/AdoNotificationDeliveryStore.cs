@@ -8,7 +8,7 @@ public sealed class AdoNotificationDeliveryStore :
     INotificationDeliveryStore,
     INotificationDeliveryHistoryReader
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     private const string Component =
         "notification-delivery";
 
@@ -134,7 +134,7 @@ public sealed class AdoNotificationDeliveryStore :
             updateVersion.Transaction = transaction;
             updateVersion.CommandText =
                 "UPDATE kafdeck_schema_info SET schema_version = @schema_version WHERE component = @component AND schema_version = 1";
-            AddParameter(updateVersion, "@schema_version", SchemaVersion);
+            AddParameter(updateVersion, "@schema_version", 2);
             AddParameter(updateVersion, "@component", Component);
             if (await updateVersion.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false) != 1)
@@ -142,6 +142,21 @@ public sealed class AdoNotificationDeliveryStore :
                 throw new InvalidOperationException(
                     "Notification delivery v1 schema upgrade did not claim the expected schema version.");
             }
+            existing = 2;
+        }
+        if (existing == 2)
+        {
+            await using var receiptMigration = connection.CreateCommand();
+            receiptMigration.Transaction = transaction;
+            receiptMigration.CommandText =
+                "ALTER TABLE kafdeck_notification_deliveries ADD COLUMN provider_receipt_fingerprint TEXT NULL CHECK (provider_receipt_fingerprint IS NULL OR (state = 'Delivered' AND length(provider_receipt_fingerprint) = 64))";
+            await receiptMigration.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await using var receiptVersion = connection.CreateCommand();
+            receiptVersion.Transaction = transaction;
+            receiptVersion.CommandText = "UPDATE kafdeck_schema_info SET schema_version = 3 WHERE component = @component AND schema_version = 2";
+            AddParameter(receiptVersion, "@component", Component);
+            if (await receiptVersion.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                throw new InvalidOperationException("Notification receipt migration did not claim schema version 2.");
         }
         else if (existing is not null &&
                  existing.Value != SchemaVersion)
@@ -361,7 +376,8 @@ public sealed class AdoNotificationDeliveryStore :
                 outcome_code,
                 revision,
                 updated_at_utc,
-                routed_profile_revision_fingerprint)
+                routed_profile_revision_fingerprint,
+                provider_receipt_fingerprint)
             VALUES (
                 @notification_id,
                 @destination_id,
@@ -374,7 +390,8 @@ public sealed class AdoNotificationDeliveryStore :
                 @outcome_code,
                 1,
                 @updated_at_utc,
-                @routed_profile_revision_fingerprint)
+                @routed_profile_revision_fingerprint,
+                @provider_receipt_fingerprint)
             ON CONFLICT (
                 notification_id,
                 destination_id)
@@ -511,6 +528,7 @@ public sealed class AdoNotificationDeliveryStore :
                 next_attempt_at_utc = @next_attempt_at_utc,
                 due_at_utc = @due_at_utc,
                 outcome_code = @outcome_code,
+                provider_receipt_fingerprint = @provider_receipt_fingerprint,
                 revision = revision + 1,
                 updated_at_utc = @updated_at_utc
             WHERE notification_id = @notification_id
@@ -1282,7 +1300,8 @@ public sealed class AdoNotificationDeliveryStore :
                 null,
                 reader.IsDBNull(10)
                     ? null
-                    : reader.GetString(10));
+                    : reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11));
 
         return new NotificationDeliveryRecord(
             snapshot,
@@ -1321,6 +1340,8 @@ public sealed class AdoNotificationDeliveryStore :
             command,
             "@state",
             snapshot.State.ToString());
+        AddParameter(command, "@provider_receipt_fingerprint", snapshot.ProviderReceiptFingerprint is null
+            ? DBNull.Value : snapshot.ProviderReceiptFingerprint);
         AddParameter(
             command,
             "@attempt_count",
@@ -1438,7 +1459,8 @@ public sealed class AdoNotificationDeliveryStore :
             outcome_code,
             revision,
             updated_at_utc,
-            routed_profile_revision_fingerprint
+            routed_profile_revision_fingerprint,
+            provider_receipt_fingerprint
         """;
 
     private static readonly string[]
@@ -1456,6 +1478,7 @@ public sealed class AdoNotificationDeliveryStore :
             destination_id TEXT NOT NULL,
             payload_fingerprint TEXT NOT NULL,
             routed_profile_revision_fingerprint TEXT NULL,
+            provider_receipt_fingerprint TEXT NULL CHECK (provider_receipt_fingerprint IS NULL OR (state = 'Delivered' AND length(provider_receipt_fingerprint) = 64)),
             state TEXT NOT NULL,
             attempt_count INTEGER NOT NULL,
             created_at_utc TEXT NOT NULL,

@@ -17,6 +17,38 @@ public sealed class KafdeckAuthorizationService
     private readonly KafdeckOptions _options;
     private readonly AuthorizationPolicyEvaluator _evaluator;
     private readonly NonBrowserReadRegistry? _nonBrowser;
+    public string PolicyFingerprint => _evaluator.Fingerprint;
+    public bool IsDirectSubjectAllowed(string principal, AuthorizationRequest request) =>
+        _evaluator.EvaluateCanonicalDirectSubject(principal, request).IsAllowed;
+
+    public bool IsLiveApprovalAllowed(ClaimsPrincipal? principal, AuthorizationRequest request)
+    {
+        if (_nonBrowser?.GovernedApprovalsActive != true) return false;
+        OperatorIdentityKey human;
+        if (principal?.Identity is NonBrowserReadIdentity bearer)
+        {
+            if (!_nonBrowser.IsGovernedApprovalAllowed(bearer, request.Action)) return false;
+            human = new(bearer.Evidence.Issuer, bearer.Evidence.Subject);
+        }
+        else
+        {
+            if (!OperatorSessionContextFactory.TryCreate(principal, out var session) || session is null) return false;
+            human = session.Identity.Key;
+        }
+        return _evaluator.EvaluateDirectSubject(human, request).IsAllowed &&
+            _evaluator.EvaluateDirectSubject(human, request with { Action = AuthorizationAction.MutationApprove }).IsAllowed;
+    }
+
+    public bool IsCurrentApprovalAllowed(string principal, AuthorizationRequest request)
+    {
+        if (_nonBrowser?.GovernedApprovalsActive != true) return false;
+        if (NonBrowserHumanPrincipalId.TryParse(principal, out var human))
+            return _nonBrowser.IsCurrentApprovalRegistrationAllowed(human!, request.Action) &&
+                _evaluator.EvaluateDirectSubject(human!.HumanKey, request).IsAllowed &&
+                _evaluator.EvaluateDirectSubject(human.HumanKey, request with { Action = AuthorizationAction.MutationApprove }).IsAllowed;
+        return principal.StartsWith("oidc:", StringComparison.Ordinal) &&
+            IsDirectSubjectAllowed(principal, request) && IsDirectSubjectAllowed(principal, request with { Action = AuthorizationAction.MutationApprove });
+    }
 
     public KafdeckAuthorizationService(KafdeckOptions options, AuthorizationPolicyEvaluator evaluator,
         NonBrowserReadRegistry? nonBrowser = null)
@@ -56,9 +88,9 @@ public sealed class KafdeckAuthorizationService
         AuthorizationAction action,
         string? clusterId)
     {
-        // Collection routes are not admitted to the initial bearer surface.
-        if (principal?.Identity is NonBrowserReadIdentity)
-            return KafdeckAuthorizationOutcome.Forbidden;
+        if (principal?.Identity is NonBrowserReadIdentity bearer)
+            return _nonBrowser?.IsCollectionAllowed(bearer, action, clusterId, _evaluator) == true
+                ? KafdeckAuthorizationOutcome.Allowed : KafdeckAuthorizationOutcome.Forbidden;
 
         if (_options.Deployment.Mode != AccessMode.Oidc)
         {

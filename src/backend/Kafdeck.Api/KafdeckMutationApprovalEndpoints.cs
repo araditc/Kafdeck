@@ -43,8 +43,6 @@ public static class KafdeckMutationApprovalEndpoints
                         title: "Operator authentication required");
                 }
 
-                var currentPrincipalId =
-                    SecurityAuditPrincipal.FromOperator(session.Identity);
                 var nowUtc = DateTimeOffset.UtcNow;
                 var visible = new List<MutationStatusData>(requestedLimit);
                 var scanLimit = InitialScanLimit;
@@ -68,23 +66,14 @@ public static class KafdeckMutationApprovalEndpoints
 
                         // Expired previews are not actionable approval candidates even
                         // if persistence has not yet reconciled their terminal state.
-                        if (operation.PreviewExpiresAtUtc <= nowUtc)
+                        if (!IsIndependentCandidate(operation, session.Identity.Key, nowUtc))
                         {
                             continue;
                         }
 
-                        // Independent approval is never offered back to the requester.
-                        if (string.Equals(
-                                currentPrincipalId,
-                                operation.RequesterPrincipalId,
-                                StringComparison.Ordinal))
-                        {
-                            continue;
-                        }
-
-                        if (authorization.AuthorizeForDispatch(
-                                context.User,
-                                operation) != KafdeckAuthorizationOutcome.Allowed)
+                        if (operation.PolicyVersion.StartsWith("v0.8-bearer:", StringComparison.Ordinal)
+                                ? !authorization.IsApprovalAllowed(context.User, operation)
+                                : authorization.AuthorizeForDispatch(context.User, operation) != KafdeckAuthorizationOutcome.Allowed)
                         {
                             continue;
                         }
@@ -110,6 +99,9 @@ public static class KafdeckMutationApprovalEndpoints
 
         return app;
     }
+
+    internal static bool IsIndependentCandidate(MutationOperationSnapshot operation, OperatorIdentityKey human, DateTimeOffset nowUtc) =>
+        operation.PreviewExpiresAtUtc > nowUtc && !MutationActor.IsSameHuman(operation.RequesterPrincipalId, human);
 }
 
 public sealed record MutationApprovalInboxData(

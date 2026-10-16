@@ -1,0 +1,330 @@
+{
+  "observedAtUtc": "2026-10-16T07:53:45.8574817+00:00",
+  "baselineMain": "e570637f26cd4cdb31ae5961c8aca4880ade0d0b",
+  "acceptance": "Local integration evidence; not full G2, protected-main or release acceptance.",
+  "build": {
+    "errors": 0,
+    "runtime": "10.0.13",
+    "sdk": "10.0.402",
+    "warnings": 0,
+    "configuration": "Release"
+  },
+  "suite": {
+    "total": 1810,
+    "failed": 0,
+    "skipped": 1,
+    "trx": "artifacts/g2/full-local-final/g2-full-live.trx",
+    "trxSha256": "378becbad635f3ae3a4bafe94d637418121b8d19186b784a93adf82db3771124",
+    "passed": 1809
+  },
+  "source": {
+    "digest": "2dfd67bf1478b390e55379e945f0a0a753935665b2abdce62f8ecb2505c8b418",
+    "fileCount": 503,
+    "algorithm": "SHA256 over sorted tracked C# path + space + file SHA256, LF-terminated"
+  },
+  "physical": {
+    "productionHAAdmitted": false,
+    "postgresHosted": "two independent hosts; one POST; real elapsed stale recovery to UnknownExternalEffect; no resend",
+    "credentialLifecycle": "versioned rotation, old-intent fence, revoked/missing/disabled refusal; zero extra dials/fallback/secret leaks",
+    "families": [
+      "Webhook",
+      "Email",
+      "Slack",
+      "Microsoft Teams",
+      "Telegram",
+      "PagerDuty"
+    ],
+    "transport": "actual local TCP/TLS; production transports, adapters, hosted worker and SQLite ledger",
+    "externalSaaSAcceptance": false
+  },
+  "critical": {
+    "requiredEvidence": "critical-human-approval-kafka-evidence.json",
+    "requiredCiCapability": "KAFDECK_G2_KAFKA_DELETE_CAPABLE=1",
+    "localCapability": "native Windows Kafka failed partition-directory rename and shut down",
+    "status": "Requires Linux CI proof",
+    "localSkipDoesNotSatisfyAcceptance": true
+  },
+  "proofs": {
+    "human-cli-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:22:08.2573519+03:30",
+      "keycloak": "26.8.1",
+      "java": "Temurin 21.0.12.1+1",
+      "issuer": "https://localhost:18444/realms/kafdeck-g2",
+      "audience": "kafdeck-api-g2",
+      "clientId": "kafdeck-g2-cli",
+      "flow": "real authorization endpoint + login form + authorization_code/PKCE S256 + signed ID/access tokens",
+      "browserLogins": 4,
+      "rejectedCallbacks": 4,
+      "callback": "127.0.0.1:ephemeral/oauth/callback",
+      "systemInfoExit": 0,
+      "deniedClusterExit": 3,
+      "wrongNonceExit": 3,
+      "wrongPkceExit": 3,
+      "tokens": "memory only; no token or authorization code retained",
+      "caveat": "Single-node identity laboratory and HTTP form driver; does not establish graphical browser, HA, upgrade or governed mutation acceptance."
+    },
+    "human-cli-kafka-effect-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:21:43.9584438+03:30",
+      "issuer": "https://localhost:18444/realms/kafdeck-g2",
+      "audience": "kafdeck-api-g2",
+      "flow": "real Keycloak human PKCE -> shipped CLI -> bearer-only API -> durable preview/confirm/execute -> real Kafka -> status/readback",
+      "family": "TopicCreate",
+      "persistence": "SQLite",
+      "durableState": "AppliedVerified",
+      "requesterKind": "oidc-cli-human",
+      "exactInitiatingPrincipal": true,
+      "serverPolicyFingerprintBound": true,
+      "idempotentPreviewSameOperation": true,
+      "changedIntentSameKeyExit": 8,
+      "wrongPreviewHashExit": 8,
+      "realTopicReadback": true,
+      "durableRepositoryReopen": true,
+      "browserLogins": 10,
+      "caveat": "Low-risk TopicCreate only. No CRITICAL approval, other-family parity, PostgreSQL effect, restart or unknown-effect acceptance in this scenario."
+    },
+    "human-kafka-product-notification-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:21:43.9415261+03:30",
+      "flow": "genuine human Keycloak PKCE -> shipped CLI -> actual API -> verified Kafka TopicCreate -> atomic product outbox -> product pump -> active subscription -> durable Pending -> API process stop -> second production sender -> physical TLS204 -> reopened Delivered",
+      "mutationState": "AppliedVerified",
+      "productSourceEnabledInActualApi": true,
+      "sourceRouted": 1,
+      "sourcePending": 0,
+      "queuedBeforeRestart": 1,
+      "attemptsBeforeRestart": 0,
+      "physicalPostsBeforeRestart": 0,
+      "physicalProviderPosts": 1,
+      "physicalHttpStatus": 204,
+      "durableState": "Delivered",
+      "durableAttemptCount": 1,
+      "rawTopicOperationAndPrincipalLeaks": 0,
+      "persistence": "SQLite",
+      "caveat": "One low-risk TopicCreate and local TLS fixture; no external SaaS, PostgreSQL effect, product-source HA, other event family, database restore or broker failover acceptance."
+    },
+    "keycloak-ha-first-use-replay-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:20:37.021466+03:30",
+      "keycloakVersion": "26.8.1",
+      "issuer": "https://localhost:19443/realms/kafdeck-g2",
+      "audience": "kafdeck-api-g2",
+      "nodes": [
+        "node-a",
+        "node-b"
+      ],
+      "cache": "ispn",
+      "stack": "jdbc-ping",
+      "clusterMtls": true,
+      "rounds": 10,
+      "contendersPerRound": 8,
+      "requestsPerNodePerRound": 4,
+      "synchronization": "all eight contenders reached a fresh per-round barrier before release",
+      "firstUseSuccessesPerRound": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "firstUseHttpStatuses": [
+        [
+          200,
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          400
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          200,
+          400
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          200,
+          400,
+          400,
+          400
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          200,
+          400
+        ],
+        [
+          400,
+          200,
+          400,
+          400,
+          400,
+          400,
+          400,
+          400
+        ],
+        [
+          400,
+          200,
+          400,
+          400,
+          400,
+          400,
+          400,
+          400
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          200,
+          400
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          200
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          400,
+          400,
+          200,
+          400
+        ],
+        [
+          400,
+          400,
+          400,
+          400,
+          400,
+          200,
+          400,
+          400
+        ]
+      ],
+      "timeValidConsumedReplayRejections": 20,
+      "accessTokensVerifiedByProductionVerifier": 10,
+      "assertionLifetimeSeconds": 45,
+      "caveat": "Two genuine nodes on one Windows host with shared PostgreSQL; no load-balancer, restart, signing/client-key rotation or version-upgrade proof in this test."
+    },
+    "postgres-product-outbox-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:20:34.0897839+03:30",
+      "postgresVersion": "17.11",
+      "concurrentTerminalSaves": 2,
+      "savedCount": 1,
+      "capturedOutboxRows": 1,
+      "firstAcknowledgementAccepted": true,
+      "duplicateAcknowledgementAccepted": false,
+      "durableRoutedCount": 1,
+      "physicalKafkaEffectPartOfThisFixture": false
+    },
+    "postgres-rate-clock-evidence.json": {
+      "serverVersion": "17.11",
+      "observedAtUtc": "2026-10-16T11:21:00.2616729+03:30",
+      "configuredRatePerSecond": 1,
+      "concurrentSlotLimit": 2,
+      "suppliedReplicaClockSkewMinutes": [
+        -5,
+        5
+      ],
+      "actualRateDenialObserved": true,
+      "observations": [
+        {
+          "attempt": 1,
+          "secondOutcome": "RateLimited",
+          "acceptedIntervalMilliseconds": null
+        }
+      ]
+    },
+    "postgres-recovery-fence-evidence.json": {
+      "proof": "unfinished-claim-reopen-real-clock-recovery-and-stale-cas-fencing",
+      "serverVersion": "17.11",
+      "observedAtUtc": "2026-10-16T11:21:15.3804407+03:30",
+      "staleThresholdSeconds": 10,
+      "realWaitSeconds": 11,
+      "beforeExpiryMarkedUnknown": 0,
+      "recoveredMarkedUnknown": 1,
+      "lateDeliveredFinalizationAccepted": false,
+      "replayClaimOutcome": "NotClaimable",
+      "durableState": "UnknownExternalEffect",
+      "durableRevision": 3,
+      "dispatchCalls": 0,
+      "physicalSenderCrashOrHostHaAccepted": false
+    },
+    "postgres-worker-cas-evidence.json": {
+      "proof": "independent-worker-instances-real-postgresql",
+      "serverVersion": "17.11",
+      "runtime": ".NET 10.0.13",
+      "observedAtUtc": "2026-10-16T11:20:57.9994452+03:30",
+      "durationMilliseconds": 1815,
+      "independentWorkerInstances": 2,
+      "dispatchCalls": 1,
+      "durableState": "Delivered",
+      "durableAttemptCount": 1,
+      "durableRevision": 3,
+      "automaticRedispatches": 0,
+      "physicalSenderHostHaAccepted": false
+    },
+    "product-source-tls-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:20:31.2639036+03:30",
+      "sourceState": "AppliedVerified",
+      "atomicOutbox": true,
+      "routeBeforeAckReplay": true,
+      "activeSubscription": true,
+      "physicalHttpStatus": 204,
+      "durableDeliveryState": "Delivered",
+      "durableAttemptCount": 1,
+      "physicalProviderPosts": 1,
+      "rawIntentLeaks": 0,
+      "kafkaEffectPartOfThisFixture": false,
+      "physicalSenderHostHaAccepted": false
+    },
+    "service-cli-kafka-effect-evidence.json": {
+      "observedAtUtc": "2026-10-16T11:22:40.316389+03:30",
+      "issuer": "https://localhost:18444/realms/kafdeck-g2",
+      "audience": "kafdeck-api-g2",
+      "flow": "real Keycloak private_key_jwt -> shipped CLI -> bearer-only API -> durable preview/confirm/execute -> real Kafka -> status/readback",
+      "family": "TopicCreate",
+      "persistence": "SQLite",
+      "durableState": "AppliedVerified",
+      "requesterKind": "oidc-service",
+      "exactInitiatingPrincipal": true,
+      "serverPolicyFingerprintBound": true,
+      "idempotentPreviewSameOperation": true,
+      "changedIntentSameKeyExit": 8,
+      "wrongPreviewHashExit": 8,
+      "realTopicReadback": true,
+      "durableRepositoryReopen": true,
+      "browserLogins": 0,
+      "caveat": "Low-risk TopicCreate only. No CRITICAL approval, other-family parity, PostgreSQL effect, restart or unknown-effect acceptance in this scenario."
+    }
+  }
+}
