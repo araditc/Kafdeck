@@ -102,7 +102,8 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
             var operation = _operations is null ? null : await _operations.GetAsync(activation.ActivationId, cancellationToken).ConfigureAwait(false);
             allowed &= operation is not null && operation.RequesterPrincipalId == activation.AutomationPrincipalId &&
                 operation.OperationKind == MutationOperationKind.ConnectAutoRestartPolicy && operation.State == MutationOperationState.AppliedVerified &&
-                operation.ResultCode == "auto_restart_policy_enabled" && _bearerAuthorization?.IsRequesterAllowed(operation) == true &&
+                (operation.ResultCode is "auto_restart_policy_enabled" or "auto_restart_policy_replaced") &&
+                _bearerAuthorization?.IsRequesterAllowed(operation) == true &&
                 _bearerAuthorization?.IsApproverAllowed(operation) == true;
         }
 
