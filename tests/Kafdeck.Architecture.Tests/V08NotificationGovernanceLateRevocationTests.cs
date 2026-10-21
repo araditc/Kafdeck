@@ -49,13 +49,13 @@ public sealed partial class V08NotificationGovernancePostgreSqlTests
             revision,true,enabled,"oidc:https://idp.example|operator",new string('c',64));
         try
         {
-            Assert.NotNull(await left.ChangeAsync(Change(0,true),token));
+            Assert.NotNull(await left.ChangeAsync(Change(0,true),() => true,token));
             var profile=await a.Services.GetRequiredService<INotificationDestinationProfileCatalog>().GetAsync("ops",token);Assert.NotNull(profile);
             var id=Guid.NewGuid();await SeedAsync(a.Services,profile,id,token);await a.StartAsync(token);
             await (afterTls?boundary.Entered.Task:network.Entered.Task).WaitAsync(token);
             var claimed=await a.Services.GetRequiredService<INotificationDeliveryStore>().GetAsync(id,"ops",token);
             Assert.NotNull(claimed);Assert.Equal(NotificationDeliveryState.InFlight,claimed.Snapshot.State);Assert.Equal(1,claimed.Snapshot.AttemptCount);
-            Assert.NotNull(await right.ChangeAsync(Change(1,false),token));
+            Assert.NotNull(await right.ChangeAsync(Change(1,false),() => true,token));
             if(afterTls) boundary.Released.TrySetResult();else network.Released.TrySetResult();
             await WaitAsync(a.Services,id,NotificationDeliveryState.UnknownExternalEffect,token);
             if(afterTls) await sessionEnded.Task.WaitAsync(token);
