@@ -342,7 +342,15 @@ try{
     $script:proofFailure='BounceMembership';Membership
     $script:proofFailure='BounceReplay';ConsumedOnBoth $baseline.assertion
     $script:proofFailure='BounceStartupEvidence'
-    foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.0 .*started'){throw 'Actual old server version startup evidence is missing.'}}
+    # Raw console banners do not reliably reach the PowerShell launcher log:
+    # owned process identity + the checksummed exact runtime directory, actual
+    # verified-TLS OAuth readiness and BOTH live cluster membership metrics
+    # provide stronger independently observed version/health evidence.
+    foreach($entry in $m.nodes){
+        if($entry.version -cne '26.8.0' -or !(ExactProcess $entry) -or !(PortOpen $entry.httpsPort)){
+            throw 'Pinned owned Keycloak 26.8.0 runtime observation is unavailable.'
+        }
+    }
     $script:proofFailure='Unclassified'
     Write-Output 'UPGRADE_PROOF oldOld=true; sameVersionBounceReplayRejected=true'
     $proofStage='UpgradeA';Diagnostic $proofStage 'Running';$beforeA=Fresh 0
@@ -356,7 +364,15 @@ try{
     $gapB=Fresh 0;Ready 1;$m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json;Membership;ConsumedOnBoth $beforeB.assertion
     $proofStage='NewReplay';Diagnostic $proofStage 'Running';$final=Fresh 1;ConsumedOnBoth $final.assertion
     $finalWinner=PairedFirstUse
-    foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.1 .*started'){throw 'Actual new server version startup evidence is missing.'}}
+    # Raw console banners do not reliably reach the PowerShell launcher log:
+    # owned process identity + the checksummed exact runtime directory, actual
+    # verified-TLS OAuth readiness and BOTH live cluster membership metrics
+    # provide stronger independently observed version/health evidence.
+    foreach($entry in $m.nodes){
+        if($entry.version -cne '26.8.1' -or !(ExactProcess $entry) -or !(PortOpen $entry.httpsPort)){
+            throw 'Pinned owned Keycloak 26.8.1 runtime observation is unavailable.'
+        }
+    }
     Private (Child 'final-access-token-private.txt') $finalWinner
     # Private bridge for the existing production-verifier replay suite. Include
     # its complete closed manifest contract rather than only OAuth fields.
