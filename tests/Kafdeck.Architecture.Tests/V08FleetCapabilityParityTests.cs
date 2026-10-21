@@ -22,6 +22,22 @@ public sealed class V08FleetCapabilityParityTests
             if(!f.HandlerAvailable) { Assert.Empty(f.NamedPreviewRoutes);Assert.Empty(f.MaterialExecuteRoutes); }
         });
     }
+    [Fact]
+    public void Disabled_mutation_host_never_advertises_unregistered_routes()
+    {
+        var inventory = KafdeckBearerCapabilities.CreateInventory(mutationsEnabled: false);
+        Assert.Equal(Enum.GetValues<MutationOperationKind>().Length, inventory.Families.Count);
+        Assert.All(inventory.Families, family =>
+        {
+            Assert.False(family.HandlerAvailable);
+            Assert.NotEqual("namedRoutesAvailable", family.ApiContractStatus);
+            Assert.NotEqual("probeRequired", family.ProviderCapability);
+            Assert.Empty(family.NamedPreviewRoutes);
+            Assert.Empty(family.MaterialExecuteRoutes);
+            Assert.False(family.AuthorityFromCapability);
+        });
+    }
+
     [Theory]
     [InlineData("quotaAlter","inheritedUnsupported","inheritedUnsupported")]
     [InlineData("preferredLeaderElection","notHosted","notAdmitted")]
