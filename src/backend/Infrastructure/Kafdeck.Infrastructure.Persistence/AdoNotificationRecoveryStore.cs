@@ -107,9 +107,10 @@ public sealed class AdoNotificationRecoveryStore(INotificationDeliveryDbConnecti
     }
 
     public async Task<NotificationRecoveryPlan?> ApproveAsync(Guid operationId, long revision, string previewHash,
-        string approver, string humanFingerprint, string policyFingerprint, CancellationToken token)
+        string approver, string humanFingerprint, string policyFingerprint, Func<bool> currentApprovalAuthority, CancellationToken token)
     {
         ValidateActor(approver, humanFingerprint, policyFingerprint);
+        ArgumentNullException.ThrowIfNull(currentApprovalAuthority);
         await using var c = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var t = await c.BeginTransactionAsync(IsolationLevel.Serializable, token).ConfigureAwait(false);
         await LockAsync(c, t, token).ConfigureAwait(false);
@@ -121,10 +122,17 @@ public sealed class AdoNotificationRecoveryStore(INotificationDeliveryDbConnecti
         if (plan.State != NotificationRecoveryState.Previewed ||
             plan.ExpiresAtUtc <= await NowAsync(c, t, token).ConfigureAwait(false)) return null;
         await VerifyAuthorityAsync(plan.Request, token).ConfigureAwait(false);
+        // The HTTP endpoint's earlier authorization is not enough: policy is
+        // reloadable while the caller waits for the DB recovery lock. Recheck
+        // live approved principal authority inside the transaction.
+        if (!currentApprovalAuthority()) return null;
         if (!MatchesExpectedRevision(plan, revision, previewHash)) return null;
         var approved = plan with { Revision = checked(plan.Revision + 1), State = NotificationRecoveryState.Approved,
             ApprovedByPrincipalId = approver, ApproverHumanFingerprint = humanFingerprint };
         await SaveAsync(c, t, approved, plan.Revision, token).ConfigureAwait(false);
+        // If authority changes during the write, roll back rather than
+        // committing durable approval that no longer has a valid approver.
+        if (!currentApprovalAuthority()) return null;
         await t.CommitAsync(token).ConfigureAwait(false);
         return approved;
     }
