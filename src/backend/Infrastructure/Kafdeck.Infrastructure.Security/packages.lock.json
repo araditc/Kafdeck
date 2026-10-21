@@ -8,7 +8,7 @@
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.4.0, )"
+          "Kafdeck.Core": "[0.7.0, )"
         }
       }
     }
