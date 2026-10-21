@@ -116,7 +116,7 @@ jobs:
           # from the same pinned Apache Kafka image as the real worker.
           # FileStream connectors are NOT on the worker plugin path by default.
           mkdir -p "$provider_root/connect-plugins/filestream"
-          docker run --rm --network none \
+          docker run --rm --network none --user 0:0 \
             -v "$provider_root/connect-plugins/filestream:/kafdeck-g2-plugin" \
             --entrypoint /bin/sh apache/kafka:4.3.1 \
             -c 'test -f /opt/kafka/libs/connect-file-4.3.1.jar && cp /opt/kafka/libs/connect-file-4.3.1.jar /kafdeck-g2-plugin/connect-file-4.3.1.jar'
