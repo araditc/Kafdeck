@@ -41,7 +41,7 @@ public interface INotificationGovernanceStore
     Task InitializeAsync(CancellationToken token);
     Task<NotificationGovernanceState?> GetAsync(string destinationId, CancellationToken token);
     /// <summary>State CAS and immutable actor/policy audit are one transaction.</summary>
-    Task<NotificationGovernanceState?> ChangeAsync(NotificationGovernanceChange change, CancellationToken token);
+    Task<NotificationGovernanceState?> ChangeAsync(NotificationGovernanceChange change, Func<bool> currentAuthority, CancellationToken token);
     Task<IReadOnlyList<NotificationGovernanceAudit>> ReadAuditAsync(string destinationId, long afterRevision,
         int maxResults, CancellationToken token);
 }
