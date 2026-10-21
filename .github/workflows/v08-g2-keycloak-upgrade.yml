@@ -35,6 +35,21 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
+      - name: Validate actual Keycloak upgrade script syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $scriptPath = [IO.Path]::GetFullPath('deploy/dev/prove-keycloak-g2-upgrade.ps1')
+          [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if (@($parseErrors).Count -gt 0) {
+            # Diagnostics are strictly finite integer source line numbers;
+            # never emit PowerShell exception messages, source snippets or
+            # fixture values that could contain private credentials.
+            $numbers = @($parseErrors | Select-Object -First 10 | ForEach-Object { [int]$_.Extent.StartLineNumber })
+            Write-Output ("KEYCLOAK_UPGRADE_PARSE_LINES=" + ($numbers -join ','))
+            throw 'Keycloak upgrade script has syntax errors.'
+          }
       - name: Download both pinned actual server versions
         shell: bash
         run: |
