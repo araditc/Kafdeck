@@ -7,18 +7,26 @@ namespace Kafdeck.Api;
 /// <summary>Bounded capability metadata. Reading it never admits or executes a mutation.</summary>
 public static class KafdeckBearerCapabilities
 {
-    public static WebApplication MapKafdeckBearerCapabilities(this WebApplication app)
+    public static WebApplication MapKafdeckBearerCapabilities(this WebApplication app, bool mutationsEnabled)
     {
-        app.MapGet("/api/v1/automation/capabilities/mutations", () => Results.Ok(CreateInventory()))
+        // Read discovery is always available under normal read RBAC even when
+        // mutation execution is disabled. Never tie it to a write route map.
+        app.MapGet("/api/v1/automation/capabilities/reads", () => Results.Ok(
+                new NamedReadInventoryData(1, false, Kafdeck.Contracts.KafdeckReadContracts.All)))
+            .WithName("v08-bearer-read-capabilities")
+            .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
+        app.MapGet("/api/v1/automation/capabilities/mutations", () => Results.Ok(CreateInventory(mutationsEnabled)))
             .WithName("v08-bearer-mutation-capabilities")
             .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
         return app;
     }
 
-    public static BearerMutationCapabilityInventory CreateInventory() => new(1, "supported-ui",
-        Enum.GetValues<MutationOperationKind>().Select(CreateFamily).ToArray());
+    // The static inventory remains reusable in compatibility probes. The
+    // HTTP endpoint MUST supply the actual host mutation activation bit.
+    public static BearerMutationCapabilityInventory CreateInventory(bool mutationsEnabled = true) => new(1, "supported-ui",
+        Enum.GetValues<MutationOperationKind>().Select(kind => CreateFamily(kind, mutationsEnabled)).ToArray());
 
-    private static BearerMutationFamilyCapability CreateFamily(MutationOperationKind kind)
+    private static BearerMutationFamilyCapability CreateFamily(MutationOperationKind kind, bool mutationsEnabled)
     {
         var inheritedId = kind switch
         {
@@ -51,10 +59,13 @@ public static class KafdeckBearerCapabilities
             MutationOperationKind.TopicIncreasePartitions => "v08-bearer-topic-increase-partitions-preview",
             _ => "v08-bearer-topic-delete-preview",
         });
-        var hosted = previews.Count > 0;
+        var hosted = mutationsEnabled && previews.Count > 0;
         var executions = contracts.Where(c => c.Execution && !c.OriginalName.EndsWith("-reconcile", StringComparison.Ordinal))
             .Select(c => c.Name).ToList();
         if (hosted && executions.Count == 0) executions.Add("v08-bearer-mutation-execute");
+        // An unregistered endpoint is not a hosted capability, even when the
+        // static named-route contract exists for a future enabled deployment.
+        if (!mutationsEnabled) { previews.Clear(); executions.Clear(); }
         var unsupported = !hosted && inherited?.State == FleetCapabilityState.Unsupported;
         var guardedProtocol = kind == MutationOperationKind.FleetUncertaintyDisposition;
         return new(JsonNamingPolicy.CamelCase.ConvertName(kind.ToString()),
