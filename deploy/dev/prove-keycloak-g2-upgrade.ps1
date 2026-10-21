@@ -32,14 +32,27 @@ function PrivateLog([string]$path){
     $reader=[IO.StreamReader]::new($stream)
     try{return $reader.ReadToEnd()}finally{$reader.Dispose();$stream.Dispose()}
 }
+# Keycloak's JVM/PowerShell launcher may route console log lines through
+# either native stream. Both remain private and size-bounded; only closed
+# booleans and outcome enums reach public CI evidence.
+function StartupEvidence($entry){
+    $text=''
+    foreach($name in @($entry.name+'-Start-'+$entry.version+'.log',
+                       $entry.name+'-Start-'+$entry.version+'-error.log')){
+        $file=Child $name
+        if(Test-Path -LiteralPath $file){$text+=(PrivateLog $file)+"`n"}
+    }
+    if($text.Length -gt 4MB){throw 'Private combined upgrade logs exceeded finite budget.'}
+    return $text
+}
 $script:proofFailure='Unclassified';$script:controlExit=$null
 function Diagnostic([string]$stage,[string]$state){
     $stages=@('OldNodes','OldMembership','SameVersionBounce','UpgradeA','MixedReplay','UpgradeB','NewReplay','Complete')
     if($stage -cnotin $stages -or $state -cnotin @('Running','Succeeded','Failed')){throw 'Closed upgrade diagnostic state changed.'}
     $observations=@()
     foreach($entry in $m.nodes){
-        $text='';$log=Child ($entry.name+'-Start-'+$entry.version+'.log')
-        try{if(Test-Path -LiteralPath $log){$text=PrivateLog $log}}catch{}
+        $text=''
+        try{$text=StartupEvidence $entry}catch{}
         $pidExists=$false;$pathMatches=$false;$startMatches=$false
         try{
             $saved=Get-Content -LiteralPath (Child ($entry.name+'-process.json')) -Raw|ConvertFrom-Json
@@ -267,7 +280,7 @@ function Membership {
     do{
         $joined=$true
         foreach($entry in $m.nodes){
-            $log=Child ($entry.name+'-Start-'+$entry.version+'.log');$text=if(Test-Path -LiteralPath $log){PrivateLog $log}else{''}
+            $text=StartupEvidence $entry
             # JGroups annotates logical names with bounded address attributes,
             # e.g. node-a(...). Require both exact configured logical names.
             if(!(TwoMembers $text)){$joined=$false}
@@ -283,7 +296,7 @@ try{
     $proofStage='OldMembership';Diagnostic $proofStage 'Running';Membership
     $baseline=Fresh 0;ConsumedOnBoth $baseline.assertion
     $proofStage='SameVersionBounce';Diagnostic $proofStage 'Running';StopNode $m.nodes[0];$continuity=Fresh 1;Launch $m.nodes[0];Ready 0;Membership;ConsumedOnBoth $baseline.assertion
-    foreach($entry in $m.nodes){$text=PrivateLog (Child ($entry.name+'-Start-26.8.0.log'));if($text -notmatch 'Keycloak 26\.8\.0 .*started'){throw 'Actual old server version startup evidence is missing.'}}
+    foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.0 .*started'){throw 'Actual old server version startup evidence is missing.'}}
     Write-Output 'UPGRADE_PROOF oldOld=true; sameVersionBounceReplayRejected=true'
     $proofStage='UpgradeA';Diagnostic $proofStage 'Running';$beforeA=Fresh 0
     & $PSCommandPath -Action Upgrade -Node node-a -OutputDirectory $scope|Out-Null
@@ -296,7 +309,7 @@ try{
     $gapB=Fresh 0;Ready 1;$m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json;Membership;ConsumedOnBoth $beforeB.assertion
     $proofStage='NewReplay';Diagnostic $proofStage 'Running';$final=Fresh 1;ConsumedOnBoth $final.assertion
     $finalWinner=PairedFirstUse
-    foreach($entry in $m.nodes){$text=PrivateLog (Child ($entry.name+'-Start-'+$entry.version+'.log'));if($text -notmatch 'Keycloak 26\.8\.1 .*started'){throw 'Actual new server version startup evidence is missing.'}}
+    foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.1 .*started'){throw 'Actual new server version startup evidence is missing.'}}
     Private (Child 'final-access-token-private.txt') $finalWinner
     # Private bridge for the existing production-verifier replay suite. Include
     # its complete closed manifest contract rather than only OAuth fields.
