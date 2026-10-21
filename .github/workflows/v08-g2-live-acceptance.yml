@@ -112,9 +112,19 @@ jobs:
           set -euo pipefail
           provider_root="$GITHUB_WORKSPACE/deploy/dev/.generated/g2/providers"
           mkdir -p "$provider_root"
+          # Populate a confined, version-matched Connect plugin directory
+          # from the same pinned Apache Kafka image as the real worker.
+          # FileStream connectors are NOT on the worker plugin path by default.
+          mkdir -p "$provider_root/connect-plugins/filestream"
+          docker run --rm --network none \
+            -v "$provider_root/connect-plugins/filestream:/kafdeck-g2-plugin" \
+            --entrypoint /bin/sh apache/kafka:4.3.1 \
+            -c 'test -f /opt/kafka/libs/connect-file-4.3.1.jar && cp /opt/kafka/libs/connect-file-4.3.1.jar /kafdeck-g2-plugin/connect-file-4.3.1.jar'
+          test -s "$provider_root/connect-plugins/filestream/connect-file-4.3.1.jar"
           cat > "$provider_root/connect.properties" <<'CONNECT'
           bootstrap.servers=127.0.0.1:9092
           group.id=g2-ci-connect
+          plugin.path=/opt/kafka/g2-connect-plugins
           listeners=http://127.0.0.1:18083
           rest.advertised.host.name=127.0.0.1
           rest.advertised.port=18083
@@ -137,6 +147,7 @@ jobs:
             confluentinc/cp-schema-registry:8.3.2
           docker run -d --name kafdeck-g2-connect --network host \
             -v "$provider_root/connect.properties:/opt/kafka/config/g2-connect.properties:ro" \
+            -v "$provider_root/connect-plugins:/opt/kafka/g2-connect-plugins:ro" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
             --entrypoint /opt/kafka/bin/connect-distributed.sh \
             apache/kafka:4.3.1 /opt/kafka/config/g2-connect.properties
@@ -155,11 +166,25 @@ jobs:
           for attempt in $(seq 1 150); do
             if curl --fail --silent --max-time 2 http://127.0.0.1:18081/subjects > /dev/null && \
                curl --fail --silent --max-time 2 http://127.0.0.1:18083/connectors > /dev/null && \
-               docker exec kafdeck-g2-destination /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9094 --list > /dev/null; then exit 0; fi
+               docker exec kafdeck-g2-destination /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9094 --list > /dev/null; then ready=1; break; fi
             sleep 1
           done
-          echo 'Actual Schema Registry/Connect readiness failed.' >&2
-          exit 1
+          if [ "${ready:-0}" != 1 ]; then
+            echo 'Actual Schema Registry/Connect readiness failed.' >&2
+            exit 1
+          fi
+          curl --fail --silent --max-time 5 \
+            http://127.0.0.1:18083/connector-plugins --output "$provider_root/plugin-catalog.json"
+          python3 - "$provider_root/plugin-catalog.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1],encoding='utf-8') as f: items=json.load(f)
+          if not isinstance(items,list) or sum(
+              isinstance(item,dict) and
+              item.get('class')=='org.apache.kafka.connect.file.FileStreamSinkConnector' and
+              item.get('version')=='4.3.1'
+              for item in items) != 1:
+              raise SystemExit('Pinned actual Kafka Connect FileStream plugin was not discovered.')
+          PY
       - name: Build and prove actual PKCE CLI and provider sockets
         shell: bash
         env:
