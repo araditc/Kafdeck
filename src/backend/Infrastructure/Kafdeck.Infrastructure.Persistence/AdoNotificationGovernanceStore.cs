@@ -37,9 +37,10 @@ public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnec
         await using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
         return await reader.ReadAsync(token).ConfigureAwait(false) ? ReadState(reader) : null;
     }
-    public async Task<NotificationGovernanceState?> ChangeAsync(NotificationGovernanceChange change, CancellationToken token)
+    public async Task<NotificationGovernanceState?> ChangeAsync(NotificationGovernanceChange change, Func<bool> currentAuthority, CancellationToken token)
     {
         ArgumentNullException.ThrowIfNull(change);
+        ArgumentNullException.ThrowIfNull(currentAuthority);
         await using var connection = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
         await using var clock = connection.CreateCommand();
@@ -47,6 +48,9 @@ public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnec
         var time = await clock.ExecuteScalarAsync(token).ConfigureAwait(false);
         var now = time is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt,DateTimeKind.Utc)) :
             time is DateTimeOffset offset ? offset.ToUniversalTime() : DateTimeOffset.Parse(Convert.ToString(time,CultureInfo.InvariantCulture)!,CultureInfo.InvariantCulture).ToUniversalTime();
+        // Re-evaluate the authenticated principal and reloadable policy only
+        // after the DB transaction has begun, never solely at the HTTP route.
+        if (!currentAuthority()) return null;
         var stamp=now.ToString("O",CultureInfo.InvariantCulture);
         var revision=checked(change.ExpectedRevision+1);
         await using var command = connection.CreateCommand();
@@ -77,6 +81,10 @@ public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnec
         Add(audit,"@actor",change.Actor); Add(audit,"@policy",change.PolicyFingerprint); Add(audit,"@stamp",stamp);
         Add(audit,"@cutoff",revision-AuditRowsPerDestination);
         await audit.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        // A late policy revocation must not commit either the delivery-enabling
+        // state or its audit row; disposing the uncommitted transaction rolls
+        // both writes back. No fallback to previous approval is admitted.
+        if (!currentAuthority()) return null;
         await transaction.CommitAsync(token).ConfigureAwait(false);
         return new(change.DestinationId,change.CandidateId,change.CandidateFingerprint,revision,change.ProfileEnabled,change.CredentialEnabled,now);
     }
