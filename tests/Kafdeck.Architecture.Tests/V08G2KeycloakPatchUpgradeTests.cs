@@ -117,7 +117,10 @@ public sealed class V08G2KeycloakPatchUpgradeTests
             start.ArgumentList.Add(value);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Upgrade control process did not start.");
         using var capture = CancellationTokenSource.CreateLinkedTokenSource(token);
-        var output = Task.WhenAll(PostgreSqlRecoveryScenario.ReadBoundedAsync(process.StandardOutput, capture.Token),
+        // Only fixed, pre-approved stage labels are retained; raw pwsh output
+        // and stderr may contain private fixture material and are discarded.
+        var safeStage = ReadSafeUpgradeStageAsync(process.StandardOutput, capture.Token);
+        var output = Task.WhenAll(safeStage,
             PostgreSqlRecoveryScenario.ReadBoundedAsync(process.StandardError, capture.Token));
         try
         {
@@ -127,7 +130,13 @@ public sealed class V08G2KeycloakPatchUpgradeTests
                 await Task.Delay(50, token);
             }
             token.ThrowIfCancellationRequested();
-            Assert.True(process.ExitCode == 0, "Actual Keycloak upgrade control action refused: " + action + "; retained private fixture diagnostics are not public evidence.");
+            if (process.ExitCode != 0)
+            {
+                var stage = safeStage.IsCompletedSuccessfully ? await safeStage : "not-recorded";
+                Assert.Fail("Actual Keycloak upgrade control action refused: " + action +
+                    "; safePrepareStage=" + (action == "Prepare" ? stage : "not-applicable") +
+                    "; retained private fixture diagnostics are not public evidence.");
+            }
         }
         finally
         {
@@ -144,6 +153,41 @@ public sealed class V08G2KeycloakPatchUpgradeTests
                     TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
         }
+    }
+
+    // Discard arbitrary process text, including potential credentials; accept
+    // only a complete, short literal stage line from our own Prepare script.
+    private static async Task<string> ReadSafeUpgradeStageAsync(StreamReader reader, CancellationToken token)
+    {
+        const string Prefix = "KAFDECK_PREPARE_STAGE=";
+        var buffer = new char[1024];
+        var line = new System.Text.StringBuilder(64);
+        var count = 0;
+        var stage = "not-recorded";
+        while (true)
+        {
+            var size = await reader.ReadAsync(buffer.AsMemory(), token);
+            if (size == 0) break;
+            count += size;
+            if (count > 16384) throw new InvalidOperationException("Laboratory process output exceeded its finite budget.");
+            for (var i = 0; i < size; i++)
+            {
+                if (buffer[i] == '\n')
+                {
+                    var candidate = line.ToString().TrimEnd('\r');
+                    if (candidate.StartsWith(Prefix, StringComparison.Ordinal))
+                    {
+                        var value = candidate[Prefix.Length..];
+                        if (value is "scope" or "ports" or "archive-pins" or "identity-inputs" or
+                            "scope-create" or "database-provision" or "extract-both-archives" or "manifest")
+                            stage = value;
+                    }
+                    line.Clear();
+                }
+                else if (line.Length < 64) line.Append(buffer[i]);
+            }
+        }
+        return stage;
     }
 
     private sealed record UpgradeInputs(string RootDirectory, string IdentityDirectory, string PostgresManifest,
