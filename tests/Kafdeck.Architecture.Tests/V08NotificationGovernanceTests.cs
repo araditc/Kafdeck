@@ -24,8 +24,11 @@ public sealed class V08NotificationGovernanceTests
             var second=new AdoNotificationGovernanceStore(new SqliteNotificationDeliveryDbConnectionFactory(file));
             await first.InitializeAsync(default);
             Assert.Null(await first.GetAsync("ops",default));
-            var created=await first.ChangeAsync(Change(0),default); Assert.NotNull(created);
-            Assert.Null(await second.ChangeAsync(Change(0),default));
+            // A revoked administrator cannot persist destination enablement.
+            Assert.Null(await first.ChangeAsync(Change(0),() => false,default));
+            Assert.Null(await first.GetAsync("ops",default));
+            var created=await first.ChangeAsync(Change(0),() => true,default); Assert.NotNull(created);
+            Assert.Null(await second.ChangeAsync(Change(0),() => true,default));
             Assert.Equal(created,await second.GetAsync("ops",default));
             await using(var connection=await factory.OpenAsync())
             {
@@ -33,7 +36,7 @@ public sealed class V08NotificationGovernanceTests
                 command.CommandText="CREATE TRIGGER fail_governance_audit BEFORE INSERT ON notification_governance_audit WHEN NEW.revision=2 BEGIN SELECT RAISE(ABORT,'fixture'); END";
                 await command.ExecuteNonQueryAsync();
             }
-            await Assert.ThrowsAsync<SqliteException>(()=>second.ChangeAsync(Change(1),default));
+            await Assert.ThrowsAsync<SqliteException>(()=>second.ChangeAsync(Change(1),() => true,default));
             Assert.Equal(1,(await first.GetAsync("ops",default))!.Revision);
             var audit=await second.ReadAuditAsync("ops",0,50,default);
             Assert.Single(audit); Assert.Equal("oidc:https://identity.example|operator",audit[0].Actor);
