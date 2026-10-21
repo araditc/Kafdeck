@@ -25,6 +25,9 @@ public sealed class JobReconciliationService(IMutationOperationRepository operat
         if (parent is null) return Problem(404, "reconciliation_parent_not_found");
         if (!OwnerAllowed(context.User, parent)) return Problem(403, "reconciliation_owner_denied");
         if (parent.OperationKind != expectedKind) return Problem(403, "reconciliation_parent_kind_denied");
+        // Authorize parent-scoped targets before processing user-controlled reconciliation input.
+        if (authorization.AuthorizeProofTargets(context.User, parent.AuthorizationTargets) != KafdeckAuthorizationOutcome.Allowed)
+            return Problem(403, "reconciliation_authority_denied");
         // Caller fields validate the requested evidence, never the authenticated authority.
         if (request.BatchId == Guid.Empty || request.ExpectedProgressVersion < 0 ||
             !JobReconciliationPlan.IsHash(request.ProofReferenceSha256) || !JobReconciliationPlan.IsHash(request.FencedWorkerEvidenceSha256))
