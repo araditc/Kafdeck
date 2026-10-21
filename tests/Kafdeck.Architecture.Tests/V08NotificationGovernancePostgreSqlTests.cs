@@ -56,14 +56,14 @@ public sealed partial class V08NotificationGovernancePostgreSqlTests(ITestOutput
             new("ops",candidate.CandidateId,candidate.Fingerprint,revision,true,credential,"oidc:https://idp.example|operator",new string('c',64));
         try
         {
-            Assert.NotNull(await governanceA.ChangeAsync(Change(first,0,true),token));
+            Assert.NotNull(await governanceA.ChangeAsync(Change(first,0,true),() => true,token));
             var profile=(await b.Services.GetRequiredService<INotificationDestinationProfileCatalog>().GetAsync("ops",token))!;
             Assert.True(await a.Services.GetRequiredService<INotificationRecoveryEventGate>().CheckAsync(eventId,"ops",DateTimeOffset.UtcNow,token));
             await SeedAsync(a.Services,profile,eventId,token);
             await Task.WhenAll(a.StartAsync(token),b.StartAsync(token));
             await WaitAsync(a.Services,eventId,NotificationDeliveryState.Delivered,token);
             Assert.Equal(1,network.Dials);
-            Assert.NotNull(await governanceB.ChangeAsync(Change(first,1,false),token));
+            Assert.NotNull(await governanceB.ChangeAsync(Change(first,1,false),() => true,token));
             Assert.False(await a.Services.GetRequiredService<INotificationDeliveryClaimGate>().CanClaimAsync("ops",token));
             await Assert.ThrowsAsync<KafdeckConfigurationException>(()=>a.Services.GetRequiredService<INotificationCredentialResolver>()
                 .ResolveAsync(new(profile),token).AsTask());
@@ -73,7 +73,7 @@ public sealed partial class V08NotificationGovernancePostgreSqlTests(ITestOutput
             Assert.NotNull(revoked);Assert.Equal(0,revoked.Snapshot.AttemptCount);Assert.Equal(NotificationDeliveryState.Pending,revoked.Snapshot.State);
             Assert.Equal(1,network.Dials);
             smtp=secondSmtp;
-            Assert.NotNull(await governanceB.ChangeAsync(Change(second,2,true),token));
+            Assert.NotNull(await governanceB.ChangeAsync(Change(second,2,true),() => true,token));
             await WaitAsync(a.Services,revokedId,NotificationDeliveryState.UnknownExternalEffect,token);
             var rotated=(await a.Services.GetRequiredService<INotificationDestinationProfileCatalog>().GetAsync("ops",token))!;
             Assert.NotEqual(profile.RevisionFingerprint,rotated.RevisionFingerprint);
