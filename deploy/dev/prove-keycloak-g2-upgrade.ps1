@@ -331,8 +331,19 @@ try{
     foreach($index in @(0,1)){& $PSCommandPath -Action Start -Node $m.nodes[$index].name -OutputDirectory $scope|Out-Null;Ready $index}
     $proofStage='OldMembership';Diagnostic $proofStage 'Running';Membership
     $baseline=Fresh 0;ConsumedOnBoth $baseline.assertion
-    $proofStage='SameVersionBounce';Diagnostic $proofStage 'Running';StopNode $m.nodes[0];$continuity=Fresh 1;Launch $m.nodes[0];Ready 0;Membership;ConsumedOnBoth $baseline.assertion
+    $proofStage='SameVersionBounce';Diagnostic $proofStage 'Running'
+    # Persist only bounded, non-secret diagnostic categories. The post-failure
+    # publisher accepts this closed vocabulary; never print process stderr,
+    # OAuth content, private source paths or raw exception text.
+    $script:proofFailure='BounceStop';StopNode $m.nodes[0]
+    $script:proofFailure='BouncePeerToken';$continuity=Fresh 1
+    $script:proofFailure='BounceRestart';Launch $m.nodes[0]
+    $script:proofFailure='BounceReadiness';Ready 0
+    $script:proofFailure='BounceMembership';Membership
+    $script:proofFailure='BounceReplay';ConsumedOnBoth $baseline.assertion
+    $script:proofFailure='BounceStartupEvidence'
     foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.0 .*started'){throw 'Actual old server version startup evidence is missing.'}}
+    $script:proofFailure='Unclassified'
     Write-Output 'UPGRADE_PROOF oldOld=true; sameVersionBounceReplayRejected=true'
     $proofStage='UpgradeA';Diagnostic $proofStage 'Running';$beforeA=Fresh 0
     & $PSCommandPath -Action Upgrade -Node node-a -OutputDirectory $scope|Out-Null
