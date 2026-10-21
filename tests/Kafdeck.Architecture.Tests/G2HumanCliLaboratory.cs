@@ -28,6 +28,7 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
     internal bool Approver { get; set; }
     internal string ConfigurationFile => Path.Combine(_directory,"appsettings.json");
     internal string Output { get; private set; } = "";
+    internal string SafeOutcome { get; private set; } = "none";
     internal int CompletedLogins { get; private set; }
     internal string Field(string name) => _identity.RootElement.GetProperty(name).GetString()!;
 
@@ -119,6 +120,36 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
         var args=new[]{"--url",Api.AbsoluteUri,"--oidc-profile",_profile}.Concat(command).ToArray();
         var result=await CliApplication.RunAsync(args,output,error,token,OpenBrowserAsync);
         Output=output.ToString();
+        // Only closed, bounded status/state/reason values enter failed test
+        // assertions. CLI bodies, request data, credentials and provider
+        // diagnostics must never be reflected into the public CI log.
+        static string SafeField(JsonElement root,string name)
+        {
+            if(!root.TryGetProperty(name,out var field) || field.ValueKind!=JsonValueKind.String)
+                return "none";
+            var value=field.GetString();
+            return value is {Length:>0 and <=96} &&
+                value.All(ch=>char.IsAsciiLetterOrDigit(ch)||ch is '_' or '-' or '.')
+                ?value:"none";
+        }
+        var http=Regex.Match(error.ToString(),@"Kafdeck returned HTTP ([1-5][0-9]{2})\.",
+            RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1));
+        var httpCode=http.Success?http.Groups[1].Value:"none";
+        SafeOutcome="http="+httpCode+"; state=none; mutation=none; progress=none; code=none";
+        if(Output.Length is >0 and <=8192)
+        {
+            try
+            {
+                using var diagnostic=JsonDocument.Parse(Output,new JsonDocumentOptions{MaxDepth=12});
+                if(diagnostic.RootElement.ValueKind==JsonValueKind.Object)
+                    SafeOutcome="http="+httpCode+
+                        "; state="+SafeField(diagnostic.RootElement,"state")+
+                        "; mutation="+SafeField(diagnostic.RootElement,"mutationState")+
+                        "; progress="+SafeField(diagnostic.RootElement,"progressPhase")+
+                        "; code="+SafeField(diagnostic.RootElement,"resultCode");
+            }
+            catch(JsonException) { }
+        }
         var phase=string.Join('.',command.Take(2).Select(value=>Regex.IsMatch(value,"^[a-z-]{1,40}$",RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1))?value:"argument"));
         Console.WriteLine($"G2_CLI phase={phase}; exit={result}");
         var transcript=Output+error;

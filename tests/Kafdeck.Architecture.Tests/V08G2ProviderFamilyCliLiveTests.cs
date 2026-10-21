@@ -91,7 +91,10 @@ public sealed class V08G2ProviderFamilyCliLiveTests
         {
             var command=materialCommand??["operations","execute",id.ToString("D")];
             if(material is not null)command=command.Concat(new[]{"--request-file",await lab.RequestFileAsync(material,token)}).ToArray();
-            Assert.Equal(CliApplication.Success,await lab.RunAsync(token,command));
+            var executionExit=await lab.RunAsync(token,command);
+            Assert.True(executionExit==CliApplication.Success,
+                "Physical family execution failed: exit="+executionExit+
+                "; "+lab.SafeOutcome);
             using var result=JsonDocument.Parse(lab.Output);Assert.Equal("appliedVerified",result.RootElement.GetProperty("state").GetString());
         }
         var records=new {records=new[]{new{key=Convert.ToBase64String(Encoding.UTF8.GetBytes("g2-family-key")),value=Convert.ToBase64String(Encoding.UTF8.GetBytes("actual-family-record"))}}};
