@@ -57,8 +57,16 @@ public static class KafdeckNotificationRecoveryEndpoints
             return await SafeAsync(async () =>
             {
                 request.Validate();
+                var policyFingerprint = auth.PolicyFingerprint;
+                var humanFingerprint = Human(actor);
+                // A queued approval may wait on the recovery-store lock after
+                // the policy revokes this approver. Store must re-check the
+                // actual authenticated actor and current approval grant in-lock.
+                bool CurrentApprovalAuthority() =>
+                    Actor(context, auth, bearer, approval: true)?.PrincipalId == actor.PrincipalId &&
+                    auth.PolicyFingerprint == policyFingerprint;
                 var plan = await store.ApproveAsync(operationId, request.ExpectedRevision, request.PreviewHash, actor.PrincipalId,
-                    Human(actor), auth.PolicyFingerprint, context.RequestAborted).ConfigureAwait(false);
+                    humanFingerprint, policyFingerprint, CurrentApprovalAuthority, context.RequestAborted).ConfigureAwait(false);
                 return plan is null ? Conflict() : Results.Ok(NotificationRecoveryData.From(plan));
             }).ConfigureAwait(false);
         }).WithName(name + "approve");
