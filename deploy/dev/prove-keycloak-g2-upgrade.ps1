@@ -50,17 +50,20 @@ function Diagnostic([string]$stage,[string]$state){
                 $startMatches=($recorded.StartTime.ToUniversalTime().Ticks -eq $time.Ticks)
             }
         }catch{}
+        # The review-only evidence publisher accepts *typed Boolean*
+        # fields, not PowerShell's nullable/dynamic expression output. A
+        # missing process/log remains false; the overall proof still fails.
         $observations+=@{node=$entry.name;version=$entry.version;
-            launcherPresent=($null -ne (ExactProcess $entry));httpsPortOpen=(PortOpen $entry.httpsPort);
-            recordedPidExists=$pidExists;recordedPathMatches=$pathMatches;recordedStartMatches=$startMatches;
-            startupBanner=($text -match 'Keycloak 26\.8\.[01] .*started');errorMarker=($text -match '\bERROR\b');
-            twoMemberView=($text -match '\(2\)');nodeALabel=($text -match '\bnode-a\b');nodeBLabel=($text -match '\bnode-b\b');
-            unknownOption=($text -match '(?i)unknown option|unrecognized option');
-            realmFilenameMismatch=($text -match '(?is)realm name.*(match|JSON file)');
-            bindConflict=($text -match '(?i)address already in use|failed to bind');
-            databaseAuthenticationFailure=($text -match '(?i)password authentication failed');
-            databaseConnectionFailure=($text -match '(?i)could not acquire connection|connection refused|failed to obtain JDBC');
-            tlsMaterialFailure=($text -match '(?i)failed to load.*(key|certificate)|keystore.*not found')}
+            launcherPresent=[bool]($null -ne (ExactProcess $entry));httpsPortOpen=[bool](PortOpen $entry.httpsPort);
+            recordedPidExists=[bool]$pidExists;recordedPathMatches=[bool]$pathMatches;recordedStartMatches=[bool]$startMatches;
+            startupBanner=[bool]($text -match 'Keycloak 26\.8\.[01] .*started');errorMarker=[bool]($text -match '\bERROR\b');
+            twoMemberView=[bool]($text -match '\(2\)');nodeALabel=[bool]($text -match '\bnode-a\b');nodeBLabel=[bool]($text -match '\bnode-b\b');
+            unknownOption=[bool]($text -match '(?i)unknown option|unrecognized option');
+            realmFilenameMismatch=[bool]($text -match '(?is)realm name.*(match|JSON file)');
+            bindConflict=[bool]($text -match '(?i)address already in use|failed to bind');
+            databaseAuthenticationFailure=[bool]($text -match '(?i)password authentication failed');
+            databaseConnectionFailure=[bool]($text -match '(?i)could not acquire connection|connection refused|failed to obtain JDBC');
+            tlsMaterialFailure=[bool]($text -match '(?i)failed to load.*(key|certificate)|keystore.*not found')}
     }
     Save (Child 'keycloak-upgrade-control-diagnostic.json') @{formatVersion=1;action='Prove';stage=$stage;state=$state;
         failure=$script:proofFailure;controlExitCode=$script:controlExit;nodes=$observations}
