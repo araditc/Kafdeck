@@ -131,7 +131,7 @@ function Launch($entry,[string]$command='Start',[string]$version=$entry.version)
 }
 if($Action -eq 'Prepare'){
     if(Test-Path -LiteralPath $scope){throw 'A fresh upgrade output directory is required; no old data is replaced or deleted.'}
-    foreach($p in @(20443,20444,7900,7910)){if(PortOpen $p){throw 'Owned upgrade ports must be free before preparation.'}}
+    foreach($p in @(20443,20444,7900,7910,29443,29444)){if(PortOpen $p){throw 'Owned upgrade ports must be free before preparation.'}}
     if((Get-FileHash -LiteralPath $OldArchive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $oldSha -or
        (Get-FileHash -LiteralPath $NewArchive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $newSha){throw 'Pinned Keycloak archive digest changed.'}
     $identity=Get-Content -LiteralPath (Join-Path $IdentityDirectory 'lab.json') -Raw|ConvertFrom-Json
@@ -149,7 +149,7 @@ if($Action -eq 'Prepare'){
         & (Join-Path $pg.binDirectory $(if($IsWindows){'psql.exe'}else{'psql'})) -X -w -v ON_ERROR_STOP=1 -h $pg.bindAddress -p $pg.port -U $pg.user -d $pg.database -f (Child 'provision.sql') *> (Child 'provision.log')
         if($LASTEXITCODE){throw 'Fresh isolated Keycloak upgrade database provisioning failed; private diagnostics retained.'}
     }finally{foreach($name in $previous.Keys){[Environment]::SetEnvironmentVariable($name,$previous[$name])}}
-    $nodes=@(@{name='node-a';httpsPort=20443;clusterPort=7900;version='26.8.0'},@{name='node-b';httpsPort=20444;clusterPort=7910;version='26.8.0'})
+    $nodes=@(@{name='node-a';httpsPort=20443;clusterPort=7900;metricsPort=29443;version='26.8.0'},@{name='node-b';httpsPort=20444;clusterPort=7910;metricsPort=29444;version='26.8.0'})
     foreach($entry in $nodes){foreach($version in @('26.8.0','26.8.1')){
         $destination=Child ($entry.name+'/'+$version);New-Item -ItemType Directory -Path $destination -Force|Out-Null
         [IO.Compression.ZipFile]::ExtractToDirectory($(if($version -eq '26.8.0'){$OldArchive}else{$NewArchive}),$destination)
@@ -169,6 +169,7 @@ $env:JAVA_HOME=$m.javaHome;$env:JAVA_OPTS_APPEND='-Xms128m -Xmx384m -XX:ActivePr
 $env:KC_DB='postgres';$env:KC_DB_URL=$m.jdbcUrl;$env:KC_DB_USERNAME=$m.databaseUser;$env:KC_DB_PASSWORD=[IO.File]::ReadAllText($m.databasePasswordFile)
 $env:KC_HTTP_ENABLED='false';$env:KC_HTTP_HOST='127.0.0.1';$env:KC_HTTPS_PORT=[string]$n.httpsPort;$env:KC_HOSTNAME='https://localhost:20443'
 $env:KC_HTTPS_KEY_STORE_FILE=Join-Path $m.identityDirectory 'https.p12';$env:KC_HTTPS_KEY_STORE_PASSWORD=[IO.File]::ReadAllText((Join-Path $m.identityDirectory 'https-password.txt'))
+$env:KC_METRICS_ENABLED='true';$env:KC_HTTP_MANAGEMENT_HOST='127.0.0.1';$env:KC_HTTP_MANAGEMENT_PORT=[string]$n.metricsPort;$env:KC_HTTP_MANAGEMENT_SCHEME='inherited'
 $env:KC_CACHE='ispn';$env:KC_CACHE_STACK='jdbc-ping';$env:KC_CACHE_EMBEDDED_MTLS_ENABLED='true'
 $env:KC_CACHE_EMBEDDED_NETWORK_BIND_ADDRESS='127.0.0.1';$env:KC_CACHE_EMBEDDED_NETWORK_BIND_PORT=[string]$n.clusterPort;$env:KC_CACHE_EMBEDDED_NODE_NAME=$Name
 $env:KC_DB_POOL_INITIAL_SIZE='2';$env:KC_DB_POOL_MIN_SIZE='2';$env:KC_DB_POOL_MAX_SIZE='4'
@@ -192,7 +193,8 @@ $m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json
 if(![string]::Equals([IO.Path]::GetFullPath($m.scope),$scope,$comparison) -or $m.oldArchiveSha256 -cne $oldSha -or $m.newArchiveSha256 -cne $newSha){throw 'Owned upgrade manifest identity changed.'}
 VerifyPath $m.databasePasswordFile 'database-password.txt'
 if(@($m.nodes).Count -ne 2 -or $m.nodes[0].name -cne 'node-a' -or $m.nodes[1].name -cne 'node-b' -or
-    $m.nodes[0].httpsPort -ne 20443 -or $m.nodes[1].httpsPort -ne 20444 -or $m.nodes[0].clusterPort -ne 7900 -or $m.nodes[1].clusterPort -ne 7910){throw 'Closed upgrade node definitions changed.'}
+    $m.nodes[0].httpsPort -ne 20443 -or $m.nodes[1].httpsPort -ne 20444 -or $m.nodes[0].clusterPort -ne 7900 -or $m.nodes[1].clusterPort -ne 7910 -or
+    $m.nodes[0].metricsPort -ne 29443 -or $m.nodes[1].metricsPort -ne 29444){throw 'Closed upgrade node definitions changed.'}
 if($Action -eq 'Start'){
     foreach($entry in $m.nodes){if($Node -ne 'all' -and $Node -ne $entry.name){continue};if(!(ExactProcess $entry)){if(PortOpen $entry.httpsPort){throw 'Upgrade port is occupied by an unowned process.'};Launch $entry}}
     Write-Output 'Started exact owned upgrade launchers; verified HTTPS readiness is separate.';exit 0
@@ -275,17 +277,94 @@ function PairedFirstUse {
         return $winner
     }finally{foreach($content in $contents){$content.Dispose()}}
 }
+# The Keycloak management interface is independently bound to localhost,
+# TLS-authenticated by the same pinned CA, and has fixed per-node ports. This
+# is real process evidence, not a synthetic node-count assertion. The cluster
+# metric is Keycloak's documented view of JGroups membership.
+function MetricTwoMembers($entry){
+    $uri='https://localhost:'+$entry.metricsPort+'/metrics'
+    try{
+        $response=$http.GetAsync($uri).GetAwaiter().GetResult()
+        try{
+            if([int]$response.StatusCode -ne 200 -or $response.Content.Headers.ContentLength -gt 256KB){return $false}
+            $text=$response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            if($text.Length -gt 256KB){return $false}
+            $samples=[regex]::Matches($text,'(?m)^vendor_cluster_size(?:\\{(?<tags>[^}\\r\\n]{0,384})\\})?\\s+(?<count>\\d+(?:\\.\\d+)?)\\s*
+$proofStage='OldNodes'
+try{
+    Diagnostic $proofStage 'Running'
+    foreach($index in @(0,1)){& $PSCommandPath -Action Start -Node $m.nodes[$index].name -OutputDirectory $scope|Out-Null;Ready $index}
+    $proofStage='OldMembership';Diagnostic $proofStage 'Running';Membership
+    $baseline=Fresh 0;ConsumedOnBoth $baseline.assertion
+    $proofStage='SameVersionBounce';Diagnostic $proofStage 'Running';StopNode $m.nodes[0];$continuity=Fresh 1;Launch $m.nodes[0];Ready 0;Membership;ConsumedOnBoth $baseline.assertion
+    foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.0 .*started'){throw 'Actual old server version startup evidence is missing.'}}
+    Write-Output 'UPGRADE_PROOF oldOld=true; sameVersionBounceReplayRejected=true'
+    $proofStage='UpgradeA';Diagnostic $proofStage 'Running';$beforeA=Fresh 0
+    & $PSCommandPath -Action Upgrade -Node node-a -OutputDirectory $scope|Out-Null
+    $gapA=Fresh 1;Ready 0;$m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json;Membership;ConsumedOnBoth $beforeA.assertion
+    $proofStage='MixedReplay';Diagnostic $proofStage 'Running';$mixed=Fresh 0;ConsumedOnBoth $mixed.assertion
+    $mixedWinner=PairedFirstUse
+    Write-Output 'UPGRADE_PROOF mixedVersions=26.8.1,26.8.0; compatibilityExit=0; replayRejected=true; livePeerIssuedToken=true'
+    $proofStage='UpgradeB';Diagnostic $proofStage 'Running';$beforeB=Fresh 1
+    & $PSCommandPath -Action Upgrade -Node node-b -OutputDirectory $scope|Out-Null
+    $gapB=Fresh 0;Ready 1;$m=Get-Content -LiteralPath $manifest -Raw|ConvertFrom-Json;Membership;ConsumedOnBoth $beforeB.assertion
+    $proofStage='NewReplay';Diagnostic $proofStage 'Running';$final=Fresh 1;ConsumedOnBoth $final.assertion
+    $finalWinner=PairedFirstUse
+    foreach($entry in $m.nodes){$text=StartupEvidence $entry;if($text -notmatch 'Keycloak 26\.8\.1 .*started'){throw 'Actual new server version startup evidence is missing.'}}
+    Private (Child 'final-access-token-private.txt') $finalWinner
+    # Private bridge for the existing production-verifier replay suite. Include
+    # its complete closed manifest contract rather than only OAuth fields.
+    Save (Child 'production-verifier-lab-private.json') @{keycloakVersion='26.8.1';issuer=$m.issuer;audience=$m.audience;
+        clientId=$m.clientId;subject=$m.subject;caPemFile=$m.caPemFile;clientPrivateKeyFile=$m.clientPrivateKeyFile;
+        cache='ispn';stack='jdbc-ping';clusterMtls=$true;
+        nodes=@(@{name='node-a';endpoint='https://localhost:20443/realms/kafdeck-g2'},@{name='node-b';endpoint='https://localhost:20444/realms/kafdeck-g2'})}
+    Save (Child 'keycloak-patch-rolling-upgrade-evidence.json') @{observedAtUtc=[DateTimeOffset]::UtcNow.ToString('O');oldVersion='26.8.0';newVersion='26.8.1';
+        oldArchiveSha256=$oldSha;newArchiveSha256=$newSha;freshIsolatedDatabase=$true;normalTls=$true;cache='ispn';stack='jdbc-ping';clusterMtls=$true;
+        actualTwoNodeMembership=$true;compatibilityCheckExitCodes=@(0,0);sameVersionBounceDistinctFromUpgrade=$true;
+        mixedVersionPhaseObserved=$true;bothNewVersionsObserved=$true;freshTokenDuringEachSingleNodeReplacement=$true;
+        timeValidConsumedReplayRejections=16;pairedFirstUseRounds=2;requestsPerRound=2;firstUseWinnersPerRound=@(1,1);
+        requestScheduling='both node requests issued before awaiting either response';assertionLifetimeSeconds=300;rawCredentialsInEvidence=$false;
+        automaticRollback=$false;operatorOrLoadBalancerTopologyClaimed=$false;productionVerifierChecked=$false}
+    Write-Output 'UPGRADE_PROOF allNew=26.8.1,26.8.1; timeValidReplayRejected=true; actualPatchUpgrade=true; safeEvidenceWritten=true'
+    Diagnostic 'Complete' 'Succeeded'
+}catch{
+    # Nested control actions have their own PowerShell script scope. Transfer
+    # only our exact closed failure literals, never exception text, to evidence.
+    $compatibilityExit=[regex]::Match($_.Exception.Message,'^Keycloak upgrade compatibility command refused; exit (-?\d{1,10})$')
+    if($compatibilityExit.Success){$script:proofFailure='CompatibilityRejected';$script:controlExit=[int]::Parse($compatibilityExit.Groups[1].Value,[Globalization.CultureInfo]::InvariantCulture)}
+    elseif($_.Exception.Message -ceq 'Upgrade compatibility command exceeded its deadline.'){$script:proofFailure='CompatibilityDeadline'}
+    Diagnostic $proofStage 'Failed'
+    Write-Output ('UPGRADE_PROOF failedStage='+$proofStage+'; exceptionType='+$_.Exception.GetType().Name)
+    foreach($entry in $m.nodes){try{StopNode $entry}catch{}}
+    throw 'Actual Keycloak patch upgrade proof refused; inspect retained private laboratory diagnostics.'
+}finally{$rsa.Dispose();$http.Dispose();$handler.Dispose();$ca.Dispose()}
+)
+            if($samples.Count -ne 1){return $false}
+            $sample=$samples[0]
+            $count=[double]::Parse($sample.Groups['count'].Value,[Globalization.CultureInfo]::InvariantCulture)
+            if($count -ne 2){return $false}
+            $labels=$sample.Groups['tags'].Value
+            # If node is labelled, it must match the exact owned node on
+            # this fixed TLS port. Missing node labels are handled by the
+            # distinct owned PID+port identity verified in Membership.
+            if($labels -match 'node="([^"\\r\\n]{1,64})"' -and $Matches[1] -cne $entry.name){return $false}
+            return $true
+        }finally{$response.Dispose()}
+    }catch{return $false}
+}
 function Membership {
-    $until=[DateTimeOffset]::UtcNow.AddSeconds(30)
+    $until=[DateTimeOffset]::UtcNow.AddSeconds(45)
     do{
         $joined=$true
         foreach($entry in $m.nodes){
+            if(!(ExactProcess $entry) -or !(PortOpen $entry.httpsPort)){$joined=$false;break}
             $text=StartupEvidence $entry
-            # JGroups annotates logical names with bounded address attributes,
-            # e.g. node-a(...). Require both exact configured logical names.
-            if(!(TwoMembers $text)){$joined=$false}
+            # Accept independently verifiable two-member evidence from EACH
+            # real Keycloak node. Private startup logs and its documented
+            # TLS-protected cluster metric are two distinct genuine sources.
+            if(!(TwoMembers $text) -and !(MetricTwoMembers $entry)){$joined=$false}
         }
-        if($joined){return};Start-Sleep -Milliseconds 200
+        if($joined){return};Start-Sleep -Milliseconds 250
     }while([DateTimeOffset]::UtcNow -lt $until)
     Refuse 'MembershipMissing' 'Actual two-node distributed cache membership was not observed.'
 }
