@@ -289,7 +289,34 @@ function MetricTwoMembers($entry){
             if([int]$response.StatusCode -ne 200 -or $response.Content.Headers.ContentLength -gt 256KB){return $false}
             $text=$response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             if($text.Length -gt 256KB){return $false}
-            $samples=[regex]::Matches($text,'(?m)^vendor_cluster_size(?:\\{(?<tags>[^}\\r\\n]{0,384})\\})?\\s+(?<count>\\d+(?:\\.\\d+)?)\\s*
+            $samples=[regex]::Matches($text,'(?m)^vendor_cluster_size(?:\{(?<tags>[^}\r\n]{0,384})\})?\s+(?<count>\d+(?:\.\d+)?)\s*$')
+            if($samples.Count -ne 1){return $false}
+            $sample=$samples[0]
+            $count=[double]::Parse($sample.Groups['count'].Value,[Globalization.CultureInfo]::InvariantCulture)
+            if($count -ne 2){return $false}
+            $labels=$sample.Groups['tags'].Value
+            # Each independent management endpoint is fixed to the owned
+            # node port; reject a conflicting explicit node tag if present.
+            if($labels -match 'node="([^"\r\n]{1,64})"' -and $Matches[1] -cne $entry.name){return $false}
+            return $true
+        }finally{$response.Dispose()}
+    }catch{return $false}
+}
+function Membership {
+    $until=[DateTimeOffset]::UtcNow.AddSeconds(45)
+    do{
+        $joined=$true
+        foreach($entry in $m.nodes){
+            if(!(ExactProcess $entry) -or !(PortOpen $entry.httpsPort)){$joined=$false;break}
+            $text=StartupEvidence $entry
+            # Both real owned processes must independently prove size 2 via
+            # complete JGroups view or signed-CA TLS management metrics.
+            if(!(TwoMembers $text) -and !(MetricTwoMembers $entry)){$joined=$false}
+        }
+        if($joined){return};Start-Sleep -Milliseconds 250
+    }while([DateTimeOffset]::UtcNow -lt $until)
+    Refuse 'MembershipMissing' 'Actual two-node distributed cache membership was not observed.'
+}
 $proofStage='OldNodes'
 try{
     Diagnostic $proofStage 'Running'
