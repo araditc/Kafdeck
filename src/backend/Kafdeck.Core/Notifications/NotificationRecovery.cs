@@ -55,7 +55,7 @@ public interface INotificationRecoveryStore
     Task<NotificationRecoveryPlan> PreviewAsync(NotificationRecoveryRequest request, string requester,
         string humanFingerprint, string policyFingerprint, CancellationToken token);
     Task<NotificationRecoveryPlan?> ApproveAsync(Guid operationId, long revision, string previewHash,
-        string approver, string humanFingerprint, string policyFingerprint, CancellationToken token);
+        string approver, string humanFingerprint, string policyFingerprint, Func<bool> currentApprovalAuthority, CancellationToken token);
     Task<NotificationRecoveryPlan?> ApplyAsync(Guid operationId, long revision, string previewHash,
         string requesterHumanFingerprint, string policyFingerprint, Func<bool> currentAuthority, CancellationToken token);
 }
