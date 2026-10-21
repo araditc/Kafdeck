@@ -178,8 +178,14 @@ public sealed class V08G2PostgreSqlSafeResumeTests(ITestOutputHelper output)
     internal static async Task<NotificationRecoveryPlan> ApplyAsync(INotificationRecoveryStore store, NotificationRecoveryRequest request, CancellationToken token)
     {
         var plan = await store.PreviewAsync(request, "reviewed-requester", A, B, token);
-        Assert.Null(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash, "requester-new-session", A, B, token));
-        plan = Assert.IsType<NotificationRecoveryPlan>(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash, "independent-approver", C, B, token));
+        Assert.Null(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash, "requester-new-session", A, B, () => true, token));
+        // A revoked approver must not be able to commit approval even when
+        // a previously issued preview hash, revision and human ID are valid.
+        Assert.Null(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash,
+            "independent-approver", C, B, () => false, token));
+        Assert.Equal(NotificationRecoveryState.Previewed,
+            (await store.GetAsync(plan.OperationId, token))!.State);
+        plan = Assert.IsType<NotificationRecoveryPlan>(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash, "independent-approver", C, B, () => true, token));
         return Assert.IsType<NotificationRecoveryPlan>(await store.ApplyAsync(plan.OperationId, plan.Revision, plan.PreviewHash, A, B, () => true, token));
     }
     private const string A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
