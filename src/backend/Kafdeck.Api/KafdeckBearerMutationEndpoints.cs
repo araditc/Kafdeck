@@ -10,8 +10,6 @@ public static class KafdeckBearerMutationEndpoints
 {
     public static WebApplication MapKafdeckBearerMutations(this WebApplication app)
     {
-        app.MapGet("/api/v1/automation/capabilities/reads", () => Results.Ok(new NamedReadInventoryData(1, false, Kafdeck.Contracts.KafdeckReadContracts.All)))
-            .WithName("v08-bearer-read-capabilities").RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
         app.MapPost("/api/v1/automation/clusters/{clusterId}/topics/{topicName}/create/preview", async (
             string clusterId, string topicName, BearerTopicCreateRequest request, HttpContext context,
             TopicMutationPlanner planner, MutationAdmissionService admission, CancellationToken cancellationToken) =>
