@@ -35,6 +35,15 @@ public sealed class JobReconciliationService(IMutationOperationRepository operat
         if (before is null || progress.Version != request.ExpectedProgressVersion ||
             progress.WorkerLeaseExpiresAtUtc > _time.GetUtcNow() || parent.State != MutationOperationState.AppliedVerified)
             return Problem(409, "reconciliation_boundary_or_fence_unavailable");
+        // Authorize the exact reconciliation-specific destination *before*
+        // making even a read-only provider observation. The parent grant alone
+        // does not grant MutationReconcile over this topic. Recheck below after
+        // observation because the authorization policy can be reloaded.
+        var earlyTargets = parent.AuthorizationTargets
+            .Append(new MutationAuthorizationTarget(AuthorizationAction.MutationReconcile,
+                before.ClusterId, before.TopicName)).Distinct().ToArray();
+        if (authorization.AuthorizeProofTargets(context.User, earlyTargets) != KafdeckAuthorizationOutcome.Allowed)
+            return Problem(403, "reconciliation_authority_denied");
         var observation = await observer.ObserveAsync(before.ClusterId, before.TopicName, before.Partition, progress.WorkerGeneration, token).ConfigureAwait(false);
         if (!observation.IsSuccess || !before.SameDestinationAndOffsets(observation.Boundary!))
             return Problem(409, "reconciliation_destination_not_unchanged");
