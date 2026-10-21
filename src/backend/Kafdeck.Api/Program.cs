@@ -852,7 +852,7 @@ app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
 app.MapKafdeckV08BearerOpenApi();
-app.MapKafdeckBearerCapabilities();
+app.MapKafdeckBearerCapabilities(mutationOptions?.Enabled == true);
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();
