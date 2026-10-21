@@ -132,7 +132,12 @@ public sealed class V08G2KeycloakPatchUpgradeTests
             token.ThrowIfCancellationRequested();
             if (process.ExitCode != 0)
             {
-                var stage = safeStage.IsCompletedSuccessfully ? await safeStage : "not-recorded";
+                // A short Prepare process may have exited before its async
+                // reader reaches EOF; finish draining this bounded stream
+                // before selecting the safe, allowlisted failure stage.
+                var stage = action == "Prepare"
+                    ? await safeStage.WaitAsync(TimeSpan.FromSeconds(5), token)
+                    : "not-applicable";
                 Assert.Fail("Actual Keycloak upgrade control action refused: " + action +
                     "; safePrepareStage=" + (action == "Prepare" ? stage : "not-applicable") +
                     "; retained private fixture diagnostics are not public evidence.");
