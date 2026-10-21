@@ -44,7 +44,7 @@ $pluginRoot=Join-Path $directory 'connect-plugins'
 $pluginDirectory=Join-Path $pluginRoot 'filestream'
 New-Item -ItemType Directory -Path $pluginDirectory -Force|Out-Null
 Copy-Item -LiteralPath $sourceFileConnector -Destination (Join-Path $pluginDirectory 'connect-file-4.3.1.jar')
-$pluginPath=$pluginRoot.Replace('\\','/')
+$pluginPath=$pluginRoot.Replace([char]92,[char]47)
 $suffix=[Guid]::NewGuid().ToString('N')
 $schemaConfig=Join-Path $directory 'schema-registry.properties'
 @"
