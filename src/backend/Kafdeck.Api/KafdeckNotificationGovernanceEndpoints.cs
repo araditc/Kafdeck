@@ -41,10 +41,17 @@ public static class KafdeckNotificationGovernanceEndpoints
             {
                 var actor=Actor(context);
                 if(actor is null) return Denied(KafdeckAuthorizationOutcome.Unauthenticated);
+                var policyFingerprint = authorization.PolicyFingerprint;
                 var change=new NotificationGovernanceChange(destinationId,request.CandidateId,candidate.Fingerprint,request.ExpectedRevision,
-                    request.ProfileEnabled,request.CredentialEnabled,actor,authorization.PolicyFingerprint);
-                if(!Allowed(context,authorization,destinationId)) return Denied(KafdeckAuthorizationOutcome.Forbidden);
-                var state=await store.ChangeAsync(change,context.RequestAborted).ConfigureAwait(false);
+                    request.ProfileEnabled,request.CredentialEnabled,actor,policyFingerprint);
+                // Persistence may wait behind another transaction. Confirm the
+                // same authenticated operator, exact destination permission and
+                // policy version while the DB lock is held and before commit.
+                bool CurrentAuthority() => Actor(context)==actor &&
+                    authorization.PolicyFingerprint==policyFingerprint &&
+                    Allowed(context,authorization,destinationId);
+                if(!CurrentAuthority()) return Denied(KafdeckAuthorizationOutcome.Forbidden);
+                var state=await store.ChangeAsync(change,CurrentAuthority,context.RequestAborted).ConfigureAwait(false);
                 if(state is null) return Results.Problem(statusCode:409,title:"Notification governance revision conflict",
                     type:"urn:kafdeck:problem:notification-governance-conflict");
                 await audit.WriteAsync(new SecurityAuditEvent(state.UpdatedAtUtc,SecurityAuditEventType.NotificationManagementChanged,
