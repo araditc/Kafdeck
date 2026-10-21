@@ -35,6 +35,16 @@ foreach($port in @($SchemaRegistryPort,$ConnectPort)){
 $kafka=[IO.Path]::GetFullPath($KafkaHome);$registry=[IO.Path]::GetFullPath($SchemaRegistryHome)
 if(!(Test-Path -LiteralPath (Join-Path $kafka 'libs')) -or !(Test-Path -LiteralPath (Join-Path $registry 'share/java/schema-registry'))){throw 'Verified Kafka 4.3.1 and portable Schema Registry 8.3.2 runtimes are required.'}
 New-Item -ItemType Directory -Path $directory | Out-Null
+# The pinned Kafka 4.3.1 FileStream connector example is not discovered
+# automatically. Load only its exact JAR through an isolated owned plugin
+# directory; never allow a caller-controlled or generic plugin path.
+$sourceFileConnector=Join-Path $kafka 'libs/connect-file-4.3.1.jar'
+if(!(Test-Path -LiteralPath $sourceFileConnector -PathType Leaf)){throw 'Pinned Kafka 4.3.1 FileStream connector artifact is missing.'}
+$pluginRoot=Join-Path $directory 'connect-plugins'
+$pluginDirectory=Join-Path $pluginRoot 'filestream'
+New-Item -ItemType Directory -Path $pluginDirectory -Force|Out-Null
+Copy-Item -LiteralPath $sourceFileConnector -Destination (Join-Path $pluginDirectory 'connect-file-4.3.1.jar')
+$pluginPath=$pluginRoot.Replace('\\','/')
 $suffix=[Guid]::NewGuid().ToString('N')
 $schemaConfig=Join-Path $directory 'schema-registry.properties'
 @"
@@ -50,6 +60,7 @@ $connectConfig=Join-Path $directory 'connect.properties'
 @"
 bootstrap.servers=$BootstrapServers
 group.id=g2-connect-$suffix
+plugin.path=$pluginPath
 listeners=http://127.0.0.1:$ConnectPort
 rest.advertised.host.name=127.0.0.1
 rest.advertised.port=$ConnectPort
@@ -94,7 +105,14 @@ try{
         Start-Sleep -Seconds 1
     }
     if(!$ready){throw 'Actual provider processes failed bounded readiness; preserve local logs for diagnosis.'}
-    Write-Output 'Actual Schema Registry and Connect are ready on the explicit loopback ports.'
+    # Verify genuine worker plugin discovery before claiming its physical
+    # connector-create and task-control scenarios are available.
+    $loadedPlugins=@(Invoke-RestMethod "http://127.0.0.1:$ConnectPort/connector-plugins" -TimeoutSec 3)
+    $fileSinks=@($loadedPlugins|Where-Object {
+        $_.class -ceq 'org.apache.kafka.connect.file.FileStreamSinkConnector' -and $_.version -ceq '4.3.1'
+    })
+    if($fileSinks.Count -ne 1){throw 'Pinned Kafka FileStream sink is not discoverable by the actual Connect worker.'}
+    Write-Output 'Actual Schema Registry and Connect are ready with the exact pinned FileStream sink plugin.'
 }catch{
     foreach($entry in $processes){Stop-Process -Id $entry.processId -ErrorAction SilentlyContinue}
     throw
