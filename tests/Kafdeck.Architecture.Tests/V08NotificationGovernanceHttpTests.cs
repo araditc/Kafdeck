@@ -103,7 +103,7 @@ public sealed class V08NotificationGovernanceHttpTests
         internal int Reads;
         public Task InitializeAsync(CancellationToken token)=>Task.CompletedTask;
         public Task<NotificationGovernanceState?> GetAsync(string id,CancellationToken token){Reads++;return Task.FromResult<NotificationGovernanceState?>(null);}
-        public Task<NotificationGovernanceState?> ChangeAsync(NotificationGovernanceChange value,CancellationToken token)=>throw new InvalidOperationException();
+        public Task<NotificationGovernanceState?> ChangeAsync(NotificationGovernanceChange value,Func<bool> currentAuthority,CancellationToken token)=>throw new InvalidOperationException();
         public Task<IReadOnlyList<NotificationGovernanceAudit>> ReadAuditAsync(string id,long after,int take,CancellationToken token)=>throw new InvalidOperationException();
     }
 }
