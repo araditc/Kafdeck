@@ -130,13 +130,18 @@ function Launch($entry,[string]$command='Start',[string]$version=$entry.version)
     try{if(!$p.WaitForExit(180000)){$p.Kill($true);Refuse 'CompatibilityDeadline' 'Upgrade compatibility command exceeded its deadline.'};$script:controlExit=$p.ExitCode;if($p.ExitCode -ne 0){Refuse 'CompatibilityRejected' ('Keycloak upgrade compatibility command refused; exit '+$p.ExitCode)}}finally{$p.Dispose()}
 }
 if($Action -eq 'Prepare'){
+    Write-Output 'KAFDECK_PREPARE_STAGE=scope'
     if(Test-Path -LiteralPath $scope){throw 'A fresh upgrade output directory is required; no old data is replaced or deleted.'}
+    Write-Output 'KAFDECK_PREPARE_STAGE=ports'
     foreach($p in @(20443,20444,7900,7910,29443,29444)){if(PortOpen $p){throw 'Owned upgrade ports must be free before preparation.'}}
+    Write-Output 'KAFDECK_PREPARE_STAGE=archive-pins'
     if((Get-FileHash -LiteralPath $OldArchive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $oldSha -or
        (Get-FileHash -LiteralPath $NewArchive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $newSha){throw 'Pinned Keycloak archive digest changed.'}
+    Write-Output 'KAFDECK_PREPARE_STAGE=identity-inputs'
     $identity=Get-Content -LiteralPath (Join-Path $IdentityDirectory 'lab.json') -Raw|ConvertFrom-Json
     $pg=Get-Content -LiteralPath $PostgresManifest -Raw|ConvertFrom-Json
     if($pg.user -cnotmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$'){throw 'PostgreSQL owner identity is invalid.'}
+    Write-Output 'KAFDECK_PREPARE_STAGE=scope-create'
     New-Item -ItemType Directory -Path $scope|Out-Null
     $database='kc_upgrade_'+[Guid]::NewGuid().ToString('N')
     $password=[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
@@ -144,11 +149,13 @@ if($Action -eq 'Prepare'){
     Private (Child 'provision.sql') "CREATE ROLE $database LOGIN PASSWORD '$password';`nCREATE DATABASE $database OWNER $database;`n"
     $connection=[Data.Common.DbConnectionStringBuilder]::new();$connection.set_ConnectionString([IO.File]::ReadAllText($pg.connectionStringFile).Trim())
     $previous=@{};foreach($name in @('PGPASSWORD','PGCONNECT_TIMEOUT','PGOPTIONS')){$previous[$name]=[Environment]::GetEnvironmentVariable($name)}
+    Write-Output 'KAFDECK_PREPARE_STAGE=database-provision'
     try{
         $env:PGPASSWORD=[string]$connection['Password'];$env:PGCONNECT_TIMEOUT='5';$env:PGOPTIONS='-c statement_timeout=15000 -c lock_timeout=5000'
         & (Join-Path $pg.binDirectory $(if($IsWindows){'psql.exe'}else{'psql'})) -X -w -v ON_ERROR_STOP=1 -h $pg.bindAddress -p $pg.port -U $pg.user -d $pg.database -f (Child 'provision.sql') *> (Child 'provision.log')
         if($LASTEXITCODE){throw 'Fresh isolated Keycloak upgrade database provisioning failed; private diagnostics retained.'}
     }finally{foreach($name in $previous.Keys){[Environment]::SetEnvironmentVariable($name,$previous[$name])}}
+    Write-Output 'KAFDECK_PREPARE_STAGE=extract-both-archives'
     $nodes=@(@{name='node-a';httpsPort=20443;clusterPort=7900;metricsPort=29443;version='26.8.0'},@{name='node-b';httpsPort=20444;clusterPort=7910;metricsPort=29444;version='26.8.0'})
     foreach($entry in $nodes){foreach($version in @('26.8.0','26.8.1')){
         $destination=Child ($entry.name+'/'+$version);New-Item -ItemType Directory -Path $destination -Force|Out-Null
@@ -156,6 +163,7 @@ if($Action -eq 'Prepare'){
         $import=Join-Path $destination ('keycloak-'+$version+'/data/import');New-Item -ItemType Directory -Path $import -Force|Out-Null
         Copy-Item -LiteralPath $identity.realmImportFile -Destination (Join-Path $import 'kafdeck-g2-realm.json')
     }}
+    Write-Output 'KAFDECK_PREPARE_STAGE=manifest'
     Save $manifest @{formatVersion=1;scope=$scope;oldVersion='26.8.0';newVersion='26.8.1';oldArchiveSha256=$oldSha;newArchiveSha256=$newSha;
         javaHome=[IO.Path]::GetFullPath($JavaHome);identityDirectory=[IO.Path]::GetFullPath($IdentityDirectory);
         jdbcUrl="jdbc:postgresql://$($pg.bindAddress):$($pg.port)/$database";database=$database;databaseUser=$database;databasePasswordFile=(Child 'database-password.txt');
