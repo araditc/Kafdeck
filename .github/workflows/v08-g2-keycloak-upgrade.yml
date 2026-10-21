@@ -108,7 +108,7 @@ jobs:
             if ($d.formatVersion -ne 1 -or $d.action -cne 'Prove' -or
                 $d.stage -cnotin @('OldNodes','OldMembership','SameVersionBounce','UpgradeA','MixedReplay','UpgradeB','NewReplay','Complete') -or
                 $d.state -cnotin @('Running','Succeeded','Failed') -or
-                $d.failure -cnotin @('Unclassified','NodeExited','ReadinessDeadline','CompatibilityDeadline','CompatibilityRejected','ReplayAccepted','FreshOAuthRejected','MembershipMissing') -or
+                $d.failure -cnotin @('Unclassified','NodeExited','ReadinessDeadline','CompatibilityDeadline','CompatibilityRejected','ReplayAccepted','FreshOAuthRejected','MembershipMissing','BounceStop','BouncePeerToken','BounceRestart','BounceReadiness','BounceMembership','BounceReplay','BounceStartupEvidence') -or
                 ($null -ne $d.controlExitCode -and ($d.controlExitCode -isnot [long] -and $d.controlExitCode -isnot [int])) -or @($d.nodes).Count -ne 2) { throw 'Closed diagnostic contract refused.' }
             $nodes = @()
             foreach ($node in $d.nodes) {
