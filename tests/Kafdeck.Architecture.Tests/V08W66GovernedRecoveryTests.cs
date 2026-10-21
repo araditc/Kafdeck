@@ -20,8 +20,14 @@ public sealed class V08W66GovernedRecoveryTests
         var id = await f.SeedAsync();
         await Assert.ThrowsAsync<InvalidOperationException>(() => f.Store.PreviewAsync(f.Request(NotificationRecoveryCommand.AdvanceGeneration), "requester", A, B, default));
         var preview = await f.Store.PreviewAsync(f.Request(NotificationRecoveryCommand.FenceBatch) with { Disposition = disposition }, "requester", A, B, default);
-        Assert.Null(await f.Store.ApproveAsync(preview.OperationId, preview.Revision, preview.PreviewHash, "different-session-same-human", A, B, default));
-        var approved = Assert.IsType<NotificationRecoveryPlan>(await f.Store.ApproveAsync(preview.OperationId, preview.Revision, preview.PreviewHash, "approver", C, B, default));
+        Assert.Null(await f.Store.ApproveAsync(preview.OperationId, preview.Revision, preview.PreviewHash, "different-session-same-human", A, B, () => true, default));
+        // Revocation after request-level admission must deny approval
+        // inside the locked transaction, preserving Previewed state.
+        Assert.Null(await f.Store.ApproveAsync(preview.OperationId, preview.Revision, preview.PreviewHash,
+            "approver", C, B, () => false, default));
+        Assert.Equal(NotificationRecoveryState.Previewed,
+            (await f.Store.GetAsync(preview.OperationId, default))!.State);
+        var approved = Assert.IsType<NotificationRecoveryPlan>(await f.Store.ApproveAsync(preview.OperationId, preview.Revision, preview.PreviewHash, "approver", C, B, () => true, default));
         Assert.Null(await f.Store.ApplyAsync(approved.OperationId, approved.Revision, approved.PreviewHash, C, B, () => true, default));
         Assert.Null(await f.Store.ApplyAsync(approved.OperationId, approved.Revision, approved.PreviewHash, A, B, () => false, default));
         var applied = Assert.IsType<NotificationRecoveryPlan>(await f.Store.ApplyAsync(approved.OperationId, approved.Revision, approved.PreviewHash, A, B, () => true, default));
@@ -265,7 +271,7 @@ public sealed class V08W66GovernedRecoveryTests
         internal async Task<NotificationRecoveryPlan> ApprovedAsync(NotificationRecoveryRequest request)
         {
             var plan = await store.PreviewAsync(request, "requester", A, B, default);
-            return Assert.IsType<NotificationRecoveryPlan>(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash, "approver", C, B, default));
+            return Assert.IsType<NotificationRecoveryPlan>(await store.ApproveAsync(plan.OperationId, plan.Revision, plan.PreviewHash, "approver", C, B, () => true, default));
         }
         internal async Task<NotificationRecoveryPlan> ApplyAsync(NotificationRecoveryRequest request)
         {
