@@ -32,7 +32,8 @@ public static class KafdeckNotificationManagementEndpoints
                         return Results.Ok(new NotificationManagementCapabilityData(
                             true,
                             NotificationSubscriptionDefinition.HardMaxEventClasses,
-                            NotificationSubscriptionDefinition.HardMaxEventTypes));
+                            NotificationSubscriptionDefinition.HardMaxEventTypes,
+                            context.RequestServices.GetService<NotificationGovernanceOptions>() is not null));
                     }
                     if (access == KafdeckAuthorizationOutcome.Unauthenticated)
                         return Results.Problem(
@@ -251,4 +252,5 @@ public sealed record NotificationSubscriptionWriteReceipt(
 public sealed record NotificationManagementCapabilityData(
     bool SubscriptionCasAvailable,
     int MaxEventClasses,
-    int MaxEventTypes);
+    int MaxEventTypes,
+    bool DestinationGovernanceAvailable = false);

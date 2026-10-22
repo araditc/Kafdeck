@@ -80,9 +80,17 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
         _bearerAuthorization = bearerAuthorization;
     }
 
-    public async Task<ConnectAutoRestartGovernanceSnapshot> GetCurrentAsync(
+    public Task<ConnectAutoRestartGovernanceSnapshot> GetAdmissionAsync(
         ConnectAutoRestartActivation activation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => EvaluateAsync(activation, requireAppliedOperation: false, cancellationToken);
+
+    public Task<ConnectAutoRestartGovernanceSnapshot> GetCurrentAsync(
+        ConnectAutoRestartActivation activation,
+        CancellationToken cancellationToken = default) => EvaluateAsync(activation, requireAppliedOperation: true, cancellationToken);
+
+    private async Task<ConnectAutoRestartGovernanceSnapshot> EvaluateAsync(
+        ConnectAutoRestartActivation activation, bool requireAppliedOperation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(activation);
 
@@ -97,7 +105,10 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
         var allowed = RegisteredBearerPrincipal.HasBearerPrefix(activation.AutomationPrincipalId)
             ? _registrations?.IsCurrentPrincipalAllowed(activation.AutomationPrincipalId, request, _authorization) == true
             : _authorization.EvaluateCanonicalDirectSubject(activation.AutomationPrincipalId, request).IsAllowed;
-        if (RegisteredBearerPrincipal.HasBearerPrefix(activation.AutomationPrincipalId))
+        // Persisted activations must have a durable, authorized AppliedVerified
+        // operation. Admission only verifies current principal and policy because
+        // the operation does not exist until after preview and confirmation.
+        if (requireAppliedOperation && RegisteredBearerPrincipal.HasBearerPrefix(activation.AutomationPrincipalId))
         {
             var operation = _operations is null ? null : await _operations.GetAsync(activation.ActivationId, cancellationToken).ConfigureAwait(false);
             allowed &= operation is not null && operation.RequesterPrincipalId == activation.AutomationPrincipalId &&

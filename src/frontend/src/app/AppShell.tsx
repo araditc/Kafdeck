@@ -52,6 +52,11 @@ export function notificationManagementSurfaces(readAvailable: boolean, manageAva
   };
 }
 
+/** A subscription-management grant does not imply destination-governance availability. */
+export function destinationGovernanceVisible(manageAvailable: boolean, governanceAvailable: boolean) {
+  return manageAvailable && governanceAvailable;
+}
+
 export function AppShell() {
   const [operator, setOperator] = useState<OperatorSession | null>(null);
   const [authenticationRequired, setAuthenticationRequired] = useState(false);
@@ -74,7 +79,7 @@ export function AppShell() {
   const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
   const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
-  const [notificationManagement, setNotificationManagement] = useState<{ sessionKey: string } | null>(null);
+  const [notificationManagement, setNotificationManagement] = useState<{ sessionKey: string; destinationGovernanceAvailable: boolean } | null>(null);
   const sessionCheckAbort = useRef<AbortController | null>(null);
 
   const invalidateOperatorSession = useCallback(() => {
@@ -199,7 +204,7 @@ export function AppShell() {
     void kafdeckApi.getNotificationManagementCapabilities(controller.signal)
       .then(capability => {
         if (!controller.signal.aborted && capability.subscriptionCasAvailable) {
-          setNotificationManagement({ sessionKey });
+          setNotificationManagement({ sessionKey, destinationGovernanceAvailable: capability.destinationGovernanceAvailable === true });
         }
       })
       .catch(() => { if (!controller.signal.aborted) setNotificationManagement(null); });
@@ -355,7 +360,10 @@ export function AppShell() {
           {visibleNotificationPage && <NotificationObservationPanel key={notificationSessionKey ?? undefined}
               initialPage={visibleNotificationPage}
               canManageSubscriptions={managementSurfaces.insideRead} />}
-          {(managementSurfaces.insideRead || managementSurfaces.standalone) &&
+          {destinationGovernanceVisible(
+            notificationManagement?.sessionKey === notificationSessionKey,
+            notificationManagement?.destinationGovernanceAvailable === true,
+          ) &&
             <NotificationDestinationManagementPanel key={'destinations-' + (notificationSessionKey ?? '')} />}
           {managementSurfaces.standalone && <section className="card kafdeck-card"
             id="notifications" aria-label="Authorized notification subscription management">

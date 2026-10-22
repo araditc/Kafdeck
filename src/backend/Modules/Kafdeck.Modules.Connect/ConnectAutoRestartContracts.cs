@@ -747,6 +747,13 @@ public sealed record ConnectAutoRestartGovernanceSnapshot(
 
 public interface IConnectAutoRestartGovernancePort
 {
+    // Before admission there is no AppliedVerified operation. The caller must
+    // still check current principal and provider policy; the hosted controller
+    // always uses GetCurrentAsync and requires durable operation provenance.
+    Task<ConnectAutoRestartGovernanceSnapshot> GetAdmissionAsync(
+        ConnectAutoRestartActivation activation,
+        CancellationToken cancellationToken = default) => GetCurrentAsync(activation, cancellationToken);
+
     Task<ConnectAutoRestartGovernanceSnapshot> GetCurrentAsync(
         ConnectAutoRestartActivation activation,
         CancellationToken cancellationToken = default);

@@ -34,6 +34,7 @@ export interface NotificationSubscriptionListData {
 }
 export interface NotificationManagementCapabilityData {
   subscriptionCasAvailable: boolean;
+  destinationGovernanceAvailable: boolean;
   maxEventClasses: number;
   maxEventTypes: number;
 }
