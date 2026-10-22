@@ -101,8 +101,18 @@ public sealed class V08G2KeycloakPatchUpgradeTests
         {
             if (File.Exists(Path.Combine(scope, "upgrade-lab.json")))
             {
+                // A failed physical proof must retain its original failure:
+                // cleanup is best effort and can itself fail after an
+                // abruptly stopped launcher. Never promote Stop to success.
                 using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-                await RunAsync(script, scope, "Stop", options, cleanup.Token);
+                try { await RunAsync(script, scope, "Stop", options, cleanup.Token); }
+                catch (Exception e) when (e is Xunit.Sdk.XunitException or
+                                           InvalidOperationException or IOException or
+                                           OperationCanceledException)
+                {
+                    // Private cleanup logs remain on the isolated runner.
+                    // The actual Prove evidence gate must still fail.
+                }
             }
         }
     }
