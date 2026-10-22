@@ -86,7 +86,7 @@ public static class KafdeckNotificationRecoveryEndpoints
                 if (saved.State != NotificationRecoveryState.Approved) return Conflict();
                 if (saved.ApproverHumanFingerprint == Human(actor) || saved.ApprovedByPrincipalId is null ||
                     !auth.IsCurrentApprovalAllowed(saved.ApprovedByPrincipalId, Manage)) return Denied();
-                var plan = await store.ApplyAsync(operationId, saved.Revision, saved.PreviewHash,
+                var plan = await store.ApplyAsync(operationId, request.ExpectedRevision, request.PreviewHash,
                     Human(actor), auth.PolicyFingerprint, () => Actor(context, auth, bearer)?.PrincipalId == saved.RequesterPrincipalId &&
                         auth.PolicyFingerprint == saved.PolicyFingerprint && auth.IsCurrentApprovalAllowed(saved.ApprovedByPrincipalId!, Manage),
                     context.RequestAborted).ConfigureAwait(false);
