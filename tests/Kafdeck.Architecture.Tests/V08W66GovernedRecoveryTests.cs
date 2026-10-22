@@ -91,6 +91,31 @@ public sealed class V08W66GovernedRecoveryTests
     }
 
     [Fact]
+    public async Task Source_capture_from_lagging_database_clock_is_new_unless_explicitly_fenced()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var historical = Guid.NewGuid();
+        f.Source.Ids.Add(historical);
+        await f.ApplyAsync(f.Request(NotificationRecoveryCommand.FenceSourceBatch));
+        var advance = await f.ApplyAsync(f.Request(NotificationRecoveryCommand.AdvanceGeneration));
+        var sourceClockBehind = advance.HistoricalCutoffUtc.AddMinutes(-20);
+
+        // An inventoried historic event stays blocked even if capture evidence
+        // is later supplied or its source database clock is skewed.
+        await f.Store.RecordCaptureAsync(historical, sourceClockBehind, default);
+        Assert.False(await f.Store.CheckAsync(historical, "recovery", sourceClockBehind, default));
+
+        // Trusted outbox capture from a different database is new if no durable
+        // historical source fence exists, regardless of skew between DB clocks.
+        var fresh = Guid.NewGuid();
+        await f.Store.RecordCaptureAsync(fresh, sourceClockBehind, default);
+        Assert.True(await f.Store.CheckAsync(fresh, "recovery", sourceClockBehind, default));
+
+        // Unverified legacy events do not gain capture-based bypass rights.
+        Assert.False(await f.Store.CheckAsync(Guid.NewGuid(), "recovery", sourceClockBehind, default));
+    }
+
+    [Fact]
     public async Task Future_clock_ledger_keeps_readable_monotonic_row_time_without_moving_trusted_epoch_cutoff_into_the_future()
     {
         await using var f = await Fixture.CreateAsync();

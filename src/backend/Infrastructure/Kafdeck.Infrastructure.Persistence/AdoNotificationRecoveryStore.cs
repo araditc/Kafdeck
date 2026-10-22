@@ -248,7 +248,14 @@ public sealed class AdoNotificationRecoveryStore(INotificationDeliveryDbConnecti
         var comparable = captured is string captureStamp ? DateTimeOffset.ParseExact(captureStamp, "O", CultureInfo.InvariantCulture) : occurredAtUtc.ToUniversalTime();
         var historical = await ScalarAsync(c, t, "SELECT operation_id FROM notification_recovery_historical_sources WHERE target_generation=@generation AND notification_id=@id",
             token, ("@generation", epoch.Generation.ToString("D")), ("@id", eventId.ToString("D"))).ConfigureAwait(false);
-        if (historical is not string && comparable > epoch.Cutoff) return true;
+        // The source outbox records capture using the source database clock,
+        // whereas the epoch cutoff uses the notification delivery database clock.
+        // Never compare those independent clocks to classify a verified source
+        // capture: all pre-recovery source IDs were explicitly inventoried and
+        // fenced, so the durable historical receipt is the authoritative deny.
+        // Keep the conservative timestamp fallback for legacy/non-source events
+        // without a durable capture record.
+        if (historical is not string && (captured is string || comparable > epoch.Cutoff)) return true;
         var count = Convert.ToInt64(await ScalarAsync(c, t, "SELECT COUNT(*) FROM notification_recovery_source_suppressions", token).ConfigureAwait(false), CultureInfo.InvariantCulture);
         if (count >= 1000000) throw new InvalidOperationException("Notification recovery source suppression budget is exhausted.");
         await ExecuteAsync(c, t, """
