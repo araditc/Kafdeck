@@ -1,5 +1,6 @@
 using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Security;
+using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 
