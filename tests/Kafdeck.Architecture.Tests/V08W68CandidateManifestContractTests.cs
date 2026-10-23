@@ -20,11 +20,13 @@ public sealed class V08W68CandidateManifestContractTests
     {
         var first = CandidateSubscriptionManifest.ParseJson(Encoding.UTF8.GetBytes(Valid));
         const string reordered = """
-            {"kind":"NotificationSubscription","spec":{"eventTypes":["consumer.lag.alert"],"eventClasses":["Operational"],"state":"Active","destinationRef":"ops-notifier"},"metadata":{"ownerRef":"team-ops","name":"ops-lag","deploymentRef":"production-a"},"apiVersion":"kafdeck.io/v0.8-proposal"}
+            {"kind":"NotificationSubscription","spec":{"eventTypes":["consumer.lag.alert"],"eventClasses":["Operational"],"state":"Active","destinationRef":"ops-notifier"},"metadata":{"ownerRef":"independent-team","name":"ops-lag","deploymentRef":"production-a"},"apiVersion":"kafdeck.io/v0.8-proposal"}
             """;
         var second = CandidateSubscriptionManifest.ParseJson(Encoding.UTF8.GetBytes(reordered));
         Assert.Equal("production-a", first.DeploymentRef);
         Assert.Equal("team-ops", first.OwnerRef);
+        Assert.Equal("independent-team", second.OwnerRef);
+        Assert.NotEqual(first.OwnerRef, second.OwnerRef);
         Assert.Equal(first.Fingerprint(), second.Fingerprint());
         Assert.Equal(64, first.Fingerprint().Length);
     }
