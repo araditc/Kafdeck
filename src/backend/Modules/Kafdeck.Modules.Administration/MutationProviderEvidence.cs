@@ -17,6 +17,7 @@ public static class MutationProviderEvidence
         CanonicalGuid = 8,
         PositiveInt64 = 9,
         DeleteScope = 10,
+        LocalActivationFailureCode = 11,
     }
 
     private static readonly IReadOnlyDictionary<string, EvidenceValueKind> AllowedKeys =
@@ -57,6 +58,7 @@ public static class MutationProviderEvidence
             ["reconciliation.proof"] = EvidenceValueKind.Sha256,
             ["reconciliation.worker-fence"] = EvidenceValueKind.Sha256,
             ["reconciliation.generation"] = EvidenceValueKind.PositiveInt64,
+            ["local-activation.failure-code"] = EvidenceValueKind.LocalActivationFailureCode,
             ["data-job.plan"] = EvidenceValueKind.Sha256,
             ["data-job.conflict-obligations"] = EvidenceValueKind.NonNegativeInt64,
             ["data-generator.plan"] = EvidenceValueKind.Sha256,
@@ -168,6 +170,12 @@ public static class MutationProviderEvidence
                 ["RUNNING", "PAUSED", "STOPPED", "FAILED", "UNASSIGNED", "DESTROYED", "RESTARTING", "UNKNOWN", "MISSING"]),
             EvidenceValueKind.CanonicalGuid => Guid.TryParseExact(normalized, "D", out var id) && id != Guid.Empty
                 ? id.ToString("D") : throw InvalidValue(key),
+            EvidenceValueKind.LocalActivationFailureCode =>
+                normalized.Length is > 0 and <= 96 &&
+                (normalized.StartsWith("data_job_", StringComparison.Ordinal) ||
+                 normalized.StartsWith("data_generator_", StringComparison.Ordinal)) &&
+                normalized.All(ch => char.IsAsciiLower(ch) || char.IsAsciiDigit(ch) || ch == '_')
+                    ? normalized : throw InvalidValue(key),
             EvidenceValueKind.PositiveInt64 => long.TryParse(normalized, NumberStyles.None, CultureInfo.InvariantCulture, out var generation) && generation > 0
                 ? generation.ToString(CultureInfo.InvariantCulture) : throw InvalidValue(key),
             _ => throw new MutationStateException(
