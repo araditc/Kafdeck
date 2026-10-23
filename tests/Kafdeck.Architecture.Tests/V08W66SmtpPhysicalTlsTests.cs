@@ -36,7 +36,7 @@ public sealed class V08W66SmtpPhysicalTlsTests(ITestOutputHelper output)
         var secret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var script = new SmtpScript(scenario, secret);
         await using var tls = new TlsProvider(certificateName: scenario == "wrong-hostname" ? "wrong.example.org" : "smtp.example.org", session: script.RunAsync);
-        using var telemetry = new NotificationHttpTelemetryCapture();
+        using var telemetry = new NotificationHttpTelemetryCapture(secret, script.ExpectedAuth);
         var profile = new NotificationDestinationProfile("smtp-profile", NotificationProviderKind.Email, "SMTP fixture",
             [NotificationEventClass.Operational], credentialBindingId: new NotificationCredentialBindingId("smtp-v1"),
             emailRecipientAddress: "ops@example.org", smtp: new NotificationSmtpProfile("smtp.example.org", "kafdeck@example.org", "kafdeck"));
