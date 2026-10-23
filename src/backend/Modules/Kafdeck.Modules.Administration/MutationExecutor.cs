@@ -608,7 +608,7 @@ public sealed class MutationExecutor
                     localCode.Length is > 0 and <= 96 &&
                     (localCode.StartsWith("data_job_", StringComparison.Ordinal) ||
                      localCode.StartsWith("data_generator_", StringComparison.Ordinal)) &&
-                    localCode.All(ch => char.IsAsciiLower(ch) || char.IsAsciiDigit(ch) || ch == '_');
+                    localCode.All(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_');
                 providerResult = new MutationProviderResult(
                     MutationExecutionResultKind.ExecutionUnknown,
                     "invalid_pre_dispatch_result_after_dispatch",
