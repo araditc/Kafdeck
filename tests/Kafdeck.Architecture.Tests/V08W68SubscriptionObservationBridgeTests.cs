@@ -60,7 +60,7 @@ public sealed class V08W68SubscriptionObservationBridgeTests
             var desired = Desired();
             var denied = new W68CandidateSubscriptionObservationBridge(store, _ => true,
                 destination => destination != "existing-notifier", _ => true,
-                (_, _, _) => ValueTask.FromResult(true), "production-a");
+                (_, _, _, _) => ValueTask.FromResult(true), "production-a");
             Assert.Equal(CandidateDriftStatus.Inaccessible, await denied.InspectAsync(desired));
 
             var approved = Bridge(store, read: true, own: true);
@@ -77,8 +77,64 @@ public sealed class V08W68SubscriptionObservationBridgeTests
         }
     }
 
+    [Fact]
+    public async Task Ownership_wait_revocation_is_checked_again_before_disclosure()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "w68-observation-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            var store = new AdoNotificationRoutingStore(new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+            var authorized = true;
+            var bridge = new W68CandidateSubscriptionObservationBridge(store, _ => authorized,
+                _ => authorized, _ => authorized,
+                (_, _, _, _) =>
+                {
+                    authorized = false;
+                    return ValueTask.FromResult(true);
+                }, "production-a");
+            Assert.Equal(CandidateDriftStatus.Inaccessible, await bridge.InspectAsync(Desired()));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var file in Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + "*"))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public async Task Owner_mismatch_and_terminal_retired_lifecycle_are_conflicts()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "w68-observation-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            var store = new AdoNotificationRoutingStore(new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+            var definition = new NotificationSubscriptionDefinition(
+                "ops-lag", "ops-notifier", [NotificationEventClass.Operational], ["consumer.lag.alert"]);
+            await store.CreateSubscriptionAsync(definition, NotificationSubscriptionState.Retired, DateTimeOffset.UtcNow);
+            var bridge = new W68CandidateSubscriptionObservationBridge(store,
+                _ => true, _ => true, _ => true,
+                (_, _, owner, _) => ValueTask.FromResult(owner == "team-ops"), "production-a");
+            Assert.Equal(CandidateDriftStatus.Conflict, await bridge.InspectAsync(Desired()));
+
+            const string otherOwnerJson = """
+                {"apiVersion":"kafdeck.io/v0.8-proposal","kind":"NotificationSubscription","metadata":{"deploymentRef":"production-a","name":"ops-lag","ownerRef":"another-owner"},"spec":{"destinationRef":"ops-notifier","state":"Active","eventClasses":["Operational"],"eventTypes":["consumer.lag.alert"]}}
+                """;
+            var anotherOwner = CandidateSubscriptionManifest.ParseJson(Encoding.UTF8.GetBytes(otherOwnerJson));
+            Assert.Equal(CandidateDriftStatus.Conflict, await bridge.InspectAsync(anotherOwner));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var file in Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + "*"))
+                File.Delete(file);
+        }
+    }
+
     private static W68CandidateSubscriptionObservationBridge Bridge(
         INotificationRoutingStore store, bool read, bool own) =>
         new(store, _ => read, _ => read, _ => read,
-            (_, _, _) => ValueTask.FromResult(own), "production-a");
+            (_, _, _, _) => ValueTask.FromResult(own), "production-a");
 }
