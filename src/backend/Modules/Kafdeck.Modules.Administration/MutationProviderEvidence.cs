@@ -174,7 +174,7 @@ public static class MutationProviderEvidence
                 normalized.Length is > 0 and <= 96 &&
                 (normalized.StartsWith("data_job_", StringComparison.Ordinal) ||
                  normalized.StartsWith("data_generator_", StringComparison.Ordinal)) &&
-                normalized.All(ch => char.IsAsciiLower(ch) || char.IsAsciiDigit(ch) || ch == '_')
+                normalized.All(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_')
                     ? normalized : throw InvalidValue(key),
             EvidenceValueKind.PositiveInt64 => long.TryParse(normalized, NumberStyles.None, CultureInfo.InvariantCulture, out var generation) && generation > 0
                 ? generation.ToString(CultureInfo.InvariantCulture) : throw InvalidValue(key),
