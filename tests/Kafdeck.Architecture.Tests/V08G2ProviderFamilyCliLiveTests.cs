@@ -65,10 +65,12 @@ public sealed class V08G2ProviderFamilyCliLiveTests
         await admin.CreateTopicsAsync([new TopicSpecification{Name=topic,NumPartitions=1,ReplicationFactor=1}],new CreateTopicsOptions{RequestTimeout=TimeSpan.FromSeconds(15)});
         await lab.StartAsync(token);
         var operations=new List<Guid>();
-        async Task<Guid> PreviewAsync(string[] command,object body)
+        async Task<Guid> PreviewAsync(string[] command,object body,bool useRequestFile=true)
         {
-            var file=await lab.RequestFileAsync(body,token);
-            var args=command.Concat(new[]{"--request-file",file,"--idempotency-key","g2-family-"+Guid.NewGuid().ToString("N")}).ToArray();
+            // Empty-payload preview contracts (for example connector delete) must
+            // not receive --request-file; the shipped CLI intentionally rejects it.
+            var payload=useRequestFile?new[]{"--request-file",await lab.RequestFileAsync(body,token)}:Array.Empty<string>();
+            var args=command.Concat(payload).Concat(new[]{"--idempotency-key","g2-family-"+Guid.NewGuid().ToString("N")}).ToArray();
             var exit=await lab.RunAsync(token,args);
             Assert.True(exit is CliApplication.Success or CliApplication.PendingApproval,"Actual family preview failed; exit="+exit+"; "+lab.SafeOutcome);
             using var preview=JsonDocument.Parse(lab.Output);var id=preview.RootElement.GetProperty("operationId").GetGuid();
@@ -188,7 +190,7 @@ public sealed class V08G2ProviderFamilyCliLiveTests
             await Task.Delay(200,token);
         }
         Assert.True(attempted,"The shipped durable controller must observe the actual failed task and consume its single admitted restart attempt.");
-        var deleteConnector=await PreviewAsync(["connect","delete-preview","permitted",connector],new{});
+        var deleteConnector=await PreviewAsync(["connect","delete-preview","permitted",connector],new{},useRequestFile:false);
         await ExecuteAsync(deleteConnector,["connect","control-execute",deleteConnector.ToString("D")]);
         using(var actual=await connectClient.GetAsync("connectors/"+Uri.EscapeDataString(connector),token))Assert.Equal(System.Net.HttpStatusCode.NotFound,actual.StatusCode);
         var repository=new Kafdeck.Infrastructure.Persistence.AdoMutationOperationRepository(database is null?
