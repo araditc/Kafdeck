@@ -93,11 +93,14 @@ public sealed class V08G2DataJobUncertaintyCliLiveTests
                 var failed=await operations.GetAsync(parent.Id,token);
                 var code=failed?.ResultCode;
                 var safeCode=code is not null&&code.Length<=128&&code.All(c=>c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_')?code:"none";
-                Console.WriteLine($"G2_DATA_START exit={startExit}; state={failed?.State}; resultCode={safeCode}");
+                var cause = failed?.SafeProviderEvidence.TryGetValue("local-activation.failure-code", out var activationFailure) == true
+                    ? activationFailure : "none";
+                Console.WriteLine($"G2_DATA_START exit={startExit}; state={failed?.State}; resultCode={safeCode}; localFailure={cause}");
             }
             Assert.True(startExit==CliApplication.Success,
                 "Actual governed data-worker start refused: exit="+startExit+
-                "; "+lab.SafeOutcome);
+                "; "+lab.SafeOutcome+
+                "; localFailure="+((await operations.GetAsync(parent.Id,token))?.SafeProviderEvidence.TryGetValue("local-activation.failure-code",out var causeCode)==true?causeCode:"none"));
             Assert.Equal(MutationOperationState.AppliedVerified,(await operations.GetAsync(parent.Id,token))!.State);
             await Task.Delay(300,token);Assert.Equal(0,Watermarks(destination,targets[scenario]).High.Value);
             await using(var child=await WorkerAsync(directory,lab.ConfigurationFile,parent.Id,generator,true,token))
