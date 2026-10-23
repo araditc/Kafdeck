@@ -1,3 +1,4 @@
+using System.Reflection;
 using Kafdeck.Core.Declarative;
 using Xunit;
 
@@ -13,9 +14,10 @@ public sealed class V08W68OwnershipEvidenceGuardTests
             Now.AddMinutes(1), ServerVerified: true, HasCompetingClaim: false);
 
     private static bool Check(CandidateOwnershipEvidence? evidence,
-        string owner = "registered-owner", string source = "registered-source") =>
+        string owner = "registered-owner", string source = "registered-source",
+        string deployment = "production-a", string resource = "ops-lag", long revision = 3) =>
         CandidateOwnershipEvidenceGuard.IsCurrentAndConsistent(evidence,
-            "production-a", "ops-lag", owner, source, Now);
+            deployment, resource, owner, source, revision, Now);
 
     [Fact]
     public void Verified_current_exact_owner_and_source_evidence_is_eligible_for_read_only_comparison() =>
@@ -29,6 +31,9 @@ public sealed class V08W68OwnershipEvidenceGuardTests
         Assert.False(Check(proof with { ServerVerified = false }));
         Assert.False(Check(proof with { HasCompetingClaim = true }));
         Assert.False(Check(proof with { OwnershipRevision = 0 }));
+        Assert.False(Check(proof with { OwnershipRevision = 2 }));
+        Assert.False(Check(proof, revision: 2));
+        Assert.False(Check(proof, revision: 4));
         Assert.False(Check(proof with { ExpiresAtUtc = Now }));
         Assert.False(Check(proof with { ObservedAtUtc = Now.AddSeconds(1) }));
         Assert.False(Check(proof with { ExpiresAtUtc = proof.ObservedAtUtc }));
@@ -46,12 +51,17 @@ public sealed class V08W68OwnershipEvidenceGuardTests
         Assert.False(Check(proof, owner: "manifest-claims-owner"));
         Assert.False(Check(proof, source: "different-source"));
         Assert.False(Check(proof, owner: ""));
+        Assert.False(Check(proof with { DeploymentId = "" }, deployment: ""));
+        Assert.False(Check(proof with { ResourceId = "" }, resource: ""));
+        Assert.False(Check(proof with { DeploymentId = " " }, deployment: " "));
+        Assert.False(Check(proof with { ResourceId = " " }, resource: " "));
     }
 
     [Fact]
     public void Proof_record_does_not_supply_apply_adopt_destroy_or_owner_creation()
     {
-        Assert.DoesNotContain(typeof(CandidateOwnershipEvidenceGuard).GetMethods(),
+        Assert.DoesNotContain(typeof(CandidateOwnershipEvidenceGuard).GetMethods(
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly),
             method => method.Name is "Apply" or "Adopt" or "Destroy" or "Acquire");
     }
 }
