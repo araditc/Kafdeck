@@ -27,10 +27,12 @@ internal static class CandidateOwnershipEvidenceGuard
         string expectedSubscriptionId,
         string expectedRegisteredOwnerId,
         string expectedRegisteredSourceId,
+        long expectedOwnershipRevision,
         DateTimeOffset serverNowUtc)
     {
         if (evidence is null || !evidence.ServerVerified || evidence.HasCompetingClaim ||
-            evidence.OwnershipRevision < 1 || serverNowUtc == default ||
+            expectedOwnershipRevision < 1 || evidence.OwnershipRevision != expectedOwnershipRevision ||
+            serverNowUtc == default ||
             evidence.ObservedAtUtc == default || evidence.ExpiresAtUtc == default ||
             evidence.ObservedAtUtc > serverNowUtc || evidence.ExpiresAtUtc <= serverNowUtc ||
             evidence.ExpiresAtUtc <= evidence.ObservedAtUtc)
@@ -41,6 +43,8 @@ internal static class CandidateOwnershipEvidenceGuard
                string.Equals(evidence.ResourceId, expectedSubscriptionId, StringComparison.Ordinal) &&
                string.Equals(evidence.RegisteredOwnerId, expectedRegisteredOwnerId, StringComparison.Ordinal) &&
                string.Equals(evidence.RegisteredSourceId, expectedRegisteredSourceId, StringComparison.Ordinal) &&
+               !string.IsNullOrWhiteSpace(expectedDeploymentId) &&
+               !string.IsNullOrWhiteSpace(expectedSubscriptionId) &&
                !string.IsNullOrWhiteSpace(expectedRegisteredOwnerId) &&
                !string.IsNullOrWhiteSpace(expectedRegisteredSourceId);
     }
