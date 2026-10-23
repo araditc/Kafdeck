@@ -22,12 +22,12 @@ public sealed class V08W66AuthenticatedWebhookTlsTests(ITestOutputHelper output)
     public async Task Physical_private_webhook_path_and_bearer_do_not_enter_http_telemetry()
     {
         await using var tls = new TlsProvider();
-        using var telemetry = new NotificationHttpTelemetryCapture();
         var directory = Path.Combine(Path.GetTempPath(), $"kafdeck-w66-private-path-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         var secretPath = Path.Combine(directory, "credential");
         var pathSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
         var bearer = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        using var telemetry = new NotificationHttpTelemetryCapture(pathSecret, bearer);
         var endpoint = new Uri($"https://hooks.example.org:{tls.Port}/private/{pathSecret}");
         var profile = new NotificationDestinationProfile("lab-webhook", NotificationProviderKind.Webhook,
             "Laboratory", [NotificationEventClass.Operational], endpoint,
@@ -71,9 +71,9 @@ public sealed class V08W66AuthenticatedWebhookTlsTests(ITestOutputHelper output)
     [Fact]
     public async Task Http_telemetry_capture_observes_real_http_request_paths_and_activity_tags()
     {
-        using var telemetry = new NotificationHttpTelemetryCapture();
         const string pathCanary = "nonsecret-w66-eventsource-canary";
         const string activityCanary = "nonsecret-w66-activity-canary";
+        using var telemetry = new NotificationHttpTelemetryCapture(pathCanary, activityCanary);
         using (var source = new System.Diagnostics.ActivitySource("System.Net.Http.W66CaptureCanary"))
         using (var activity = source.StartActivity("capture-canary"))
             activity?.SetTag("url.full", activityCanary);
