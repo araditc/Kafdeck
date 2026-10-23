@@ -71,8 +71,41 @@ internal sealed class W68CandidateSubscriptionObservationBridge(
             (current is not null && !currentDestinationReadAllowed(current.Definition.DestinationId)))
             return CandidateDriftStatus.Inaccessible;
 
-        if (!ownershipConsistent || current?.State == NotificationSubscriptionState.Retired)
+        // Ownership proof may have awaited a competing create, update, or
+        // retirement. Observe the exact identity again before classifying.
+        NotificationSubscriptionSnapshot? latest;
+        try
+        {
+            latest = await store.GetSubscriptionAsync(desired.Definition.SubscriptionId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return CandidateDriftStatus.Unknown;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return CandidateDriftStatus.Unknown;
+        }
+
+        // Never disclose a newly moved destination or use revoked authority.
+        if (!currentDeploymentAllowed(desired.DeploymentRef) ||
+            !currentSubscriptionReadAllowed(desired.Definition.SubscriptionId) ||
+            !currentDestinationReadAllowed(desired.Definition.DestinationId) ||
+            (latest is not null && !currentDestinationReadAllowed(latest.Definition.DestinationId)) ||
+            (current is not null && !currentDestinationReadAllowed(current.Definition.DestinationId)))
+            return CandidateDriftStatus.Inaccessible;
+
+        if (!ownershipConsistent || latest?.State == NotificationSubscriptionState.Retired)
             return CandidateDriftStatus.Conflict;
+
+        // A new resource, vanished resource, or advanced CAS revision makes
+        // the prior owner/current-state proof stale, never InSync or Missing.
+        if ((current is null) != (latest is null) ||
+            (current is not null && latest is not null &&
+             (current.Revision != latest.Revision ||
+              !string.Equals(current.Definition.DestinationId, latest.Definition.DestinationId, StringComparison.Ordinal))))
+            return CandidateDriftStatus.Unknown;
 
         // The snapshot's own server-managed revision is the only current
         // revision evidence used; no raw provider, manifest revision or
