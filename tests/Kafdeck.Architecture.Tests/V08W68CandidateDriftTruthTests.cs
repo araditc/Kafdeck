@@ -65,7 +65,7 @@ public sealed class V08W68CandidateDriftTruthTests
         var inaccessible = CandidateSubscriptionDriftClassifier.Classify("not-a-fingerprint",
             new(CandidateObservationTruth.AccessDenied, Other, true, true));
         Assert.Equal(CandidateDriftStatus.Inaccessible, inaccessible);
-        Assert.DoesNotContain("a", inaccessible.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Inaccessible", inaccessible.ToString());
     }
 
     [Fact]
