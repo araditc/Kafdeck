@@ -155,7 +155,20 @@ public sealed class V08G2DataJobUncertaintyCliLiveTests
             Assert.True(reconciled.WorkerGeneration>interrupted.WorkerGeneration);
             await using(var resumed=await WorkerAsync(directory,lab.ConfigurationFile,parent.Id,generator,false,token))
             {
-                await WaitAsync(async()=>(await fleet.GetProgressAsync(parent.Id,token))?.Phase==FleetProgressPhase.Completed,resumed.Process,token);
+                // The progress CAS can become Completed before the worker's
+                // subsequent durable conflict-obligation resolution commits.
+                // Do not kill this physical worker at the first phase readback:
+                // on slower PostgreSQL this strands Outstanding obligations and
+                // falsely blocks the second real scenario as a Fleet conflict.
+                // Completion acceptance requires both durable progress and all
+                // exact parent obligations to be nonblocking after verified effects.
+                await WaitAsync(async() =>
+                {
+                    var completedProgress=await fleet.GetProgressAsync(parent.Id,token);
+                    if(completedProgress?.Phase!=FleetProgressPhase.Completed)return false;
+                    var obligations=await fleet.ListConflictObligationsByOperationAsync(parent.Id,token);
+                    return obligations.Count>0&&obligations.All(obligation=>!obligation.BlocksConflictingDispatch);
+                },resumed.Process,token);
             }
             var durable=await new AdoFleetMutationStateStore(connections).GetProgressAsync(parent.Id,token);Assert.NotNull(durable);
             Assert.Equal(1,generator?durable.Generator!.AcknowledgedRecords:durable.Transfer!.AcknowledgedRecords);
