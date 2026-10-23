@@ -113,7 +113,9 @@ public sealed class V08W68SubscriptionObservationBridgeTests
             await store.InitializeAsync();
             var definition = new NotificationSubscriptionDefinition(
                 "ops-lag", "ops-notifier", [NotificationEventClass.Operational], ["consumer.lag.alert"]);
-            await store.CreateSubscriptionAsync(definition, NotificationSubscriptionState.Retired, DateTimeOffset.UtcNow);
+            var created = await store.CreateSubscriptionAsync(definition, NotificationSubscriptionState.Active, DateTimeOffset.UtcNow);
+            await store.ReplaceSubscriptionAsync(definition, NotificationSubscriptionState.Retired,
+                created.Revision, DateTimeOffset.UtcNow.AddSeconds(1));
             var bridge = new W68CandidateSubscriptionObservationBridge(store,
                 _ => true, _ => true, _ => true,
                 (_, _, owner, _) => ValueTask.FromResult(owner == "team-ops"), "production-a");
