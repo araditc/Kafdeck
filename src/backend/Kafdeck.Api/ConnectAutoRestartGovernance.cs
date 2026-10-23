@@ -1,6 +1,7 @@
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Connect;
+using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Api;
 
@@ -56,11 +57,15 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
     private readonly KafdeckOptions _options;
     private readonly AuthorizationPolicyEvaluator _authorization;
     private readonly IConnectAutoRestartRuntimePolicyProvider _runtimePolicy;
+    private readonly NonBrowserReadRegistry? _registrations;
+    private readonly IMutationOperationRepository? _operations;
+    private readonly BearerRuntimeAuthorization? _bearerAuthorization;
 
     public ConfiguredConnectAutoRestartGovernancePort(
         KafdeckOptions options,
         AuthorizationPolicyEvaluator authorization,
-        IConnectAutoRestartRuntimePolicyProvider runtimePolicy)
+        IConnectAutoRestartRuntimePolicyProvider runtimePolicy, NonBrowserReadRegistry? registrations = null,
+        IMutationOperationRepository? operations = null, BearerRuntimeAuthorization? bearerAuthorization = null)
     {
         _options =
             options ?? throw new ArgumentNullException(nameof(options));
@@ -70,11 +75,22 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
         _runtimePolicy =
             runtimePolicy ??
             throw new ArgumentNullException(nameof(runtimePolicy));
+        _registrations = registrations;
+        _operations = operations;
+        _bearerAuthorization = bearerAuthorization;
     }
 
-    public async Task<ConnectAutoRestartGovernanceSnapshot> GetCurrentAsync(
+    public Task<ConnectAutoRestartGovernanceSnapshot> GetAdmissionAsync(
         ConnectAutoRestartActivation activation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => EvaluateAsync(activation, requireAppliedOperation: false, cancellationToken);
+
+    public Task<ConnectAutoRestartGovernanceSnapshot> GetCurrentAsync(
+        ConnectAutoRestartActivation activation,
+        CancellationToken cancellationToken = default) => EvaluateAsync(activation, requireAppliedOperation: true, cancellationToken);
+
+    private async Task<ConnectAutoRestartGovernanceSnapshot> EvaluateAsync(
+        ConnectAutoRestartActivation activation, bool requireAppliedOperation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(activation);
 
@@ -85,25 +101,34 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
                     cancellationToken)
                 .ConfigureAwait(false);
 
-        var decision =
-            _authorization.EvaluateCanonicalDirectSubject(
-                activation.AutomationPrincipalId,
-                new AuthorizationRequest(
-                    AuthorizationAction.ConnectRestart,
-                    activation.Target.ClusterId,
-                    activation.Target.AuthorizationResource));
+        var request = new AuthorizationRequest(AuthorizationAction.ConnectRestart, activation.Target.ClusterId, activation.Target.AuthorizationResource);
+        var allowed = RegisteredBearerPrincipal.HasBearerPrefix(activation.AutomationPrincipalId)
+            ? _registrations?.IsCurrentPrincipalAllowed(activation.AutomationPrincipalId, request, _authorization) == true
+            : _authorization.EvaluateCanonicalDirectSubject(activation.AutomationPrincipalId, request).IsAllowed;
+        // Persisted activations must have a durable, authorized AppliedVerified
+        // operation. Admission only verifies current principal and policy because
+        // the operation does not exist until after preview and confirmation.
+        if (requireAppliedOperation && RegisteredBearerPrincipal.HasBearerPrefix(activation.AutomationPrincipalId))
+        {
+            var operation = _operations is null ? null : await _operations.GetAsync(activation.ActivationId, cancellationToken).ConfigureAwait(false);
+            allowed &= operation is not null && operation.RequesterPrincipalId == activation.AutomationPrincipalId &&
+                operation.OperationKind == MutationOperationKind.ConnectAutoRestartPolicy && operation.State == MutationOperationState.AppliedVerified &&
+                (operation.ResultCode is "auto_restart_policy_enabled" or "auto_restart_policy_replaced") &&
+                _bearerAuthorization?.IsRequesterAllowed(operation) == true &&
+                _bearerAuthorization?.IsApproverAllowed(operation) == true;
+        }
 
         var providerFingerprint =
             CurrentProviderFingerprint(
                 activation.Target);
 
         return new ConnectAutoRestartGovernanceSnapshot(
-            decision.IsAllowed,
+            allowed,
             providerFingerprint,
             ConnectAutoRestartPolicyFingerprint.ComputeEffective(
                 policy,
                 activation.Policy),
-            decision.IsAllowed
+            allowed
                 ? null
                 : "auto_restart_authorization_revoked");
     }

@@ -13,7 +13,8 @@ public sealed record FleetGeneratorPendingBatch(
     long RawBytes,
     FleetGeneratorBatchState State,
     DateTimeOffset ReservedAtUtc,
-    DateTimeOffset? DispatchStartedAtUtc = null);
+    DateTimeOffset? DispatchStartedAtUtc = null,
+    DestinationDispatchBoundary? DestinationBoundary = null);
 
 public sealed record FleetGeneratorProgressSnapshot(
     string PlanFingerprint,
@@ -57,7 +58,7 @@ public sealed class FleetGeneratorProgress
         long recordIndex,
         int destinationPartition,
         long rawBytes,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc, DestinationDispatchBoundary? destinationBoundary = null)
     {
         if (Snapshot.PendingBatch is not null)
         {
@@ -87,7 +88,7 @@ public sealed class FleetGeneratorProgress
                 rawBytes,
                 FleetGeneratorBatchState
                     .ReservedBeforeDispatch,
-                nowUtc);
+                nowUtc, DestinationBoundary: destinationBoundary?.Validate());
 
         Snapshot = Snapshot with
         {
@@ -199,6 +200,8 @@ public sealed class FleetGeneratorProgress
 
         if (snapshot.PendingBatch is { } pending)
         {
+            if (pending.DestinationBoundary is { } boundary && boundary.Validate().Partition != pending.DestinationPartition)
+                throw new MutationStateException("Generator destination boundary does not match its partition.");
             if (pending.BatchId == Guid.Empty ||
                 pending.RecordIndex !=
                     snapshot.NextRecordIndex ||

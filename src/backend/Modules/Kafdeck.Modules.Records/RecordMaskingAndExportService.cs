@@ -234,13 +234,22 @@ public sealed class RecordExportService
         OperatorIdentity? identity,
         Stream destination,
         CancellationToken cancellationToken = default,
-        bool legacyDeploymentAuthorized = false)
+        bool legacyDeploymentAuthorized = false,
+        Func<bool>? liveAuthorization = null)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authorizationEvaluator);
         ArgumentNullException.ThrowIfNull(destination);
-        EnsureExportAuthorized(page, authorizationEvaluator, identity, legacyDeploymentAuthorized);
+        void AuthorizeCurrent()
+        {
+            if (liveAuthorization is not null)
+            {
+                if (!liveAuthorization()) throw new UnauthorizedAccessException("Current exact export authority is required.");
+            }
+            else EnsureExportAuthorized(page, authorizationEvaluator, identity, legacyDeploymentAuthorized);
+        }
+        AuthorizeCurrent();
         if (!destination.CanWrite) throw new ArgumentException("Export destination must be writable.", nameof(destination));
 
         var stopwatch = Stopwatch.StartNew();
@@ -268,6 +277,7 @@ public sealed class RecordExportService
 
         for (var index = 0; index < page.Records.Count; index++)
         {
+            AuthorizeCurrent();
             cancellationToken.ThrowIfCancellationRequested();
             if (stopwatch.Elapsed >= request.Budget.MaxDuration) { outcome = RecordExportBudgetOutcome.DurationLimit; break; }
             if (rowsWritten >= request.Budget.MaxRows) { outcome = RecordExportBudgetOutcome.RowLimit; break; }

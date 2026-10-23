@@ -34,8 +34,21 @@ export interface NotificationSubscriptionListData {
 }
 export interface NotificationManagementCapabilityData {
   subscriptionCasAvailable: boolean;
+  destinationGovernanceAvailable: boolean;
   maxEventClasses: number;
   maxEventTypes: number;
+}
+export interface NotificationManagedDestination {
+  destinationId: string; revision: number; candidateId: string | null;
+  profileEnabled: boolean; credentialEnabled: boolean; configurationMismatch: boolean;
+  candidates: Array<{ candidateId: string; provider: string; requiresCredential: boolean }>;
+}
+export interface NotificationManagedDestinationChange {
+  candidateId: string; expectedRevision: number; profileEnabled: boolean; credentialEnabled: boolean;
+}
+export interface NotificationManagedAudit {
+  revision: number; candidateId: string; profileEnabled: boolean; credentialEnabled: boolean;
+  actorFingerprint: string; policyFingerprint: string; updatedAtUtc: string;
 }
 
 export interface NotificationSubscriptionWriteRequest {
@@ -827,6 +840,24 @@ export const kafdeckApi = {
   getNotificationManagementCapabilities(signal?: AbortSignal) {
     return readJson<NotificationManagementCapabilityData>(
       '/api/v1/notifications/management/capabilities', signal,
+    );
+  },
+  listNotificationManagedDestinations(signal?: AbortSignal) {
+    return readJson<{ items: NotificationManagedDestination[] }>('/api/v1/notifications/management/destinations', signal);
+  },
+  changeNotificationManagedDestination(destinationId: string, request: NotificationManagedDestinationChange, signal?: AbortSignal) {
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(destinationId) || destinationId === '.' || destinationId === '..')
+      throw new TypeError('Invalid managed destination identity');
+    return putJson<{ destinationId: string; revision: number; profileEnabled: boolean; credentialEnabled: boolean }>(
+      '/api/v1/notifications/management/destinations/' + encodeURIComponent(destinationId), request, signal,
+    );
+  },
+  readNotificationManagedAudit(destinationId: string, afterRevision = 0, signal?: AbortSignal) {
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(destinationId) || destinationId === '.' || destinationId === '..' ||
+        !Number.isSafeInteger(afterRevision) || afterRevision < 0) throw new TypeError('Invalid audit cursor');
+    return readJson<{ items: NotificationManagedAudit[]; nextRevision: number | null }>(
+      '/api/v1/notifications/management/destinations/' + encodeURIComponent(destinationId) +
+      '/audit?maxResults=50&afterRevision=' + afterRevision, signal,
     );
   },
   upsertNotificationSubscription(

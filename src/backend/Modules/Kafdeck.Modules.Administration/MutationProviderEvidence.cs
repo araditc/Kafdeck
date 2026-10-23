@@ -12,6 +12,12 @@ public static class MutationProviderEvidence
         Boolean = 3,
         VerificationState = 4,
         Sha256 = 5,
+        CompatibilityMode = 6,
+        ConnectorState = 7,
+        CanonicalGuid = 8,
+        PositiveInt64 = 9,
+        DeleteScope = 10,
+        LocalActivationFailureCode = 11,
     }
 
     private static readonly IReadOnlyDictionary<string, EvidenceValueKind> AllowedKeys =
@@ -29,12 +35,34 @@ public static class MutationProviderEvidence
             ["acknowledged.count"] = EvidenceValueKind.NonNegativeInt64,
             ["failure.ordinal"] = EvidenceValueKind.NonNegativeInt64,
             ["schema.version"] = EvidenceValueKind.PositiveInt32,
+            ["schema.id"] = EvidenceValueKind.PositiveInt32,
+            ["target.count"] = EvidenceValueKind.NonNegativeInt64,
+            ["applied.count"] = EvidenceValueKind.NonNegativeInt64,
+            ["failed.count"] = EvidenceValueKind.NonNegativeInt64,
+            ["verified.count"] = EvidenceValueKind.NonNegativeInt64,
+            ["group.count"] = EvidenceValueKind.NonNegativeInt64,
             ["provider.accepted"] = EvidenceValueKind.Boolean,
             ["resource.exists"] = EvidenceValueKind.Boolean,
             ["compatibility.valid"] = EvidenceValueKind.Boolean,
+            ["delete.permanent"] = EvidenceValueKind.Boolean,
+            ["delete.scope"] = EvidenceValueKind.DeleteScope,
+            ["connector.exists"] = EvidenceValueKind.Boolean,
+            ["compatibility.mode"] = EvidenceValueKind.CompatibilityMode,
+            ["connector.state"] = EvidenceValueKind.ConnectorState,
             ["verification.state"] = EvidenceValueKind.VerificationState,
             ["resource.fingerprint"] = EvidenceValueKind.Sha256,
             ["configuration.fingerprint"] = EvidenceValueKind.Sha256,
+            ["reconciliation.parent"] = EvidenceValueKind.CanonicalGuid,
+            ["reconciliation.batch"] = EvidenceValueKind.CanonicalGuid,
+            ["reconciliation.before"] = EvidenceValueKind.Sha256,
+            ["reconciliation.proof"] = EvidenceValueKind.Sha256,
+            ["reconciliation.worker-fence"] = EvidenceValueKind.Sha256,
+            ["reconciliation.generation"] = EvidenceValueKind.PositiveInt64,
+            ["local-activation.failure-code"] = EvidenceValueKind.LocalActivationFailureCode,
+            ["data-job.plan"] = EvidenceValueKind.Sha256,
+            ["data-job.conflict-obligations"] = EvidenceValueKind.NonNegativeInt64,
+            ["data-generator.plan"] = EvidenceValueKind.Sha256,
+            ["data-generator.records"] = EvidenceValueKind.PositiveInt32,
         };
 
     private static readonly HashSet<string> VerificationStates =
@@ -43,6 +71,8 @@ public static class MutationProviderEvidence
             "observed",
             "inconclusive",
             "not-observable",
+            "partial",
+            "unknown",
         ],
         StringComparer.Ordinal);
 
@@ -133,6 +163,21 @@ public static class MutationProviderEvidence
                 NormalizeVerificationState(key, normalized),
             EvidenceValueKind.Sha256 =>
                 NormalizeSha256(key, normalized),
+            EvidenceValueKind.CompatibilityMode => NormalizeChoice(key, normalized,
+                ["NONE", "BACKWARD", "BACKWARD_TRANSITIVE", "FORWARD", "FORWARD_TRANSITIVE", "FULL", "FULL_TRANSITIVE"]),
+            EvidenceValueKind.DeleteScope => NormalizeChoice(key, normalized, ["SUBJECT", "VERSION"]),
+            EvidenceValueKind.ConnectorState => NormalizeChoice(key, normalized,
+                ["RUNNING", "PAUSED", "STOPPED", "FAILED", "UNASSIGNED", "DESTROYED", "RESTARTING", "UNKNOWN", "MISSING"]),
+            EvidenceValueKind.CanonicalGuid => Guid.TryParseExact(normalized, "D", out var id) && id != Guid.Empty
+                ? id.ToString("D") : throw InvalidValue(key),
+            EvidenceValueKind.LocalActivationFailureCode =>
+                normalized.Length is > 0 and <= 96 &&
+                (normalized.StartsWith("data_job_", StringComparison.Ordinal) ||
+                 normalized.StartsWith("data_generator_", StringComparison.Ordinal)) &&
+                normalized.All(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_')
+                    ? normalized : throw InvalidValue(key),
+            EvidenceValueKind.PositiveInt64 => long.TryParse(normalized, NumberStyles.None, CultureInfo.InvariantCulture, out var generation) && generation > 0
+                ? generation.ToString(CultureInfo.InvariantCulture) : throw InvalidValue(key),
             _ => throw new MutationStateException(
                 $"Provider evidence key '{key}' has an unsupported value contract."),
         };
@@ -204,4 +249,10 @@ public static class MutationProviderEvidence
 
     private static MutationStateException InvalidValue(string key) =>
         new($"Provider evidence value for '{key}' does not match its admitted typed projection.");
+
+    private static string NormalizeChoice(string key, string value, IReadOnlyList<string> allowed)
+    {
+        var normalized = value.ToUpperInvariant();
+        return allowed.Contains(normalized, StringComparer.Ordinal) ? normalized : throw InvalidValue(key);
+    }
 }

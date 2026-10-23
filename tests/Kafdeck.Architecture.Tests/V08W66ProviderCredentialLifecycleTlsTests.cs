@@ -46,7 +46,13 @@ public sealed class V08W66ProviderCredentialLifecycleTlsTests(ITestOutputHelper 
         var network = new LifecycleNetwork(hostname, tls.Port, provider == NotificationProviderKind.Email ? 465 : 443);
         var first = Profile(provider, "provider-v1");
         var rotated = Profile(provider, "provider-v2");
-        using var telemetry = new NotificationHttpTelemetryCapture();
+        // All expected credentials are known before any physical provider send.
+        // Evaluate them across the full HTTP telemetry stream, regardless of
+        // unrelated parallel integration-test traffic, without retaining it.
+        var watchedSecrets = provider == NotificationProviderKind.Email
+            ? new[] { oldSecret, currentSecret, firstSmtp.ExpectedAuth, secondSmtp.ExpectedAuth }
+            : new[] { oldSecret, currentSecret };
+        using var telemetry = new NotificationHttpTelemetryCapture(watchedSecrets);
         try
         {
             await File.WriteAllTextAsync(oldSecretPath, oldSecret);
@@ -176,6 +182,7 @@ public sealed class V08W66ProviderCredentialLifecycleTlsTests(ITestOutputHelper 
         builder.Services.AddSingleton(new NotificationPinnedHttpHandlerFactory(network, NotificationAddressPolicy.NoConfiguredNat64,
             trustRoots: new X509Certificate2Collection(tls.Root)));
         var connections = new SqliteNotificationDeliveryDbConnectionFactory(path);
+        builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(connections);
         builder.Services.AddSingleton<INotificationRoutingStore>(new AdoNotificationRoutingStore(connections));
         builder.Services.AddSingleton<INotificationDeliveryStore>(new AdoNotificationDeliveryStore(connections));
         builder.Services.AddKafdeckWebhookDelivery(options);

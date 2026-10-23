@@ -362,6 +362,7 @@ public sealed class V07W57GovernedDataJobWorkerTests
         IFleetMutationStateStore
     {
         private FleetOperationProgressSnapshot? _progress;
+        private readonly Dictionary<Guid, FleetConflictObligationSnapshot> _obligations = [];
 
         public Task InitializeAsync(
             CancellationToken cancellationToken = default) =>
@@ -428,33 +429,63 @@ public sealed class V07W57GovernedDataJobWorkerTests
         public Task<FleetConflictObligationCreateResult>
             CreateConflictObligationAsync(
                 FleetConflictObligationSnapshot obligation,
-                CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+                CancellationToken cancellationToken = default)
+        {
+            var existing = _obligations.Values.FirstOrDefault(row => row.BlocksConflictingDispatch && row.ConflictKey == obligation.ConflictKey);
+            if (existing is not null)
+                return Task.FromResult(new FleetConflictObligationCreateResult(
+                    existing.OperationId == obligation.OperationId && existing.EffectFingerprint == obligation.EffectFingerprint
+                        ? FleetConflictObligationCreateOutcome.ExistingSameEffect : FleetConflictObligationCreateOutcome.ExistingDifferentEffect, existing));
+            _obligations.Add(obligation.ObligationId, obligation);
+            return Task.FromResult(new FleetConflictObligationCreateResult(FleetConflictObligationCreateOutcome.Created, obligation));
+        }
 
         public Task<FleetConflictObligationBatchCreateResult>
             CreateConflictObligationsAsync(
                 IReadOnlyList<FleetConflictObligationSnapshot> obligations,
-                CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+                CancellationToken cancellationToken = default)
+        {
+            var conflict = _obligations.Values.FirstOrDefault(row => row.BlocksConflictingDispatch &&
+                obligations.Any(candidate => candidate.ConflictKey == row.ConflictKey &&
+                    (candidate.OperationId != row.OperationId || candidate.EffectFingerprint != row.EffectFingerprint)));
+            if (conflict is not null)
+                return Task.FromResult(new FleetConflictObligationBatchCreateResult(FleetConflictObligationBatchCreateOutcome.ExistingDifferentEffect, [], conflict));
+            foreach (var obligation in obligations) _obligations.TryAdd(obligation.ObligationId, obligation);
+            return Task.FromResult(new FleetConflictObligationBatchCreateResult(FleetConflictObligationBatchCreateOutcome.Created, obligations));
+        }
 
         public Task<FleetConflictObligationSnapshot?>
             GetConflictObligationAsync(
                 Guid obligationId,
                 CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            Task.FromResult(_obligations.GetValueOrDefault(obligationId));
+
+        public Task<IReadOnlyList<FleetConflictObligationSnapshot>> ListConflictObligationsByOperationAsync(
+            Guid operationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<FleetConflictObligationSnapshot>>(_obligations.Values.Where(row => row.OperationId == operationId).ToArray());
 
         public Task<FleetConflictObligationSnapshot?>
             FindBlockingConflictObligationAsync(
                 string conflictKey,
                 CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            Task.FromResult(_obligations.Values.FirstOrDefault(row => row.BlocksConflictingDispatch && row.ConflictKey == conflictKey));
 
         public Task<FleetConflictObligationSaveResult>
             TrySaveConflictObligationAsync(
                 FleetConflictObligationSnapshot obligation,
                 long expectedVersion,
-                CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+                CancellationToken cancellationToken = default)
+        {
+            if (!_obligations.TryGetValue(obligation.ObligationId, out var existing))
+                return Task.FromResult(new FleetConflictObligationSaveResult(FleetConflictObligationSaveOutcome.NotFound, null));
+            if (existing.Version != expectedVersion)
+                return Task.FromResult(new FleetConflictObligationSaveResult(FleetConflictObligationSaveOutcome.VersionConflict, existing));
+            if (existing.OperationId != obligation.OperationId || existing.ConflictKey != obligation.ConflictKey ||
+                existing.EffectFingerprint != obligation.EffectFingerprint || existing.StepId != obligation.StepId)
+                return Task.FromResult(new FleetConflictObligationSaveResult(FleetConflictObligationSaveOutcome.ImmutableIdentityConflict, existing));
+            _obligations[obligation.ObligationId] = obligation;
+            return Task.FromResult(new FleetConflictObligationSaveResult(FleetConflictObligationSaveOutcome.Saved, obligation));
+        }
     }
 
     private sealed class UnusedOperationRepository :

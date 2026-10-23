@@ -3,7 +3,7 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { NotificationObservationPanel } from '../dist/test-source/features/notifications/NotificationObservationPanel.js';
-import { AppShell, notificationManagementSurfaces } from '../dist/test-source/app/AppShell.js';
+import { AppShell, notificationManagementSurfaces, destinationGovernanceVisible } from '../dist/test-source/app/AppShell.js';
 import {
   NotificationSubscriptionManagementPanel,
   isValidNotificationDestinationId,
@@ -59,6 +59,13 @@ test('W66 security-filtered pagination does not offer hidden cursor continuation
   assert.match(markup, /restricted cursor/);
   assert.doesNotMatch(markup, /hidden-internal-id/);
   assert.doesNotMatch(markup, /Load more subscriptions/);
+});
+
+test('destination governance requires both the management grant and configured runtime activation', () => {
+  assert.equal(destinationGovernanceVisible(true, true), true);
+  assert.equal(destinationGovernanceVisible(true, false), false);
+  assert.equal(destinationGovernanceVisible(false, true), false);
+  assert.equal(destinationGovernanceVisible(false, false), false);
 });
 
 test('W66 UI is absent from the unverified app shell', () => {

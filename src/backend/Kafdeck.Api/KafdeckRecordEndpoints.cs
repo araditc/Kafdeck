@@ -58,6 +58,7 @@ public static class KafdeckRecordEndpoints
                 query.SerdeFormat,
                 cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null) return ApiResults.Problem(ApiProblemMapper.FromKafka(filtered.Failure!));
+            if (!CurrentBearerReadAllowed(http, clusterId, topicName)) return Results.Problem(statusCode: 403, title: "Record access revoked.");
 
             var safe = maskingService.Apply(query.Read, filtered.Value, maskingPolicy);
             await AuditRecordAccessAsync(http, auditSink, maskingService.BuildReadAudit(safe), cancellationToken).ConfigureAwait(false);
@@ -95,6 +96,7 @@ public static class KafdeckRecordEndpoints
         var admissionIdentity = "legacy-deployment";
         if (OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null)
             admissionIdentity = $"{session.Identity.Key.Issuer}|{session.Identity.Key.Subject}";
+        if (http.User.Identity is NonBrowserReadIdentity bearer) admissionIdentity = bearer.AuditId;
 
         var tailBudget = new RecordTailBudget(
             Math.Min(query.Read.Budget.MaxRecords, RecordTailBudget.HardMaxRecords),
@@ -114,6 +116,7 @@ public static class KafdeckRecordEndpoints
             query.SerdeFormat,
             cancellationToken).ConfigureAwait(false))
         {
+            if (!CurrentBearerReadAllowed(http, clusterId, topicName)) break;
             object payload;
             if (frame.Kind == RecordTailFrameKind.Records && frame.Page is not null)
             {
@@ -194,7 +197,9 @@ public static class KafdeckRecordEndpoints
 
             var summary = await exportService.ExportAsync(
                 safe, exportRequest, authorizationEvaluator, identity, http.Response.Body, cancellationToken,
-                legacyDeploymentAuthorized: legacyDeploymentAuthorized).ConfigureAwait(false);
+                legacyDeploymentAuthorized: legacyDeploymentAuthorized,
+                liveAuthorization: http.User.Identity is NonBrowserReadIdentity
+                    ? () => CurrentBearerReadAllowed(http, clusterId, topicName, export: true) : null).ConfigureAwait(false);
             await AuditRecordAccessAsync(http, auditSink, exportService.BuildExportAudit(safe, summary), cancellationToken).ConfigureAwait(false);
         }
         catch (UnauthorizedAccessException)
@@ -221,6 +226,7 @@ public static class KafdeckRecordEndpoints
     {
         var hasSession = OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null;
         var principal = hasSession ? SecurityAuditPrincipal.FromOperator(session!.Identity) : SecurityAuditPrincipal.LegacyDeployment;
+        if (http.User.Identity is NonBrowserReadIdentity bearer) principal = bearer.AuditId;
         var first = metadata.FirstOffset?.ToString(CultureInfo.InvariantCulture) ?? "none";
         var last = metadata.LastOffset?.ToString(CultureInfo.InvariantCulture) ?? "none";
         var reason = metadata.Operation == "record.export"
@@ -240,6 +246,16 @@ public static class KafdeckRecordEndpoints
 
     private static bool IsConfiguredCluster(KafdeckOptions options, string clusterId) =>
         options.Clusters.Any(cluster => string.Equals(cluster.Id, clusterId, StringComparison.Ordinal));
+
+    private static bool CurrentBearerReadAllowed(HttpContext http, string cluster, string topic, bool export = false)
+    {
+        if (http.User.Identity is not NonBrowserReadIdentity) return true;
+        var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
+        return authorization.Authorize(http.User, new(AuthorizationAction.ClusterRead, cluster)) == KafdeckAuthorizationOutcome.Allowed &&
+            authorization.Authorize(http.User, new(AuthorizationAction.TopicRead, cluster, topic)) == KafdeckAuthorizationOutcome.Allowed &&
+            authorization.Authorize(http.User, new(AuthorizationAction.RecordRead, cluster, topic)) == KafdeckAuthorizationOutcome.Allowed &&
+            (!export || authorization.Authorize(http.User, new(AuthorizationAction.RecordExport, cluster, topic)) == KafdeckAuthorizationOutcome.Allowed);
+    }
 
     private static bool IsSafeQueryError(Exception exception) =>
         exception is ArgumentException or FormatException or OverflowException or RecordFilterCompilationException;

@@ -66,6 +66,9 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
     [KeycloakG2KafkaFact]
     public Task Real_Keycloak_human_CLI_previews_confirms_executes_real_Kafka_topic_and_reads_durable_status() => RunScenarioAsync(true);
 
+    [KeycloakG2PostgreSqlKafkaFact]
+    public Task Real_PostgreSql_governed_operator_subscription_and_human_CLI_Kafka_product_notification_reaches_TLS() => RunScenarioAsync(true, postgres: true);
+
     [KeycloakG2KafkaFact]
     public Task Real_Keycloak_service_CLI_previews_confirms_executes_real_Kafka_topic_with_distinct_durable_actor() => RunScenarioAsync(true, service: true);
 
@@ -210,7 +213,7 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
             configuration["Kafdeck:Authorization:Roles:0:Permissions:6:ResourcePatterns:0"] = topicName;
         }
         await using var productBridge = includeEffect && !service && !critical && !extendedTopics
-            ? await G2KafkaProductNotificationBridge.PrepareAsync(evidenceDirectory, configuration) : null;
+            ? await G2KafkaProductNotificationBridge.PrepareAsync(evidenceDirectory, configuration, postgresDatabase?.ConnectionString) : null;
         foreach (var setting in configuration)
             start.Environment[setting.Key.Replace(":", "__", StringComparison.Ordinal)] = setting.Value;
         var host = Process.Start(start)!;
@@ -240,6 +243,8 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                 await Task.Delay(200, deadline.Token);
             }
             Assert.True(ready, "The shipped API did not become ready for genuine CLI acceptance.");
+            if (productBridge is not null)
+                await productBridge.ConfigureViaOperatorApiAsync(new Uri(apiBase), lab.RootElement, deadline.Token);
 
             // This bounded browser-form driver follows the real authorization endpoint
             // and login form. It never uses direct-access/password grant or makes JWTs.
@@ -388,9 +393,10 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                 using (var status = JsonDocument.Parse(lastOutput)) Assert.Equal("appliedVerified", status.RootElement.GetProperty("state").GetString());
                 if (service)
                 {
-                    // Service reads retain their narrower admission surface. Read
-                    // back Kafka independently rather than grant a new route.
-                    Assert.Equal(CliApplication.AuthenticationOrAuthorizationError, await Run("topics", "get", "permitted", topicName));
+                    // The registered service has current exact TopicRead scope.
+                    // Keep the independent physical Kafka readback as well.
+                    Assert.Equal(CliApplication.Success, await Run("topics", "get", "permitted", topicName));
+                    Assert.Contains(topicName, lastOutput, StringComparison.Ordinal);
                     using var reads = new ConfluentKafkaAdministrationAdapter([
                         new ClusterProfile("permitted", [Environment.GetEnvironmentVariable("KAFDECK_G2_KAFKA_BOOTSTRAP")!],
                             KafkaSecurityProtocol.Plaintext, null, null)], new SecretResolver());
@@ -502,15 +508,15 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
                 }
                 if (productBridge is not null)
                     await productBridge.DeliverAfterApiRestartAsync(host, mutationDb, persisted, topicName, evidenceDirectory, deadline.Token);
-                await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, service ? "service-cli-kafka-effect-evidence.json" : "human-cli-kafka-effect-evidence.json"), JsonSerializer.Serialize(new
+                await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, service ? "service-cli-kafka-effect-evidence.json" : postgres ? "postgres-human-cli-kafka-effect-evidence.json" : "human-cli-kafka-effect-evidence.json"), JsonSerializer.Serialize(new
                 {
                     observedAtUtc = DateTimeOffset.UtcNow, issuer = Field("issuer"), audience = Field("audience"),
                     flow = (service ? "real Keycloak private_key_jwt" : "real Keycloak human PKCE") + " -> shipped CLI -> bearer-only API -> durable preview/confirm/execute -> real Kafka -> status/readback",
-                    family = "TopicCreate", persistence = "SQLite", durableState = persisted.State.ToString(),
+                    family = "TopicCreate", persistence = postgres ? "PostgreSQL" : "SQLite", durableState = persisted.State.ToString(),
                     requesterKind = actorKind, exactInitiatingPrincipal = true, serverPolicyFingerprintBound = true,
                     idempotentPreviewSameOperation = true, changedIntentSameKeyExit = 8, wrongPreviewHashExit = 8,
                     realTopicReadback = true, durableRepositoryReopen = true, browserLogins,
-                    caveat = "Low-risk TopicCreate only. No CRITICAL approval, other-family parity, PostgreSQL effect, restart or unknown-effect acceptance in this scenario.",
+                    caveat = "Low-risk TopicCreate only. No CRITICAL approval, other-family parity, database failover/restore or unknown-effect acceptance in this scenario.",
                 }, new JsonSerializerOptions { WriteIndented = true }), deadline.Token);
                 return;
             }
@@ -542,7 +548,7 @@ public sealed class V08G2HumanCliLiveTests(ITestOutputHelper testOutput)
             if (approverPassword is not null) Assert.False(logs.Contains(approverPassword, StringComparison.Ordinal),
                 "The API log reflected the disposable approver password.");
             Assert.False(logs.Contains("Bearer eyJ", StringComparison.Ordinal), "The API log exposed bearer JWT material.");
-            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, postgres ? "g2-postgres-topic-lifecycle-api.log" : extendedTopics ? "g2-topic-lifecycle-api.log" : critical ? "g2-critical-api.log" : service ? "g2-service-effect-api.log" : includeEffect ? "g2-human-effect-api.log" : "g2-human-api.log"), logs);
+            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, postgres && !extendedTopics ? "g2-postgres-product-api.log" : postgres ? "g2-postgres-topic-lifecycle-api.log" : extendedTopics ? "g2-topic-lifecycle-api.log" : critical ? "g2-critical-api.log" : service ? "g2-service-effect-api.log" : includeEffect ? "g2-human-effect-api.log" : "g2-human-api.log"), logs);
         }
     }
 

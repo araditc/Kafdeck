@@ -36,6 +36,30 @@ export interface MutationStatus {
   version: number;
   createdAtUtc: string;
   updatedAtUtc: string;
+  reconciliationReview?: JobReconciliationReview | null;
+}
+
+export interface DestinationDispatchObservation {
+  clusterId: string;
+  kafkaClusterId: string;
+  topicName: string;
+  topicId: string;
+  partition: number;
+  lowWatermark: number;
+  highWatermark: number;
+  workerGeneration: number;
+  observedAtUtc: string;
+}
+
+export interface JobReconciliationReview {
+  parentOperationId: string;
+  batchId: string;
+  expectedProgressVersion: number;
+  workerGeneration: number;
+  proofReferenceSha256: string;
+  fencedWorkerEvidenceSha256: string;
+  beforeDispatch: DestinationDispatchObservation;
+  reviewedObservation: DestinationDispatchObservation;
 }
 
 export interface MutationApprovalInbox {
@@ -224,6 +248,7 @@ export interface DataJobStatus {
   activeRuntimeMilliseconds: number;
   ranges: DataJobRangeStatus[];
   pendingBatch: DataJobPendingBatchStatus | null;
+  progressVersion?: number | null;
 }
 
 export type DataGeneratorSourceKindInput = 'Schema' | 'BuiltInTemplate';
@@ -284,6 +309,25 @@ export interface DataGeneratorStatus {
   acknowledgedBytes: number;
   activeRuntimeMilliseconds: number;
   pendingBatch: DataGeneratorPendingBatchStatus | null;
+  progressVersion?: number | null;
+}
+
+export interface DataReconciliationPreviewInput {
+  batchId: string;
+  expectedProgressVersion: number;
+  proofReferenceSha256: string;
+  fencedWorkerEvidenceSha256: string;
+}
+
+/** Validate before CSRF acquisition or any network I/O. Hash references are not proof authority. */
+export function validateDataReconciliationPreview(operationId: string, request: DataReconciliationPreviewInput, idempotencyKey: string): void {
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(operationId) ||
+      !request || Object.keys(request).some(key => !['batchId', 'expectedProgressVersion', 'proofReferenceSha256', 'fencedWorkerEvidenceSha256'].includes(key)) ||
+      typeof request.batchId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(request.batchId) ||
+      !Number.isSafeInteger(request.expectedProgressVersion) || request.expectedProgressVersion < 0 ||
+      !/^[a-f0-9]{64}$/.test(request.proofReferenceSha256) || !/^[a-f0-9]{64}$/.test(request.fencedWorkerEvidenceSha256) ||
+      typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 256 || /[\u0000-\u001f\u007f]/.test(idempotencyKey))
+    throw new Error('Reconciliation requires an exact operation, batch, current progress version, SHA256 proof/fence references and Idempotency-Key.');
 }
 
 export type RecordsPurgeSelectorKind = 'absolute' | 'timestamp';
@@ -883,15 +927,17 @@ export const mutationApi = {
     );
   },
 
-  reconcileDataJob(
+  previewDataJobReconciliation(
     operationId: string,
-    batchId: string,
+    request: DataReconciliationPreviewInput,
+    idempotencyKey: string,
     signal?: AbortSignal,
   ) {
-    return postJson<DataJobStatus>(
-      `/api/v1/data-jobs/${encodeURIComponent(operationId)}/reconcile`,
-      { batchId, disposition: 'provenNonApplication' },
-      { signal },
+    validateDataReconciliationPreview(operationId, request, idempotencyKey);
+    return postJson<MutationStatus>(
+      `/api/v1/data-jobs/${encodeURIComponent(operationId)}/reconcile/preview`,
+      request,
+      { idempotencyKey, signal },
     );
   },
 
@@ -930,15 +976,17 @@ export const mutationApi = {
     );
   },
 
-  reconcileDataGenerator(
+  previewDataGeneratorReconciliation(
     operationId: string,
-    batchId: string,
+    request: DataReconciliationPreviewInput,
+    idempotencyKey: string,
     signal?: AbortSignal,
   ) {
-    return postJson<DataGeneratorStatus>(
-      `/api/v1/data-jobs/generator/${encodeURIComponent(operationId)}/reconcile`,
-      { batchId, disposition: 'provenNonApplication' },
-      { signal },
+    validateDataReconciliationPreview(operationId, request, idempotencyKey);
+    return postJson<MutationStatus>(
+      `/api/v1/data-jobs/generator/${encodeURIComponent(operationId)}/reconcile/preview`,
+      request,
+      { idempotencyKey, signal },
     );
   },
 

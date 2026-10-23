@@ -8,14 +8,16 @@ public sealed class ConfiguredDataGeneratorEffectGuard :
     IDataGeneratorEffectGuard
 {
     private readonly AuthorizationPolicyEvaluator _authorization;
+    private readonly BearerRuntimeAuthorization? _bearerAuthorization;
     private readonly MutationApprovalAuthorizer _approval;
     private readonly DataGeneratorPreconditionValidator _preconditions;
 
     public ConfiguredDataGeneratorEffectGuard(
         AuthorizationPolicyEvaluator authorization,
         MutationApprovalAuthorizer approval,
-        DataGeneratorPreconditionValidator preconditions)
+        DataGeneratorPreconditionValidator preconditions, BearerRuntimeAuthorization? bearerAuthorization = null)
     {
+        _bearerAuthorization = bearerAuthorization;
         _authorization =
             authorization ??
             throw new ArgumentNullException(
@@ -90,6 +92,8 @@ public sealed class ConfiguredDataGeneratorEffectGuard :
     private bool RequesterAllowed(
         MutationOperationSnapshot operation)
     {
+        if (RegisteredBearerPrincipal.HasBearerPrefix(operation.RequesterPrincipalId))
+            return _bearerAuthorization?.IsRequesterAllowed(operation) == true;
         foreach (var target in
                  operation.AuthorizationTargets)
         {
@@ -114,6 +118,8 @@ public sealed class ConfiguredDataGeneratorEffectGuard :
     private bool ApproverAllowed(
         MutationOperationSnapshot operation)
     {
+        if (RegisteredBearerPrincipal.HasBearerPrefix(operation.RequesterPrincipalId))
+            return _bearerAuthorization?.IsApproverAllowed(operation) == true;
         if (!operation.Risk
                 .RequiresIndependentApproval)
         {

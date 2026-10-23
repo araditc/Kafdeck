@@ -43,11 +43,12 @@ public static class FleetMutationAuthorization
         }
 
         ArgumentNullException.ThrowIfNull(requirements);
-        if (requirements.Count == 0 || requirements.Count > MutationLimits.MaxResourceKeys)
+        var maximumRequirements = MutationLimits.MaxResourceKeys + (kind == MutationOperationKind.FleetUncertaintyDisposition ? 1 : 0);
+        if (requirements.Count == 0 || requirements.Count > maximumRequirements)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(requirements),
-                $"Fleet authorization requirements must contain between 1 and {MutationLimits.MaxResourceKeys} items.");
+                $"Fleet authorization requirements must contain between 1 and {maximumRequirements} items.");
         }
 
         var rule = RuleFor(kind);
@@ -420,7 +421,6 @@ public static class FleetMutationAuthorization
             AuthorizationAction.SystemRead,
             AuthorizationAction.TopicList,
             AuthorizationAction.ConsumerRead,
-            AuthorizationAction.SchemaRead,
             AuthorizationAction.KsqlRead,
             AuthorizationAction.CatalogRead,
         };

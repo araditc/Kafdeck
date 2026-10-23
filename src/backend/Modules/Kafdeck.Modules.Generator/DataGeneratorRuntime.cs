@@ -44,13 +44,14 @@ public sealed class DataGeneratorDispatchCoordinator
     private readonly IDataGeneratorEffectGuard _guard;
     private readonly DataGeneratorMaterializer _materializer;
     private readonly TimeProvider _timeProvider;
+    private readonly IDestinationDispatchObserver? _destinationObserver;
 
     public DataGeneratorDispatchCoordinator(
         DataGeneratorStateCoordinator state,
         IClusterTransferProducePort producer,
         IDataGeneratorEffectGuard guard,
         DataGeneratorMaterializer materializer,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null, IDestinationDispatchObserver? destinationObserver = null)
     {
         _state =
             state ??
@@ -66,6 +67,7 @@ public sealed class DataGeneratorDispatchCoordinator
             throw new ArgumentNullException(nameof(materializer));
         _timeProvider =
             timeProvider ?? TimeProvider.System;
+        _destinationObserver = destinationObserver;
     }
 
     public async Task<DataGeneratorDispatchResult>
@@ -185,6 +187,15 @@ public sealed class DataGeneratorDispatchCoordinator
                 current);
         }
 
+        DestinationDispatchBoundary? destinationBoundary = null;
+        if (_destinationObserver is not null)
+        {
+            var observed = await _destinationObserver.ObserveAsync(plan.Destination.ClusterId, plan.Destination.TopicName,
+                plan.Destination.Partition, workerGeneration, cancellationToken).ConfigureAwait(false);
+            if (!observed.IsSuccess) return new(FailedDefinitive(observed.Code, current), current);
+            destinationBoundary = observed.Boundary;
+        }
+
         var guard =
             await _guard.ValidateAsync(
                     operation,
@@ -211,7 +222,7 @@ public sealed class DataGeneratorDispatchCoordinator
                     recordIndex,
                     rawBytes,
                     _timeProvider.GetUtcNow(),
-                    cancellationToken)
+                    cancellationToken, destinationBoundary)
                 .ConfigureAwait(false);
 
         current =

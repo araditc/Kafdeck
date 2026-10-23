@@ -598,9 +598,22 @@ public sealed class MutationExecutor
             }
             else if (providerResult.ResultKind == MutationExecutionResultKind.FailedBeforeDispatch)
             {
+                // The dispatch fence is already durable. Even a local worker
+                // activation failure remains ExecutionUnknown, never a false
+                // pre-dispatch certainty. Only fixed-shape internal activation
+                // codes may be retained as typed diagnostic evidence.
+                var localCode = providerResult.ResultCode;
+                var safeLocalCode = operation.Snapshot.OperationKind is
+                    MutationOperationKind.DataJob or MutationOperationKind.DataGenerator &&
+                    localCode.Length is > 0 and <= 96 &&
+                    (localCode.StartsWith("data_job_", StringComparison.Ordinal) ||
+                     localCode.StartsWith("data_generator_", StringComparison.Ordinal)) &&
+                    localCode.All(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_');
                 providerResult = new MutationProviderResult(
                     MutationExecutionResultKind.ExecutionUnknown,
-                    "invalid_pre_dispatch_result_after_dispatch");
+                    "invalid_pre_dispatch_result_after_dispatch",
+                    safeLocalCode ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    { ["local-activation.failure-code"] = localCode } : null);
             }
 
             var terminalOutcomeCode = providerResult.ResultCode;

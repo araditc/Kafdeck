@@ -243,6 +243,14 @@ public sealed class DataGeneratorWorker
         }
 
         var current = loaded.Progress;
+        if (current.Phase == FleetProgressPhase.Completed)
+        {
+            await CompletedJobConflictResolution.ResolveAsync(_fleet, operation, plan, current, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+        // An unresolved dispatched batch must stay byte-for-byte stable for
+        // governed review. A restart/lease expiry never authorizes blind replay.
+        if (current.Generator?.PendingBatch?.State == FleetGeneratorBatchState.DispatchStarted) return;
         if (!IsRunnable(current.Phase))
         {
             return;
@@ -461,6 +469,7 @@ public sealed class DataGeneratorWorker
                     if (current.Phase ==
                         FleetProgressPhase.Completed)
                     {
+                        await CompletedJobConflictResolution.ResolveAsync(_fleet, operation, plan, current, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
                         return;
                     }
 

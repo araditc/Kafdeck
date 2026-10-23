@@ -1,0 +1,105 @@
+name: v08-g2-identity-lifecycle
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v08-g2-identity-lifecycle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-signing-client-rotation-and-rendered-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Setup browser driver runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.x'
+      - name: Prepare verified isolated Keycloak runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-lifecycle"
+          mkdir -p "$lab"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+            https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip --output "$lab/keycloak.zip"
+          printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak.zip" | sha256sum --check
+          unzip -q "$lab/keycloak.zip" -d "$lab"
+          chmod +x "$lab/keycloak-26.8.1/bin/kc.sh"
+      - name: Prepare disposable realm control without application privileges
+        shell: pwsh
+        run: |
+          $lab = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g2-lifecycle"
+          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$lab/keycloak-26.8.1" -OutputDirectory "$lab/identity" -HttpsPort 18446 -IncludeLifecycleControl
+      - name: Start genuine HTTPS identity lifecycle laboratory
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-lifecycle"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          export JAVA_OPTS_APPEND='-Xms128m -Xmx512m'
+          export KC_HTTPS_KEY_STORE_PASSWORD="$(cat "$lab/identity/https-password.txt")"
+          export KC_DB_URL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["databaseUrl"])' "$lab/identity/lab.json")"
+          nohup "$lab/keycloak-26.8.1/bin/kc.sh" start --db=dev-file --http-enabled=false --http-host=127.0.0.1 \
+            --https-port=18446 --hostname=https://localhost:18446 --https-key-store-file="$lab/identity/https.p12" \
+            --cache=local --import-realm > "$lab/server.log" 2>&1 &
+          printf '%s' "$!" > "$lab/server.pid"
+          for attempt in $(seq 1 150); do
+            if curl --fail --silent --cacert "$lab/identity/ca.pem" --connect-timeout 1 --max-time 2 \
+              https://localhost:18446/realms/kafdeck-g2/.well-known/openid-configuration > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo 'Genuine lifecycle Keycloak readiness failed.' >&2
+          exit 1
+      - name: Install pinned rendered browser
+        working-directory: deploy/dev/browser-g2
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx --no-install playwright install --with-deps chromium
+      - name: Prove actual rotation revocation current RBAC and rendered PKCE
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KAFDECK_KEYCLOAK_G2_LIFECYCLE_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-lifecycle/identity/lab.json"
+          export KAFDECK_G2_BROWSER_LAB="$KAFDECK_KEYCLOAK_G2_LIFECYCLE_LAB"
+          export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-complete-ci/identity"
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08G2CurrentIdentityPolicyTests|FullyQualifiedName~V08G2IdentityLifecycleLiveTests|FullyQualifiedName~V08G2RenderedBrowserLiveTests' \
+            --results-directory artifacts/g2-complete-ci/identity --logger 'trx;LogFileName=identity-lifecycle.trx'
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/keycloak-live-key-registration-lifecycle-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/rendered-browser-pkce-api-evidence.json"
+      - name: Retain sanitized lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g2-real-identity-lifecycle-browser
+          path: |
+            artifacts/g2-complete-ci/identity/identity-lifecycle.trx
+            artifacts/g2-complete-ci/identity/*-evidence.json
+          if-no-files-found: error
+      - name: Stop owned identity node
+        if: always()
+        shell: bash
+        run: |
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-lifecycle"
+          if [ -f "$lab/server.pid" ]; then kill "$(cat "$lab/server.pid")" 2>/dev/null || true; fi

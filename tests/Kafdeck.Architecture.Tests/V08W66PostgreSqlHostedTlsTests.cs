@@ -115,6 +115,7 @@ public sealed class V08W66PostgreSqlHostedTlsTests(ITestOutputHelper output)
         builder.Services.AddSingleton(new NotificationPinnedHttpHandlerFactory(tls, NotificationAddressPolicy.NoConfiguredNat64, replicaClock,
             trustRoots: new X509Certificate2Collection(tls.Root)));
         var connections = new PostgreSqlNotificationDeliveryDbConnectionFactory(connectionString);
+        builder.Services.AddSingleton<INotificationDeliveryDbConnectionFactory>(connections);
         builder.Services.AddSingleton<INotificationRoutingStore>(new AdoNotificationRoutingStore(connections));
         builder.Services.AddSingleton<INotificationDeliveryStore>(new AdoNotificationDeliveryStore(connections));
         builder.Services.AddKafdeckWebhookDelivery(options);

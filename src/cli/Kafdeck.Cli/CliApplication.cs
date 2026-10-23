@@ -57,6 +57,8 @@ public static class CliApplication
             var requestToken =
                 deadline.Token;
 
+            using var familyPayload = await CliFamilyCommands.ReadPayloadAsync(invocation.Family, requestToken);
+
             using var client = await KafdeckCliClient.CreateAsync(
                 invocation,
                 requestToken,
@@ -65,6 +67,13 @@ public static class CliApplication
 
             using var response = invocation.Command switch
             {
+                CliCommand.FamilyMutation when invocation.Family?.ReadContract is not null && invocation.Family.Method == "get" =>
+                    await client.GetAsync(CliReadCommands.BuildRoute(invocation.Family, familyPayload), requestToken),
+                CliCommand.FamilyMutation when invocation.Family?.Read == true && invocation.Family.Method == "get" => await client.GetAsync(CliRouteBuilder.Build(invocation), requestToken),
+                CliCommand.FamilyMutation when invocation.Family?.Method == "put" => await client.PutAsync(CliRouteBuilder.Build(invocation),
+                    familyPayload is not null ? (object)familyPayload.RootElement : null, invocation.IdempotencyKey, requestToken),
+                CliCommand.FamilyMutation => await client.PostAsync(CliRouteBuilder.Build(invocation),
+                    familyPayload is not null ? (object)familyPayload.RootElement : null, invocation.IdempotencyKey, requestToken),
                 CliCommand.TopicCreatePreview => await client.PostAsync(CliRouteBuilder.Build(invocation),
                     new { partitionCount = invocation.PartitionCount, replicationFactor = invocation.ReplicationFactor,
                         configurations = invocation.TopicConfigurations ?? new Dictionary<string, string?>() }, invocation.IdempotencyKey, requestToken),
@@ -110,8 +119,13 @@ public static class CliApplication
                 return RemoteError;
             }
 
-            await WriteJsonAsync(output, body, requestToken);
-            return IsMutation(invocation.Command) ? MutationOutcomeCategory(body, invocation.Command) : Success;
+            if (CliReadCommands.RawOutput(invocation.Family?.ReadContract)) await output.WriteAsync(body);
+            else await WriteJsonAsync(output, body, requestToken);
+            if (invocation.Family?.ReadContract is { } readName) return CliReadCommands.Outcome(body, readName);
+            return invocation.Family?.Recovery == true ? RecoveryOutcomeCategory(body) :
+                invocation.Family?.RuntimeProgress == true ? RuntimeProgressOutcomeCategory(body, invocation.Family.Stop) :
+                invocation.Family?.PolicyStatus == true ? AutoRestartStatusCategory(body) :
+                IsMutation(invocation.Command) ? MutationOutcomeCategory(body, invocation.Command) : Success;
         }
         catch (CliUsageException exception)
         {
@@ -172,7 +186,7 @@ public static class CliApplication
 
     public static bool IsMutation(CliCommand command) => command is CliCommand.TopicCreatePreview or CliCommand.OperationStatus or
         CliCommand.OperationConfirm or CliCommand.OperationExecute or CliCommand.TopicDeletePreview or CliCommand.OperationApproval or CliCommand.OperationApprove or
-        CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview or CliCommand.OperationCancel or CliCommand.OperationReject;
+        CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview or CliCommand.OperationCancel or CliCommand.OperationReject or CliCommand.FamilyMutation;
 
     public static int MutationOutcomeCategory(string json, CliCommand command = CliCommand.None)
     {
@@ -190,6 +204,45 @@ public static class CliApplication
             "previewed" or "awaitingconfirmation" or "ready" or "appliedverified" => Success,
             _ => RemoteError,
         };
+    }
+
+    public static int RecoveryOutcomeCategory(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("state", out var state))
+            return document.RootElement.ValueKind == JsonValueKind.Object ? Success : RemoteError;
+        return state.GetString()?.ToLowerInvariant() switch
+        {
+            "previewed" => PendingApproval, "approved" or "applied" => Success,
+            "expired" => Expired, "executing" or "executionunknown" => UnknownEffect, _ => RemoteError,
+        };
+    }
+
+    public static int RuntimeProgressOutcomeCategory(string json, bool intentionalStop = false)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("mutationState", out var mutation) || mutation.ValueKind != JsonValueKind.String ||
+            !root.TryGetProperty("progressPhase", out var progress) || progress.ValueKind != JsonValueKind.String) return RemoteError;
+        if (root.TryGetProperty("pendingBatch", out var pending) && pending.ValueKind == JsonValueKind.Object &&
+            pending.TryGetProperty("state", out var pendingState) && pendingState.ValueKind == JsonValueKind.String &&
+            pendingState.GetString()?.ToLowerInvariant() is "dispatchstarted" or "unknowneffect") return UnknownEffect;
+        if (!string.Equals(mutation.GetString(), "appliedVerified", StringComparison.OrdinalIgnoreCase))
+            return MutationOutcomeCategory(JsonSerializer.Serialize(new { state = mutation.GetString() }));
+        return progress.GetString()?.ToLowerInvariant() switch
+        {
+            "completed" => Success, "stopped" when intentionalStop => Success,
+            "stopped" => RemoteError, "pausedauthorization" => AuthenticationOrAuthorizationError,
+            "unknown" or "waitingforexternalaction" or "planned" or "submitting" or "observing" or "waitingformaterial" or "notactivated" => UnknownEffect,
+            _ => RemoteError,
+        };
+    }
+
+    private static int AutoRestartStatusCategory(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("hasUnresolvedDispatch", out var unresolved) && unresolved.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? unresolved.GetBoolean() ? UnknownEffect : Success : RemoteError;
     }
 
     private static async Task WriteJsonAsync(
@@ -240,6 +293,8 @@ public enum CliCommand
     TopicIncreasePartitionsPreview = 23,
     OperationCancel = 24,
     OperationReject = 25,
+    FamilyMutation = 26,
+    MutationCapabilities = 27,
 }
 
 public enum CliOutputFormat
@@ -267,18 +322,21 @@ public sealed record CliInvocation(
     int? PartitionCount = null,
     short? ReplicationFactor = null,
     string? ServiceProfileFile = null,
-    IReadOnlyDictionary<string, string?>? TopicConfigurations = null);
+    IReadOnlyDictionary<string, string?>? TopicConfigurations = null,
+    CliFamilyInvocation? Family = null);
 
 public static class CliRouteBuilder
 {
     public static string Build(
         CliInvocation invocation)
     {
+        if (invocation.Family is not null) return invocation.Family.Route;
         ArgumentNullException.ThrowIfNull(
             invocation);
 
         return invocation.Command switch
         {
+            CliCommand.MutationCapabilities => "/api/v1/automation/capabilities/mutations",
             CliCommand.SystemInfo =>
                 "/api/v1/system/info",
             CliCommand.ClustersList =>
@@ -454,6 +512,18 @@ public static class CliParser
           kafdeck --oidc-profile <profile> [global-options] operations approve <operation-id> <preview-hash>
           kafdeck --oidc-profile <profile> [global-options] operations reject <operation-id> <preview-hash>
           kafdeck --oidc-profile <profile> [global-options] operations cancel <operation-id> <preview-hash>
+          kafdeck --oidc-profile <profile> records produce-preview <cluster-id> <topic-name> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> records produce-execute <operation-id> --request-file <closed.json>
+          kafdeck --oidc-profile <profile> consumer-groups offsets-preview <cluster-id> <group-id> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> schemas register-preview <cluster-id> <subject> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> connect create-preview <cluster-id> <connector> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> notifications recovery status
+          kafdeck --oidc-profile <profile> notifications recovery preview --request-file <closed.json>
+          kafdeck --oidc-profile <profile> notifications recovery approve <operation-id> --request-file <revision-hash.json>
+          kafdeck --oidc-profile <profile> notifications recovery apply <operation-id> --request-file <revision-hash.json>
+          kafdeck [global-options] capabilities mutations
+          kafdeck --oidc-profile <profile> views v08-bearer-read-capabilities
+          kafdeck --service-profile <profile> views <exact-versioned-view-name> <path-identities...> [--request-file <closed-query-or-body.json>]
           kafdeck --help
 
         Global options:
@@ -462,7 +532,8 @@ public static class CliParser
           --oidc-profile <public-profile.json>  Sign in using browser PKCE; memory-only bearer for this command.
           --service-profile <public-profile.json>  Sign in with a referenced RSA private key; memory-only service bearer.
           --output json
-          --idempotency-key <key>  Required only for a new topic preview.
+          --idempotency-key <key>  Required for a named mutation preview; recovery has its own revision/hash CAS.
+          --request-file <path>   Bounded closed payload for a named family command; no generic JSON or provider route.
           --challenge <target>    Admitted only for operation confirmation.
           --config <key=value>   Repeat unique allowed keys for topic create/alter preview.
           --reset-config <key>   Reset a unique allowed topic key; alter preview only.
@@ -475,8 +546,8 @@ public static class CliParser
           Access tokens are intentionally not accepted as command-line arguments.
           Use KAFDECK_ACCESS_TOKEN or --token-file.
           The CLI exposes only typed governed API routes; there is no arbitrary HTTP path passthrough.
-          Governed TopicCreate commands require non-browser OIDC and explicit backend admission.
-          Approval commands require a separate eligible human. Other mutation families remain unavailable.
+          Governed commands require non-browser OIDC and explicit backend family admission.
+          Approval and recovery commands require eligible human identities. Missing runtime families remain unavailable.
         """;
 
     public static CliInvocation Parse(
@@ -505,6 +576,7 @@ public static class CliParser
         string? serviceProfileFile = null;
         string? idempotencyKey = null;
         string? typedChallenge = null;
+        string? familyRequestFile = null;
         var topicConfigurations = new Dictionary<string, string?>(StringComparer.Ordinal);
         string? search = null;
         string? cursor = null;
@@ -556,6 +628,10 @@ public static class CliParser
                     break;
                 case "--config":
                     CliTopicConfiguration.Add(topicConfigurations, RequireValue(args, ref index, "--config"), reset: false);
+                    break;
+                case "--request-file":
+                    if (familyRequestFile is not null) throw new CliUsageException("A named family command accepts one request file.");
+                    familyRequestFile = ValidateBoundedOption(RequireValue(args, ref index, "--request-file"), "--request-file", 2048);
                     break;
                 case "--reset-config":
                     CliTopicConfiguration.Add(topicConfigurations, RequireValue(args, ref index, "--reset-config"), reset: true);
@@ -641,8 +717,10 @@ public static class CliParser
         var baseUri =
             ResolveBaseUri(url);
 
-        var invocation =
-            ParseCommand(
+        var family = CliReadCommands.TryParse(positionals) ?? CliFamilyCommands.TryParse(positionals);
+        var invocation = family is not null
+            ? new CliInvocation(baseUri, tokenFile, CliCommand.FamilyMutation, null, false, Output: output, Family: family)
+            : ParseCommand(
                 baseUri,
                 tokenFile,
                 positionals,
@@ -669,10 +747,13 @@ public static class CliParser
             throw new CliUsageException("Governed operation commands require --oidc-profile or --service-profile; deployment credentials never acquire mutation authority.");
         if (invocation.Command is CliCommand.OperationApproval or CliCommand.OperationApprove or CliCommand.OperationReject && oidcProfileFile is null)
             throw new CliUsageException("Human approval commands require --oidc-profile; a service cannot become a human approver.");
+        if (family?.HumanOnly == true && oidcProfileFile is null)
+            throw new CliUsageException("This named command requires a registered human OIDC profile.");
         var isTopicPreview = invocation.Command is CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview or
             CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview;
+        isTopicPreview |= family?.Preview == true;
         if (isTopicPreview && idempotencyKey is null)
-            throw new CliUsageException("A topic mutation preview requires --idempotency-key.");
+            throw new CliUsageException("A named mutation preview requires --idempotency-key.");
         if (!isTopicPreview && idempotencyKey is not null ||
             invocation.Command != CliCommand.OperationConfirm && typedChallenge is not null)
             throw new CliUsageException("Mutation options must match their named command.");
@@ -680,7 +761,11 @@ public static class CliParser
             invocation.Command == CliCommand.TopicCreatePreview && topicConfigurations.Values.Any(v => v is null) ||
             invocation.Command == CliCommand.TopicAlterPreview && topicConfigurations.Count == 0)
             throw new CliUsageException("Topic create accepts config values; topic alter requires config values or resets; other commands accept neither.");
+        if (familyRequestFile is not null && (family is null || family.Payload == CliFamilyPayload.Empty) ||
+            family is not null && family.Payload != CliFamilyPayload.Empty && familyRequestFile is null)
+            throw new CliUsageException("--request-file must match a named family command requiring its closed payload.");
         return invocation with { OidcProfileFile = oidcProfileFile, ServiceProfileFile = serviceProfileFile, IdempotencyKey = idempotencyKey, TypedTargetChallenge = typedChallenge,
+            Family = family is not null ? family with { RequestFile = familyRequestFile } : null,
             TopicConfigurations = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string?>(topicConfigurations) };
     }
 
@@ -693,6 +778,8 @@ public static class CliParser
         int? limit,
         CliOutputFormat output)
     {
+        if (positionals.SequenceEqual(new[] { "capabilities", "mutations" }, StringComparer.Ordinal))
+            return Create(baseUri, tokenFile, CliCommand.MutationCapabilities, output: output);
         if (positionals.Count == 4 && positionals[0] == "topics" && positionals[1] == "alter-preview")
         {
             ValidateIdentifier(positionals[2], "cluster ID"); ValidateIdentifier(positionals[3], "topic name", 249);

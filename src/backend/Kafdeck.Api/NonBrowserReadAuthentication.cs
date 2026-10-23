@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Kafdeck.Core.Security;
+using Kafdeck.Contracts;
 
 namespace Kafdeck.Api;
 
@@ -19,6 +20,7 @@ public sealed class NonBrowserReadOptions
     public List<NonBrowserReadRegistration> HumanRegistrations { get; set; } = [];
     public bool GovernedMutationsEnabled { get; set; }
     public bool GovernedApprovalsEnabled { get; set; }
+    public List<string> RevokedSigningKeyIds { get; set; } = [];
 }
 
 public enum NonBrowserPrincipalKind { Service = 1, Human = 2 }
@@ -51,6 +53,11 @@ public sealed class NonBrowserReadRegistry
     private NonBrowserReadOptions Read()
     {
         var options = _configuration.GetSection("Kafdeck:NonBrowserRead").Get<NonBrowserReadOptions>() ?? new();
+        if (options.RevokedSigningKeyIds.Count > 16 ||
+            options.RevokedSigningKeyIds.Distinct(StringComparer.Ordinal).Count() != options.RevokedSigningKeyIds.Count ||
+            options.RevokedSigningKeyIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 256 ||
+                id != id.Trim() || id.Any(char.IsControl)))
+            throw new InvalidOperationException("Revoked signing key identifiers must be bounded, unique and nonempty.");
         if (!options.Enabled) return options;
         var registrations = options.Registrations.Concat(options.HumanRegistrations).ToArray();
         if (registrations.Length is < 1 or > 128)
@@ -58,11 +65,12 @@ public sealed class NonBrowserReadRegistry
         var proposals = registrations.Select(r => new NonBrowserServicePrincipalProposal(
             r.Id, r.OwnerId, options.Issuer, options.ApiAudience, r.Subject, r.ClientId, r.ReadActions)).ToArray();
         _ = new NonBrowserPrincipalProposalSet(proposals);
-        if (registrations.Any(r => r.MutationActions.Count > 3 || r.MutationActions.Distinct().Count() != r.MutationActions.Count ||
-                r.MutationActions.Any(action => !BearerTopicMutationScope.IsAction(action))) ||
-            options.Registrations.Any(r => r.ApprovalActions.Count != 0) ||
-            options.HumanRegistrations.Any(r => r.ApprovalActions.Count > 1 || r.ApprovalActions.Any(a => a != AuthorizationAction.TopicDelete)))
-            throw new InvalidOperationException("Only explicit topic mutation actions and human TopicDelete approvals are admitted.");
+        if (registrations.Any(r => r.MutationActions.Count > 32 || r.MutationActions.Distinct().Count() != r.MutationActions.Count ||
+                r.MutationActions.Any(action => !BearerFamilyRoutes.IsAction(action) && action != AuthorizationAction.NotificationManage)) ||
+            options.Registrations.Any(r => r.ApprovalActions.Count != 0 || r.MutationActions.Contains(AuthorizationAction.NotificationManage)) ||
+            options.HumanRegistrations.Any(r => r.ApprovalActions.Count > 32 || r.ApprovalActions.Distinct().Count() != r.ApprovalActions.Count ||
+                r.ApprovalActions.Any(a => !BearerFamilyRoutes.IsAction(a) && a != AuthorizationAction.NotificationManage)))
+            throw new InvalidOperationException("Only explicit admitted family actions and registered human approvals are allowed.");
         return options;
     }
 
@@ -90,6 +98,19 @@ public sealed class NonBrowserReadRegistry
         }
     }
 
+    public bool IsSigningKeyAllowed(string keyId)
+    {
+        try
+        {
+            var current = Read();
+            return !string.IsNullOrWhiteSpace(keyId) && keyId.Length <= 256 &&
+                Trust.Enabled && current.Enabled && Trust.Issuer == current.Issuer &&
+                Trust.ApiAudience == current.ApiAudience && Trust.TrustedCaPemFile == current.TrustedCaPemFile &&
+                !current.RevokedSigningKeyIds.Contains(keyId, StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return false; }
+    }
+
     internal NonBrowserPrincipalKind FindKind(string subject, string client) =>
         Read().HumanRegistrations.Any(r => r.Subject == subject && r.ClientId == client)
             ? NonBrowserPrincipalKind.Human : NonBrowserPrincipalKind.Service;
@@ -112,16 +133,21 @@ public sealed class NonBrowserReadRegistry
                 Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind) is null ||
                 identity.Evidence.ExpiresAtUtc <= DateTimeOffset.UtcNow) return false;
             var registrations = identity.Kind == NonBrowserPrincipalKind.Human ? current.HumanRegistrations : current.Registrations;
-            return BearerTopicMutationScope.IsAction(action) &&
+            return (BearerFamilyRoutes.IsAction(action) || identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage) &&
                 registrations.Single(r => r.Id == identity.RegistrationId).MutationActions.Contains(action);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return false; }
     }
 
     public bool IsAnyGovernedTopicMutationAllowed(NonBrowserReadIdentity identity) =>
-        IsGovernedMutationAllowed(identity, AuthorizationAction.TopicCreate) ||
-        IsGovernedMutationAllowed(identity, AuthorizationAction.TopicAlter) ||
-        IsGovernedMutationAllowed(identity, AuthorizationAction.TopicDelete);
+        Enum.GetValues<AuthorizationAction>().Any(action => BearerFamilyRoutes.IsAction(action) && IsGovernedMutationAllowed(identity, action));
+
+    public bool IsAnyGovernedApprovalAllowed(NonBrowserReadIdentity identity) =>
+        Enum.GetValues<AuthorizationAction>().Any(action => BearerFamilyRoutes.IsAction(action) && IsGovernedApprovalAllowed(identity, action));
+
+    public bool IsRegisteredReadAllowed(NonBrowserReadIdentity identity, AuthorizationAction action) =>
+        identity.Evidence.ExpiresAtUtc > DateTimeOffset.UtcNow &&
+        Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind)?.RequestedReadActions.Contains(action) == true;
 
     public bool GovernedApprovalsActive
     {
@@ -142,9 +168,11 @@ public sealed class NonBrowserReadRegistry
     {
         try
         {
-            return GovernedApprovalsActive && action == AuthorizationAction.TopicDelete && principal.HumanKey.Issuer == Trust.Issuer &&
-                Find(principal.HumanKey.Subject, principal.ClientId, principal.RegistrationId, NonBrowserPrincipalKind.Human) is not null &&
-                Read().HumanRegistrations.Single(r => r.Id == principal.RegistrationId).ApprovalActions.Contains(action);
+            if (!GovernedApprovalsActive || principal.HumanKey.Issuer != Trust.Issuer ||
+                Find(principal.HumanKey.Subject, principal.ClientId, principal.RegistrationId, NonBrowserPrincipalKind.Human) is null) return false;
+            var registration = Read().HumanRegistrations.Single(r => r.Id == principal.RegistrationId);
+            return registration.ApprovalActions.Contains(action) || registration.ApprovalActions.Count > 0 &&
+                !BearerFamilyRoutes.IsAction(action) && action != AuthorizationAction.NotificationManage && registration.ReadActions.Contains(action);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return false; }
     }
@@ -153,9 +181,26 @@ public sealed class NonBrowserReadRegistry
         AuthorizationPolicyEvaluator evaluator)
     {
         var registration = Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind);
-        return identity.Kind == NonBrowserPrincipalKind.Human && registration is not null &&
-            identity.Evidence.ExpiresAtUtc > DateTimeOffset.UtcNow && registration.RequestedReadActions.Contains(action) &&
+        return registration is not null &&
+            identity.Evidence.ExpiresAtUtc > DateTimeOffset.UtcNow && (registration.RequestedReadActions.Contains(action) ||
+                identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage && IsGovernedMutationAllowed(identity, action)) &&
             evaluator.HasApplicableDirectSubjectPermission(new(identity.Evidence.Issuer, identity.Evidence.Subject), action, clusterId);
+    }
+
+    public bool IsCurrentPrincipalAllowed(string principal, AuthorizationRequest request, AuthorizationPolicyEvaluator evaluator)
+    {
+        try
+        {
+            if (!RegisteredBearerPrincipal.TryParse(principal, out var parsed) || parsed is null || parsed.Subject.Issuer != Trust.Issuer) return false;
+            var current = Read();
+            var found = Find(parsed.Subject.Subject, parsed.ClientId, parsed.RegistrationId, parsed.Kind);
+            if (found is null || !Trust.GovernedMutationsEnabled || !current.GovernedMutationsEnabled) return false;
+            var registration = (parsed.Kind == NonBrowserPrincipalKind.Human ? current.HumanRegistrations : current.Registrations)
+                .Single(r => r.Id == parsed.RegistrationId);
+            return (registration.ReadActions.Contains(request.Action) || registration.MutationActions.Contains(request.Action)) &&
+                evaluator.EvaluateDirectSubject(parsed.Subject, request).IsAllowed;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return false; }
     }
 }
 
@@ -185,6 +230,7 @@ public sealed class NonBrowserReadTokenVerifier : IDisposable
     private readonly SemaphoreSlim _refresh = new(1, 1);
     private Dictionary<string, string> _keys = new(StringComparer.Ordinal);
     private DateTimeOffset _validUntil;
+    private DateTimeOffset _unknownKeyRefreshAfter;
     private X509Certificate2? _ca;
     private readonly TimeSpan _requestDeadline = TimeSpan.FromSeconds(10);
 
@@ -232,14 +278,15 @@ public sealed class NonBrowserReadTokenVerifier : IDisposable
             var kid = header.RootElement.GetProperty("kid").GetString();
             var subject = payload.RootElement.GetProperty("sub").GetString();
             var client = payload.RootElement.GetProperty("azp").GetString();
-            if (kid is null || subject is null || client is null) return null;
+            if (kid is null || subject is null || client is null || !_registry.IsSigningKeyAllowed(kid)) return null;
             var registration = _registry.Find(subject, client);
             if (registration is null) return null;
-            var keys = await GetKeysAsync(deadline.Token).ConfigureAwait(false);
+            var keys = await GetKeysAsync(kid, deadline.Token).ConfigureAwait(false);
             if (!keys.TryGetValue(kid, out var pem)) return null;
             using var rsa = RSA.Create();
             rsa.ImportFromPem(pem);
             var evidence = NonBrowserRs256JwtEvidenceVerifier.Verify(token, rsa, kid, registration, DateTimeOffset.UtcNow);
+            if (!_registry.IsSigningKeyAllowed(kid) || _registry.Find(subject, client) is null) return null;
             return new(registration.RegistrationId, evidence, _registry.FindKind(subject, client));
         }
         catch (Exception ex) when (ex is NonBrowserJwtEvidenceException or JsonException or FormatException or
@@ -251,12 +298,17 @@ public sealed class NonBrowserReadTokenVerifier : IDisposable
         }
     }
 
-    private async Task<Dictionary<string, string>> GetKeysAsync(CancellationToken cancellationToken)
+    private async Task<Dictionary<string, string>> GetKeysAsync(string requestedKeyId, CancellationToken cancellationToken)
     {
         await _refresh.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_validUntil > DateTimeOffset.UtcNow) return _keys;
+            var now = DateTimeOffset.UtcNow;
+            if (_validUntil > now && (_keys.ContainsKey(requestedKeyId) || _unknownKeyRefreshAfter > now)) return _keys;
+            // Admit a newly rotated issuer key without waiting for the full
+            // cache lifetime. Unknown IDs share one bounded refresh budget;
+            // caller-controlled IDs never choose a URL or bypass TLS/trust.
+            _unknownKeyRefreshAfter = now.AddSeconds(5);
             var issuer = _registry.Trust.Issuer;
             using var discovery = await GetDocumentAsync(issuer + "/.well-known/openid-configuration", cancellationToken);
             var expectedKeys = issuer + "/protocol/openid-connect/certs";
@@ -332,7 +384,7 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
     // human approval admission below never expands this read allowlist.
     private static readonly HashSet<string> Routes = new(StringComparer.Ordinal)
     {
-        "v01-system-info", "v01-system-health", "v08-bearer-openapi", "v01-clusters-detail", "v01-clusters-health",
+        "v01-system-info", "v01-system-health", "v08-bearer-openapi", "v08-bearer-mutation-capabilities", "v01-clusters-detail", "v01-clusters-health",
         "v01-clusters-capabilities", "v01-brokers-list", "v01-brokers-detail",
     };
     private static readonly HashSet<string> HumanReadRoutes = new(StringComparer.Ordinal)
@@ -346,15 +398,22 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         "v08-bearer-mutation-status", "v08-bearer-mutation-confirm", "v08-bearer-mutation-execute", "v08-bearer-mutation-cancel" };
     private static readonly HashSet<string> ApprovalRoutes = new(StringComparer.Ordinal)
     { "v08-bearer-mutation-approval", "v08-bearer-mutation-approve", "v08-bearer-mutation-reject" };
+    private static readonly HashSet<string> RecoveryRoutes = new(StringComparer.Ordinal)
+    { "v08-bearer-notification-recovery-status", "v08-bearer-notification-recovery-detail", "v08-bearer-notification-recovery-preview",
+        "v08-bearer-notification-recovery-approve", "v08-bearer-notification-recovery-apply" };
 
     public async Task InvokeAsync(HttpContext context, NonBrowserReadTokenVerifier verifier, ISecurityAuditSink audit, NonBrowserReadRegistry? registry = null)
     {
         var route = context.GetEndpoint()?.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName;
+        var readContract = KafdeckReadContracts.Find(route);
+        var namedRead = BearerReadBoundary.Matches(context, readContract);
+        var family = context.GetEndpoint()?.Metadata.GetMetadata<BearerFamilyRoute>();
+        var recoveryRoute = route is not null && RecoveryRoutes.Contains(route);
         var approvalRoute = route is not null && ApprovalRoutes.Contains(route);
-        var governedRoute = route is not null && (MutationRoutes.Contains(route) || approvalRoute);
+        var governedRoute = route is not null && (MutationRoutes.Contains(route) || approvalRoute || family is not null || recoveryRoute);
         // Minimal API binding runs before endpoint filters, including for callers
         // without an Authorization header. Bound these dedicated routes first.
-        if (governedRoute && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
+        if ((governedRoute || namedRead && readContract!.Body is not null) && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
             bodyLimit.MaxRequestBodySize = 64 * 1024;
         if (!context.Request.Headers.TryGetValue("Authorization", out var authorization))
         {
@@ -367,7 +426,7 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         var secureTransport = context.Request.IsHttps ||
             context.Connection.RemoteIpAddress is { } remote && IPAddress.IsLoopback(remote);
         var admitted = secureTransport && route is not null &&
-            (governedRoute || HttpMethods.IsGet(context.Request.Method) && (Routes.Contains(route) || HumanReadRoutes.Contains(route)));
+            (governedRoute || namedRead || HttpMethods.IsGet(context.Request.Method) && Routes.Contains(route));
         // HTTP authentication scheme names are case-insensitive; keep the
         // credential substring untouched for signature/claim validation.
         var identity = !collision && admitted && header is not null && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) &&
@@ -377,12 +436,19 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         if (identity is not null && governedRoute)
         {
             var previewAction = BearerTopicMutationScope.PreviewAction(route);
-            var allowed = approvalRoute ? registry?.IsGovernedApprovalAllowed(identity, AuthorizationAction.TopicDelete) == true :
+            var allowed = recoveryRoute ? identity.Kind == NonBrowserPrincipalKind.Human &&
+                    (route == "v08-bearer-notification-recovery-approve"
+                        ? registry?.IsGovernedApprovalAllowed(identity, AuthorizationAction.NotificationManage) == true
+                        : registry?.IsGovernedMutationAllowed(identity, AuthorizationAction.NotificationManage) == true) :
+                family is not null ? (family.Read && !BearerFamilyRoutes.IsAction(family.Action) ? registry?.IsRegisteredReadAllowed(identity, family.Action) == true :
+                    family.Execution ? registry?.IsAnyGovernedTopicMutationAllowed(identity) == true :
+                    registry?.IsGovernedMutationAllowed(identity, family.Action) == true) :
+                approvalRoute ? registry?.IsAnyGovernedApprovalAllowed(identity) == true :
                 previewAction is { } action ? registry?.IsGovernedMutationAllowed(identity, action) == true :
                 registry?.IsAnyGovernedTopicMutationAllowed(identity) == true;
             if (!allowed) identity = null;
         }
-        if (identity is not null && route is not null && !governedRoute && !Routes.Contains(route) && identity.Kind != NonBrowserPrincipalKind.Human)
+        if (identity is not null && namedRead && !BearerReadBoundary.Registered(registry, identity, readContract!))
             identity = null;
         if (identity is null)
         {
@@ -395,6 +461,35 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
             return;
         }
         context.User = new ClaimsPrincipal(identity);
+        if (namedRead && (!BearerReadBoundary.ValidQuery(context.Request.Query, readContract!) ||
+            !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, BearerReadBoundary.RequestType(readContract!), context.RequestAborted)))
+        {
+            context.Response.StatusCode = 400;
+            await context.Response.WriteAsJsonAsync(new { title = "Invalid closed read request", status = 400 }, context.RequestAborted);
+            return;
+        }
+        if (namedRead && BearerReadBoundary.Authorize(context, readContract!) != KafdeckAuthorizationOutcome.Allowed)
+        {
+            await audit.WriteAsync(new(DateTimeOffset.UtcNow, SecurityAuditEventType.AuthorizationDenied, identity.AuditId,
+                context.TraceIdentifier, context.Request.RouteValues["clusterId"]?.ToString(), null, SecurityAuditOutcome.Denied,
+                "registered_bearer_read_scope_denied"), context.RequestAborted);
+            context.Response.StatusCode = 403;
+            await context.Response.WriteAsJsonAsync(new { title = "Read access denied", status = 403 }, context.RequestAborted);
+            return;
+        }
+        var recoveryRequestType = route switch
+        {
+            "v08-bearer-notification-recovery-preview" => typeof(NotificationRecoveryPreviewRequest),
+            "v08-bearer-notification-recovery-approve" or "v08-bearer-notification-recovery-apply" => typeof(NotificationRecoveryRevisionRequest),
+            _ => null,
+        };
+        if ((family is not null && !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, family, context.RequestAborted)) ||
+            (recoveryRoute && !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, recoveryRequestType, context.RequestAborted)))
+        {
+            context.Response.StatusCode = 400;
+            await context.Response.WriteAsJsonAsync(new { type = "urn:kafdeck:problem:closed-family-request", title = "Invalid closed family request", status = 400 }, context.RequestAborted);
+            return;
+        }
         await audit.WriteAsync(new SecurityAuditEvent(DateTimeOffset.UtcNow, SecurityAuditEventType.LoginSucceeded,
             identity.AuditId, context.TraceIdentifier, null, null, SecurityAuditOutcome.Succeeded,
             approvalRoute ? "registered_bearer_approval" : governedRoute ? "registered_bearer_mutation" : "registered_bearer_read"), context.RequestAborted);
@@ -408,6 +503,7 @@ public static class NonBrowserReadServiceExtensions
     {
         services.AddSingleton(new NonBrowserReadRegistry(configuration));
         services.AddSingleton<NonBrowserReadTokenVerifier>();
+        services.AddSingleton<BearerRuntimeAuthorization>();
         return services;
     }
 }

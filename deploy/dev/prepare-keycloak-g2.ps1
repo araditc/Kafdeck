@@ -1,7 +1,10 @@
 param(
     [Parameter(Mandatory=$true)][string]$KeycloakHome,
     [string]$OutputDirectory = "$PSScriptRoot/.generated/g2/identity",
-    [string]$JavaVersion = 'Temurin 21.0.12.1+1'
+    [string]$JavaVersion = 'Temurin 21.0.12.1+1',
+    [ValidateRange(1024,65535)][int]$HttpsPort = 18444,
+    [switch]$IncludeLifecycleControl,
+    [switch]$IncludeBrowserSignIn
 )
 $ErrorActionPreference = 'Stop'
 $labDir = [IO.Path]::GetFullPath($OutputDirectory)
@@ -20,8 +23,10 @@ $importDir = Join-Path $serverHome 'data/import'
 New-Item -ItemType Directory -Path $importDir -Force | Out-Null
 $tlsKey = [Security.Cryptography.RSA]::Create(2048)
 $clientKey = [Security.Cryptography.RSA]::Create(2048)
+$controlKey = [Security.Cryptography.RSA]::Create(2048)
 $tlsCert = $null
 $clientCert = $null
+$controlCert = $null
 try {
     $tlsRequest = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=localhost', $tlsKey,
         [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pkcs1)
@@ -103,11 +108,42 @@ try {
         )
     }
     $realmImport = Join-Path $labDir 'realm-import.json'
+    if ($IncludeBrowserSignIn) {
+        $realm.clients += @{
+            clientId='kafdeck-g2-browser';protocol='openid-connect';enabled=$true;publicClient=$true
+            standardFlowEnabled=$true;directAccessGrantsEnabled=$false;implicitFlowEnabled=$false;serviceAccountsEnabled=$false
+            fullScopeAllowed=$false;redirectUris=@('http://127.0.0.1/signin-oidc');webOrigins=@()
+            attributes=@{'pkce.code.challenge.method'='S256';'access.token.lifespan'='120'}
+            defaultClientScopes=@();optionalClientScopes=@();protocolMappers=@($subjectMapper)
+        }
+    }
+    if ($IncludeLifecycleControl) {
+        # Disposable realm administration exists only in this explicit lab.
+        # It is never registered as a Kafdeck application principal. Tests use
+        # genuine signed assertions; no admin password grant or token is saved.
+        $controlRequest = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=kafdeck-g2-lab-control', $controlKey,
+            [Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        $controlCert = $controlRequest.CreateSelfSigned([DateTimeOffset]::UtcNow.AddMinutes(-5),[DateTimeOffset]::UtcNow.AddDays(2))
+        [IO.File]::WriteAllText((Join-Path $labDir 'control-private.key'), $controlKey.ExportPkcs8PrivateKeyPem())
+        $realm.clients += @{
+            id='f51b26b6-1152-4e2b-b18a-7c46b94c2c05';clientId='kafdeck-g2-lab-control';protocol='openid-connect'
+            enabled=$true;publicClient=$false;serviceAccountsEnabled=$true;standardFlowEnabled=$false
+            directAccessGrantsEnabled=$false;implicitFlowEnabled=$false;clientAuthenticatorType='client-jwt';fullScopeAllowed=$true
+            defaultClientScopes=@('roles');optionalClientScopes=@()
+            attributes=@{'jwt.credential.certificate'=[Convert]::ToBase64String($controlCert.RawData);'token.endpoint.auth.signing.alg'='RS256'}
+            protocolMappers=@($subjectMapper)
+        }
+        $realm.users += @{
+            id='f51b26b6-1152-4e2b-b18a-7c46b94c2c06';username='service-account-kafdeck-g2-lab-control'
+            enabled=$true;serviceAccountClientId='kafdeck-g2-lab-control'
+            clientRoles=@{'realm-management'=@('manage-clients','manage-realm','manage-users','view-realm','view-clients','view-users')}
+        }
+    }
     $realm | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $realmImport -Encoding utf8
     Copy-Item -LiteralPath $realmImport -Destination (Join-Path $importDir 'kafdeck-g2-realm.json')
     $public = @{
         keycloakVersion='26.8.1'; javaVersion=$JavaVersion
-        issuer='https://localhost:18444/realms/kafdeck-g2'; audience='kafdeck-api-g2'
+        issuer="https://localhost:$HttpsPort/realms/kafdeck-g2"; audience='kafdeck-api-g2'
         clientId='kafdeck-g2-service'; subject='f51b26b6-1152-4e2b-b18a-7c46b94c2c02'
         cliClientId='kafdeck-g2-cli'; humanSubject='f51b26b6-1152-4e2b-b18a-7c46b94c2c03'
         humanUsername='kafdeck-g2-operator'; humanPasswordFile=(Join-Path $labDir 'human-password.txt')
@@ -118,11 +154,17 @@ try {
         realmImportFile=$realmImport
         databaseUrl=('jdbc:h2:file:' + (Join-Path $labDir 'keycloakdb').Replace('\','/') + ';NON_KEYWORDS=VALUE')
     }
+    if ($IncludeLifecycleControl) {
+        $public.controlClientId='kafdeck-g2-lab-control'
+        $public.controlPrivateKeyFile=(Join-Path $labDir 'control-private.key')
+    }
+    if ($IncludeBrowserSignIn) { $public.browserClientId='kafdeck-g2-browser' }
     $public | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $labDir 'lab.json') -Encoding utf8
 } finally {
     if ($null -ne $tlsCert) { $tlsCert.Dispose() }
     if ($null -ne $clientCert) { $clientCert.Dispose() }
-    $tlsKey.Dispose(); $clientKey.Dispose()
+    if ($null -ne $controlCert) { $controlCert.Dispose() }
+    $tlsKey.Dispose(); $clientKey.Dispose(); $controlKey.Dispose()
 }
 Write-Output "Prepared isolated G2 realm, human authorization-code client and asymmetric service client under $labDir"
 Write-Output 'Keys, password, database, authorization codes and tokens must remain under ignored .generated; never commit them.'

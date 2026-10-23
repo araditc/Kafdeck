@@ -9,12 +9,13 @@ public static class KafdeckConsumerMutationEndpoints
     private const string IdempotencyHeader = "Idempotency-Key";
 
     public static WebApplication MapKafdeckConsumerMutationEndpoints(
-        this WebApplication app)
+        this WebApplication app, bool bearer = false)
     {
         ArgumentNullException.ThrowIfNull(app);
+        if (!bearer) app.MapKafdeckConsumerMutationEndpoints(bearer: true);
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/consumer-groups/{groupId}/mutations/offsets/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/consumer-groups/{groupId}/mutations/offsets/preview"),
                 async (
                     string clusterId,
                     string groupId,
@@ -62,11 +63,11 @@ public static class KafdeckConsumerMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-consumer-offset-alter-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-consumer-offset-alter-preview"))
+            .RequireFamilyBoundary(bearer, "v05-consumer-offset-alter-preview");
 
         app.MapPost(
-                "/api/v1/clusters/{clusterId}/consumer-groups/{groupId}/mutations/delete/preview",
+                BearerFamilyRoutes.Path(bearer, "/api/v1/clusters/{clusterId}/consumer-groups/{groupId}/mutations/delete/preview"),
                 async (
                     string clusterId,
                     string groupId,
@@ -116,8 +117,8 @@ public static class KafdeckConsumerMutationEndpoints
                             .ConfigureAwait(false)
                         : PlanningProblem(planning.Failure!);
                 })
-            .WithName("v05-consumer-delete-preview")
-            .RequireKafdeckAntiforgery();
+            .WithName(BearerFamilyRoutes.Name(bearer, "v05-consumer-delete-preview"))
+            .RequireFamilyBoundary(bearer, "v05-consumer-delete-preview");
 
         return app;
     }

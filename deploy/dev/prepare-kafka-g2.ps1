@@ -1,7 +1,9 @@
 param(
     [Parameter(Mandatory=$true)][string]$KafkaHome,
     [Parameter(Mandatory=$true)][string]$JavaHome,
-    [string]$OutputDirectory = "$PSScriptRoot/.generated/g2/kafka/instance"
+    [string]$OutputDirectory = "$PSScriptRoot/.generated/g2/kafka/instance",
+    [ValidateRange(1024,65535)][int]$BrokerPort = 19092,
+    [ValidateRange(1024,65535)][int]$ControllerPort = 19093
 )
 $ErrorActionPreference = 'Stop'
 $runtime = [IO.Path]::GetFullPath($KafkaHome)
@@ -12,14 +14,19 @@ if (!(Test-Path -LiteralPath $java) -or !(Test-Path -LiteralPath (Join-Path $run
     throw 'Require Java 21 and the verified official Apache Kafka 4.3.1 binary distribution.'
 }
 if (Test-Path -LiteralPath $instance) { throw 'Select a fresh ignored instance directory; never reformat an existing broker.' }
+if ($BrokerPort -eq $ControllerPort) { throw 'Broker and controller ports must be distinct.' }
+foreach ($port in @($BrokerPort,$ControllerPort)) {
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,$port)
+    try { $listener.Start() } finally { $listener.Stop() }
+}
 New-Item -ItemType Directory -Path $instance -Force | Out-Null
 $data = (Join-Path $instance 'data').Replace('\','/')
 @"
 process.roles=broker,controller
 node.id=1
-controller.quorum.bootstrap.servers=127.0.0.1:19093
-listeners=PLAINTEXT://127.0.0.1:19092,CONTROLLER://127.0.0.1:19093
-advertised.listeners=PLAINTEXT://127.0.0.1:19092,CONTROLLER://127.0.0.1:19093
+controller.quorum.bootstrap.servers=127.0.0.1:$ControllerPort
+listeners=PLAINTEXT://127.0.0.1:$BrokerPort,CONTROLLER://127.0.0.1:$ControllerPort
+advertised.listeners=PLAINTEXT://127.0.0.1:$BrokerPort,CONTROLLER://127.0.0.1:$ControllerPort
 controller.listener.names=CONTROLLER
 inter.broker.listener.name=PLAINTEXT
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
@@ -40,9 +47,9 @@ $id = [Convert]::ToBase64String([Guid]::NewGuid().ToByteArray()).TrimEnd('=').Re
 & $java -Xms64m -Xmx256m ("-Dlog4j2.configurationFile=" + (Join-Path $runtime 'config/tools-log4j2.yaml')) -cp (Join-Path $runtime 'libs/*') kafka.tools.StorageTool format --standalone -t $id -c (Join-Path $instance 'server.properties')
 if ($LASTEXITCODE -ne 0) { throw 'Kafka storage format failed; preserve this directory for diagnosis and choose a fresh directory for a retry.' }
 @{
-    kafkaVersion='4.3.1'; bootstrapServers='127.0.0.1:19092'
+    kafkaVersion='4.3.1'; bootstrapServers="127.0.0.1:$BrokerPort"
     kafkaHome=$runtime; configFile=(Join-Path $instance 'server.properties'); javaExecutable=$java
     sha512='c7d7b2318cb51aa0c61d3246a51c349210073c5c9b754947ef965a439f2f939e8600f204e134a75ac31faf3829c9370960ef7c6a9886c8a1dbf0339a21f4c54c'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $instance 'lab.json') -Encoding utf8
-Write-Output 'Prepared an isolated single-node Kafka KRaft laboratory on numeric loopback ports 19092/19093.'
+Write-Output "Prepared an isolated single-node Kafka KRaft laboratory on numeric loopback ports $BrokerPort/$ControllerPort."
 Write-Output 'This disposable plaintext loopback fixture does not establish production TLS/SASL, Kafka HA or OS support.'

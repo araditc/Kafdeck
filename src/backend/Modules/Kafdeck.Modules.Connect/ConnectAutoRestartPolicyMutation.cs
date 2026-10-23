@@ -304,7 +304,7 @@ public sealed class ConnectAutoRestartPolicyPlanner
 
             governance =
                 await _governance
-                    .GetCurrentAsync(
+                    .GetAdmissionAsync(
                         probe,
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -620,7 +620,7 @@ public sealed class ConnectAutoRestartPolicyPreconditionValidator
 
         var governance =
             await _governance
-                .GetCurrentAsync(
+                .GetAdmissionAsync(
                     probe,
                     cancellationToken)
                 .ConfigureAwait(false);

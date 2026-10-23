@@ -121,7 +121,7 @@ public sealed class MutationNotificationOutbox(IMutationDbConnectionFactory conn
         await PruneExpiredAsync(connection, transaction, now, cancellationToken).ConfigureAwait(false);
         var result = new List<NotificationProductEvent>();
         await using (var command = Command(connection, transaction, """
-                         SELECT event_id, occurred_at_utc, kind FROM kafdeck_notification_product_outbox
+                         SELECT event_id, occurred_at_utc, kind,captured_at_utc FROM kafdeck_notification_product_outbox
                          ORDER BY captured_at_utc, event_id LIMIT @limit
                          """))
         {
@@ -131,7 +131,7 @@ public sealed class MutationNotificationOutbox(IMutationDbConnectionFactory conn
             {
                 if (reader.GetString(2) != "mutation-applied-verified")
                     throw new InvalidOperationException("Unapproved product notification kind.");
-                result.Add(new(Guid.ParseExact(reader.GetString(0), "D"), Parse(reader.GetString(1))));
+                result.Add(new(Guid.ParseExact(reader.GetString(0), "D"), Parse(reader.GetString(1)), Parse(reader.GetString(3))));
             }
         }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

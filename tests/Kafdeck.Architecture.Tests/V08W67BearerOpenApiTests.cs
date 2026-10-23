@@ -13,8 +13,8 @@ public sealed class V08W67BearerOpenApiTests
         var root = json.RootElement;
         Assert.Equal("3.1.0", root.GetProperty("openapi").GetString());
         var paths = root.GetProperty("paths");
-        Assert.Equal(11, paths.EnumerateObject().Count());
-        Assert.All(paths.EnumerateObject(), path => Assert.StartsWith("/api/v1/automation/", path.Name, StringComparison.Ordinal));
+        Assert.Equal(49 + Kafdeck.Contracts.KafdeckReadContracts.All.Count, paths.EnumerateObject().Count());
+        Assert.All(paths.EnumerateObject(), path => Assert.StartsWith("/api/v1/", path.Name, StringComparison.Ordinal));
         Assert.Equal("bearer", root.GetProperty("components").GetProperty("securitySchemes").GetProperty("bearerAuth").GetProperty("scheme").GetString());
         var schemas = root.GetProperty("components").GetProperty("schemas");
         Assert.False(schemas.GetProperty("TopicCreateRequest").GetProperty("additionalProperties").GetBoolean());
@@ -28,6 +28,9 @@ public sealed class V08W67BearerOpenApiTests
         Assert.False(schemas.GetProperty("TopicAlterRequest").GetProperty("properties").GetProperty("changes").GetProperty("additionalProperties").GetBoolean());
         Assert.Equal(100000, schemas.GetProperty("TopicIncreasePartitionsRequest").GetProperty("properties").GetProperty("newPartitionCount").GetProperty("maximum").GetInt32());
         Assert.DoesNotContain("requesterPrincipalId", schemas.GetProperty("TopicCreateRequest").GetRawText(), StringComparison.Ordinal);
+        Assert.False(schemas.GetProperty("FamilyRecordProductionPreviewRequest").GetProperty("additionalProperties").GetBoolean());
+        Assert.True(paths.TryGetProperty("/api/v1/automation/mutations/{operationId}/record-production/execute", out _));
+        Assert.True(paths.TryGetProperty("/api/v1/automation/clusters/{clusterId}/consumer-groups/{groupId}/mutations/offsets/preview", out _));
     }
 
     [Fact]

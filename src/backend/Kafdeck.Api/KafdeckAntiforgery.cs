@@ -80,11 +80,22 @@ public static class KafdeckAntiforgeryExtensions
 
         return builder.AddEndpointFilter(async (invocation, next) =>
         {
+            // Only these compiled, bounded read-only POST contracts may use
+            // the separate verified bearer identity. Browser cookies still require CSRF.
+            var http = invocation.HttpContext;
+            var read = Kafdeck.Contracts.KafdeckReadContracts.Find(http.GetEndpoint()?.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName);
+            if (http.User.Identity is NonBrowserReadIdentity && read?.Method == "post" && BearerReadBoundary.Matches(http, read))
+                return await next(invocation).ConfigureAwait(false);
             var antiforgery = invocation.HttpContext.RequestServices
                 .GetRequiredService<IAntiforgery>();
 
             try
             {
+                // Framework middleware has already rejected this request. A
+                // second validation reads its guarded FormFeature and throws
+                // InvalidOperationException instead of the stable 403 below.
+                if (invocation.HttpContext.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: false })
+                    throw new AntiforgeryValidationException("Request antiforgery validation failed.");
                 await antiforgery
                     .ValidateRequestAsync(invocation.HttpContext)
                     .ConfigureAwait(false);

@@ -49,6 +49,14 @@ public sealed class MutationRequestAuthorizationService
         return KafdeckAuthorizationOutcome.Allowed;
     }
 
+    public KafdeckAuthorizationOutcome AuthorizeProofTargets(ClaimsPrincipal? principal, IReadOnlyList<MutationAuthorizationTarget> targets)
+    {
+        if (!MutationActor.TryCreate(principal, out var actor) || actor is null) return KafdeckAuthorizationOutcome.Unauthenticated;
+        if (principal?.Identity is NonBrowserReadIdentity) return AuthorizeTargets(principal, targets);
+        return targets.Count > 0 && targets.All(target => _authorization.IsDirectSubjectAllowed(actor.PrincipalId,
+            new(target.Action, target.ClusterId, target.ResourceName))) ? KafdeckAuthorizationOutcome.Allowed : KafdeckAuthorizationOutcome.Forbidden;
+    }
+
     public KafdeckAuthorizationOutcome AuthorizeForDispatch(
         ClaimsPrincipal? principal,
         MutationOperationSnapshot operation)
@@ -56,7 +64,7 @@ public sealed class MutationRequestAuthorizationService
         ArgumentNullException.ThrowIfNull(operation);
         var lifecycle = AuthorizeForLifecycle(principal, operation);
         if (lifecycle != KafdeckAuthorizationOutcome.Allowed) return lifecycle;
-        if (principal?.Identity is NonBrowserReadIdentity)
+        if (principal?.Identity is NonBrowserReadIdentity || operation.OperationKind == MutationOperationKind.FleetUncertaintyDisposition)
         {
             if (operation.Risk.RequiresIndependentApproval && operation.State is MutationOperationState.Ready or MutationOperationState.Executing &&
                 (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
@@ -71,15 +79,26 @@ public sealed class MutationRequestAuthorizationService
     public KafdeckAuthorizationOutcome AuthorizeForLifecycle(ClaimsPrincipal? principal, MutationOperationSnapshot operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        if (principal?.Identity is NonBrowserReadIdentity &&
-            (!BearerTopicMutationScope.IsKind(operation.OperationKind) || operation.PolicyVersion != PolicyVersionFor(principal)))
+        try
+        {
+            // A kind admitted elsewhere cannot reinterpret another family's
+            // authorization targets. Validate the exact closed conjunction.
+            var normalized = MutationAuthorizationRequirements.Normalize(operation.OperationKind, operation.ClusterId,
+                operation.AuthorizationTargets, operation.ResourceKeys);
+            if (!operation.AuthorizationTargets.SequenceEqual(normalized)) return KafdeckAuthorizationOutcome.Forbidden;
+        }
+        catch (Exception exception) when (exception is ArgumentException or MutationStateException)
+        { return KafdeckAuthorizationOutcome.Forbidden; }
+        if ((principal?.Identity is NonBrowserReadIdentity || operation.OperationKind == MutationOperationKind.FleetUncertaintyDisposition) &&
+            (!BearerFamilyRoutes.IsKind(operation.OperationKind) || operation.PolicyVersion != PolicyVersionFor(principal, operation.OperationKind)))
             return KafdeckAuthorizationOutcome.Forbidden;
-        return AuthorizeTargets(principal, operation.AuthorizationTargets);
+        return operation.OperationKind == MutationOperationKind.FleetUncertaintyDisposition
+            ? AuthorizeProofTargets(principal, operation.AuthorizationTargets) : AuthorizeTargets(principal, operation.AuthorizationTargets);
     }
 
     public bool IsApprovalAllowed(ClaimsPrincipal? principal, MutationOperationSnapshot operation)
     {
-        return operation.OperationKind == MutationOperationKind.TopicDelete && operation.Risk.RequiresIndependentApproval &&
+        return BearerFamilyRoutes.IsKind(operation.OperationKind) && operation.Risk.RequiresIndependentApproval &&
             operation.PolicyVersion == "v0.8-bearer:" + _authorization.PolicyFingerprint &&
             MutationActor.TryCreate(principal, out var actor) && actor?.HumanKey is not null &&
             !MutationActor.IsSameHuman(operation.RequesterPrincipalId, actor.HumanKey) &&
@@ -87,6 +106,6 @@ public sealed class MutationRequestAuthorizationService
                 _authorization.IsLiveApprovalAllowed(principal, new(target.Action, target.ClusterId, target.ResourceName)));
     }
 
-    public string PolicyVersionFor(ClaimsPrincipal? principal) => principal?.Identity is NonBrowserReadIdentity
+    public string PolicyVersionFor(ClaimsPrincipal? principal, MutationOperationKind? kind = null) => principal?.Identity is NonBrowserReadIdentity || kind == MutationOperationKind.FleetUncertaintyDisposition
         ? "v0.8-bearer:" + _authorization.PolicyFingerprint : MutationAdmissionService.PolicyVersion;
 }

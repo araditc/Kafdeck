@@ -30,7 +30,7 @@ public sealed record NotificationProductEventPolicy
     public int MaxPendingDeliveries { get; }
 }
 
-public sealed record NotificationProductEvent(Guid EventId, DateTimeOffset OccurredAtUtc)
+public sealed record NotificationProductEvent(Guid EventId, DateTimeOffset OccurredAtUtc, DateTimeOffset? DatabaseCapturedAtUtc = null)
 {
     public NotificationSafeEvent Project() => NotificationSafeEvent.Approved(EventId,
         NotificationApprovedEventKind.MutationStateChanged, OccurredAtUtc);
@@ -58,7 +58,8 @@ public sealed record NotificationProductEventCycleResult(int Visited, int Acknow
 // principal from a caller can be supplied to this pump.
 public sealed class NotificationProductEventPump(INotificationProductEventOutbox outbox,
     NotificationRoutingCoordinator routing, NotificationProductEventPolicy policy,
-    INotificationProductEventBackpressure backpressure, TimeProvider? timeProvider = null)
+    INotificationProductEventBackpressure backpressure, TimeProvider? timeProvider = null,
+    INotificationRecoverySourceEvidence? recoverySourceEvidence = null)
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
@@ -80,6 +81,8 @@ public sealed class NotificationProductEventPump(INotificationProductEventOutbox
                         deadline.Token).ConfigureAwait(false)) { unroutable++; break; }
                 visited++;
                 var now = _time.GetUtcNow();
+                if (recoverySourceEvidence is not null && productEvent.DatabaseCapturedAtUtc is { } captured)
+                    await recoverySourceEvidence.RecordCaptureAsync(productEvent.EventId, captured, deadline.Token).ConfigureAwait(false);
                 // Clock-skewed future evidence is retained until comparable or
                 // explicitly expired by the source; never invent an earlier event.
                 if (productEvent.OccurredAtUtc > now) { unroutable++; continue; }

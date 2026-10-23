@@ -97,12 +97,13 @@ public sealed class GovernedDataJobDispatchCoordinator
     private readonly IClusterTransferProducePort _producer;
     private readonly IGovernedDataJobEffectGuard _guard;
     private readonly TimeProvider _timeProvider;
+    private readonly IDestinationDispatchObserver? _destinationObserver;
 
     public GovernedDataJobDispatchCoordinator(
         GovernedDataJobStateCoordinator state,
         IClusterTransferProducePort producer,
         IGovernedDataJobEffectGuard guard,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null, IDestinationDispatchObserver? destinationObserver = null)
     {
         _state =
             state ??
@@ -115,6 +116,7 @@ public sealed class GovernedDataJobDispatchCoordinator
             throw new ArgumentNullException(nameof(guard));
         _timeProvider =
             timeProvider ?? TimeProvider.System;
+        _destinationObserver = destinationObserver;
     }
 
     public async Task<GovernedDataJobDispatchResult>
@@ -190,6 +192,15 @@ public sealed class GovernedDataJobDispatchCoordinator
                 current);
         }
 
+        DestinationDispatchBoundary? destinationBoundary = null;
+        if (_destinationObserver is not null)
+        {
+            var observed = await _destinationObserver.ObserveAsync(plan.Destination.ClusterId, range.DestinationTopic,
+                range.DestinationPartition, workerGeneration, cancellationToken).ConfigureAwait(false);
+            if (!observed.IsSuccess) return new(FailedDefinitive(observed.Code, current), current);
+            destinationBoundary = observed.Boundary;
+        }
+
         var guard =
             await _guard.ValidateAsync(
                     operation,
@@ -219,7 +230,7 @@ public sealed class GovernedDataJobDispatchCoordinator
                     range.DestinationPartition,
                     rawBytes,
                     _timeProvider.GetUtcNow(),
-                    cancellationToken)
+                    cancellationToken, destinationBoundary)
                 .ConfigureAwait(false);
         current = RequireApplied(
             reserved,
