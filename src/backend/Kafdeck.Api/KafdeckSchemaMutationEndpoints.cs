@@ -92,13 +92,22 @@ public static class KafdeckSchemaMutationEndpoints
                         return denied;
                     }
 
+                    // A caller-supplied enum is not an authorization or planning authority.
+                    // Reject undefined/Unknown values at the API boundary before planner access.
+                    if (request.RequestedMode == SchemaCompatibilityMode.Unknown ||
+                        !Enum.IsDefined(request.RequestedMode))
+                    {
+                        return InvalidRequest("A valid non-Unknown compatibility mode is required.");
+                    }
+                    var requestedMode = request.RequestedMode;
+
                     var planning = await planner
                         .PlanCompatibilityAsync(
                             new SchemaCompatibilityAlterRequest(
                                 clusterId,
                                 SchemaCompatibilityScope.Subject,
                                 subject,
-                                request.RequestedMode),
+                                requestedMode),
                             cancellationToken)
                         .ConfigureAwait(false);
 
@@ -137,13 +146,22 @@ public static class KafdeckSchemaMutationEndpoints
                         return denied;
                     }
 
+                    // A caller-supplied enum is not an authorization or planning authority.
+                    // Reject undefined/Unknown values at the API boundary before planner access.
+                    if (request.RequestedMode == SchemaCompatibilityMode.Unknown ||
+                        !Enum.IsDefined(request.RequestedMode))
+                    {
+                        return InvalidRequest("A valid non-Unknown compatibility mode is required.");
+                    }
+                    var requestedMode = request.RequestedMode;
+
                     var planning = await planner
                         .PlanCompatibilityAsync(
                             new SchemaCompatibilityAlterRequest(
                                 clusterId,
                                 SchemaCompatibilityScope.Global,
                                 null,
-                                request.RequestedMode),
+                                requestedMode),
                             cancellationToken)
                         .ConfigureAwait(false);
 
