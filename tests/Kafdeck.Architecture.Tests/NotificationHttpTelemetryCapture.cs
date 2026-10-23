@@ -12,8 +12,10 @@ internal sealed class NotificationHttpTelemetryCapture : EventListener
     // In guarded provider tests, search exact credentials as events arrive.
     // This keeps memory bounded by the finite watched set rather than the
     // process-wide HTTP event rate from parallel integration laboratories.
-    private readonly string[] _watchedSecrets;
-    private readonly int[] _watchedMatches;
+    // EventListener can deliver events from its base constructor before
+    // our watched set is installed. Empty defaults keep that interval safe.
+    private readonly string[] _watchedSecrets = [];
+    private readonly int[] _watchedMatches = [];
     private readonly ActivityListener _activities;
     private int _entries;
     private int _overflowed;
@@ -23,8 +25,9 @@ internal sealed class NotificationHttpTelemetryCapture : EventListener
         if (watchedSecrets.Length > 8 || watchedSecrets.Any(secret =>
                 string.IsNullOrEmpty(secret) || secret.Length > 1024 || secret.Any(char.IsControl)))
             throw new ArgumentException("Telemetry leak checks require up to eight bounded, predeclared credentials.", nameof(watchedSecrets));
-        _watchedSecrets = watchedSecrets.Distinct(StringComparer.Ordinal).ToArray();
-        _watchedMatches = new int[_watchedSecrets.Length];
+        var distinctSecrets = watchedSecrets.Distinct(StringComparer.Ordinal).ToArray();
+        _watchedMatches = new int[distinctSecrets.Length];
+        _watchedSecrets = distinctSecrets;
         _activities = new ActivityListener
         {
             ShouldListenTo = source => source.Name.StartsWith("System.Net.Http", StringComparison.Ordinal),
