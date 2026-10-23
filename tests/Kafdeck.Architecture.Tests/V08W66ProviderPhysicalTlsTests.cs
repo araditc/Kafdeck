@@ -53,7 +53,7 @@ public sealed class V08W66ProviderPhysicalTlsTests(ITestOutputHelper output)
             _ => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
         };
         var profile = Profile(provider);
-        using var telemetry = new NotificationHttpTelemetryCapture();
+        using var telemetry = new NotificationHttpTelemetryCapture(secret);
         try
         {
             await File.WriteAllTextAsync(credentialPath, secret);
