@@ -135,6 +135,60 @@ public sealed class V08W68SubscriptionObservationBridgeTests
         }
     }
 
+    [Fact]
+    public async Task Concurrent_retirement_during_owner_proof_is_never_reported_as_ordinary_drift()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "w68-observation-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            var store = new AdoNotificationRoutingStore(new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+            var definition = Desired().Definition;
+            var created = await store.CreateSubscriptionAsync(definition, NotificationSubscriptionState.Active, DateTimeOffset.UtcNow);
+            var bridge = new W68CandidateSubscriptionObservationBridge(store, _ => true, _ => true, _ => true,
+                async (_, _, _, token) =>
+                {
+                    await store.ReplaceSubscriptionAsync(definition, NotificationSubscriptionState.Retired,
+                        created.Revision, DateTimeOffset.UtcNow.AddSeconds(1), token);
+                    return true;
+                }, "production-a");
+
+            Assert.Equal(CandidateDriftStatus.Conflict, await bridge.InspectAsync(Desired()));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var file in Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + "*"))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_create_during_ownership_proof_cannot_prove_missing()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "w68-observation-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            var store = new AdoNotificationRoutingStore(new SqliteNotificationDeliveryDbConnectionFactory(path));
+            await store.InitializeAsync();
+            var desired = Desired();
+            var bridge = new W68CandidateSubscriptionObservationBridge(store, _ => true, _ => true, _ => true,
+                async (_, _, _, token) =>
+                {
+                    await store.CreateSubscriptionAsync(desired.Definition, NotificationSubscriptionState.Active,
+                        DateTimeOffset.UtcNow, token);
+                    return true;
+                }, "production-a");
+            Assert.Equal(CandidateDriftStatus.Unknown, await bridge.InspectAsync(desired));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var file in Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + "*"))
+                File.Delete(file);
+        }
+    }
+
     private static W68CandidateSubscriptionObservationBridge Bridge(
         INotificationRoutingStore store, bool read, bool own) =>
         new(store, _ => read, _ => read, _ => read,
