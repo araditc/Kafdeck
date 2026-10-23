@@ -9,7 +9,7 @@ internal sealed class W68CandidateSubscriptionObservationBridge(
     Func<string, bool> currentSubscriptionReadAllowed,
     Func<string, bool> currentDestinationReadAllowed,
     Func<string, bool> currentDeploymentAllowed,
-    Func<string, string, CancellationToken, ValueTask<bool>> currentOwnershipConsistent,
+    Func<string, string, string, CancellationToken, ValueTask<bool>> currentOwnershipConsistent,
     string serverDeploymentId)
 {
     public async Task<CandidateDriftStatus> InspectAsync(
@@ -52,7 +52,7 @@ internal sealed class W68CandidateSubscriptionObservationBridge(
         try
         {
             ownershipConsistent = await currentOwnershipConsistent(
-                desired.DeploymentRef, desired.Definition.SubscriptionId, cancellationToken).ConfigureAwait(false);
+                desired.DeploymentRef, desired.Definition.SubscriptionId, desired.OwnerRef, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -63,7 +63,15 @@ internal sealed class W68CandidateSubscriptionObservationBridge(
             return CandidateDriftStatus.Unknown;
         }
 
-        if (!ownershipConsistent)
+        // A permission can be revoked during asynchronous ownership validation.
+        // Reauthorize all exact resource identities at the final disclosure boundary.
+        if (!currentDeploymentAllowed(desired.DeploymentRef) ||
+            !currentSubscriptionReadAllowed(desired.Definition.SubscriptionId) ||
+            !currentDestinationReadAllowed(desired.Definition.DestinationId) ||
+            (current is not null && !currentDestinationReadAllowed(current.Definition.DestinationId)))
+            return CandidateDriftStatus.Inaccessible;
+
+        if (!ownershipConsistent || current?.State == NotificationSubscriptionState.Retired)
             return CandidateDriftStatus.Conflict;
 
         // The snapshot's own server-managed revision is the only current
