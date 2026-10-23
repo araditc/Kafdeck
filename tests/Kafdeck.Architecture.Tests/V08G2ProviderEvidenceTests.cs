@@ -21,6 +21,8 @@ public sealed class V08G2ProviderEvidenceTests
     [InlineData("data-generator.records","2")]
     [InlineData("verification.state","partial")]
     [InlineData("verification.state","unknown")]
+    [InlineData("local-activation.failure-code","data_job_conflict_persistence_unavailable")]
+    [InlineData("local-activation.failure-code","data_generator_progress_persistence_unavailable")]
     public void Existing_typed_family_evidence_survives_durable_kernel_normalization(string key,string value)
         => Assert.Equal(value,MutationProviderEvidence.Normalize(new Dictionary<string,string>{{key,value}})[key]);
 
@@ -32,6 +34,9 @@ public sealed class V08G2ProviderEvidenceTests
     [InlineData("connector.config","secret-marker")]
     [InlineData("delete.scope","caller-invented")]
     [InlineData("verification.state","claimed-success")]
+    [InlineData("local-activation.failure-code","https://internal.invalid/secret")]
+    [InlineData("local-activation.failure-code","data_job_secret\\ncredential")]
+    [InlineData("local-activation.failure-code","provider_error")]
     public void Unknown_fields_and_untyped_values_remain_refused(string key,string value)
         => Assert.Throws<MutationStateException>(()=>MutationProviderEvidence.Normalize(new Dictionary<string,string>{{key,value}}));
 }
