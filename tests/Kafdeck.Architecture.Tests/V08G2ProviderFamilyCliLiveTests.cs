@@ -70,7 +70,7 @@ public sealed class V08G2ProviderFamilyCliLiveTests
             var file=await lab.RequestFileAsync(body,token);
             var args=command.Concat(new[]{"--request-file",file,"--idempotency-key","g2-family-"+Guid.NewGuid().ToString("N")}).ToArray();
             var exit=await lab.RunAsync(token,args);
-            Assert.True(exit is CliApplication.Success or CliApplication.PendingApproval,"Actual family preview failed; safe transcript: "+lab.Output);
+            Assert.True(exit is CliApplication.Success or CliApplication.PendingApproval,"Actual family preview failed; exit="+exit+"; "+lab.SafeOutcome);
             using var preview=JsonDocument.Parse(lab.Output);var id=preview.RootElement.GetProperty("operationId").GetGuid();
             var hash=preview.RootElement.GetProperty("previewHash").GetString()!;
             var confirmation=new List<string>{"operations","confirm",id.ToString("D"),hash};
