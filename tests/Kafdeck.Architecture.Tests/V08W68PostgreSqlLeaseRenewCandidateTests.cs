@@ -87,4 +87,60 @@ public sealed class V08W68PostgreSqlLeaseRenewCandidateTests
             await delete.ExecuteNonQueryAsync();
         }
     }
+
+    [Fact]
+    public async Task Competing_locked_lease_never_renews_after_its_expiry()
+    {
+        var cs = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var deployment = "race-" + Guid.NewGuid().ToString("N");
+        await using var seed = new NpgsqlConnection(cs);
+        await seed.OpenAsync();
+        await using (var ddl = seed.CreateCommand())
+        {
+            ddl.CommandText = W68LeaseSchemaCandidate.PostgreSql;
+            await ddl.ExecuteNonQueryAsync();
+        }
+        await using (var insert = seed.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO kafdeck_declarative_controller_leases
+                   (deployment_id,lease_scope_id,holder_id,epoch,expires_at_utc)
+                VALUES (@deployment,'writer','holder-a',3,clock_timestamp()+interval '1 second')
+                """;
+            insert.Parameters.AddWithValue("@deployment", deployment);
+            await insert.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using var first = new NpgsqlConnection(cs);
+            await using var second = new NpgsqlConnection(cs);
+            await first.OpenAsync();
+            await second.OpenAsync();
+            await using (var tx = await first.BeginTransactionAsync())
+            {
+                Assert.NotNull(await W68PostgreSqlLockedControllerLeaseReader.ReadForUpdateAsync(
+                    first, tx, deployment, "writer"));
+                await using var competing = await second.BeginTransactionAsync();
+                var error = await Assert.ThrowsAsync<PostgresException>(() =>
+                    W68PostgreSqlLeaseRenewCandidate.TryRenewAsync(
+                        second, competing, deployment, "writer", "holder-a", 3, 60));
+                Assert.Equal("55P03", error.SqlState);
+                await competing.RollbackAsync();
+                await Task.Delay(TimeSpan.FromMilliseconds(1200));
+                await tx.CommitAsync();
+            }
+            await using var expiredTx = await second.BeginTransactionAsync();
+            Assert.Null(await W68PostgreSqlLeaseRenewCandidate.TryRenewAsync(
+                second, expiredTx, deployment, "writer", "holder-a", 3, 60));
+            await expiredTx.RollbackAsync();
+        }
+        finally
+        {
+            await using var delete = seed.CreateCommand();
+            delete.CommandText = "DELETE FROM kafdeck_declarative_controller_leases WHERE deployment_id=@deployment";
+            delete.Parameters.AddWithValue("@deployment", deployment);
+            await delete.ExecuteNonQueryAsync();
+        }
+    }
 }
