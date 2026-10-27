@@ -37,6 +37,17 @@ internal static class W68PostgreSqlLeaseRenewCandidate
         if (connection.State != ConnectionState.Open)
             throw new InvalidOperationException("Connection must be open.");
 
+        // Take the authoritative row lock BEFORE evaluating expiry. NOWAIT
+        // denies a competing transaction rather than reviving a lease whose
+        // expiry elapses while blocked behind an unchanged locked tuple.
+        var locked = await W68PostgreSqlLockedControllerLeaseReader.ReadForUpdateAsync(
+            connection, transaction, deploymentId, scopeId, cancellationToken).ConfigureAwait(false);
+        if (locked is null ||
+            !string.Equals(locked.Lease.HolderId, authenticatedHolderId, StringComparison.Ordinal) ||
+            locked.Lease.Epoch != acquiredEpoch ||
+            locked.Lease.ExpiresAtUtc <= locked.DatabaseObservedAtUtc)
+            return null;
+
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = Sql;
