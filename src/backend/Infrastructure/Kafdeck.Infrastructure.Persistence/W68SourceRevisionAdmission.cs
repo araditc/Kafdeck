@@ -12,7 +12,8 @@ internal static class W68SourceRevisionAdmission
         string expectedOwnershipGeneration)
     {
         if (stored is null || !Valid(expectedOwner) || !Valid(expectedSource) ||
-            !Valid(expectedSourceGeneration) || !Valid(expectedOwnershipGeneration) ||
+            !Uuid(expectedSourceGeneration) || !Uuid(expectedOwnershipGeneration) ||
+            !Uuid(stored.SourceGenerationId) || !Uuid(stored.OwnershipGenerationId) ||
             !Sha(expectedRevisionSha256) || !Sha(stored.PinnedRevisionSha256))
             return false;
         return string.Equals(stored.RegisteredOwnerId, expectedOwner, StringComparison.Ordinal) &&
@@ -23,6 +24,9 @@ internal static class W68SourceRevisionAdmission
     }
     private static bool Valid(string? s) => !string.IsNullOrWhiteSpace(s) &&
         s.Length <= 128 && s == s.Trim();
+    private static bool Uuid(string? s) =>
+        s is { Length: 36 } && Guid.TryParseExact(s, "D", out var id) &&
+        id != Guid.Empty && string.Equals(id.ToString("D"), s, StringComparison.Ordinal);
     private static bool Sha(string? s) => s is { Length: 64 } &&
         s.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 }
