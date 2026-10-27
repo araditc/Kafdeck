@@ -46,7 +46,8 @@ public sealed class V08W68StoredControllerLeaseReaderTests
         // PostgreSQL supplies TIMESTAMPTZ as UTC DateTime, not text.
         // Assert the exact fractional ticks survive the production reader's conversion.
         var pgUtc = new DateTime(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
-        var projected = new DateTimeOffset(pgUtc, TimeSpan.Zero);
+        var convert = type.GetMethod("ConvertExpiryUtc", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var projected = (DateTimeOffset)convert.Invoke(null, [pgUtc])!;
         Assert.Equal(1234560, projected.Ticks % TimeSpan.TicksPerSecond);
     }
 }
