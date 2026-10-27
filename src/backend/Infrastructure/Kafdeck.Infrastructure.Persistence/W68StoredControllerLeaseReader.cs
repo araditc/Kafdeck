@@ -35,10 +35,14 @@ internal static class W68StoredControllerLeaseReader
             return null; // Storage absence is NOT an authorization or acquisition grant.
         var epoch = reader.GetInt64(1);
         var expiry = reader.GetValue(2);
-        var expires = expiry is DateTimeOffset dto
-            ? dto.ToUniversalTime()
-            : DateTimeOffset.Parse(Convert.ToString(expiry, CultureInfo.InvariantCulture)!,
-                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+        var expires = expiry switch
+        {
+            DateTimeOffset dto => dto.ToUniversalTime(),
+            DateTime dt => new DateTimeOffset(dt.Kind == DateTimeKind.Utc
+                ? dt : dt.ToUniversalTime(), TimeSpan.Zero),
+            _ => DateTimeOffset.Parse(Convert.ToString(expiry, CultureInfo.InvariantCulture)!,
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
+        };
         var result = new W68StoredControllerLease(
             deploymentId, scopeId, reader.GetString(0), epoch, expires);
         if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
