@@ -35,20 +35,22 @@ internal static class W68StoredControllerLeaseReader
             return null; // Storage absence is NOT an authorization or acquisition grant.
         var epoch = reader.GetInt64(1);
         var expiry = reader.GetValue(2);
-        var expires = expiry switch
-        {
-            DateTimeOffset dto => dto.ToUniversalTime(),
-            DateTime dt => new DateTimeOffset(dt.Kind == DateTimeKind.Utc
-                ? dt : dt.ToUniversalTime(), TimeSpan.Zero),
-            _ => DateTimeOffset.Parse(Convert.ToString(expiry, CultureInfo.InvariantCulture)!,
-                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
-        };
+        var expires = ConvertExpiryUtc(expiry);
         var result = new W68StoredControllerLease(
             deploymentId, scopeId, reader.GetString(0), epoch, expires);
         if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("Non-unique controller lease observation.");
         return result;
     }
+
+    internal static DateTimeOffset ConvertExpiryUtc(object expiry) => expiry switch
+    {
+        DateTimeOffset dto => dto.ToUniversalTime(),
+        DateTime dt => new DateTimeOffset(dt.Kind == DateTimeKind.Utc
+            ? dt : dt.ToUniversalTime(), TimeSpan.Zero),
+        _ => DateTimeOffset.Parse(Convert.ToString(expiry, CultureInfo.InvariantCulture)!,
+            CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
+    };
 
     private static void Validate(string value, string name)
     {
