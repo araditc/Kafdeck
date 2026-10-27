@@ -10,7 +10,7 @@ internal static class W68LeaseSchemaCandidate
           deployment_id TEXT NOT NULL COLLATE BINARY,
           lease_scope_id TEXT NOT NULL COLLATE BINARY,
           holder_id TEXT NOT NULL COLLATE BINARY,
-          epoch INTEGER NOT NULL CHECK (epoch >= 1),
+          epoch INTEGER NOT NULL CHECK (typeof(epoch) = 'integer' AND epoch >= 1),
           expires_at_utc TEXT NOT NULL,
           PRIMARY KEY (deployment_id, lease_scope_id),
           CHECK (length(deployment_id) BETWEEN 1 AND 128),
