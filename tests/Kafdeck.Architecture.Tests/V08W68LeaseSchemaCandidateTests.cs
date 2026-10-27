@@ -22,7 +22,7 @@ public sealed class V08W68LeaseSchemaCandidateTests
             command.CommandText = sqlite;
             command.ExecuteNonQuery();
         }
-        static int Insert(SqliteConnection connection, string scope, string holder, long epoch)
+        static int Insert(SqliteConnection connection, string scope, string holder, object epoch)
         {
             using var command = connection.CreateCommand();
             command.CommandText = """
@@ -41,5 +41,8 @@ public sealed class V08W68LeaseSchemaCandidateTests
         Assert.Equal(1, Insert(connection, "controller-b", "holder-b", 1));
         Assert.Throws<SqliteException>(() => Insert(connection, "controller-c", "", 1));
         Assert.Throws<SqliteException>(() => Insert(connection, "controller-c", "holder-c", 0));
+        Assert.Throws<SqliteException>(() => Insert(connection, "controller-c", "holder-c", 1.5));
+        Assert.Throws<SqliteException>(() => Insert(connection, "controller-c", "holder-c", "not-an-epoch"));
+        Assert.Throws<SqliteException>(() => Insert(connection, "controller-c", "holder-c", 1e30));
     }
 }
