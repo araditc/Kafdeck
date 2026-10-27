@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
 
+[Collection("W68PostgresLeaseSchema")]
 public sealed class V08W68PostgreSqlLockedLeaseReaderTests
 {
     [Fact]
