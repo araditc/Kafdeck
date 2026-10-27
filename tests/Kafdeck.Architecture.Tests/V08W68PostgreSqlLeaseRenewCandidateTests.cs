@@ -5,6 +5,10 @@ using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
 
+[CollectionDefinition("W68PostgresLeaseSchema", DisableParallelization = true)]
+public sealed class W68PostgresLeaseSchemaCollection { }
+
+[Collection("W68PostgresLeaseSchema")]
 public sealed class V08W68PostgreSqlLeaseRenewCandidateTests
 {
     [Fact]
