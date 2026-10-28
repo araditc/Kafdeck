@@ -26,6 +26,7 @@ on:
       - 'tests/Kafdeck.Architecture.Tests/V08W66NotificationReadApiTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlLockedLeaseReaderTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlLeaseRenewCandidateTests.cs'
+      - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlEpochAdvanceCandidateTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlEpochHighWaterTests.cs'
       - 'docs/implementation/v0.5-w40-readiness.md'
       - '.github/workflows/v05-persistence.yml'
