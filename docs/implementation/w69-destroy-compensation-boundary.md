@@ -10,3 +10,9 @@ Prevent secret propagation, cross-tenant destroy, externally managed resource ta
 Irreversible resources denied, unauthorized actor denied, mismatch owner generation denied, changed state denied, PendingApproval preserved, failure-after-dispatch reconciled, audit present.
 
 **No destructive API is implemented by this document.**
+
+## Stored-plan and authorization requirements
+
+Destroy requires the *original immutable server-stored* `planId` and `planFingerprint`, exact initiating principal, owner/source generation, current resource revision, policy version and policy-input fingerprint. Missing, tampered, expired, replayed or policy-stale plans are rejected and require fresh planning even if resource data is otherwise unchanged. Execution requires `declarative.apply` **AND** every underlying effect permission. CRITICAL actions require an eligible approver distinct from the immutable initiator; self-approval and any missing individual permission are denied.
+
+The durable backend states `AwaitingApproval` and `ExecutionUnknown` remain **non-success**. A Terraform diagnostic may surface pending approval but must not report completed Destroy or discard the operation reference. Unknown effects are reconciled by observing the persisted operation and must never be blindly redispatched, even with an idempotency key. Acceptance tests include stolen plan, policy changed without resource change, missing declarative/apply vs underlying grant, initiator self-approval, restart/resume while awaiting approval and unknown effect after dispatch.
