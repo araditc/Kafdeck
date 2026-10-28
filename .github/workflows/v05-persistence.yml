@@ -26,6 +26,7 @@ on:
       - 'tests/Kafdeck.Architecture.Tests/V08W66NotificationReadApiTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlLockedLeaseReaderTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlLeaseRenewCandidateTests.cs'
+      - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlEpochAdvanceCandidateTests.cs'
       - 'tests/Kafdeck.Architecture.Tests/V08W68PostgreSqlEpochHighWaterTests.cs'
       - 'docs/implementation/v0.5-w40-readiness.md'
       - '.github/workflows/v05-persistence.yml'
@@ -83,5 +84,5 @@ jobs:
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release
           --no-restore
-          --filter 'FullyQualifiedName~V05MutationKernelTests|FullyQualifiedName~V05MutationPersistenceTests|FullyQualifiedName~V06W41FleetConflictObligationTests|FullyQualifiedName~V06W41FleetConflictRelationTests|FullyQualifiedName~V06W41FleetConflictScopeTests|FullyQualifiedName~V06W41FleetPersistenceTests|FullyQualifiedName~V06W41FleetProgressTests|FullyQualifiedName~V08W63HistoricalMetricsPersistenceTests|FullyQualifiedName~V08W65DataQualityDurableStoreTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V08W66NotificationReadApiTests|FullyQualifiedName~V08W68PostgreSqlLockedLeaseReaderTests|FullyQualifiedName~V08W68PostgreSqlLeaseRenewCandidateTests|FullyQualifiedName~V08W68PostgreSqlEpochHighWaterTests'
+          --filter 'FullyQualifiedName~V05MutationKernelTests|FullyQualifiedName~V05MutationPersistenceTests|FullyQualifiedName~V06W41FleetConflictObligationTests|FullyQualifiedName~V06W41FleetConflictRelationTests|FullyQualifiedName~V06W41FleetConflictScopeTests|FullyQualifiedName~V06W41FleetPersistenceTests|FullyQualifiedName~V06W41FleetProgressTests|FullyQualifiedName~V08W63HistoricalMetricsPersistenceTests|FullyQualifiedName~V08W65DataQualityDurableStoreTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V08W66NotificationReadApiTests|FullyQualifiedName~V08W68PostgreSqlLockedLeaseReaderTests|FullyQualifiedName~V08W68PostgreSqlLeaseRenewCandidateTests|FullyQualifiedName~V08W68PostgreSqlEpochHighWaterTests|FullyQualifiedName~V08W68PostgreSqlEpochAdvanceCandidateTests'
           --logger 'console;verbosity=detailed'
