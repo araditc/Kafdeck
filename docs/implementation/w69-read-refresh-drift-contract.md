@@ -14,3 +14,11 @@ Keep resource scope, owner/source generation, CAS revision and desired SHA256 fi
 - Retry is bounded and only for safe idempotent reads.
 
 **No working provider read is claimed until real W68 API fixtures exist.**
+
+## Explicit Terraform state mapping
+
+`InSync`: retain canonical state with fresh backend revision.
+`OutOfSync`: expose a typed drift diagnostic and require a new governed plan; do not mutate during refresh.
+`Missing`: preserve prior Terraform state and report a diagnostic until authoritative, authorized ownership/lifecycle reconciliation proves deletion. Never infer adopt/recreate.
+`Unknown`, `Inaccessible`, `Conflict`, `Unsupported`: **error-severity diagnostic, preserve prior state, no state removal and no mutation** even when HTTP 200 carries the typed status.
+HTTP 401/403, stale timestamp, absent owner generation, malformed body, timeout or inconsistent scoped read are also error diagnostics retaining prior state. Negative tests must assert each status separately; do not convert denied or unavailable into a normal 404.
