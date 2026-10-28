@@ -38,7 +38,9 @@ func NewClient(endpoint, token string, httpClient *http.Client) (*Client,error) 
  u,e:=url.Parse(endpoint)
  if e!=nil || u==nil || u.Scheme!="https" || u.Host=="" || u.User!=nil || u.RawQuery!="" || u.Fragment!="" || u.Path!="" {return nil,errors.New("HTTPS origin required")}
  if strings.TrimSpace(token)=="" {return nil,errors.New("token required")}
- if httpClient==nil {httpClient=&http.Client{Timeout:10*time.Second}}\n copyClient:=*httpClient\n copyClient.CheckRedirect=func(*http.Request,[]*http.Request) error{return http.ErrUseLastResponse}
+ if httpClient==nil {httpClient=&http.Client{Timeout:10*time.Second}}
+ copyClient:=*httpClient
+ copyClient.CheckRedirect=func(*http.Request,[]*http.Request) error{return http.ErrUseLastResponse}
  return &Client{base:u,http:&copyClient,token:token},nil
 }
 // ReadExact requires an explicit versioned backend read path supplied by the admitted API.
