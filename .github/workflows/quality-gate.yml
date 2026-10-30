@@ -51,6 +51,12 @@ jobs:
         if: steps.detect.outputs.backend == 'true'
         run: bash scripts/ci/backend.sh
 
+      - name: Test isolated Terraform Go client
+        shell: bash
+        run: |
+          cd providers/terraform
+          go test ./...
+
       - name: Setup Node.js
         if: steps.detect.outputs.frontend == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
