@@ -21,6 +21,9 @@ func TestFailClosedTypedReads(t *testing.T){
   {`{"status":"Missing","deploymentId":"prod","resourceId":"sub","revision":2,"ownershipGeneration":"owner-gen"}`,false},
   {`{"status":"InSync","deploymentId":"other","resourceId":"sub","revision":2,"ownershipGeneration":"owner-gen"}`,false},
   {`{"status":"InSync","deploymentId":"prod","resourceId":"sub","revision":2}`,false},
+  {`{"status":"InSync","deploymentId":"prod","resourceId":"sub","ownershipGeneration":"owner-gen"}`,false},
+  {`{"status":"InSync","deploymentId":"prod","resourceId":"sub","revision":null,"ownershipGeneration":"owner-gen"}`,false},
+  {`{"status":"InSync","deploymentId":"prod","resourceId":"sub","revision":2,"ownershipGeneration":"owner-gen"}`+strings.Repeat(" ",65536)+`{}`,false},
  }
  for _,tc:=range cases{
   transport:=roundTrip(func(req *http.Request)(*http.Response,error){
