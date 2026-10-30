@@ -60,10 +60,19 @@ func (c *Client) ReadExact(ctx context.Context, apiPath, deployment, resource st
  if e!=nil{return zero,ErrUnavailable}
  defer res.Body.Close()
  if res.StatusCode!=http.StatusOK{return zero,ErrUnavailable}
- dec:=json.NewDecoder(io.LimitReader(res.Body,64*1024))
+ data,readErr:=io.ReadAll(io.LimitReader(res.Body,64*1024+1))
+ if readErr!=nil || len(data)>64*1024{return zero,ErrUnavailable}
+ dec:=json.NewDecoder(strings.NewReader(string(data)))
  dec.DisallowUnknownFields()
- var found Observation
- if dec.Decode(&found)!=nil{return zero,ErrUnavailable}
+ var wire struct {
+  Status DriftStatus `json:"status"`
+  DeploymentID string `json:"deploymentId"`
+  ResourceID string `json:"resourceId"`
+  Revision *int64 `json:"revision"`
+  OwnershipGeneration string `json:"ownershipGeneration"`
+ }
+ if dec.Decode(&wire)!=nil || wire.Revision==nil{return zero,ErrUnavailable}
+ found:=Observation{Status:wire.Status,DeploymentID:wire.DeploymentID,ResourceID:wire.ResourceID,Revision:*wire.Revision,OwnershipGeneration:wire.OwnershipGeneration}
  var extra any
  if dec.Decode(&extra)!=io.EOF{return zero,ErrUnavailable}
  if found.DeploymentID!=deployment || found.ResourceID!=resource || found.Revision<0 || found.OwnershipGeneration=="" {
