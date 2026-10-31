@@ -65,6 +65,17 @@ public sealed class V08W68FencedOwnershipCasCandidateTests
             Assert.Equal(0,await Update("foreign",2,1));
             Assert.Equal(0,await Update("owner",1,1));
             Assert.Equal(2,await Update("owner",2,1));
+            await using(var ledger=db.CreateCommand())
+            {
+                ledger.CommandText="""
+                    SELECT revision_high_water FROM kafdeck_declarative_key_versions
+                    WHERE deployment_id=@d AND scope_kind='Tenant'
+                      AND scope_id='scope' AND resource_kind='NotificationSubscription'
+                      AND resource_id='sub'
+                    """;
+                ledger.Parameters.AddWithValue("@d",d);
+                Assert.Equal(2L,(long)(await ledger.ExecuteScalarAsync())!);
+            }
             Assert.Equal(0,await Update("owner",2,1));
         }
         finally
