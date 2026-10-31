@@ -27,15 +27,6 @@ internal static class W68PostgreSqlFencedOwnershipCasCandidate
            AND o.registered_source_id = @source
            AND o.ownership_state = 'Managed'
            AND o.stored_lease_epoch <= @epoch
-           AND EXISTS (
-               SELECT 1 FROM kafdeck_declarative_controller_leases AS l
-                WHERE l.deployment_id = o.deployment_id
-                  AND l.lease_scope_id = @leaseScope
-                  AND l.holder_id = @holder
-                  AND l.epoch = @epoch
-                  AND l.expires_at_utc > clock_timestamp()
-                FOR UPDATE
-           )
         RETURNING o.ownership_revision
         """;
 
@@ -64,6 +55,15 @@ internal static class W68PostgreSqlFencedOwnershipCasCandidate
             throw new ArgumentException("Invalid SHA256 fingerprint.",nameof(evidenceFingerprint));
         if (epoch <= 0 || expectedRevision < 1 || expectedRevision == long.MaxValue)
             throw new ArgumentOutOfRangeException(nameof(expectedRevision));
+        // Acquire an exact NOWAIT row lock before evaluating database time.
+        // A lock conflict is a fail-closed PostgreSQL error, not authority.
+        var locked = await W68PostgreSqlLockedControllerLeaseReader.ReadForUpdateAsync(
+            connection, transaction, deployment, leaseScope, ct).ConfigureAwait(false);
+        if (locked is null || locked.Lease.HolderId != authenticatedHolder ||
+            locked.Lease.Epoch != epoch ||
+            locked.Lease.ExpiresAtUtc <= locked.DatabaseObservedAtUtc)
+            return 0;
+
         await using var cmd = connection.CreateCommand();
         cmd.Transaction = transaction;
         cmd.CommandText = Sql;
@@ -81,7 +81,35 @@ internal static class W68PostgreSqlFencedOwnershipCasCandidate
             cmd.Parameters.Add(p);
         }
         var result = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-        return result is long next && next == expectedRevision + 1 ? next : 0;
-        // 0 is denial, NOT proof of absence or authorization to adopt.
+        if (result is not long next || next != expectedRevision + 1)
+            return 0; // Denial; caller MUST roll back, not adopt.
+
+        // Advance the permanent per-resource high water in this same transaction.
+        // Any failure is fatal to the unit of work; caller MUST roll back CAS and audit.
+        await using var ledger = connection.CreateCommand();
+        ledger.Transaction = transaction;
+        ledger.CommandText = """
+            UPDATE kafdeck_declarative_key_versions
+               SET revision_high_water = @next
+             WHERE deployment_id=@deployment AND scope_kind=@scopeKind
+               AND scope_id=@scope AND resource_kind=@kind AND resource_id=@resource
+               AND revision_high_water=@expectedRevision
+            RETURNING revision_high_water
+            """;
+        foreach (var (key, value) in new (string, object)[] {
+            ("@next", next), ("@deployment", deployment), ("@scopeKind", scopeKind),
+            ("@scope", scope), ("@kind", resourceKind), ("@resource", resource),
+            ("@expectedRevision", expectedRevision)})
+        {
+            var parameter = ledger.CreateParameter();
+            parameter.ParameterName = key;
+            parameter.Value = value;
+            ledger.Parameters.Add(parameter);
+        }
+        var highWater = await ledger.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        if (highWater is not long persisted || persisted != next)
+            throw new InvalidOperationException(
+                "Permanent revision ledger CAS failed. Entire transaction must roll back.");
+        return next;
     }
 }
