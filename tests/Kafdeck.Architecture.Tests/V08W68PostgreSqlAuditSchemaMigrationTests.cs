@@ -48,14 +48,14 @@ public sealed class V08W68PostgreSqlAuditSchemaMigrationTests
         await db.OpenAsync();
         await using(var create=db.CreateCommand())
         {
-            create.CommandText=$"CREATE SCHEMA \\"{schema}\\"";
+            create.CommandText=$"CREATE SCHEMA \"{schema}\"";
             await create.ExecuteNonQueryAsync();
         }
         try
         {
             await using(var set=db.CreateCommand())
             {
-                set.CommandText=$"SET search_path TO \\"{schema}\\"";
+                set.CommandText=$"SET search_path TO \"{schema}\"";
                 await set.ExecuteNonQueryAsync();
             }
             await using(var broken=db.CreateCommand())
@@ -85,7 +85,7 @@ public sealed class V08W68PostgreSqlAuditSchemaMigrationTests
         finally
         {
             await using var cleanup=db.CreateCommand();
-            cleanup.CommandText=$"DROP SCHEMA IF EXISTS \\"{schema}\\" CASCADE";
+            cleanup.CommandText=$"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
             await cleanup.ExecuteNonQueryAsync();
         }
     }
