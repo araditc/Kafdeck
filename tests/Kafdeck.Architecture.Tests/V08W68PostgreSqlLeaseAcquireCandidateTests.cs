@@ -69,4 +69,70 @@ public sealed class V08W68PostgreSqlLeaseAcquireCandidateTests
             await cleanup.ExecuteNonQueryAsync();
         }
     }
+    [Fact]
+    public async Task Replacement_expiry_is_calculated_after_competing_row_lock_releases()
+    {
+        var cs = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var deployment = "expiry-" + Guid.NewGuid().ToString("N");
+        await using var setup = new NpgsqlConnection(cs);
+        await setup.OpenAsync();
+        foreach (var ddl in new[] { W68PermanentLeaseEpochHighWaterSchema.PostgreSql,
+                                    W68LeaseSchemaCandidate.PostgreSql })
+        {
+            await using var cmd = setup.CreateCommand();
+            cmd.CommandText = ddl;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using (var seed = setup.CreateCommand())
+            {
+                seed.CommandText = """
+                    INSERT INTO kafdeck_declarative_lease_epoch_high_water
+                        (deployment_id,lease_scope_id,epoch_high_water)
+                    VALUES (@d,'writer',1);
+                    INSERT INTO kafdeck_declarative_controller_leases
+                        (deployment_id,lease_scope_id,holder_id,epoch,expires_at_utc)
+                    VALUES (@d,'writer','old',1,clock_timestamp()-interval '1 second');
+                    """;
+                seed.Parameters.AddWithValue("@d",deployment);
+                await seed.ExecuteNonQueryAsync();
+            }
+            await using var first = new NpgsqlConnection(cs);
+            await using var second = new NpgsqlConnection(cs);
+            await first.OpenAsync();
+            await second.OpenAsync();
+            await using var holder = await first.BeginTransactionAsync();
+            Assert.NotNull(await W68PostgreSqlLockedControllerLeaseReader.ReadForUpdateAsync(
+                first,holder,deployment,"writer"));
+            await using var contenderTx = await second.BeginTransactionAsync();
+            var contender = W68PostgreSqlLeaseAcquireCandidate.AcquireAsync(
+                second,contenderTx,deployment,"writer","new",1);
+            await Task.Delay(TimeSpan.FromMilliseconds(1400));
+            Assert.False(contender.IsCompleted);
+            await holder.CommitAsync();
+            Assert.Equal(2L,await contender);
+            await contenderTx.CommitAsync();
+            await using var check = setup.CreateCommand();
+            check.CommandText = """
+                SELECT expires_at_utc > clock_timestamp()
+                FROM kafdeck_declarative_controller_leases
+                WHERE deployment_id=@d AND lease_scope_id='writer'
+                """;
+            check.Parameters.AddWithValue("@d",deployment);
+            Assert.True((bool)(await check.ExecuteScalarAsync())!);
+        }
+        finally
+        {
+            await using var cleanup = setup.CreateCommand();
+            cleanup.CommandText = """
+                DELETE FROM kafdeck_declarative_controller_leases WHERE deployment_id=@d;
+                DELETE FROM kafdeck_declarative_lease_epoch_high_water WHERE deployment_id=@d;
+                """;
+            cleanup.Parameters.AddWithValue("@d",deployment);
+            await cleanup.ExecuteNonQueryAsync();
+        }
+    }
+
 }
