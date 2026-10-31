@@ -62,6 +62,26 @@ public sealed class V08W68FencedOwnershipCasCandidateTests
                 else await tx.RollbackAsync();
                 return result;
             }
+            // A locked lease is never interpreted as current authority, even if
+            // it expires while another connection owns the row lock.
+            await using(var locker=new NpgsqlConnection(cs))
+            await using(var contender=new NpgsqlConnection(cs))
+            {
+                await locker.OpenAsync();
+                await contender.OpenAsync();
+                await using var hold=await locker.BeginTransactionAsync();
+                Assert.NotNull(await W68PostgreSqlLockedControllerLeaseReader.ReadForUpdateAsync(
+                    locker,hold,d,"writer"));
+                await using var blocked=await contender.BeginTransactionAsync();
+                var failure=await Assert.ThrowsAsync<PostgresException>(() =>
+                    W68PostgreSqlFencedOwnershipCasCandidate.TryUpdateAsync(
+                        contender,blocked,d,"Tenant","scope","NotificationSubscription","sub",
+                        "owner","source","writer","controller",2,1,fingerprint,
+                        "principal","v1","audit1"));
+                Assert.Equal("55P03",failure.SqlState);
+                await blocked.RollbackAsync();
+                await hold.CommitAsync();
+            }
             Assert.Equal(0,await Update("foreign",2,1));
             Assert.Equal(0,await Update("owner",1,1));
             Assert.Equal(2,await Update("owner",2,1));
