@@ -17,7 +17,7 @@ internal static class W68PostgreSqlLeaseAcquireCandidate
         ON CONFLICT (deployment_id, lease_scope_id)
         DO UPDATE SET holder_id = EXCLUDED.holder_id,
                       epoch = EXCLUDED.epoch,
-                      expires_at_utc = EXCLUDED.expires_at_utc
+                      expires_at_utc = clock_timestamp() + (@seconds * INTERVAL '1 second')
         WHERE kafdeck_declarative_controller_leases.expires_at_utc <= clock_timestamp()
         RETURNING epoch
         """;
