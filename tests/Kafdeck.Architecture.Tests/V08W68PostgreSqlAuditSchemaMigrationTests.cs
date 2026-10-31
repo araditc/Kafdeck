@@ -38,4 +38,56 @@ public sealed class V08W68PostgreSqlAuditSchemaMigrationTests
         read.Parameters.AddWithValue("@operation",operation);
         Assert.Equal(0L,(long)(await read.ExecuteScalarAsync())!);
     }
+    [Fact]
+    public async Task Existing_table_without_primary_key_is_not_accepted()
+    {
+        var cs=Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(cs))return;
+        var schema="w68audit"+Guid.NewGuid().ToString("N");
+        await using var db=new NpgsqlConnection(cs);
+        await db.OpenAsync();
+        await using(var create=db.CreateCommand())
+        {
+            create.CommandText=$"CREATE SCHEMA \\"{schema}\\"";
+            await create.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using(var set=db.CreateCommand())
+            {
+                set.CommandText=$"SET search_path TO \\"{schema}\\"";
+                await set.ExecuteNonQueryAsync();
+            }
+            await using(var broken=db.CreateCommand())
+            {
+                broken.CommandText="""
+                    CREATE TABLE kafdeck_declarative_ownership_audit (
+                      operation_id VARCHAR(128) NOT NULL,
+                      deployment_id VARCHAR(128) NOT NULL,
+                      scope_kind VARCHAR(64) NOT NULL,
+                      scope_id VARCHAR(128) NOT NULL,
+                      resource_kind VARCHAR(64) NOT NULL,
+                      resource_id VARCHAR(128) NOT NULL,
+                      principal_id VARCHAR(128) NOT NULL,
+                      owner_id VARCHAR(128) NOT NULL,
+                      source_id VARCHAR(128) NOT NULL,
+                      lease_epoch BIGINT NOT NULL CHECK (lease_epoch>0),
+                      new_revision BIGINT NOT NULL CHECK (new_revision>0),
+                      event_fingerprint CHAR(64) NOT NULL,
+                      recorded_at_utc TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+                    )
+                    """;
+                await broken.ExecuteNonQueryAsync();
+            }
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                ()=>W68PostgreSqlAuditSchemaMigration.ApplyAsync(db));
+        }
+        finally
+        {
+            await using var cleanup=db.CreateCommand();
+            cleanup.CommandText=$"DROP SCHEMA IF EXISTS \\"{schema}\\" CASCADE";
+            await cleanup.ExecuteNonQueryAsync();
+        }
+    }
+
 }
