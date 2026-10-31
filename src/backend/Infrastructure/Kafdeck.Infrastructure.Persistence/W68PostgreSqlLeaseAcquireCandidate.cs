@@ -19,7 +19,7 @@ internal static class W68PostgreSqlLeaseAcquireCandidate
                       epoch = EXCLUDED.epoch,
                       expires_at_utc = clock_timestamp() + (@seconds * INTERVAL '1 second')
         WHERE kafdeck_declarative_controller_leases.expires_at_utc <= clock_timestamp()
-        RETURNING epoch
+        RETURNING epoch, expires_at_utc, clock_timestamp() AS observed_at_utc
         """;
 
     internal static async Task<long> AcquireAsync(DbConnection connection, DbTransaction transaction,
@@ -52,9 +52,15 @@ internal static class W68PostgreSqlLeaseAcquireCandidate
             var p = cmd.CreateParameter(); p.ParameterName = key; p.Value = value;
             cmd.Parameters.Add(p);
         }
-        var result = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-        if (result is not long stored || stored != epoch)
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
             throw new InvalidOperationException("Active lease prevents acquisition. Roll back transaction.");
+        var stored = reader.GetInt64(0);
+        var expiry = W68PostgreSqlLockedControllerLeaseReader.RequireUtc(reader.GetValue(1));
+        var observed = W68PostgreSqlLockedControllerLeaseReader.RequireUtc(reader.GetValue(2));
+        if (stored != epoch || expiry <= observed ||
+            await reader.ReadAsync(ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Lease acquisition expired or ambiguous. Roll back transaction.");
         return epoch;
     }
 }
