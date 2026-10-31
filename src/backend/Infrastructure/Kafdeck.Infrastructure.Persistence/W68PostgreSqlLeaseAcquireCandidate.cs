@@ -1,0 +1,66 @@
+using System.Data;
+using System.Data.Common;
+using Npgsql;
+
+namespace Kafdeck.Infrastructure.Persistence;
+
+// Internal transaction-bound candidate, not a registered runtime authority.
+// The caller MUST bind holderId to authenticated server principal and roll back
+// the entire transaction if an acquisition attempt throws or cannot be admitted.
+internal static class W68PostgreSqlLeaseAcquireCandidate
+{
+    internal const string ClaimSql = """
+        INSERT INTO kafdeck_declarative_controller_leases
+            (deployment_id, lease_scope_id, holder_id, epoch, expires_at_utc)
+        VALUES (@deployment, @scope, @holder, @epoch,
+                clock_timestamp() + (@seconds * INTERVAL '1 second'))
+        ON CONFLICT (deployment_id, lease_scope_id)
+        DO UPDATE SET holder_id = EXCLUDED.holder_id,
+                      epoch = EXCLUDED.epoch,
+                      expires_at_utc = clock_timestamp() + (@seconds * INTERVAL '1 second')
+        WHERE kafdeck_declarative_controller_leases.expires_at_utc <= clock_timestamp()
+        RETURNING epoch, expires_at_utc, clock_timestamp() AS observed_at_utc
+        """;
+
+    internal static async Task<long> AcquireAsync(DbConnection connection, DbTransaction transaction,
+        string deployment, string scope, string authenticatedHolderId, int ttlSeconds,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        if (!ReferenceEquals(connection, transaction.Connection))
+            throw new ArgumentException("Transaction must belong to connection.", nameof(transaction));
+        if (connection is not NpgsqlConnection || transaction is not NpgsqlTransaction ||
+            connection.State != ConnectionState.Open)
+            throw new NotSupportedException("Live PostgreSQL transaction required.");
+        foreach (var id in new[] { deployment, scope, authenticatedHolderId })
+            if (string.IsNullOrWhiteSpace(id) || id.Length > 128 || id != id.Trim())
+                throw new ArgumentException("Invalid canonical lease identity.");
+        if (ttlSeconds is < 1 or > 300) throw new ArgumentOutOfRangeException(nameof(ttlSeconds));
+
+        // Persisted high water serializes competing acquisition contenders.
+        // A denied claim throws: caller MUST rollback the high-water advance.
+        var epoch = await W68PostgreSqlEpochAdvanceCandidate.AdvanceAsync(
+            connection, transaction, deployment, scope, ct).ConfigureAwait(false);
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = ClaimSql;
+        foreach (var (key, value) in new (string, object)[] {
+            ("@deployment", deployment), ("@scope", scope), ("@holder", authenticatedHolderId),
+            ("@epoch", epoch), ("@seconds", ttlSeconds) })
+        {
+            var p = cmd.CreateParameter(); p.ParameterName = key; p.Value = value;
+            cmd.Parameters.Add(p);
+        }
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Active lease prevents acquisition. Roll back transaction.");
+        var stored = reader.GetInt64(0);
+        var expiry = W68PostgreSqlLockedControllerLeaseReader.RequireUtc(reader.GetValue(1));
+        var observed = W68PostgreSqlLockedControllerLeaseReader.RequireUtc(reader.GetValue(2));
+        if (stored != epoch || expiry <= observed ||
+            await reader.ReadAsync(ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Lease acquisition expired or ambiguous. Roll back transaction.");
+        return epoch;
+    }
+}
