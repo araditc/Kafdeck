@@ -11,6 +11,8 @@ for pair in 'nonowner ammarheidari' 'ammarheidari nonowner'; do
   read -r actor trigger <<< "$pair"
   if PATH="$PWD/$root/guards/bin:$PATH" GITHUB_ACTOR="$actor" GITHUB_TRIGGERING_ACTOR="$trigger" bash scripts/release/load-v08-publication-candidate.sh > "$root/guard.log" 2>&1; then echo 'Nonowner load accepted.' >&2; exit 1; fi
   if PATH="$PWD/$root/guards/bin:$PATH" GITHUB_ACTOR="$actor" GITHUB_TRIGGERING_ACTOR="$trigger" pwsh -NoProfile -File scripts/release/prepare-v08-publication.ps1 > "$root/prepare-guard.log" 2>&1; then echo 'Nonowner selection accepted.' >&2; exit 1; fi
+  grep -Fq 'Release action requires an approved original and triggering owner identity.' "$root/guard.log"
+  grep -Fq 'Original and triggering release actors must both be approved owners.' "$root/prepare-guard.log"
   [[ ! -f "$root/forbidden-io.log" ]]
 done
 GITHUB_ACTOR=ammarheidari GITHUB_TRIGGERING_ACTOR=akhiabanchian bash scripts/release/assert-v08-release-owner.sh
