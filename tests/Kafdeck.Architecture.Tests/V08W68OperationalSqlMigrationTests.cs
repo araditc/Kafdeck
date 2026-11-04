@@ -78,6 +78,19 @@ public sealed class V08W68OperationalSqlMigrationTests
                 await corrupt.ExecuteNonQueryAsync();
             }
             await Assert.ThrowsAsync<PostgresException>(() => ApplyAsync(db));
+            // The original finding also covers non-key audit columns.
+            // A correct PK alone must not make a damaged audit writer acceptable.
+            await using (var missingColumn = db.CreateCommand())
+            {
+                missingColumn.CommandText = """
+                    ALTER TABLE kafdeck_declarative_ownership_audit
+                      ADD PRIMARY KEY (operation_id);
+                    ALTER TABLE kafdeck_declarative_ownership_audit
+                      DROP COLUMN event_fingerprint;
+                    """;
+                await missingColumn.ExecuteNonQueryAsync();
+            }
+            await Assert.ThrowsAsync<PostgresException>(() => ApplyAsync(db));
         }
         finally
         {
