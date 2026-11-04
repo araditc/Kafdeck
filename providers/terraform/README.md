@@ -9,6 +9,9 @@ installable packages without publishing a tag or release.
 Build with pinned Go **1.27.3** and test with Terraform **1.14.9**. Protocol 6
 requires Terraform 1.0 or later; only versions actually exercised by acceptance
 are claimed tested. The pinned Go module graph and `go.sum` are committed.
+The transitive gRPC transport is explicitly pinned to **1.85.0**, with its
+required patched module graph, to resolve the dependency-review advisories;
+provider protocol and backend authorization contracts remain unchanged.
 HashiCorp's [framework documentation](https://developer.hashicorp.com/terraform/plugin/framework)
 and [provider-server contract](https://developer.hashicorp.com/terraform/plugin/framework/provider-servers)
 define the SDK and protocol choice.

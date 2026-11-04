@@ -86,6 +86,7 @@
     "Local genuine runtime uses real Keycloak, actual CLI/plugin or stdio processes and SQLite/PostgreSQL. Unknown is explicit durable fault injection, not a physical crash. Second-node API continuity is not a claim of database-replica failover.",
     "Local Terraform acceptance preceded a stricter datasource OutOfSync diagnostic, separately proven by the focused SDK test. Exact-head CI repeats final production code.",
     "Cross-target compilation and ZIP mode validation do not establish runtime acceptance on every target. Publication/signing remains the separate G6 owner gate.",
-    "Local package smoke verifies installed MCP protocol; CI additionally executes genuine authenticated tools from the installed package DLL."
+    "Local package smoke verifies installed MCP protocol; CI additionally executes genuine authenticated tools from the installed package DLL.",
+    "The initial local Terraform runs used the SDK default gRPC graph. Dependency review subsequently required gRPC1.85.0 and its patched transitive graph; Go tests and exact-head CI validate that final graph without a waiver."
   ]
 }
