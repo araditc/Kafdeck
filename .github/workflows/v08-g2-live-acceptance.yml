@@ -240,9 +240,11 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-declarative-cli-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-service-controller-evidence.json"
           dotnet pack src/mcp/Kafdeck.Mcp/Kafdeck.Mcp.csproj -c Release --no-build --no-restore -o artifacts/g4-ci/mcp
-          dotnet tool install Kafdeck.Mcp --version 0.8.0 --tool-path deploy/dev/.generated/g4-installed-mcp --add-source artifacts/g4-ci/mcp --ignore-failed-sources
+          printf '%s\n' '<configuration><packageSources><clear /></packageSources></configuration>' > deploy/dev/.generated/g4-toolchains/NuGet.Config
+          dotnet tool install Kafdeck.Mcp --version 0.8.0 --tool-path deploy/dev/.generated/g4-installed-mcp --configfile deploy/dev/.generated/g4-toolchains/NuGet.Config --add-source artifacts/g4-ci/mcp --no-cache
           export KAFDECK_G4_MCP_DLL="$(find "$GITHUB_WORKSPACE/deploy/dev/.generated/g4-installed-mcp/.store" -name kafdeck-mcp.dll -print -quit)"
           test -s "$KAFDECK_G4_MCP_DLL"
+          cmp src/mcp/Kafdeck.Mcp/bin/Release/net10.0/kafdeck-mcp.dll "$KAFDECK_G4_MCP_DLL"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V08G4' --results-directory artifacts/g4-ci --logger 'trx;LogFileName=g4-live.trx'
           for provider in sqlite postgres; do

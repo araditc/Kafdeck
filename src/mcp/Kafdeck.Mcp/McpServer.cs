@@ -81,6 +81,9 @@ public sealed class McpServer(IMcpApiBackend backend, bool enableEffects = false
             McpApiRequest api;
             try { api=tool.Request(arguments); }
             catch(ArgumentException) { return Error(id,-32602,"Invalid typed tool arguments."); }
+            // Browser login/MFA uses the independently bounded CLI auth flow.
+            // Do not consume the API request budget while waiting for identity.
+            await backend.PrepareAsync(token);
             using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(35));
             var response=await backend.SendAsync(api,deadline.Token);
             if(response.Status is <200 or >=300 || response.Data is null)

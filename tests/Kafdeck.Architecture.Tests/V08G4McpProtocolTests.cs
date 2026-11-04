@@ -119,6 +119,42 @@ public sealed class V08G4McpProtocolTests
         Assert.Empty(api.Requests);
         await Assert.ThrowsAsync<IOException>(()=>server.RunAsync(new StringReader(new string('x',McpServer.MaxRequestBytes+1)),new StringWriter(),CancellationToken.None));
     }
+    [Fact]
+    public async Task Authentication_preparation_precedes_and_does_not_share_the_API_deadline()
+    {
+        using var caller = new CancellationTokenSource();
+        var backend = new PreparingBackend(); var server = new McpServer(backend);
+        await Call(server,"initialize",Initialization);
+        await server.HandleAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+        var request = JsonSerializer.Serialize(new { jsonrpc="2.0",id=1,method="tools/call",
+            @params=new { name="declarative_capabilities",arguments=new { } } });
+        var pending = server.HandleAsync(request,caller.Token);
+        await backend.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(caller.Token,backend.PreparationToken);
+        Assert.False(backend.Sent); Assert.False(pending.IsCompleted);
+        backend.Release.SetResult();
+        using var response = JsonDocument.Parse((await pending)!);
+        Assert.False(response.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
+        Assert.True(backend.Sent); Assert.NotEqual(caller.Token,backend.RequestToken);
+        Assert.True(backend.RequestToken.CanBeCanceled);
+    }
+    private sealed class PreparingBackend : IMcpApiBackend
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public CancellationToken PreparationToken { get; private set; }
+        public CancellationToken RequestToken { get; private set; }
+        public bool Sent { get; private set; }
+        public async Task PrepareAsync(CancellationToken token)
+        {
+            PreparationToken=token; Started.SetResult(); await Release.Task.WaitAsync(token);
+        }
+        public Task<McpApiResponse> SendAsync(McpApiRequest request,CancellationToken token)
+        {
+            Sent=true; RequestToken=token;
+            return Task.FromResult(new McpApiResponse(200,JsonSerializer.SerializeToElement(new { enabled=true })));
+        }
+    }
     private static readonly object Initialization=new { protocolVersion=McpServer.ProtocolVersion,capabilities=new { },clientInfo=new { name="acceptance",version="1" } };
     private static async Task<McpServer> Ready(RecordingBackend api,bool effects=false)
     {

@@ -79,6 +79,60 @@
         "failed": 0,
         "notExecuted": 0
       }
+    },
+    {
+      "path": "artifacts/g4/terraform-grpc-security-test.log",
+      "sha256": "0dd6bce4e71aaebe2b6a333f3c22ba5d04fa7cf69dc150d57d22b2ca14aa0bca"
+    },
+    {
+      "path": "artifacts/g4/terraform-grpc-native-protocol.log",
+      "sha256": "27cb88f84c4e46ac7148521e3843cf940a71ad01297445d033ccb20960489307"
+    },
+    {
+      "path": "artifacts/g4/terraform-package-grpc185.log",
+      "sha256": "13b04bf55bbc5df1d05d95a2839b5496e73970850837050e45940845418b06f3"
+    },
+    {
+      "path": "providers/terraform/dist/terraform-provider-kafdeck_0.8.0_SHA256SUMS",
+      "sha256": "203c1091f7bd74ce295e62704f9daa0b85bb8d2d85fa91ff61f09c40c1ee6ff1"
+    },
+    {
+      "path": "providers/terraform/dist/terraform-provider-kafdeck_0.8.0_darwin_amd64.zip",
+      "sha256": "cc68890f39837362ba50624f889d40500aa818776cfeb33c3e9d924c234fd5fb"
+    },
+    {
+      "path": "providers/terraform/dist/terraform-provider-kafdeck_0.8.0_darwin_arm64.zip",
+      "sha256": "ad3869fd1e954ce9521320dff5d85ac141a77255a600c61d4e40c98c4d098f49"
+    },
+    {
+      "path": "providers/terraform/dist/terraform-provider-kafdeck_0.8.0_linux_amd64.zip",
+      "sha256": "f61c8820a93919ae3e876a81d55eeccbe1e726d84fe057725ef5ac0eebba6ac6"
+    },
+    {
+      "path": "providers/terraform/dist/terraform-provider-kafdeck_0.8.0_linux_arm64.zip",
+      "sha256": "4aa581ced02323250d2d9c6df14ee19553a15ddf903b4b3658f33436d2dbea60"
+    },
+    {
+      "path": "providers/terraform/dist/terraform-provider-kafdeck_0.8.0_windows_amd64.zip",
+      "sha256": "c1c4161cb560d6e0992ea9404af118ecc86a0fa69081d903f457f4db5ae11876"
+    },
+    {
+      "path": "artifacts/g4/contracts-v5/g4-contract-v5.trx",
+      "sha256": "53c3ebed482f863fd42b0bfe4364db188ae6c90e21f152fa91ee1ef70f965b58",
+      "counters": {
+        "total": 36,
+        "passed": 36,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g4/packages-v5/Kafdeck.Mcp.0.8.0.nupkg",
+      "sha256": "72b16e4261dfcc5c8aa6509910f0e3f7220c202e50929e94f8864180f218d59a"
+    },
+    {
+      "path": "artifacts/g4/mcp-package-v5-evidence.json",
+      "sha256": "55149f199ce860d96079a89aea9241590f2858af684395071cf5c5e9ad5bc5d4"
     }
   ],
   "limits": [
@@ -88,5 +142,6 @@
     "Cross-target compilation and ZIP mode validation do not establish runtime acceptance on every target. Publication/signing remains the separate G6 owner gate.",
     "Local package smoke verifies installed MCP protocol; CI additionally executes genuine authenticated tools from the installed package DLL.",
     "The initial local Terraform runs used the SDK default gRPC graph. Dependency review subsequently required gRPC1.85.0 and its patched transitive graph; Go tests and exact-head CI validate that final graph without a waiver."
-  ]
+  ],
+  "updatedDate": "2026-11-05"
 }
