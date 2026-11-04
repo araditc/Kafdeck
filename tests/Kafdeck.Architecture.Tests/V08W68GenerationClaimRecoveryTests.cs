@@ -36,8 +36,10 @@ public sealed class V08W68GenerationClaimRecoveryTests
                 first.Snapshot.ExecutionClaimGeneration, first.Snapshot.ResourceKeys, first.Snapshot.ExecutionClaimExpiresAtUtc!.Value)).Outcome);
             var executingVersion = first.Snapshot.Version; var now = DateTimeOffset.UtcNow;
             first.MarkDispatchStarted(now);
-            first.Complete(MutationExecutionResultKind.ExecutionUnknown, "declarative_commit_unknown", now);
             Assert.Equal(MutationSaveOutcome.Saved, (await repository.TrySaveAsync(first.Snapshot, executingVersion)).Outcome);
+            var dispatchedVersion = first.Snapshot.Version;
+            first.Complete(MutationExecutionResultKind.ExecutionUnknown, "declarative_commit_unknown", now);
+            Assert.Equal(MutationSaveOutcome.Saved, (await repository.TrySaveAsync(first.Snapshot, dispatchedVersion)).Outcome);
             Assert.Null(await oldStore.GetCommitReceiptAsync(firstPlan.PlanId));
             Assert.Throws<MutationStateException>(() => first.ClaimExecution(now, now.AddMinutes(1)));
             Assert.Throws<MutationStateException>(() => first.Cancel(now));

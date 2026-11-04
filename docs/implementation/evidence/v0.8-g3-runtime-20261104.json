@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-04",
+  "baselineMain": "104bc184764fdcf3ec7111635825295789a04c39",
+  "pullRequest": 418,
+  "productionCommit": "e55500d",
+  "exactProductionCiRun": 41889950296,
+  "status": "ImplementationAndRuntimeProvedPendingProtectedAcceptance",
+  "scope": [
+    "W68 D1",
+    "W68 D2",
+    "W68 D3",
+    "W68 D4",
+    "W68 D5",
+    "W68 D6"
+  ],
+  "proofs": [
+    {
+      "path": "ci-e55500d-runtime/g2-keycloak-ha-replay/ha-replay.trx",
+      "sha256": "4861bbfc2bde12bd8733d4255725cf37e4c1dc159d249cd72bcaad6251aea94b",
+      "counters": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-live-acceptance/g2-live.trx",
+      "sha256": "da89b60e057eba62255f3bf8fa418433ff8b8db085d9c20f87791b03c108d5e7",
+      "counters": {
+        "total": 297,
+        "passed": 297,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-live-acceptance/identity/postgres-g3-declarative-cli-evidence.json",
+      "sha256": "36a7e4ea46f5422a38917fe6c0d53902fe85b0984568f3be76391e55746aa684"
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-live-acceptance/identity/postgres-g3-service-controller-evidence.json",
+      "sha256": "3442367ca421ff961c57ecc3cb90658e5306bc5822a76690653c249a92c8cb89"
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-live-acceptance/identity/sqlite-g3-declarative-cli-evidence.json",
+      "sha256": "b86e9b6b1e9b06a516ffa46a74d4d6b9b47a15410ae9ec494bc9367b6084e450"
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-postgresql-acceptance/postgres-live.trx",
+      "sha256": "e48a149b669ed2bc99bb60186717af589b70b210e3cd0debb404c61f70993294",
+      "counters": {
+        "total": 177,
+        "passed": 177,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-postgresql-failover-restore/g3-postgresql-lease-failover-evidence.json",
+      "sha256": "f0b1505da9409de3977d7228387bf280e59e833020819d686eae5f6e00db9070"
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-postgresql-failover-restore/g3-postgresql-physical-restore-fence-evidence.json",
+      "sha256": "c0bea11a68a4e077a205f6f75db923fc032a2867ae42c1ee3e8726a542d8bfa7"
+    },
+    {
+      "path": "ci-e55500d-runtime/g2-postgresql-failover-restore/recovery-live.trx",
+      "sha256": "4025829968dd76ae9afab4b9fe316dbff3fc1d96de906e6bd132f03fa851a484",
+      "counters": {
+        "total": 60,
+        "passed": 60,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "claims-v9/claims-v9.trx",
+      "sha256": "079e69ab06d357ff0a6213430c498407baff2b66218e6b7557230588087b71b2",
+      "counters": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "live-v7/live-v7.trx",
+      "sha256": "92532e2e2258c8948ae8549e139b4f75dd41efef697745db09952f003ee202fd",
+      "counters": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "live-v7/postgres-g3-declarative-cli-evidence.json",
+      "sha256": "36a7e4ea46f5422a38917fe6c0d53902fe85b0984568f3be76391e55746aa684"
+    },
+    {
+      "path": "live-v7/postgres-g3-service-controller-evidence.json",
+      "sha256": "3442367ca421ff961c57ecc3cb90658e5306bc5822a76690653c249a92c8cb89"
+    },
+    {
+      "path": "live-v7/sqlite-g3-declarative-cli-evidence.json",
+      "sha256": "b86e9b6b1e9b06a516ffa46a74d4d6b9b47a15410ae9ec494bc9367b6084e450"
+    },
+    {
+      "path": "native-v6/g3-postgresql-lease-failover-evidence.json",
+      "sha256": "96a1a8bd0612265a31c5300df182b1662108e242382bc42d2f1f4cf0c04409b2"
+    },
+    {
+      "path": "native-v6/g3-postgresql-physical-restore-fence-evidence.json",
+      "sha256": "2da3cd3d14f57b3ef814e71bcb900ec48df1c0a4696bbbf520be42c28662fea2"
+    },
+    {
+      "path": "native-v6/native-v6.trx",
+      "sha256": "d33c0bcab3420491aeaab27bc8c1f1c8df238162d603d54bc6dd9bb27c0eaf45",
+      "counters": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "regression-v9/regression-v9.trx",
+      "sha256": "a23647255c6d07fe30f81fc8fb52ff81ec3586c06febd3998850bd59d20817ec",
+      "counters": {
+        "total": 2201,
+        "passed": 2201,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    }
+  ],
+  "limits": [
+    "Test totals across overlapping runs must not be summed.",
+    "Local live-v7 precedes the generation-scoped scheduling-claim correction; exact-production-head CI runtime and corrected claims-v9 cover it.",
+    "Native proof uses actual databases and production outside authority; actual OIDC and multiple API processes are separately evidenced by hosted CLI tests.",
+    "Final review/exact-head/protected-main acceptance remains authoritative in issue217.",
+    "W69-W71 and release publication remain separately gated."
+  ]
+}
