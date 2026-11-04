@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-04",
+  "protectedMain": "76d129b08dddc5ba20c63314fa75c299f6b481c6",
+  "implementationPr": 332,
+  "status": "Accepted",
+  "runs": {
+    "g2": 41846022445,
+    "identity": 41846022204,
+    "upgrade": 41846022382,
+    "g1": 41846022191,
+    "quality": 41846022258,
+    "codeql": 41846022216
+  },
+  "securityTriage": {
+    "falsePositiveAlerts": [
+      6,
+      7
+    ],
+    "unchangedProductionChecks": true,
+    "unrelatedHistoricalSchemaAlert": 3
+  },
+  "proofs": [
+    {
+      "path": "main-identity/g2-real-identity-lifecycle-browser/identity-lifecycle.trx",
+      "sha256": "893e09530f86b4a58b898f6f55754904d8fbee40481e9a03ef59eb3668e5319e",
+      "counters": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "main-identity/g2-real-identity-lifecycle-browser/keycloak-live-key-registration-lifecycle-evidence.json",
+      "sha256": "61465df145e598e557e4044226ab148487bd3a8c0b1bf03cb9c7634b22a6be9f"
+    },
+    {
+      "path": "main-identity/g2-real-identity-lifecycle-browser/rendered-browser-pkce-api-evidence.json",
+      "sha256": "7a7bfe236d5122efae7f007370ea5fb0ce01643ff14d20cfee4064d4392ac26d"
+    },
+    {
+      "path": "main-runtime/g2-keycloak-ha-replay/ha-replay.trx",
+      "sha256": "3539ddb4b7af65cfa101b72fced77c5c8e916d31f698773a64c3645da5b63f81",
+      "counters": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "main-runtime/g2-keycloak-ha-replay/keycloak-ha-first-use-replay-evidence.json",
+      "sha256": "3b5375c8a70978a482b26c75b772ed98384503ed7a01894c0c9ce6059b5b258a"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/g2-live.trx",
+      "sha256": "2f3621b611c89a69cc589a584e03f35bc71e7666255dc190f6fa9661bbb98a69",
+      "counters": {
+        "total": 170,
+        "passed": 170,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/critical-human-approval-kafka-evidence.json",
+      "sha256": "429aaae8b857dbcffaeedd3796051e65261be8310c4f322cb216da274925f001"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/human-cli-evidence.json",
+      "sha256": "2f9efc23a2b09540d287844e62aba1b040fe00549f6379474cd89a648267a2fc"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/human-cli-kafka-effect-evidence.json",
+      "sha256": "02117cc50bd1e2edae284a08626cf10548ee39a221c6054252b231819fcb05fb"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/human-kafka-product-notification-evidence.json",
+      "sha256": "4cccf4c5e1b64ef2d984c7e1a759545d6fadc44eb84967da549663a3426987ff"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-data-job-uncertainty-evidence.json",
+      "sha256": "36e20a240f907be8ee30c88a1f60a7541d06f28a88895f5e04dfda9dcd51c766"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-generator-uncertainty-evidence.json",
+      "sha256": "c716c42ecc4ff8cf466ff8247e3607d9102eddde6f823b13434fe0d1219d33c7"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-human-cli-kafka-effect-evidence.json",
+      "sha256": "1a6df520bfe88541d78c58c0ff5ad047a5fe863f373438d74c160fc903f32144"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-human-kafka-product-notification-evidence.json",
+      "sha256": "e764ef9f16b6384dc96bfef1c3ccaf8357a9716f980433ff2e5f4fd1093c51fd"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-keycloak-human-cli-recovery-evidence.json",
+      "sha256": "8473c22ef20015a99edb526e7f1b429944806c9b4af0fac69bd62bf6647392a8"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-product-outbox-evidence.json",
+      "sha256": "7f72b968193ae16ffa56857d3633942e4d2bd8ed407158d883f989ca7f2f7728"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-real-provider-family-cli-evidence.json",
+      "sha256": "1580de3593adb68825aef0019a77d075e2857431d31292c427509c197d9b1c72"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/postgres-topic-cli-lifecycle-evidence.json",
+      "sha256": "6c4a7aa45b812e17f4fdcb83ac25d2d9639bda6917d44b8e69bd85b0a0ff312a"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/product-source-tls-evidence.json",
+      "sha256": "d63933c60c52f220e80345d714ac04b6d2be2438ea3665381caff8db1a43f2a6"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/service-cli-kafka-effect-evidence.json",
+      "sha256": "4518a5fe6a1e81139c2f67531adc019fdc72ffbd478281cf67ce67a02b2cd213"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/sqlite-data-job-uncertainty-evidence.json",
+      "sha256": "8c31ff2a88f463f439ebfa37b397ee7da2256e66507cfc6f13aa291c3c123496"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/sqlite-generator-uncertainty-evidence.json",
+      "sha256": "47d5f066fe4b10510821b5487e8a74f41598c7219d2b93173dfbccea3b6f7482"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/sqlite-keycloak-human-cli-recovery-evidence.json",
+      "sha256": "25ead33bc1d038ec1eb3866ec280cf9447eb888fb26d29ad1279d02111b57aae"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/sqlite-real-provider-family-cli-evidence.json",
+      "sha256": "6c70e62b8a3180399bf20ac8d87b74b2cfbaa09eb5562f301fa18aa58a48ecf0"
+    },
+    {
+      "path": "main-runtime/g2-live-acceptance/identity/topic-cli-lifecycle-evidence.json",
+      "sha256": "269b025e65a74052a55e48e2b19288ca210b8f60b026fac0ec1e7b1e3a5fb7cd"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-governance-email-evidence.json",
+      "sha256": "716cdadb15ac153a6b41469d93e5f2b65a6db66ccac30d37d8635afa7da66acc"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-governance-microsoftteams-evidence.json",
+      "sha256": "6acc0d2e9e9dfda8368872d2e70e95ea4138d0e142983dc607dd556c581a6ca5"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-governance-pagerduty-evidence.json",
+      "sha256": "4bb76ac8dd09046f7592138417cbe596b9eb4e3abc71dc011fde9a4954a03b45"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-governance-slack-evidence.json",
+      "sha256": "0be94c148a86651674e5dcdbabdf42f8d6f088fe24a4a5f688edfbf5c6c7b05c"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-governance-telegram-evidence.json",
+      "sha256": "3b3adef9e624923913a78a77f90f2ff632bce50d7b85a6288475119effd292b5"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-governance-webhook-evidence.json",
+      "sha256": "856157dd32c38420038c060245f678fed5734f47dfd5a46f9865b5dbb7f84fe8"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-email-dns-evidence.json",
+      "sha256": "f3427800aba32e858f4a098e847a3d8309fb3d2c9865fa63026c37a91bb55e34"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-email-tls-evidence.json",
+      "sha256": "ce2880a8b3b989f08b8920841c2b08724828b90082f8e38704df49e509d6d720"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-microsoftteams-dns-evidence.json",
+      "sha256": "32a56edbaa2d838fb29d07e511a99a913553b098e93d3297b65026d8520cb4fb"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-microsoftteams-tls-evidence.json",
+      "sha256": "1da9d285ab478c0f3e2eadcdc2bc13390e147a0f0795c4b572bf8313aca823c1"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-pagerduty-dns-evidence.json",
+      "sha256": "2fdcfda33e0cbd1ad1343028503fa1c0655b5655a74b02b7e253463b1bcccf0e"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-pagerduty-tls-evidence.json",
+      "sha256": "9d574cddd5d3c23e64fa725e2011c4afceae631a2f64a880d3736469e94fc4a7"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-slack-dns-evidence.json",
+      "sha256": "e1269d89ac019fe21e37e9de167ab049ae95e87e4d0ae944914f1b29ac9960b8"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-slack-tls-evidence.json",
+      "sha256": "2f8fd73f60dc3fb7c13dfef3294c37884834a11a560c2d4b99976801eb103c7e"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-telegram-dns-evidence.json",
+      "sha256": "a93bf98b6364896e04ba0bb5624429537cede4c1a2e9e030b2a4f61c794a8ddd"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-telegram-tls-evidence.json",
+      "sha256": "9b2f4e7f02376a8f4adce9b6d42ee70c04105480122818ff98869c55b5cca724"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-webhook-dns-evidence.json",
+      "sha256": "a2d405af69e6e6e81f2e639ba3ef17443d41c0940ba0069869a4fbfdfc23e2db"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/notification-revocation-webhook-tls-evidence.json",
+      "sha256": "29d05a65da73f8db9cba40d5f91680f20cfcb864ec89f81f2a93162cd34aa1b9"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/postgres-governance-fairness-evidence.json",
+      "sha256": "47c4bea9ad8abf98398350ff077be73f544463e303d65dcda117e609bb72ab1d"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/postgres-live.trx",
+      "sha256": "7a3968bd6a623224fefe8d97a45c82e6e55029135613b97b39ba9fe8b7ff63b7",
+      "counters": {
+        "total": 140,
+        "passed": 140,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/postgres-product-outbox-evidence.json",
+      "sha256": "72e85128c21a2dd766352e5cd84c203c78b22158e559b321d1fc6bfefa324025"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/postgres-rate-clock-evidence.json",
+      "sha256": "be8eeabcb83ce9fef053aa23ec0347d5e7112f9fe4b0c9214ea4f4ffe4c1a01e"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/postgres-recovery-fence-evidence.json",
+      "sha256": "d311a5235ab523d6338d96a164c855bec01bc1fe6cf524304f2082a30047f356"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/postgres-worker-cas-evidence.json",
+      "sha256": "bd2255d1b82c4dea41e73f596ed3f8cd3fdef36ed3befd3f567a2fba0c55d74d"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-acceptance/product-source-tls-evidence.json",
+      "sha256": "9f03285e93c1e52e0d26b485860ef59088c852b9d8d74239dba9f1d726a89485"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/postgres-before-claim-failover-evidence.json",
+      "sha256": "149c25b037c74e92d1f1bde3e7946f743b5a061005844b9c490cfea8a8b94392"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/postgres-control-diagnostic-evidence.json",
+      "sha256": "6c30aa3043f2197401b335fb420a2d787125157b699fe0d9de8e2e744391f726"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/postgres-crash-after-post-failover-evidence.json",
+      "sha256": "bdfc672351d5597d9793be3e1a4f75828c29a8e45b2eb0b38ae97d4bd3c87578"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/postgres-governed-restore-safe-resume-evidence.json",
+      "sha256": "0eeee2522f2cef8a8b2875fef8ae975c2ff636d0083b999f90e54a4716745829"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/postgres-stale-backup-quarantine-evidence.json",
+      "sha256": "dbb0a80bc89403a3826fc4812943d4a9184c99e943972746b3ae8cb027c382c3"
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/recovery-live.trx",
+      "sha256": "5f1296970efc8c5672cd71ef2822e5bee91a91a6cc66a7b46e0b05a5a35d9516",
+      "counters": {
+        "total": 58,
+        "passed": 58,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "main-runtime/g2-postgresql-failover-restore/sqlite-governed-restore-safe-resume-evidence.json",
+      "sha256": "e2cfc73f31e9db90fefc8e0a87e94545c653d9ad3f655f36c7d39947214662ec"
+    },
+    {
+      "path": "main-upgrade/g2-actual-keycloak-patch-upgrade/keycloak-patch-rolling-upgrade-evidence.json",
+      "sha256": "af7c68d05c6520830ca4e4fe79c9c92f2a8cc1d22287ca7ee95ed753e11f4261"
+    },
+    {
+      "path": "main-upgrade/g2-actual-keycloak-patch-upgrade/keycloak-patch-upgrade-production-verifier-evidence.json",
+      "sha256": "4ee82c392958ecae3f80fef60b42b20d2065771f8770954c1380396e3d8c4409"
+    },
+    {
+      "path": "main-upgrade/g2-actual-keycloak-patch-upgrade/keycloak-upgrade-control-diagnostic.json",
+      "sha256": "9b496a80ad7f8583510bf1fc91a2ab3aaec5f11de3ee495a6c0c4941deb93380"
+    },
+    {
+      "path": "main-upgrade/g2-actual-keycloak-patch-upgrade/keycloak-upgrade.trx",
+      "sha256": "1047cbeae5b662b3f8a40deffd27c27040a644159af4c335dfe031d9c09aeb2e",
+      "counters": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    }
+  ],
+  "limits": [
+    "Six provider protocol fixtures prove real production transport behavior, not receipt by external SaaS tenant accounts.",
+    "Existing explicit unsupported/blocked capability kinds remain explicit.",
+    "W68-W71 and v0.8 publication are not closed by G2 acceptance."
+  ]
+}
