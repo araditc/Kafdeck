@@ -27,6 +27,9 @@ foreach ($id in ($RunId | Sort-Object -Unique)) {
     $runs += $run
     $catalog = Read-GhJson @('api',"repos/$Repository/actions/runs/$id/artifacts?per_page=100")
     foreach ($artifact in $catalog.artifacts) {
+        # Buildx uploads opaque diagnostic build records by default. They are
+        # not release evidence; never download or interpret them as such.
+        if ($artifact.name -match '^[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+~[A-Za-z0-9_.-]+\.dockerbuild$') { continue }
         if ($artifact.expired) { $missing.Add("artifact:$id/$($artifact.name):expired"); continue }
         if ($artifact.name -notmatch '^[A-Za-z0-9_.-]{1,160}$' -or $artifact.name -in @('.','..')) { throw 'Unsafe artifact identity.' }
         $directory = Join-Path $root "downloads/$id/$($artifact.name)"
