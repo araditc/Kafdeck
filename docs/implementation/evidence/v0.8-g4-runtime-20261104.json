@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-04",
+  "baselineMain": "ccaed0c40a35410322a2868cf4036ec91b8cc001",
+  "status": "RuntimeProvedPendingProtectedAcceptance",
+  "scope": [
+    "W69 T1-T5",
+    "W70 M1-M5"
+  ],
+  "canonicalAcceptanceIssues": [
+    218,
+    219
+  ],
+  "proofs": [
+    {
+      "path": "artifacts/g4/contracts-v3/g4-contract-v3.trx",
+      "sha256": "ba5d13c19d7e0c6825ed04fbb94d5d8908c7bb4e00dce2d8f9076ae7cb1327b2",
+      "counters": {
+        "total": 35,
+        "passed": 35,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g4/live-v3/g4-mcp-v3.trx",
+      "sha256": "4408cb3f0105a6839eb4e57456c2c442976826243f4f1d306796162ddca58263",
+      "counters": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g4/live-v3/g4-terraform-v3.trx",
+      "sha256": "fab1b97b721321ceddade182fa1229fb29d19053fb82e54b673d715c1104d3ba",
+      "counters": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g4/live-v3/sqlite-g4-mcp-evidence.json",
+      "sha256": "58101efddfa446297d7a7777fbd0a190e8d5f12f0850bf9832918ae56695816e"
+    },
+    {
+      "path": "artifacts/g4/live-v3/postgres-g4-mcp-evidence.json",
+      "sha256": "1d7c8201178aa776414beb6bf457e728d9fbec77176cbe20ca748d30685f3826"
+    },
+    {
+      "path": "artifacts/g4/live-v3/sqlite-g4-terraform-evidence.json",
+      "sha256": "c1d624ca68a0009958b8788761ec659891bc999c3f624294b3d8e4bf645570d4"
+    },
+    {
+      "path": "artifacts/g4/live-v3/postgres-g4-terraform-evidence.json",
+      "sha256": "5f4c080a1be759ba9f99d27a3821c30883820be9672a308118c7a88603811664"
+    },
+    {
+      "path": "artifacts/g4/mcp-package-evidence.json",
+      "sha256": "42a340fcff8c0ac51acd35a12392f5ff33dc8b1c82d30f1ba68c428864873787"
+    },
+    {
+      "path": "artifacts/g4/packages/Kafdeck.Mcp.0.8.0.nupkg",
+      "sha256": "5a426f9250a0874a64dc539914d62677419c498b6fe9b25edbde3ca8086004de"
+    },
+    {
+      "path": "artifacts/g4/terraform-datasource-drift-test.log",
+      "sha256": "9e2d8c14001e47e38de11b5554a7390d591bab42914ebe1eea81e77185c18d14"
+    },
+    {
+      "path": "artifacts/g4/regression-v4/g4-regression-v4.trx",
+      "sha256": "09204cc80ed318545a2ff5a46dd1be7f84d0d10e328b11dde97f1f1f539630a2",
+      "counters": {
+        "total": 2236,
+        "passed": 2236,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    }
+  ],
+  "limits": [
+    "Overlapping test totals are not added.",
+    "Local genuine runtime uses real Keycloak, actual CLI/plugin or stdio processes and SQLite/PostgreSQL. Unknown is explicit durable fault injection, not a physical crash. Second-node API continuity is not a claim of database-replica failover.",
+    "Local Terraform acceptance preceded a stricter datasource OutOfSync diagnostic, separately proven by the focused SDK test. Exact-head CI repeats final production code.",
+    "Cross-target compilation and ZIP mode validation do not establish runtime acceptance on every target. Publication/signing remains the separate G6 owner gate.",
+    "Local package smoke verifies installed MCP protocol; CI additionally executes genuine authenticated tools from the installed package DLL."
+  ]
+}

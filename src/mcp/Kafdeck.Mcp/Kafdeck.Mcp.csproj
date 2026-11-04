@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>kafdeck-mcp</AssemblyName>
+    <RootNamespace>Kafdeck.Mcp</RootNamespace>
+    <Version>0.8.0</Version>
+    <PackageId>Kafdeck.Mcp</PackageId>
+    <Description>Kafdeck governed MCP stdio server (protocol 2025-06-18).</Description>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>kafdeck-mcp</ToolCommandName>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../cli/Kafdeck.Cli/Kafdeck.Cli.csproj" /></ItemGroup>
+</Project>

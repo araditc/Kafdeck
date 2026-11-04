@@ -29,6 +29,7 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
     internal bool Approver { get; set; }
     internal bool OptionalServiceRequester { get; private set; }
     internal int ServiceApiCommands { get; private set; }
+    internal string ServiceProfileFile => _serviceProfile ?? throw new InvalidOperationException("Enable the service profile first.");
     internal string ConfigurationFile => Path.Combine(_directory,"appsettings.json");
     internal string Output { get; private set; } = "";
     internal string SafeOutcome { get; private set; } = "none";

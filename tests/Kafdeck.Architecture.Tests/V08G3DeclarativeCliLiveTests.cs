@@ -282,10 +282,10 @@ public sealed class V08G3DeclarativeCliLiveTests
                 limitation = "Physical backup restore, HA fencing and crash-during-commit are separate storage acceptance scenarios; no provider transport is invoked by subscription metadata changes." }), token);
     }
 
-    private sealed record Artifact(string Resource, string File, DeclarativeSubscriptionManifest Manifest, string SourceRef);
-    private sealed record Preview(Guid Id, string Hash, string? Challenge);
-    private sealed record SourceProof(Guid Generation, long Revision, string Hash);
-    private sealed class Fixture : IAsyncDisposable
+    internal sealed record Artifact(string Resource, string File, DeclarativeSubscriptionManifest Manifest, string SourceRef);
+    internal sealed record Preview(Guid Id, string Hash, string? Challenge);
+    internal sealed record SourceProof(Guid Generation, long Revision, string Hash);
+    internal sealed class Fixture : IAsyncDisposable
     {
         internal G2HumanCliLaboratory Lab { get; }
         internal INotificationDeliveryDbConnectionFactory Connections { get; }

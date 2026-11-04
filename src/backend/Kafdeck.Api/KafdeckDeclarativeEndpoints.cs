@@ -34,7 +34,7 @@ public static class KafdeckDeclarativeEndpoints
             enabled, apiVersion = DeclarativeSubscriptionManifest.ApiVersion,
             families = new object[]
             {
-                new { kind = "NotificationSubscription", validate = true, observe = true, drift = true,
+                new { kind = "NotificationSubscription", schemaVersion = 1, declarativelyOwnable = true, validate = true, observe = true, drift = true,
                     import = true, plan = true, create = true, apply = true, delete = false, relinquish = false },
                 new { kind = "DataQualityPolicy", ownership = "Unadmitted", apply = false },
                 new { kind = "KafkaTopic", ownership = "ObservedOnly", apply = false },
@@ -45,10 +45,10 @@ public static class KafdeckDeclarativeEndpoints
         }
         if (!enabled) return app;
         app.MapKafdeckDeclarativeSources();
-        foreach (var verb in new[] { "validate", "observe", "drift", "import-preview", "plan" })
+        foreach (var verb in new[] { "validate", "observe", "drift", "import-check", "import-preview", "plan" })
         {
             var command = verb;
-            var action = command == "import-preview" ? AuthorizationAction.DeclarativeAdopt
+            var action = command is "import-preview" or "import-check" ? AuthorizationAction.DeclarativeAdopt
                 : command == "plan" ? AuthorizationAction.DeclarativePlan : AuthorizationAction.DeclarativeRead;
             app.MapPost("/api/v1/declarative/" + command,
                 (DeclarativeManifestRequest request, HttpContext context, DeclarativeEndpointService service,
@@ -99,6 +99,10 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
                 request.SourceRef, request.SourceRevision, definition.SubscriptionId);
             if (registration is null || !Authorized(DeclarativeRuntimeVerb.Read, [definition.DestinationId]))
                 return Problem(403, "declarative_source_or_read_denied");
+            var deploymentGeneration = await store.GetDeploymentGenerationAsync(desired.DeploymentRef, token).ConfigureAwait(false);
+            if (deploymentGeneration is null || deploymentGeneration != context.RequestServices.GetRequiredService<IConfiguration>()
+                .GetValue<Guid>("Kafdeck:Declarative:DeploymentGeneration"))
+                return Problem(409, "declarative_deployment_generation_conflict");
             var registeredSource = await store.GetRegistrationAsync(W68RuntimeRegistrationKind.Source,
                 desired.DeploymentRef, request.SourceRef, token).ConfigureAwait(false);
             if (registration.AllowRevisionAdvance)
@@ -113,18 +117,44 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
             var key = new W68RuntimeResourceKey(desired.DeploymentRef, "Deployment", desired.DeploymentRef,
                 "NotificationSubscription", definition.SubscriptionId);
             var ownership = await store.GetOwnershipAsync(key, token).ConfigureAwait(false);
+            var ownerRegistration = ownership is null ? null : await store.GetRegistrationAsync(W68RuntimeRegistrationKind.Owner,
+                desired.DeploymentRef, desired.OwnerRef, token).ConfigureAwait(false);
+            var controller = ownership is null ? null : await store.GetRegistrationAsync(W68RuntimeRegistrationKind.Controller,
+                desired.DeploymentRef, registration.Id, token).ConfigureAwait(false);
+            var bindingActive = ownerRegistration is { Enabled: true } && ownerRegistration.OwnerId == desired.OwnerRef &&
+                controller is { Enabled: true } && controller.OwnerId == desired.OwnerRef && controller.PrincipalId == actor.PrincipalId;
             var conflict = current?.State == NotificationSubscriptionState.Retired || ownership is not null &&
                 (ownership.OwnerId != desired.OwnerRef || ownership.SourceId != request.SourceRef || ownership.State != "Managed");
             var drift = conflict ? "Conflict" : current is null ? "Missing"
                 : SameDesired(desired, current) ? "InSync" : "OutOfSync";
-            if (verb is "validate" or "observe" or "drift") return Results.Ok(new
+            if (verb == "import-check")
+            {
+                if (!Authorized(DeclarativeRuntimeVerb.Adopt, destinations)) return Problem(403, "declarative_import_authority_denied");
+                if (current is null || conflict || ownership is null || ownership.State != "Managed" ||
+                    ownerRegistration is not { Enabled: true } || ownerRegistration.OwnerId != desired.OwnerRef ||
+                    controller is not { Enabled: true } || controller.OwnerId != desired.OwnerRef || controller.PrincipalId != actor.PrincipalId ||
+                    registeredSource is not { Enabled: true } || registeredSource.OwnerId != desired.OwnerRef ||
+                    registeredSource.PinnedRevision != request.SourceRevision || ownership.SourceGeneration != registeredSource.GenerationId ||
+                    ownership.SourceRevisionHash != request.SourceRevision || ownership.Revision != request.ExpectedOwnershipRevision)
+                    return Problem(409, "declarative_import_binding_conflict");
+            }
+            if (verb is "validate" or "observe" or "drift" or "import-check") return Results.Ok(new
             {
                 valid = true, drift, desiredFingerprint = desired.Fingerprint(),
+                deploymentId = desired.DeploymentRef, scopeKind = "Deployment", scopeId = desired.DeploymentRef,
+                resourceId = definition.SubscriptionId, kind = "NotificationSubscription", schemaVersion = 1,
+                ownerRef = ownership?.OwnerId, sourceRef = ownership?.SourceId,
+                ownershipGeneration = ownership?.GenerationId, sourceGeneration = registeredSource?.GenerationId,
+                sourceRegistrationRevision = registeredSource?.Revision,
+                deploymentGeneration,
+                current = current is null ? null : new { destinationRef = current.Definition.DestinationId,
+                    state = current.State.ToString(), eventClasses = current.Definition.EventClasses.Select(x => x.ToString()).ToArray(),
+                    eventTypes = current.Definition.EventTypes },
                 observedAtUtc = await store.ReadDatabaseUtcNowAsync(token).ConfigureAwait(false),
                 capability = "Supported", authorization = "Allowed",
                 subscriptionRevision = current?.Revision, ownershipRevision = ownership?.Revision ?? 0,
                 ownership = ownership is null ? "ObservedOnly" : ownership.State,
-                sourceInSync = ownership is not null && registeredSource is { Enabled: true } &&
+                sourceInSync = bindingActive && ownership is not null && registeredSource is { Enabled: true } &&
                     registeredSource.OwnerId == desired.OwnerRef && registeredSource.PinnedRevision == request.SourceRevision &&
                     ownership.SourceRevisionHash == request.SourceRevision && ownership.SourceGeneration == registeredSource.GenerationId,
                 observedFingerprint = current is null ? "missing" : W68RuntimeFingerprints.Subscription(current)

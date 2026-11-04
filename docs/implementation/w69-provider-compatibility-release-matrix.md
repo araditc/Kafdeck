@@ -1,6 +1,6 @@
 # W69 — Provider compatibility and release matrix
 
-Status: **candidate release checklist; not published**.
+Status: **implemented integration candidate / publication not performed**. G3 W68 runtime is accepted in PR #418. The actual protocol-6 provider, typed resource/data source, exact import, schema upgrade and governed effect boundary are implemented in `providers/terraform`; final G4 real-runtime evidence and protected acceptance are tracked in the G4 ledger.
 
 ## Gates
 1. Backend W68 runtime ownership, import/read/plan/apply and exact versioned API schema admitted.
