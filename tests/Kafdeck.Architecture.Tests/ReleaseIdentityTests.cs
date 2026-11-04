@@ -22,6 +22,8 @@ public sealed class ReleaseIdentityTests
         var buildProps = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
         var backendVersion = buildProps.Descendants("Version").Single().Value;
         var informationalVersion = buildProps.Descendants("InformationalVersion").Single().Value;
+        var assemblyVersion = buildProps.Descendants("AssemblyVersion").Single().Value;
+        var fileVersion = buildProps.Descendants("FileVersion").Single().Value;
 
         using var packageDocument = JsonDocument.Parse(
             File.ReadAllText(Path.Combine(root, "src", "frontend", "package.json")));
@@ -38,31 +40,49 @@ public sealed class ReleaseIdentityTests
 
         Assert.Equal(expectedPackageVersion, backendVersion);
         Assert.Equal(expectedPackageVersion, informationalVersion);
+        Assert.Equal(expectedPackageVersion.Split('-')[0] + ".0", assemblyVersion);
+        Assert.Equal(expectedPackageVersion.Split('-')[0] + ".0", fileVersion);
         Assert.Equal(expectedPackageVersion, frontendVersion);
         Assert.Equal(expectedPackageVersion, lockVersion);
         Assert.Equal(expectedPackageVersion, lockRootVersion);
     }
 
     [Fact]
-    public void Readme_release_badge_matches_the_governed_release_manifest()
+    public void Readme_release_badge_tracks_actual_GitHub_publication_not_the_prepared_candidate()
     {
         var root = FindRepositoryRoot();
 
-        using var releaseDocument = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(root, ".github", "release", "release.json")));
-        var releaseVersion = releaseDocument.RootElement.GetProperty("version").GetString()
-                             ?? throw new InvalidOperationException("Release version is missing.");
-
         var readme = File.ReadAllText(Path.Combine(root, "README.md"));
         var expectedBadge =
-            $"[![Latest Release](https://img.shields.io/badge/release-{releaseVersion}-2ea44f)]" +
-            $"(https://github.com/araditc/Kafdeck/releases/tag/{releaseVersion})";
+            "[![Latest Release](https://img.shields.io/github/v/release/araditc/Kafdeck)]" +
+            "(https://github.com/araditc/Kafdeck/releases/latest)";
 
         Assert.Contains(expectedBadge, readme, StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "img.shields.io/github/v/release/araditc/Kafdeck",
+            "img.shields.io/badge/release-",
             readme,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Candidate_build_and_historical_published_baseline_are_explicit_and_consistent()
+    {
+        var root = FindRepositoryRoot();
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".github", "release", "release.json")));
+        var manifest = document.RootElement;
+        var selected = manifest.GetProperty("version").GetString()!;
+        var baseline = manifest.GetProperty("publishedBaselineVersion").GetString()!;
+        var status = manifest.GetProperty("status").GetString();
+        Assert.Equal("candidate", status); // Publication input, not a registry-status claim.
+        Assert.NotEqual(selected, baseline);
+        Assert.True(Version.Parse(ToPackageVersion(selected).Split('-')[0]) > Version.Parse(ToPackageVersion(baseline).Split('-')[0]));
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        Assert.Contains($"**{baseline} is the historical published baseline at candidate preparation**", readme, StringComparison.Ordinal);
+        Assert.Contains($"**{selected} as the prepared build candidate**", readme, StringComparison.Ordinal);
+        var notes = manifest.GetProperty("notes").GetString()!;
+        Assert.Equal($"docs/releases/{selected}.md", notes);
+        Assert.True(File.Exists(Path.Combine(root, notes)));
+        Assert.StartsWith($"Kafdeck {selected}", manifest.GetProperty("title").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -98,6 +118,7 @@ public sealed class ReleaseIdentityTests
     [InlineData("v0.6.1-rc.2", "0.6.1-rc.2")]
     [InlineData("v0.6", "0.6.0")]
     [InlineData("v0.7", "0.7.0")]
+    [InlineData("v0.8", "0.8.0")]
     public void Release_version_normalization_preserves_prerelease_identity(
         string releaseVersion,
         string expectedPackageVersion)

@@ -5,7 +5,7 @@
       "kafdeck": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.7.0, )"
+          "Kafdeck.Core": "[0.8.0, )"
         }
       },
       "kafdeck.core": {
