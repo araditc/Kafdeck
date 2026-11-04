@@ -127,5 +127,69 @@ BEGIN
           'kafdeck_declarative_lease_epoch_high_water',
           'kafdeck_declarative_ownership_audit'))<>5
  THEN RAISE EXCEPTION 'W68 baseline incomplete'; END IF;
+ -- Do not accept a pre-existing same-name table with an absent/wrong primary key.
+ IF (WITH required(tbl, columns) AS (
+       VALUES
+       ('kafdeck_declarative_key_versions', ARRAY['deployment_id','scope_kind','scope_id','resource_kind','resource_id']),
+       ('kafdeck_declarative_ownership', ARRAY['deployment_id','scope_kind','scope_id','resource_kind','resource_id']),
+       ('kafdeck_declarative_controller_leases', ARRAY['deployment_id','lease_scope_id']),
+       ('kafdeck_declarative_lease_epoch_high_water', ARRAY['deployment_id','lease_scope_id']),
+       ('kafdeck_declarative_ownership_audit', ARRAY['operation_id']),
+       ('kafdeck_declarative_schema_migrations', ARRAY['version'])
+     )
+     SELECT count(*) FROM required r WHERE EXISTS (
+       SELECT 1 FROM pg_class tbl
+       JOIN pg_namespace ns ON ns.oid=tbl.relnamespace
+       JOIN pg_constraint pk ON pk.conrelid=tbl.oid AND pk.contype='p'
+       WHERE ns.nspname=current_schema() AND tbl.relname=r.tbl AND tbl.relkind='r'
+         AND ARRAY(
+           SELECT a.attname::text FROM unnest(pk.conkey) WITH ORDINALITY k(attnum,ord)
+           JOIN pg_attribute a ON a.attrelid=tbl.oid AND a.attnum=k.attnum
+           ORDER BY k.ord
+         )=r.columns
+     ))<>6 THEN
+   RAISE EXCEPTION 'W68 schema lacks exact required primary keys';
+ END IF;
+ -- Ensure the essential fencing and audit fields were not type-weakened.
+ IF (WITH required(tbl, col, kind) AS (
+       VALUES
+       ('kafdeck_declarative_key_versions','revision_high_water','bigint'),
+       ('kafdeck_declarative_ownership','ownership_revision','bigint'),
+       ('kafdeck_declarative_ownership','stored_lease_epoch','bigint'),
+       ('kafdeck_declarative_controller_leases','epoch','bigint'),
+       ('kafdeck_declarative_controller_leases','expires_at_utc','timestamp with time zone'),
+       ('kafdeck_declarative_lease_epoch_high_water','epoch_high_water','bigint'),
+       ('kafdeck_declarative_ownership_audit','new_revision','bigint'),
+       ('kafdeck_declarative_ownership_audit','lease_epoch','bigint'),
+       ('kafdeck_declarative_ownership_audit','recorded_at_utc','timestamp with time zone'),
+       ('kafdeck_declarative_schema_migrations','version','integer')
+     )
+     SELECT count(*) FROM required r JOIN information_schema.columns c
+       ON c.table_schema=current_schema() AND c.table_name=r.tbl
+       AND c.column_name=r.col AND c.data_type=r.kind AND c.is_nullable='NO'
+     )<>10 THEN
+   RAISE EXCEPTION 'W68 schema has incompatible critical column invariants';
+ END IF;
+ IF NOT EXISTS (
+   SELECT 1 FROM pg_constraint fk
+   JOIN pg_class tbl ON tbl.oid=fk.conrelid
+   JOIN pg_namespace ns ON ns.oid=tbl.relnamespace
+   JOIN pg_class parent ON parent.oid=fk.confrelid
+   WHERE ns.nspname=current_schema()
+     AND tbl.relname='kafdeck_declarative_ownership'
+     AND parent.relname='kafdeck_declarative_key_versions'
+     AND fk.contype='f'
+ ) THEN
+   RAISE EXCEPTION 'W68 ownership foreign-key invariant absent';
+ END IF;
+ IF NOT EXISTS (
+   SELECT 1 FROM information_schema.columns c
+   WHERE c.table_schema=current_schema()
+     AND c.table_name='kafdeck_declarative_ownership_audit'
+     AND c.column_name='recorded_at_utc'
+     AND c.column_default LIKE '%clock_timestamp()%'
+ ) THEN
+   RAISE EXCEPTION 'W68 audit timestamp default invariant absent';
+ END IF;
 END
 $verify$;
