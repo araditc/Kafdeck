@@ -146,6 +146,7 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
             if (existing is not null)
             {
                 if (existing.Command != command || existing.DesiredFingerprint != desired.Fingerprint() ||
+                    existing.DeploymentGeneration != context.RequestServices.GetRequiredService<IConfiguration>().GetValue<Guid>("Kafdeck:Declarative:DeploymentGeneration") ||
                     existing.SourceRevisionHash != request.SourceRevision || existing.ExpectedOwnershipRevision != request.ExpectedOwnershipRevision ||
                     existing.RequesterPrincipalId != actor.PrincipalId || existing.PolicyFingerprint != authorization.PolicyFingerprint)
                     return Problem(409, "declarative_idempotency_conflict");

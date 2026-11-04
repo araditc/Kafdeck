@@ -17,7 +17,7 @@ public static class DeclarativeSubscriptionMutation
         var targets = Targets(plan);
         return new(MutationOperationKind.DeclarativeNotificationSubscription, plan.Key.DeploymentId,
             JsonSerializer.Serialize(new Reference(1, plan.PlanId, plan.PlanFingerprint)),
-            [$"declarative/{plan.Key.DeploymentId}/NotificationSubscription/{plan.Key.ResourceId}"],
+            [$"declarative/{plan.Key.DeploymentId}/{plan.DeploymentGeneration:D}/NotificationSubscription/{plan.Key.ResourceId}"],
             [new("declarative.plan", plan.PlanFingerprint), new("declarative.desired", plan.DesiredFingerprint),
                 new("declarative.observed", plan.ObservedSubscriptionFingerprint)],
             AuthorizationTargets: targets);

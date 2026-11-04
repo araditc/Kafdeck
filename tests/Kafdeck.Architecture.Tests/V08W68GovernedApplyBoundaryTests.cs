@@ -191,7 +191,7 @@ public sealed class V08W68GovernedApplyBoundaryTests
         return Seal(new(Guid.NewGuid(), W68RuntimePlanCommand.Apply, new("deployment", "Deployment", "deployment", "NotificationSubscription", "subscription"),
             "owner", "source", Guid.NewGuid(), Hash, "oidc:https://idp.example|alice", 1, Guid.NewGuid(), 1,
             Hash, "old", manifest.Definition, manifest.State, canonical, manifest.Fingerprint(), Hash,
-            "controller", "scope", "holder", 1, DateTimeOffset.UtcNow.AddMinutes(2), ""));
+            "controller", "scope", "holder", 1, DateTimeOffset.UtcNow.AddMinutes(2), "", DeploymentGeneration: Guid.NewGuid()));
     }
     private static W68StoredRuntimePlan Seal(W68StoredRuntimePlan plan) => plan with { PlanFingerprint = W68RuntimeFingerprints.Plan(plan) };
     private static ClaimsPrincipal Human(string subject) => OidcIdentityNormalizer.Normalize(

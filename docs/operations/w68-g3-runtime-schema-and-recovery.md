@@ -122,6 +122,15 @@ status reads never advance it. This protocol does not automatically detect an
 undeclared rollback or recall an external effect. Missing restored commit
 receipts remain Unknown and never authorize automatic replay.
 
+Mutation scheduling claims include the backend-admitted deployment generation;
+the canonical ownership/subscription identity and per-resource lease do not.
+An unresolved old-generation operation keeps its Unknown status and claims.
+After physically fenced, explicit new-generation admission, a newly reviewed
+operation with a **new idempotency key** can claim that same logical resource.
+It cannot reinterpret or release the older operation. A source revision or owner
+change within the same generation never bypasses an unresolved claim. The
+outside/database generation guards continue to refuse all old-generation writes.
+
 Physical proof class: `V08G3DeclarativePostgreSqlRecoveryTests`. Required safe
 artifacts are `g3-postgresql-lease-failover-evidence.json` and
 `g3-postgresql-physical-restore-fence-evidence.json`. These storage/production
