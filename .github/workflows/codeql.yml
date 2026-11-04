@@ -6,6 +6,8 @@ on:
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
+      - 'src/mcp/**'
+      - 'providers/terraform/**'
       - '.github/workflows/codeql.yml'
   push:
     branches: [main]
@@ -15,6 +17,8 @@ on:
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
+      - 'src/mcp/**'
+      - 'providers/terraform/**'
       - '.github/workflows/codeql.yml'
 
 permissions:
@@ -29,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [csharp, javascript-typescript]
+        language: [csharp, javascript-typescript, go]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,7 +46,16 @@ jobs:
           languages: ${{ matrix.language }}
 
       - name: Autobuild
+        if: matrix.language != 'go'
         uses: github/codeql-action/autobuild@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+
+      - name: Build pinned Go provider
+        if: matrix.language == 'go'
+        env:
+          GOTOOLCHAIN: go1.27.3
+        run: |
+          cd providers/terraform
+          go build ./...
 
       - name: Analyze
         uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0

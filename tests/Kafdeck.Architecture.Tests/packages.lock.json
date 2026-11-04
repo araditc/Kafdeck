@@ -302,6 +302,12 @@
           "Kafdeck.Core": "[0.7.0, )"
         }
       },
+      "kafdeck.mcp": {
+        "type": "Project",
+        "dependencies": {
+          "kafdeck": "[0.7.0, )"
+        }
+      },
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {

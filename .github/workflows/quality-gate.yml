@@ -51,8 +51,10 @@ jobs:
         if: steps.detect.outputs.backend == 'true'
         run: bash scripts/ci/backend.sh
 
-      - name: Test isolated Terraform Go client
+      - name: Test pinned Terraform provider
         shell: bash
+        env:
+          GOTOOLCHAIN: go1.27.3
         run: |
           cd providers/terraform
           go test ./...

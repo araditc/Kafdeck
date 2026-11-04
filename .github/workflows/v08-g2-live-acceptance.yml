@@ -40,7 +40,7 @@ jobs:
 
   real-human-cli-and-transports:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:18.6-alpine
@@ -185,6 +185,25 @@ jobs:
               for item in items) != 1:
               raise SystemExit('Pinned actual Kafka Connect FileStream plugin was not discovered.')
           PY
+      - name: Build pinned Terraform protocol provider and external client
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/g4-toolchains"
+          mkdir -p "$lab/terraform" "$GITHUB_WORKSPACE/artifacts/g4-ci"
+          curl --fail --location --retry 2 --max-time 180 https://go.dev/dl/go1.27.3.linux-amd64.tar.gz -o "$lab/go.tar.gz"
+          printf '%s  %s\n' 65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40 "$lab/go.tar.gz" | sha256sum --check
+          tar -xzf "$lab/go.tar.gz" -C "$lab"
+          curl --fail --location --retry 2 --max-time 180 https://releases.hashicorp.com/terraform/1.14.9/terraform_1.14.9_linux_amd64.zip -o "$lab/terraform.zip"
+          printf '%s  %s\n' 2e5cffc20a0b48a67a76268723bd5a10b8666f69b2aa4f04906e206726bedd63 "$lab/terraform.zip" | sha256sum --check
+          unzip -q "$lab/terraform.zip" -d "$lab/terraform"
+          export PATH="$lab/go/bin:$PATH"
+          cd providers/terraform
+          go mod verify
+          go test ./...
+          go build -trimpath -buildvcs=false -o "$lab/terraform-provider-kafdeck_v0.8.0" .
+          echo "KAFDECK_G4_TERRAFORM_BIN=$lab/terraform/terraform" >> "$GITHUB_ENV"
+          echo "KAFDECK_G4_PROVIDER_BIN=$lab/terraform-provider-kafdeck_v0.8.0" >> "$GITHUB_ENV"
       - name: Build and prove actual PKCE CLI and provider sockets
         shell: bash
         env:
@@ -220,6 +239,33 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-g3-declarative-cli-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-declarative-cli-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-service-controller-evidence.json"
+          dotnet pack src/mcp/Kafdeck.Mcp/Kafdeck.Mcp.csproj -c Release --no-build --no-restore -o artifacts/g4-ci/mcp
+          printf '%s\n' '<configuration><packageSources><clear /></packageSources></configuration>' > deploy/dev/.generated/g4-toolchains/NuGet.Config
+          dotnet tool install Kafdeck.Mcp --version 0.8.0 --tool-path deploy/dev/.generated/g4-installed-mcp --configfile deploy/dev/.generated/g4-toolchains/NuGet.Config --add-source artifacts/g4-ci/mcp --no-cache
+          export KAFDECK_G4_MCP_DLL="$(find "$GITHUB_WORKSPACE/deploy/dev/.generated/g4-installed-mcp/.store" -name kafdeck-mcp.dll -print -quit)"
+          test -s "$KAFDECK_G4_MCP_DLL"
+          cmp src/mcp/Kafdeck.Mcp/bin/Release/net10.0/kafdeck-mcp.dll "$KAFDECK_G4_MCP_DLL"
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08G4' --results-directory artifacts/g4-ci --logger 'trx;LogFileName=g4-live.trx'
+          for provider in sqlite postgres; do
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-terraform-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-mcp-evidence.json"
+          done
+      - name: Package external integration artifacts without publication
+        shell: pwsh
+        run: |
+          $go = "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g4-toolchains/go/bin/go"
+          ./providers/terraform/scripts/build.ps1 -Go $go -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts/g4-ci/terraform"
+      - name: Retain packaged G4 clients
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g4-external-integration-packages
+          path: |
+            artifacts/g4-ci/terraform/*.zip
+            artifacts/g4-ci/terraform/*SHA256SUMS
+            artifacts/g4-ci/terraform/build-modules.txt
+            artifacts/g4-ci/mcp/*.nupkg
+          if-no-files-found: error
       - name: Retain sanitized live acceptance evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -227,6 +273,7 @@ jobs:
           name: g2-live-acceptance
           path: |
             artifacts/g2-ci/g2-live.trx
+            artifacts/g4-ci/g4-live.trx
             artifacts/g2-ci/identity/*-evidence.json
           if-no-files-found: error
       - name: Stop isolated identity process

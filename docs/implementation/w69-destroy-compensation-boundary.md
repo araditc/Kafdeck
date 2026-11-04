@@ -1,6 +1,6 @@
 # W69 — Destroy and compensation boundaries
 
-Status: **candidate / W68/W71 dependency**.
+Status: **implemented integration candidate / publication not performed**. G3 W68 runtime is accepted in PR #418. The actual protocol-6 provider, typed resource/data source, exact import, schema upgrade and governed effect boundary are implemented in `providers/terraform`; final G4 real-runtime evidence and protected acceptance are tracked in the G4 ledger.
 
 Terraform Destroy is not equivalent to Kafka deletion. Each admitted resource family must advertise its own supported lifecycle: Retire, Relinquish, Delete or None. Missing support means plan diagnostic and blocked destructive mutation, not generic delete.
 Every destructive request must go through Kafdeck backend authorization, fresh state, risk evaluation, approval and audit. Critical operations may remain PendingApproval. Retry requires an idempotency key and persisted operation reference. Compensation is a *new governed effect*, never an implicit rollback, and only for explicitly safe inverses.
@@ -9,7 +9,7 @@ Prevent secret propagation, cross-tenant destroy, externally managed resource ta
 ## Acceptance
 Irreversible resources denied, unauthorized actor denied, mismatch owner generation denied, changed state denied, PendingApproval preserved, failure-after-dispatch reconciled, audit present.
 
-**No destructive API is implemented by this document.**
+The installed provider rejects destroy planning and Delete because W68 does not admit this family lifecycle.
 
 ## Stored-plan and authorization requirements
 
