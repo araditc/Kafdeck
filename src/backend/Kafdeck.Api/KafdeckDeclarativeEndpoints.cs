@@ -45,6 +45,7 @@ public static class KafdeckDeclarativeEndpoints
         }
         if (!enabled) return app;
         app.MapKafdeckDeclarativeSources();
+        app.MapKafdeckCompensation();
         foreach (var verb in new[] { "validate", "observe", "drift", "import-check", "import-preview", "plan" })
         {
             var command = verb;
@@ -78,14 +79,14 @@ public static class KafdeckDeclarativeEndpoints
     }
 }
 
-public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotificationRoutingStore routing,
+public sealed partial class DeclarativeEndpointService(IW68RuntimeStore store, INotificationRoutingStore routing,
     DeclarativeRuntimeAuthorizer authorization, MutationAdmissionService admission,
     IMutationOperationRepository operations, MutationDispatchService dispatch,
     KafdeckAuthorizationService policy, IMutationAuditSink audit, DeclarativeLifecycleGuard lifecycle,
     MutationRequestAuthorizationService requestAuthorization)
 {
     public async Task<IResult> HandleAsync(string verb, DeclarativeManifestRequest request,
-        HttpContext context, CancellationToken token)
+        HttpContext context, CancellationToken token, Guid? compensatesPlanId = null)
     {
         try
         {
@@ -95,6 +96,8 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
             var desired = DeclarativeSubscriptionManifest.Parse(Encoding.UTF8.GetBytes(request.Manifest), request.Format);
             if (request.SourceRevision != desired.Fingerprint()) return Problem(403, "declarative_source_content_mismatch");
             var definition = desired.Definition;
+            if (compensatesPlanId is not null && (verb != "plan" || !await CompensationSourceCurrentAsync(compensatesPlanId.Value, desired, context, token).ConfigureAwait(false)))
+                return Problem(409, "compensation_source_or_inverse_stale");
             var registration = authorization.Registration(context.User, desired.DeploymentRef, desired.OwnerRef,
                 request.SourceRef, request.SourceRevision, definition.SubscriptionId);
             if (registration is null || !Authorized(DeclarativeRuntimeVerb.Read, [definition.DestinationId]))
@@ -175,14 +178,16 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
             var existing = await store.GetPlanAsync(id, token).ConfigureAwait(false);
             if (existing is not null)
             {
-                if (existing.Command != command || existing.DesiredFingerprint != desired.Fingerprint() ||
+                if (existing.CompensatesPlanId != compensatesPlanId || existing.Command != command || existing.DesiredFingerprint != desired.Fingerprint() ||
                     existing.DeploymentGeneration != context.RequestServices.GetRequiredService<IConfiguration>().GetValue<Guid>("Kafdeck:Declarative:DeploymentGeneration") ||
                     existing.SourceRevisionHash != request.SourceRevision || existing.ExpectedOwnershipRevision != request.ExpectedOwnershipRevision ||
                     existing.RequesterPrincipalId != actor.PrincipalId || existing.PolicyFingerprint != authorization.PolicyFingerprint)
                     return Problem(409, "declarative_idempotency_conflict");
                 return await AdmitAsync(existing).ConfigureAwait(false);
             }
-            async Task<bool> Authority(CancellationToken _) => await Task.FromResult(Authorized(required, destinations));
+            var compensationSource = compensatesPlanId is { } parentId ? await store.GetPlanAsync(parentId, token).ConfigureAwait(false) : null;
+            async Task<bool> Authority(CancellationToken ct) => Authorized(required, destinations) &&
+                (compensatesPlanId is null || compensationSource is not null && await DeclarativeCompensationAuthority.IsVerifiedPlanAsync(compensationSource, operations, ct).ConfigureAwait(false));
             await RegisterAsync(W68RuntimeRegistrationKind.Owner, desired.OwnerRef, "", "").ConfigureAwait(false);
             var source = await RegisterAsync(W68RuntimeRegistrationKind.Source, request.SourceRef,
                 request.SourceRef, request.SourceRevision).ConfigureAwait(false);
@@ -200,7 +205,7 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
                 desired.Fingerprint(), authorization.PolicyFingerprint, registration.Id, scope, lease.HolderId, lease.Epoch,
                 now.AddSeconds(110), "", ownership?.SourceRevisionHash,
                 context.RequestServices.GetRequiredService<IConfiguration>().GetValue<Guid>("Kafdeck:Declarative:DeploymentGeneration"));
-            plan = plan with { SourceRegistrationRevision = source.Revision, ObservedSubscription = current };
+            plan = plan with { SourceRegistrationRevision = source.Revision, ObservedSubscription = current, CompensatesPlanId = compensatesPlanId };
             plan = plan with { PlanFingerprint = W68RuntimeFingerprints.Plan(plan) };
             var saved = await store.SavePlanAsync(plan, (_, ct) => Authority(ct), token).ConfigureAwait(false);
             return saved is null ? Problem(409, "declarative_plan_conflict") : await AdmitAsync(saved).ConfigureAwait(false);
@@ -275,10 +280,10 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
             before = Projection(plan.ObservedSubscription),
             desired = desiredProjection,
             after = plan.Command == W68RuntimePlanCommand.Adopt ? Projection(plan.ObservedSubscription) : desiredProjection,
-            changes = plan.Command == W68RuntimePlanCommand.Adopt ? new[] { "AcquireOwnership" }
+            changes = plan.CompensatesPlanId is not null ? new[] { "CompensateVerifiedStateToggle" } : plan.Command == W68RuntimePlanCommand.Adopt ? new[] { "AcquireOwnership" }
                 : plan.ExpectedSubscriptionRevision is null ? new[] { "CreateSubscription", "AcquireOwnership" } : new[] { "UpdateSubscription" },
             risk = operation.Risk.RiskClass.ToString(), operation.Risk.RequiresIndependentApproval,
-            state = operation.State.ToString(), command = plan.Command.ToString()
+            state = operation.State.ToString(), command = plan.Command.ToString(), plan.CompensatesPlanId
         });
     }
 

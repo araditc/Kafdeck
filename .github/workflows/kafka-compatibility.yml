@@ -3,6 +3,9 @@ name: kafka-compatibility
 on:
   pull_request:
     paths:
+      - 'docs/implementation/v0.8-g5*'
+      - 'docs/releases/v0.8*'
+      - 'src/backend/Kafdeck.Api/*Compensation*'
       - 'deploy/dev/**'
       - 'scripts/ci/kafka-smoke.sh'
       - 'src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/**'
@@ -15,6 +18,9 @@ on:
     tags:
       - 'v*'
     paths:
+      - 'docs/implementation/v0.8-g5*'
+      - 'docs/releases/v0.8*'
+      - 'src/backend/Kafdeck.Api/*Compensation*'
       - 'deploy/dev/**'
       - 'scripts/ci/kafka-smoke.sh'
       - 'src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/**'
@@ -67,3 +73,10 @@ jobs:
         env:
           KAFDECK_KAFKA_VERSION: ${{ matrix.kafka-version }}
         run: bash scripts/ci/kafka-smoke.sh
+      - name: Retain actual Kafka matrix test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kafka-${{ matrix.kafka-version }}-${{ matrix.tier }}
+          path: artifacts/kafka-*/*.trx
+          if-no-files-found: error

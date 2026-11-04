@@ -438,3 +438,8 @@ body {
     max-height: calc(100vh - 2rem);
   }
 }
+.automation-proof { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.kafdeck-card pre.automation-proof { color: var(--tblr-body-color); }
+#automation fieldset { margin-block: 1.25rem; min-width: 0; }
+#automation input, #automation textarea { min-width: 0; }
+#automation dd { overflow-wrap: anywhere; }

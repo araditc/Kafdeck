@@ -796,7 +796,7 @@ public static class CliParser
         var isTopicPreview = invocation.Command is CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview or
             CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview;
         isTopicPreview |= family?.Preview == true;
-        isTopicPreview |= declarative?.Command is "import-preview" or "plan" or "reconcile";
+        isTopicPreview |= declarative?.Command is "import-preview" or "plan" or "reconcile" or "compensation-preview";
         if (isTopicPreview && idempotencyKey is null)
             throw new CliUsageException("A named mutation preview requires --idempotency-key.");
         if (!isTopicPreview && idempotencyKey is not null ||

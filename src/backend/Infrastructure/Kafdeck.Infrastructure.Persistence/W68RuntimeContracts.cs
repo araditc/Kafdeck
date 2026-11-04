@@ -35,7 +35,11 @@ public sealed record W68StoredRuntimePlan(Guid PlanId, W68RuntimePlanCommand Com
     string PolicyFingerprint, string ControllerId, string LeaseScopeId, string LeaseHolderId, long LeaseEpoch,
     DateTimeOffset ExpiresAtUtc, string PlanFingerprint, string? ExpectedOwnedSourceRevisionHash = null,
     Guid DeploymentGeneration = default, long SourceRegistrationRevision = 0,
-    NotificationSubscriptionSnapshot? ObservedSubscription = null);
+    NotificationSubscriptionSnapshot? ObservedSubscription = null)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? CompensatesPlanId { get; init; }
+}
 
 public sealed record W68RuntimeCommitReceipt(Guid OperationId, string PlanFingerprint,
     long OwnershipRevision, Guid OwnershipGeneration, long SubscriptionRevision,

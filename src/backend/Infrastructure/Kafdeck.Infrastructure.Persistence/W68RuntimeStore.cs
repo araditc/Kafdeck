@@ -123,7 +123,7 @@ public sealed partial class W68RuntimeStore(INotificationDeliveryDbConnectionFac
             connections.SupportsSelectForUpdate, token).ConfigureAwait(false);
         if (!SubscriptionMatches(plan, current)) return null;
         var owner = await OwnershipAsync(c, t, plan.Key, true, token).ConfigureAwait(false);
-        if (!OwnershipMatches(plan, owner)) return null;
+        if (!OwnershipMatches(plan, owner) || !await CompensationAllowsAsync(c, t, plan, owner, current, token).ConfigureAwait(false)) return null;
         if (await ExecuteAsync(c, t, """
             INSERT INTO kafdeck_declarative_plans(operation_id,plan_fingerprint,principal_id,plan_json)
             VALUES(@id,@hash,@principal,@json) ON CONFLICT(operation_id) DO NOTHING

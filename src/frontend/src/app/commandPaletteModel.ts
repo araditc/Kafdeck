@@ -12,6 +12,7 @@ export type ProductCommand = {
 };
 
 export const productCommands: readonly ProductCommand[] = [
+  { id: 'automation', label: 'Governed automation', description: 'Inspect ownership, drift, immutable plans and safe compensation.', keywords: ['automation', 'gitops', 'declarative', 'terraform', 'mcp', 'compensation'], targetId: 'automation', availability: 'available' },
   { id: 'cluster', label: 'Select cluster', description: 'Focus the active cluster selector.', keywords: ['cluster', 'environment', 'profile'], targetId: 'kafdeck-title', focusId: 'cluster-selector', availability: 'available' },
   { id: 'overview', label: 'Cluster overview', description: 'Open the current cluster overview.', keywords: ['overview', 'health', 'controller'], targetId: 'overview', availability: 'available' },
   { id: 'brokers', label: 'Brokers', description: 'Navigate to broker metadata and configuration.', keywords: ['broker', 'controller', 'configuration'], targetId: 'brokers', availability: 'available' },

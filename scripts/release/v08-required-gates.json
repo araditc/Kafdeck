@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "requiredJobs": [
+    "quality-gate",
+    "codeql-csharp",
+    "codeql-javascript-typescript",
+    "codeql-go",
+    "bounded-processing-benchmark",
+    "read-view-benchmark",
+    "evidence",
+    "real-keycloak-and-webhook",
+    "real-signing-client-rotation-and-rendered-browser",
+    "actual-patch-rolling-upgrade",
+    "real-human-cli-and-transports",
+    "real-postgresql-fencing",
+    "real-postgresql-failover-restore",
+    "real-keycloak-ha-replay",
+    "loopback-boundaries (ubuntu-latest)",
+    "loopback-boundaries (windows-latest)",
+    "loopback-boundaries (macos-latest)",
+    "kafka-4.3.1-tier1",
+    "kafka-4.2.1-tier1",
+    "kafka-4.1.2-tier1",
+    "kafka-3.9.2-tier2"
+  ],
+  "requiredZeroSkipTrx": [
+    "g4-live.trx",
+    "postgres-live.trx",
+    "recovery-live.trx",
+    "g5-regression.trx",
+    "g5-compensation.trx"
+  ],
+  "requiredFiles": [
+    "sbom.spdx.json",
+    "trivy-results.sarif",
+    "candidate-provenance.json",
+    "g5-ui-evidence.json",
+    "offline-startup-evidence.json"
+  ],
+  "requiredProviderEvidence": [
+    "notification-governance-webhook-evidence.json",
+    "notification-governance-email-evidence.json",
+    "notification-governance-slack-evidence.json",
+    "notification-governance-microsoftteams-evidence.json",
+    "notification-governance-telegram-evidence.json",
+    "notification-governance-pagerduty-evidence.json"
+  ],
+  "requiredTrxTestPatterns": [
+    {
+      "file": "g5-regression.trx",
+      "patterns": [
+        "V08W62",
+        "V08W63",
+        "V08W64",
+        "V08W65"
+      ]
+    },
+    {
+      "file": "g4-live.trx",
+      "patterns": [
+        "Real_MCP_stdio_service_tools",
+        "Actual_Terraform_plugin"
+      ]
+    },
+    {
+      "file": "g5-compensation.trx",
+      "patterns": [
+        "Compensation"
+      ]
+    }
+  ],
+  "requiredKafkaMatrix": [
+    {
+      "version": "4.3.1",
+      "tier": "tier1",
+      "artifact": "kafka-4.3.1-tier1",
+      "job": "kafka-4.3.1-tier1"
+    },
+    {
+      "version": "4.2.1",
+      "tier": "tier1",
+      "artifact": "kafka-4.2.1-tier1",
+      "job": "kafka-4.2.1-tier1"
+    },
+    {
+      "version": "4.1.2",
+      "tier": "tier1",
+      "artifact": "kafka-4.1.2-tier1",
+      "job": "kafka-4.1.2-tier1"
+    },
+    {
+      "version": "3.9.2",
+      "tier": "tier2",
+      "artifact": "kafka-3.9.2-tier2",
+      "job": "kafka-3.9.2-tier2"
+    }
+  ],
+  "requiredKafkaBatches": [
+    {
+      "file": "kafka-1.trx",
+      "testClass": "KafkaAdapterIntegrationTests"
+    },
+    {
+      "file": "kafka-2.trx",
+      "testClass": "KafkaTopicMutationIntegrationTests"
+    },
+    {
+      "file": "kafka-3.trx",
+      "testClass": "KafkaRecordProduceIntegrationTests"
+    },
+    {
+      "file": "kafka-4.trx",
+      "testClass": "KafkaConsumerMutationIntegrationTests"
+    },
+    {
+      "file": "kafka-5.trx",
+      "testClass": "KafkaRecordsPurgeIntegrationTests"
+    },
+    {
+      "file": "kafka-6.trx",
+      "testClass": "KafkaAclMutationIntegrationTests"
+    },
+    {
+      "file": "kafka-7.trx",
+      "testClass": "KafkaScramMutationIntegrationTests"
+    },
+    {
+      "file": "kafka-8.trx",
+      "testClass": "KafkaAdapterIntegrationTestsAuthorization"
+    }
+  ]
+}

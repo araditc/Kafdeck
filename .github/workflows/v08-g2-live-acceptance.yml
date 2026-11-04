@@ -36,7 +36,7 @@ jobs:
         run: >-
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release --no-restore
-          --filter 'FullyQualifiedName~V08W67CliPkceLoopbackBoundaryTests|FullyQualifiedName~V08W67CliSocketCallbackTests|FullyQualifiedName~V08W67HumanCliBoundaryTests|FullyQualifiedName~V08W67GovernedBearerBoundaryTests|FullyQualifiedName~V08W67CriticalApprovalBoundaryTests|FullyQualifiedName~V08W67TopicLifecycleBoundaryTests|FullyQualifiedName~V08AuthorizationActionIsolationTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests'
+          --filter 'FullyQualifiedName~V08W67CliPkceLoopbackBoundaryTests|FullyQualifiedName~V08W67CliSocketCallbackTests|FullyQualifiedName~V08W67HumanCliBoundaryTests|FullyQualifiedName~V08W67GovernedBearerBoundaryTests|FullyQualifiedName~V08W67CriticalApprovalBoundaryTests|FullyQualifiedName~V08W67TopicLifecycleBoundaryTests|FullyQualifiedName~V08AuthorizationActionIsolationTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08G5CompensationStoreTests.SQLite|FullyQualifiedName~V08G5ClientBoundaryTests'
 
   real-human-cli-and-transports:
     runs-on: ubuntu-24.04
@@ -246,6 +246,12 @@ jobs:
           test -s "$KAFDECK_G4_MCP_DLL"
           cmp src/mcp/Kafdeck.Mcp/bin/Release/net10.0/kafdeck-mcp.dll "$KAFDECK_G4_MCP_DLL"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08G5CompensationLiveTests' --results-directory artifacts/g5-ci --logger 'trx;LogFileName=g5-compensation.trx'
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V08G5CompensationStoreTests|FullyQualifiedName~V08G5CompensationSourceOutcomeTests|FullyQualifiedName~V08G5ClientBoundaryTests|FullyQualifiedName~V08W62|FullyQualifiedName~V08W63|FullyQualifiedName~V08W64|FullyQualifiedName~V08W65' --results-directory artifacts/g5-ci --logger 'trx;LogFileName=g5-regression.trx'
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-g5-compensation-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g5-compensation-evidence.json"
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V08G4' --results-directory artifacts/g4-ci --logger 'trx;LogFileName=g4-live.trx'
           for provider in sqlite postgres; do
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-terraform-evidence.json"
@@ -274,6 +280,7 @@ jobs:
           path: |
             artifacts/g2-ci/g2-live.trx
             artifacts/g4-ci/g4-live.trx
+            artifacts/g5-ci/*.trx
             artifacts/g2-ci/identity/*-evidence.json
           if-no-files-found: error
       - name: Stop isolated identity process

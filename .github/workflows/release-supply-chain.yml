@@ -8,6 +8,15 @@ on:
       - '.github/workflows/release-supply-chain.yml'
       - '.github/workflows/publish-release.yml'
       - '.github/release/release.json'
+      - 'tools/Kafdeck.OfflineProbe/**'
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'src/**'
+      - 'tools/Kafdeck.OfflineProbe/**'
+      - '.github/workflows/release-supply-chain.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,7 +29,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -33,11 +42,38 @@ jobs:
           load: true
           push: false
           provenance: false
-          tags: kafdeck:evidence-${{ github.event.pull_request.head.sha }}
+          tags: kafdeck:evidence-${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Select exact candidate reference
         shell: bash
-        run: echo "CANDIDATE_REF=kafdeck:evidence-${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+        run: echo "CANDIDATE_REF=kafdeck:evidence-${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Setup offline probe build SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Prove isolated candidate startup and retain offline image
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_METADATA: ${{ steps.build.outputs.metadata }}
+        run: |
+          set -euo pipefail
+          dotnet restore tools/Kafdeck.OfflineProbe/Kafdeck.OfflineProbe.csproj --locked-mode
+          dotnet publish tools/Kafdeck.OfflineProbe/Kafdeck.OfflineProbe.csproj -c Release --no-restore -o .artifacts/offline-probe
+          cleanup() { docker rm -f kafdeck-g5-offline >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --detach --name kafdeck-g5-offline --network none \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/.artifacts/offline-probe,dst=/offline-probe,readonly" "$CANDIDATE_REF"
+          docker exec kafdeck-g5-offline dotnet /offline-probe/Kafdeck.OfflineProbe.dll > offline-startup-evidence.json
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' kafdeck-g5-offline)" = none
+          image_id="$(docker image inspect --format '{{.Id}}' "$CANDIDATE_REF")"
+          docker image save "$CANDIDATE_REF" | gzip -n > kafdeck-offline-candidate.tar.gz
+          archive_sha="$(sha256sum kafdeck-offline-candidate.tar.gz | cut -d' ' -f1)"
+          jq -n --arg source "$SOURCE_SHA" --arg image "$image_id" --arg archive "$archive_sha" \
+            --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --argjson metadata "$BUILD_METADATA" \
+            '{schemaVersion:1,sourceSha:$source,imageId:$image,archiveSha256:$archive,runUrl:$run,buildMetadata:$metadata,published:false,publication:false,signature:"unsigned candidate build record; publication attestation is a separate gate"}' > candidate-provenance.json
 
       - name: Generate SPDX SBOM for exact candidate
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -46,6 +82,13 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
 
+      - name: Bind candidate SBOM to retained provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum sbom.spdx.json | cut -d' ' -f1)"
+          jq --arg digest "$digest" '. + {sbomSha256:$digest,imageArchiveSha256:.archiveSha256}' candidate-provenance.json > candidate-provenance.tmp
+          mv candidate-provenance.tmp candidate-provenance.json
       - name: Scan exact candidate for High/Critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -61,8 +104,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-evidence-${{ github.event.pull_request.head.sha }}
+          name: release-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          compression-level: 0
           path: |
             sbom.spdx.json
             trivy-results.sarif
+            candidate-provenance.json
+            offline-startup-evidence.json
+            kafdeck-offline-candidate.tar.gz
           if-no-files-found: warn

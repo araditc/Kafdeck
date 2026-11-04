@@ -75,6 +75,20 @@ public static class McpTools
         foreach (var verb in new[] { "apply", "recover" }) tools.Add(Tool("declarative_" + verb, "Explicit governed " + verb + "; never retries or approves; recovery requires the backend's positive verified receipt.", true,
             [("planId",UuidSchema()),("planFingerprint",HashSchema())], ["planId","planFingerprint"], args =>
                 new("/api/v1/declarative/plans/" + Id(args,"planId") + "/" + verb, new { planFingerprint=Hash(args,"planFingerprint") }, Post:true)));
+        tools.Add(Tool("compensation_catalog", "Inspect versioned safe-inverse eligibility; delivered notifications and unknown effects cannot be undone.", false,
+            [], [], _ => new("/api/v1/declarative/compensation/catalog")));
+        tools.Add(Tool("compensation_inspect", "Inspect current safe inverse evidence. A fresh plan and independent human approval remain mandatory.", false,
+            [("planId",UuidSchema())], ["planId"], args => new("/api/v1/declarative/plans/"+Id(args,"planId")+"/compensation")));
+        var inverseSchema=(JsonObject)tools.Single(x=>x.Name=="declarative_plan").InputSchema.DeepClone();
+        inverseSchema["properties"]!.AsObject()["sourcePlanId"]=UuidSchema();
+        inverseSchema["required"]!.AsArray().Add("sourcePlanId");
+        tools.Add(new("compensation_preview", "Create a fresh sealed inverse plan after explicit source advance. Never confirms, approves or applies automatically.",inverseSchema,true,args=>
+        {
+            var manifest=DeclarativeSubscriptionManifest.Parse(Encoding.UTF8.GetBytes(Text(args,"manifest")),Text(args,"format"));
+            return new("/api/v1/declarative/plans/"+Id(args,"sourcePlanId")+"/compensation-preview",new
+            { manifest=Encoding.UTF8.GetString(manifest.ToCanonicalUtf8()),format="json",sourceRef=Segment(args,"sourceRef"),
+                sourceRevision=Hash(args,"sourceRevision"),expectedOwnershipRevision=args.GetProperty("expectedOwnershipRevision").GetInt64() },Segment(args,"idempotencyKey"),true);
+        }));
         return tools.AsReadOnly();
     }
     public static bool Validate(JsonElement arguments, JsonObject schema)
