@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'docs/implementation/v0.8-g5*'
+      - 'scripts/release/**'
       - 'docs/releases/v0.8*'
       - 'src/backend/Kafdeck.Api/*Compensation*'
       - 'deploy/dev/**'
@@ -19,6 +20,7 @@ on:
       - 'v*'
     paths:
       - 'docs/implementation/v0.8-g5*'
+      - 'scripts/release/**'
       - 'docs/releases/v0.8*'
       - 'src/backend/Kafdeck.Api/*Compensation*'
       - 'deploy/dev/**'

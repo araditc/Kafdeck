@@ -79,11 +79,15 @@ foreach ($broker in $required.requiredKafkaMatrix) {
             $results=@($xml.SelectNodes("//*[local-name()='UnitTestResult']"))
             $definitions=@($xml.SelectNodes("//*[local-name()='TestDefinitions']/*[local-name()='UnitTest']"))
             if($results.Count -ne $c.total -or @($results|Where-Object outcome -ne 'Passed').Count){$valid=$false;continue}
+            $observedClasses=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
             foreach($result in $results) {
                 $definition=@($definitions|Where-Object id -eq $result.testId)
                 $method=if($definition.Count -eq 1){$definition[0].SelectSingleNode("*[local-name()='TestMethod']")}else{$null}
-                if($null -eq $method -or -not $method.className.EndsWith('.'+$batch.testClass,[StringComparison]::Ordinal)){$valid=$false}
+                $matchingClass=@()
+                if($null -ne $method){$matchingClass=@($batch.testClasses|Where-Object {$method.className.EndsWith('.'+$_,[StringComparison]::Ordinal)})}
+                if($matchingClass.Count -ne 1){$valid=$false}else{[void]$observedClasses.Add($matchingClass[0])}
             }
+            foreach($class in $batch.testClasses){if(-not $observedClasses.Contains($class)){$valid=$false}}
         }
         if($valid){$complete=$true}
     }

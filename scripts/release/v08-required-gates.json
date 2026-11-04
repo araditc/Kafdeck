@@ -98,35 +98,52 @@
   "requiredKafkaBatches": [
     {
       "file": "kafka-1.trx",
-      "testClass": "KafkaAdapterIntegrationTests"
+      "testClasses": [
+        "KafkaAdapterIntegrationTests",
+        "KafkaAdapterIntegrationTestsRecordRead"
+      ]
     },
     {
       "file": "kafka-2.trx",
-      "testClass": "KafkaTopicMutationIntegrationTests"
+      "testClasses": [
+        "KafkaTopicMutationIntegrationTests"
+      ]
     },
     {
       "file": "kafka-3.trx",
-      "testClass": "KafkaRecordProduceIntegrationTests"
+      "testClasses": [
+        "KafkaRecordProduceIntegrationTests"
+      ]
     },
     {
       "file": "kafka-4.trx",
-      "testClass": "KafkaConsumerMutationIntegrationTests"
+      "testClasses": [
+        "KafkaConsumerMutationIntegrationTests"
+      ]
     },
     {
       "file": "kafka-5.trx",
-      "testClass": "KafkaRecordsPurgeIntegrationTests"
+      "testClasses": [
+        "KafkaRecordsPurgeIntegrationTests"
+      ]
     },
     {
       "file": "kafka-6.trx",
-      "testClass": "KafkaAclMutationIntegrationTests"
+      "testClasses": [
+        "KafkaAclMutationIntegrationTests"
+      ]
     },
     {
       "file": "kafka-7.trx",
-      "testClass": "KafkaScramMutationIntegrationTests"
+      "testClasses": [
+        "KafkaScramMutationIntegrationTests"
+      ]
     },
     {
       "file": "kafka-8.trx",
-      "testClass": "KafkaAdapterIntegrationTestsAuthorization"
+      "testClasses": [
+        "KafkaAdapterIntegrationTestsAuthorization"
+      ]
     }
   ]
 }

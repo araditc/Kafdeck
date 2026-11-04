@@ -8,6 +8,7 @@ on:
       - 'src/frontend/**'
       - 'src/mcp/**'
       - 'providers/terraform/**'
+      - 'scripts/release/**'
       - '.github/workflows/codeql.yml'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - 'src/frontend/**'
       - 'src/mcp/**'
       - 'providers/terraform/**'
+      - 'scripts/release/**'
       - '.github/workflows/codeql.yml'
 
 permissions:

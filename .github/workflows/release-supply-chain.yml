@@ -9,12 +9,14 @@ on:
       - '.github/workflows/publish-release.yml'
       - '.github/release/release.json'
       - 'tools/Kafdeck.OfflineProbe/**'
+      - 'scripts/release/**'
   push:
     branches: [main]
     paths:
       - 'Dockerfile'
       - 'src/**'
       - 'tools/Kafdeck.OfflineProbe/**'
+      - 'scripts/release/**'
       - '.github/workflows/release-supply-chain.yml'
   workflow_dispatch:
 
