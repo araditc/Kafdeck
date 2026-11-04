@@ -150,37 +150,105 @@ BEGIN
      ))<>6 THEN
    RAISE EXCEPTION 'W68 schema lacks exact required primary keys';
  END IF;
- -- Ensure the essential fencing and audit fields were not type-weakened.
+ -- Verify the exact column set, PostgreSQL types and NOT NULL on ALL six
+ -- persisted W68 tables, not merely selected fencing/audit fields.
  IF (WITH required(tbl, col, kind) AS (
-       VALUES
+     VALUES
+       ('kafdeck_declarative_schema_migrations','version','integer'),
+       ('kafdeck_declarative_schema_migrations','manifest_id','character varying(128)'),
+       ('kafdeck_declarative_schema_migrations','applied_at_utc','timestamp with time zone'),
+       ('kafdeck_declarative_key_versions','deployment_id','character varying(128)'),
+       ('kafdeck_declarative_key_versions','scope_kind','character varying(64)'),
+       ('kafdeck_declarative_key_versions','scope_id','character varying(128)'),
+       ('kafdeck_declarative_key_versions','resource_kind','character varying(64)'),
+       ('kafdeck_declarative_key_versions','resource_id','character varying(128)'),
        ('kafdeck_declarative_key_versions','revision_high_water','bigint'),
+       ('kafdeck_declarative_ownership','deployment_id','character varying(128)'),
+       ('kafdeck_declarative_ownership','scope_kind','character varying(64)'),
+       ('kafdeck_declarative_ownership','scope_id','character varying(128)'),
+       ('kafdeck_declarative_ownership','resource_kind','character varying(64)'),
+       ('kafdeck_declarative_ownership','resource_id','character varying(128)'),
+       ('kafdeck_declarative_ownership','registered_owner_id','character varying(128)'),
+       ('kafdeck_declarative_ownership','registered_source_id','character varying(128)'),
+       ('kafdeck_declarative_ownership','registered_source_generation_id','uuid'),
+       ('kafdeck_declarative_ownership','pinned_source_revision','character(64)'),
+       ('kafdeck_declarative_ownership','ownership_generation_id','uuid'),
        ('kafdeck_declarative_ownership','ownership_revision','bigint'),
        ('kafdeck_declarative_ownership','stored_lease_epoch','bigint'),
+       ('kafdeck_declarative_ownership','ownership_state','character varying(32)'),
+       ('kafdeck_declarative_ownership','evidence_fingerprint','character(64)'),
+       ('kafdeck_declarative_ownership','claimant_principal_id','character varying(256)'),
+       ('kafdeck_declarative_ownership','policy_version','character varying(128)'),
+       ('kafdeck_declarative_ownership','audit_operation_id','character varying(128)'),
+       ('kafdeck_declarative_ownership','updated_at_utc','timestamp with time zone'),
+       ('kafdeck_declarative_controller_leases','deployment_id','character varying(128)'),
+       ('kafdeck_declarative_controller_leases','lease_scope_id','character varying(128)'),
+       ('kafdeck_declarative_controller_leases','holder_id','character varying(128)'),
        ('kafdeck_declarative_controller_leases','epoch','bigint'),
        ('kafdeck_declarative_controller_leases','expires_at_utc','timestamp with time zone'),
+       ('kafdeck_declarative_lease_epoch_high_water','deployment_id','character varying(128)'),
+       ('kafdeck_declarative_lease_epoch_high_water','lease_scope_id','character varying(128)'),
        ('kafdeck_declarative_lease_epoch_high_water','epoch_high_water','bigint'),
-       ('kafdeck_declarative_ownership_audit','new_revision','bigint'),
+       ('kafdeck_declarative_ownership_audit','operation_id','character varying(128)'),
+       ('kafdeck_declarative_ownership_audit','deployment_id','character varying(128)'),
+       ('kafdeck_declarative_ownership_audit','scope_kind','character varying(64)'),
+       ('kafdeck_declarative_ownership_audit','scope_id','character varying(128)'),
+       ('kafdeck_declarative_ownership_audit','resource_kind','character varying(64)'),
+       ('kafdeck_declarative_ownership_audit','resource_id','character varying(128)'),
+       ('kafdeck_declarative_ownership_audit','principal_id','character varying(128)'),
+       ('kafdeck_declarative_ownership_audit','owner_id','character varying(128)'),
+       ('kafdeck_declarative_ownership_audit','source_id','character varying(128)'),
        ('kafdeck_declarative_ownership_audit','lease_epoch','bigint'),
-       ('kafdeck_declarative_ownership_audit','recorded_at_utc','timestamp with time zone'),
-       ('kafdeck_declarative_schema_migrations','version','integer')
+       ('kafdeck_declarative_ownership_audit','new_revision','bigint'),
+       ('kafdeck_declarative_ownership_audit','event_fingerprint','character(64)'),
+       ('kafdeck_declarative_ownership_audit','recorded_at_utc','timestamp with time zone')
+   ), observed AS (
+     SELECT rel.relname::text AS tbl, att.attname::text AS col,
+            pg_catalog.format_type(att.atttypid,att.atttypmod) AS kind,
+            att.attnotnull AS required_not_null
+     FROM pg_class rel
+     JOIN pg_namespace ns ON ns.oid=rel.relnamespace
+     JOIN pg_attribute att ON att.attrelid=rel.oid
+     WHERE ns.nspname=current_schema() AND rel.relkind='r'
+       AND rel.relname IN (SELECT DISTINCT tbl FROM required)
+       AND att.attnum>0 AND NOT att.attisdropped
+   )
+   SELECT (SELECT count(*) FROM observed)=(SELECT count(*) FROM required)
+     AND NOT EXISTS(
+       SELECT 1 FROM required r LEFT JOIN observed o
+         ON o.tbl=r.tbl AND o.col=r.col
+       WHERE o.col IS NULL OR o.kind<>r.kind OR NOT o.required_not_null
      )
-     SELECT count(*) FROM required r JOIN information_schema.columns c
-       ON c.table_schema=current_schema() AND c.table_name=r.tbl
-       AND c.column_name=r.col AND c.data_type=r.kind AND c.is_nullable='NO'
-     )<>10 THEN
-   RAISE EXCEPTION 'W68 schema has incompatible critical column invariants';
+ ) IS NOT TRUE THEN
+   RAISE EXCEPTION 'W68 column set/type/nullability differs from versioned baseline';
  END IF;
+ -- Require a validated FK to the exact ledger relation in this schema,
+ -- with the same ordered five resource-key columns on both sides.
  IF NOT EXISTS (
    SELECT 1 FROM pg_constraint fk
-   JOIN pg_class tbl ON tbl.oid=fk.conrelid
-   JOIN pg_namespace ns ON ns.oid=tbl.relnamespace
+   JOIN pg_class child ON child.oid=fk.conrelid
+   JOIN pg_namespace child_ns ON child_ns.oid=child.relnamespace
    JOIN pg_class parent ON parent.oid=fk.confrelid
-   WHERE ns.nspname=current_schema()
-     AND tbl.relname='kafdeck_declarative_ownership'
+   JOIN pg_namespace parent_ns ON parent_ns.oid=parent.relnamespace
+   WHERE child_ns.nspname=current_schema()
+     AND parent_ns.nspname=current_schema()
+     AND child.relname='kafdeck_declarative_ownership'
      AND parent.relname='kafdeck_declarative_key_versions'
-     AND fk.contype='f'
+     AND fk.conrelid=to_regclass(format('%I.%I',current_schema(),'kafdeck_declarative_ownership'))
+     AND fk.confrelid=to_regclass(format('%I.%I',current_schema(),'kafdeck_declarative_key_versions'))
+     AND fk.contype='f' AND fk.convalidated
+     AND ARRAY(
+       SELECT attr.attname::text FROM unnest(fk.conkey) WITH ORDINALITY k(attnum,ord)
+       JOIN pg_attribute attr ON attr.attrelid=child.oid AND attr.attnum=k.attnum
+       ORDER BY k.ord
+     )=ARRAY['deployment_id','scope_kind','scope_id','resource_kind','resource_id']
+     AND ARRAY(
+       SELECT attr.attname::text FROM unnest(fk.confkey) WITH ORDINALITY k(attnum,ord)
+       JOIN pg_attribute attr ON attr.attrelid=parent.oid AND attr.attnum=k.attnum
+       ORDER BY k.ord
+     )=ARRAY['deployment_id','scope_kind','scope_id','resource_kind','resource_id']
  ) THEN
-   RAISE EXCEPTION 'W68 ownership foreign-key invariant absent';
+   RAISE EXCEPTION 'W68 ownership FK is missing, unvalidated or incorrectly targeted';
  END IF;
  IF NOT EXISTS (
    SELECT 1 FROM information_schema.columns c
