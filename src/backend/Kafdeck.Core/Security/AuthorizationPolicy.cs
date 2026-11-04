@@ -64,6 +64,11 @@ public enum AuthorizationAction
     MutationApprove = 56,
     StreamsRead = 57,
     LineageRead = 58,
+    DeclarativeRead = 59,
+    DeclarativePlan = 60,
+    DeclarativeAdopt = 61,
+    DeclarativeApply = 62,
+    DeclarativeSourceManage = 63,
 }
 
 public enum AuthorizationDecisionReason

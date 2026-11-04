@@ -543,6 +543,53 @@ public sealed class AdoNotificationRoutingStore :
             updatedAtUtc);
     }
 
+    /// <summary>Typed declarative CAS inside the caller's existing transaction. Never commits or starts a second connection.</summary>
+    public static async Task<NotificationSubscriptionSnapshot?> WriteSubscriptionInTransactionAsync(
+        DbConnection connection, DbTransaction transaction, NotificationSubscriptionDefinition definition,
+        NotificationSubscriptionState state, long? expectedRevision, DateTimeOffset now,
+        bool lockRow, CancellationToken token = default)
+    {
+        ValidateSubscriptionWrite(definition, state, now);
+        if (transaction.Connection != connection || state == NotificationSubscriptionState.Retired || expectedRevision is < 1)
+            throw new ArgumentException("Declarative writes require a live transaction, an Active/Paused state and exact CAS revision.");
+        var existing = await ReadSubscriptionRowAsync(connection, transaction, definition.SubscriptionId, lockRow, token).ConfigureAwait(false);
+        if (expectedRevision is null ? existing is not null : existing is null || existing.Revision != expectedRevision)
+            return null;
+        if (existing?.State == NotificationSubscriptionState.Retired || existing is not null && now < existing.UpdatedAtUtc) return null;
+        await using var command = connection.CreateCommand(); command.Transaction = transaction;
+        command.CommandText = expectedRevision is null
+            ? """
+              INSERT INTO kafdeck_notification_subscriptions
+              (subscription_id,destination_id,lifecycle_state,revision,updated_at_utc,event_types_json,is_retired)
+              VALUES (@subscription_id,@destination_id,@state,1,@updated_at_utc,@event_types_json,@is_retired)
+              ON CONFLICT (subscription_id) DO NOTHING
+              """
+            : """
+              UPDATE kafdeck_notification_subscriptions
+              SET destination_id=@destination_id,lifecycle_state=@state,event_types_json=@event_types_json,
+                  is_retired=@is_retired,revision=revision+1,updated_at_utc=@updated_at_utc
+              WHERE subscription_id=@subscription_id AND revision=@expected_revision AND is_retired=0
+              """;
+        BindSubscription(command, definition, state, now);
+        if (expectedRevision is not null) AddParameter(command, "@expected_revision", expectedRevision.Value);
+        if (await command.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return null;
+        await ReplaceEventClassesAsync(connection, transaction, definition, token).ConfigureAwait(false);
+        return new(definition, state, expectedRevision is null ? 1 : checked(expectedRevision.Value + 1), now);
+    }
+
+    /// <summary>Reads metadata under the same parent row lock used by all subscription updates.</summary>
+    public static async Task<NotificationSubscriptionSnapshot?> ReadSubscriptionInTransactionAsync(
+        DbConnection connection, DbTransaction transaction, string subscriptionId, bool lockRow,
+        CancellationToken token = default)
+    {
+        if (transaction.Connection != connection) throw new ArgumentException("The transaction must belong to the supplied connection.");
+        subscriptionId = NotificationSubscriptionDefinition.NormalizeSubscriptionId(subscriptionId);
+        var row = await ReadSubscriptionRowAsync(connection, transaction, subscriptionId, lockRow, token).ConfigureAwait(false);
+        if (row is null) return null;
+        var classes = await ReadEventClassesAsync(connection, transaction, [subscriptionId], token).ConfigureAwait(false);
+        return ToSnapshot(row, classes[subscriptionId]);
+    }
+
     public async Task<NotificationSubscriptionPage>
         ListSubscriptionsAsync(
             NotificationSubscriptionQuery query,
@@ -812,7 +859,7 @@ public sealed class AdoNotificationRoutingStore :
                 reader.GetString(6)));
     }
 
-    private async Task<SubscriptionRow?>
+    private static async Task<SubscriptionRow?>
         ReadSubscriptionRowAsync(
             DbConnection connection,
             DbTransaction transaction,
@@ -875,7 +922,7 @@ public sealed class AdoNotificationRoutingStore :
             Parse(reader.GetString(4)),
             reader.GetString(5));
 
-    private async Task<Dictionary<string, IReadOnlyList<NotificationEventClass>>>
+    private static async Task<Dictionary<string, IReadOnlyList<NotificationEventClass>>>
         ReadEventClassesAsync(
             DbConnection connection,
             DbTransaction? transaction,
@@ -953,7 +1000,7 @@ public sealed class AdoNotificationRoutingStore :
             StringComparer.Ordinal);
     }
 
-    private async Task ReplaceEventClassesAsync(
+    private static async Task ReplaceEventClassesAsync(
         DbConnection connection,
         DbTransaction transaction,
         NotificationSubscriptionDefinition definition,

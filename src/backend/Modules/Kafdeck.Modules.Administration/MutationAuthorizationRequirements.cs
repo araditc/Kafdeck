@@ -22,6 +22,9 @@ public static class MutationAuthorizationRequirements
             "Operation physical cluster",
             256);
 
+        if (kind == MutationOperationKind.DeclarativeNotificationSubscription)
+            return DeclarativeMutationAuthorization.Normalize(normalizedOperationCluster, requirements);
+
         if (kind == MutationOperationKind.ConnectAutoRestartPolicy)
         {
             return NormalizeConnectAutoRestartRequirements(

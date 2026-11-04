@@ -516,5 +516,6 @@ public sealed class MutationDispatchService
             MutationOperationKind.ConnectAutoRestartPolicy or
             MutationOperationKind.DataJob or
             MutationOperationKind.DataGenerator or
+            MutationOperationKind.DeclarativeNotificationSubscription or
             MutationOperationKind.FleetUncertaintyDisposition;
 }

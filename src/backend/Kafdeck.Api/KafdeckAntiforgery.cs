@@ -83,6 +83,9 @@ public static class KafdeckAntiforgeryExtensions
             // Only these compiled, bounded read-only POST contracts may use
             // the separate verified bearer identity. Browser cookies still require CSRF.
             var http = invocation.HttpContext;
+            if (http.User.Identity is NonBrowserReadIdentity &&
+                http.GetEndpoint()?.Metadata.GetMetadata<DeclarativeRouteContract>() is not null)
+                return await next(invocation).ConfigureAwait(false);
             var read = Kafdeck.Contracts.KafdeckReadContracts.Find(http.GetEndpoint()?.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName);
             if (http.User.Identity is NonBrowserReadIdentity && read?.Method == "post" && BearerReadBoundary.Matches(http, read))
                 return await next(invocation).ConfigureAwait(false);

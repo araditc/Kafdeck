@@ -50,6 +50,7 @@ public enum MutationOperationKind
     ConnectAutoRestartPolicy = 28,
     DataJob = 29,
     DataGenerator = 30,
+    DeclarativeNotificationSubscription = 31,
 }
 
 public enum MutationRiskClass

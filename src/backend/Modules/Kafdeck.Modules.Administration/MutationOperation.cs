@@ -432,6 +432,32 @@ public sealed class MutationOperation
         Transition(MutationOperationState.Expired, nowUtc);
     }
 
+    // A positive backend transaction receipt resolves acknowledgement loss.
+    // This never authorizes another dispatch or infers success from absence.
+    public void ReconcileVerifiedDeclarativeCommit(Guid receiptOperationId, string planFingerprint,
+        long ownershipRevision, long subscriptionRevision, DateTimeOffset committedAtUtc, DateTimeOffset nowUtc)
+    {
+        RequireState(MutationOperationState.ExecutionUnknown);
+        if (Snapshot.OperationKind != MutationOperationKind.DeclarativeNotificationSubscription ||
+            receiptOperationId != Snapshot.OperationId || Snapshot.DispatchStartedAtUtc is null ||
+            planFingerprint is not { Length: 64 } || !planFingerprint.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            Snapshot.Preconditions.Count(p => p.Key == "declarative.plan" && p.Fingerprint == planFingerprint) != 1 ||
+            ownershipRevision < 1 || subscriptionRevision < 1 || committedAtUtc == default || committedAtUtc > nowUtc)
+            throw new MutationStateException("A matching durable declarative commit receipt is required.");
+        Snapshot = Snapshot with
+        {
+            ResultCode = "declarative_commit_receipt_recovered",
+            SafeProviderEvidence = MutationProviderEvidence.Normalize(new Dictionary<string, string>
+            {
+                ["declarative.plan"] = receiptOperationId.ToString("D"),
+                ["declarative.plan-fingerprint"] = planFingerprint,
+                ["declarative.ownership-revision"] = ownershipRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["declarative.subscription-revision"] = subscriptionRevision.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            })
+        };
+        Transition(MutationOperationState.AppliedVerified, nowUtc);
+    }
+
     private void Transition(MutationOperationState state, DateTimeOffset nowUtc)
     {
         Snapshot = Snapshot with

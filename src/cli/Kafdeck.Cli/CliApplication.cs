@@ -57,6 +57,9 @@ public static class CliApplication
             var requestToken =
                 deadline.Token;
 
+            if (invocation.Declarative is not null)
+                return await CliDeclarativeCommands.ExecuteAsync(invocation, output, error, requestToken, openBrowser);
+
             using var familyPayload = await CliFamilyCommands.ReadPayloadAsync(invocation.Family, requestToken);
 
             using var client = await KafdeckCliClient.CreateAsync(
@@ -295,6 +298,7 @@ public enum CliCommand
     OperationReject = 25,
     FamilyMutation = 26,
     MutationCapabilities = 27,
+    Declarative = 28,
 }
 
 public enum CliOutputFormat
@@ -323,13 +327,15 @@ public sealed record CliInvocation(
     short? ReplicationFactor = null,
     string? ServiceProfileFile = null,
     IReadOnlyDictionary<string, string?>? TopicConfigurations = null,
-    CliFamilyInvocation? Family = null);
+    CliFamilyInvocation? Family = null,
+    CliDeclarativeInvocation? Declarative = null);
 
 public static class CliRouteBuilder
 {
     public static string Build(
         CliInvocation invocation)
     {
+        if (invocation.Declarative is not null) return CliDeclarativeCommands.BuildRoute(invocation.Declarative);
         if (invocation.Family is not null) return invocation.Family.Route;
         ArgumentNullException.ThrowIfNull(
             invocation);
@@ -522,6 +528,14 @@ public static class CliParser
           kafdeck --oidc-profile <profile> notifications recovery approve <operation-id> --request-file <revision-hash.json>
           kafdeck --oidc-profile <profile> notifications recovery apply <operation-id> --request-file <revision-hash.json>
           kafdeck [global-options] capabilities mutations
+          kafdeck declarative validate --manifest-file <closed.json|yaml> --source <registered-source> --source-revision <sha256> --ownership-revision <number>
+          kafdeck --service-profile <profile> declarative observe|drift|import|plan|reconcile --manifest-file <closed.json|yaml> --source <registered-source> --source-revision <sha256> --ownership-revision <number> [--idempotency-key <key>] [--yes]
+          kafdeck --service-profile <profile> declarative apply <plan-id> <plan-fingerprint>
+          kafdeck --service-profile <profile> declarative recover <plan-id> <plan-fingerprint>
+          kafdeck --service-profile <profile> declarative show <plan-id>
+          kafdeck --service-profile <profile> declarative capabilities
+          kafdeck --service-profile <profile> declarative source-show <source> --resource <resource-id>
+          kafdeck --service-profile <profile> declarative source-advance <source> <expected-generation> <expected-revision> <expected-hash> --manifest-file <closed.json|yaml>
           kafdeck --oidc-profile <profile> views v08-bearer-read-capabilities
           kafdeck --service-profile <profile> views <exact-versioned-view-name> <path-identities...> [--request-file <closed-query-or-body.json>]
           kafdeck --help
@@ -577,6 +591,9 @@ public static class CliParser
         string? idempotencyKey = null;
         string? typedChallenge = null;
         string? familyRequestFile = null;
+        string? manifestFile = null, manifestFormat = null, declarativeSource = null, sourceRevision = null, ownershipRevision = null;
+        string? declarativeResource = null;
+        var declarativeYes = false;
         var topicConfigurations = new Dictionary<string, string?>(StringComparer.Ordinal);
         string? search = null;
         string? cursor = null;
@@ -633,6 +650,28 @@ public static class CliParser
                     if (familyRequestFile is not null) throw new CliUsageException("A named family command accepts one request file.");
                     familyRequestFile = ValidateBoundedOption(RequireValue(args, ref index, "--request-file"), "--request-file", 2048);
                     break;
+                case "--manifest-file":
+                    if (manifestFile is not null) throw new CliUsageException("One manifest file is admitted.");
+                    manifestFile = ValidateBoundedOption(RequireValue(args, ref index, value), value, 2048);
+                    break;
+                case "--format":
+                    if (manifestFormat is not null) throw new CliUsageException("One manifest format is admitted.");
+                    manifestFormat = RequireValue(args, ref index, value); break;
+                case "--source":
+                    if (declarativeSource is not null) throw new CliUsageException("One registered source is admitted.");
+                    declarativeSource = RequireValue(args, ref index, value); break;
+                case "--source-revision":
+                    if (sourceRevision is not null) throw new CliUsageException("One source revision is admitted.");
+                    sourceRevision = RequireValue(args, ref index, value); break;
+                case "--ownership-revision":
+                    if (ownershipRevision is not null) throw new CliUsageException("One ownership revision is admitted.");
+                    ownershipRevision = RequireValue(args, ref index, value); break;
+                case "--yes":
+                    if (declarativeYes) throw new CliUsageException("Consent can be supplied once.");
+                    declarativeYes = true; break;
+                case "--resource":
+                    if (declarativeResource is not null) throw new CliUsageException("One declarative resource is admitted.");
+                    declarativeResource = RequireValue(args, ref index, value); break;
                 case "--reset-config":
                     CliTopicConfiguration.Add(topicConfigurations, RequireValue(args, ref index, "--reset-config"), reset: true);
                     break;
@@ -717,8 +756,11 @@ public static class CliParser
         var baseUri =
             ResolveBaseUri(url);
 
+        var declarative = CliDeclarativeCommands.TryParse(positionals, manifestFile, manifestFormat, declarativeSource, sourceRevision, ownershipRevision, declarativeYes, declarativeResource);
         var family = CliReadCommands.TryParse(positionals) ?? CliFamilyCommands.TryParse(positionals);
-        var invocation = family is not null
+        var invocation = declarative is not null
+            ? new CliInvocation(baseUri, tokenFile, CliCommand.Declarative, null, false, Output: output, Declarative: declarative)
+            : family is not null
             ? new CliInvocation(baseUri, tokenFile, CliCommand.FamilyMutation, null, false, Output: output, Family: family)
             : ParseCommand(
                 baseUri,
@@ -745,6 +787,8 @@ public static class CliParser
             throw new CliUsageException("OIDC sign-in cannot be combined with a deployment access-token source.");
         if (CliApplication.IsMutation(invocation.Command) && oidcProfileFile is null && serviceProfileFile is null)
             throw new CliUsageException("Governed operation commands require --oidc-profile or --service-profile; deployment credentials never acquire mutation authority.");
+        if (declarative is not null && declarative.Command != "validate" && oidcProfileFile is null && serviceProfileFile is null)
+            throw new CliUsageException("Declarative API commands require a registered human or service OIDC profile.");
         if (invocation.Command is CliCommand.OperationApproval or CliCommand.OperationApprove or CliCommand.OperationReject && oidcProfileFile is null)
             throw new CliUsageException("Human approval commands require --oidc-profile; a service cannot become a human approver.");
         if (family?.HumanOnly == true && oidcProfileFile is null)
@@ -752,6 +796,7 @@ public static class CliParser
         var isTopicPreview = invocation.Command is CliCommand.TopicCreatePreview or CliCommand.TopicDeletePreview or
             CliCommand.TopicAlterPreview or CliCommand.TopicIncreasePartitionsPreview;
         isTopicPreview |= family?.Preview == true;
+        isTopicPreview |= declarative?.Command is "import-preview" or "plan" or "reconcile";
         if (isTopicPreview && idempotencyKey is null)
             throw new CliUsageException("A named mutation preview requires --idempotency-key.");
         if (!isTopicPreview && idempotencyKey is not null ||

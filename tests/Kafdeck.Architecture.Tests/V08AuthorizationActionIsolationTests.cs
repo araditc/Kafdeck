@@ -28,6 +28,11 @@ public sealed class V08AuthorizationActionIsolationTests
         Assert.Equal(56, (int)AuthorizationAction.MutationApprove);
         Assert.Equal(57, (int)AuthorizationAction.StreamsRead);
         Assert.Equal(58, (int)AuthorizationAction.LineageRead);
+        Assert.Equal(59, (int)AuthorizationAction.DeclarativeRead);
+        Assert.Equal(60, (int)AuthorizationAction.DeclarativePlan);
+        Assert.Equal(61, (int)AuthorizationAction.DeclarativeAdopt);
+        Assert.Equal(62, (int)AuthorizationAction.DeclarativeApply);
+        Assert.Equal(63, (int)AuthorizationAction.DeclarativeSourceManage);
     }
 
     [Theory]
@@ -54,6 +59,11 @@ public sealed class V08AuthorizationActionIsolationTests
     [InlineData("connect.restart", AuthorizationAction.ConnectRestart)]
     [InlineData("connect_auto_restart_manage", AuthorizationAction.ConnectAutoRestartManage)]
     [InlineData("mutation.approve", AuthorizationAction.MutationApprove)]
+    [InlineData("declarative.read", AuthorizationAction.DeclarativeRead)]
+    [InlineData("declarative.plan", AuthorizationAction.DeclarativePlan)]
+    [InlineData("declarative.adopt", AuthorizationAction.DeclarativeAdopt)]
+    [InlineData("declarative.apply", AuthorizationAction.DeclarativeApply)]
+    [InlineData("declarative.source.manage", AuthorizationAction.DeclarativeSourceManage)]
     public void Named_configuration_actions_resolve_to_their_distinct_authority(string configured, AuthorizationAction expected)
     {
         var policy = AuthorizationPolicyConfigurationLoader.Load(Configuration(configured));

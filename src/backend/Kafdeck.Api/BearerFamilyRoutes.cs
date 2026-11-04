@@ -105,10 +105,11 @@ internal static class BearerFamilyRoutes
     });
 
     public static bool IsAction(AuthorizationAction action) => BearerTopicMutationScope.IsAction(action) ||
+        action is AuthorizationAction.DeclarativePlan or AuthorizationAction.DeclarativeAdopt or AuthorizationAction.DeclarativeApply or AuthorizationAction.DeclarativeSourceManage ||
         action is AuthorizationAction.DataJobPlan or AuthorizationAction.DataJobExecute or AuthorizationAction.DataGeneratorPlan or
             AuthorizationAction.DataGeneratorExecute or AuthorizationAction.ConnectRestart or AuthorizationAction.MutationReconcile ||
         Contracts.Any(c => !c.Read && c.Action == action);
-    public static bool IsKind(MutationOperationKind kind) => kind == MutationOperationKind.FleetUncertaintyDisposition || BearerTopicMutationScope.IsKind(kind) || Contracts.Any(c => c.Kind == kind);
+    public static bool IsKind(MutationOperationKind kind) => kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription || BearerTopicMutationScope.IsKind(kind) || Contracts.Any(c => c.Kind == kind);
     public static string Path(bool bearer, string original) => bearer ? original.Replace("/api/v1/", "/api/v1/automation/", StringComparison.Ordinal) : original;
     public static string Name(bool bearer, string original) => bearer ? Contract(original).Name : original;
     private static BearerFamilyRoute Contract(string original) => Contracts.Single(c => c.OriginalName == original);

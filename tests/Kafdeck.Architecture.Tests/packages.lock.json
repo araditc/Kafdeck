@@ -220,7 +220,10 @@
         }
       },
       "kafdeck": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.7.0, )"
+        }
       },
       "kafdeck.api": {
         "type": "Project",

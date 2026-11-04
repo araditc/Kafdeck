@@ -4,6 +4,7 @@
     <RootNamespace>Kafdeck.Infrastructure.Persistence</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../../../deploy/postgresql/w68-g2-baseline-v1.sql" Link="Sql/w68-g2-baseline-v1.sql" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Npgsql" />
   </ItemGroup>
