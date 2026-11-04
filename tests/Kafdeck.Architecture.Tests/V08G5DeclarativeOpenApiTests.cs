@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Kafdeck.Api;
 using Kafdeck.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,33 @@ public sealed class V08G5DeclarativeOpenApiTests
             var operation=entry.GetProperty(method);Assert.Equal(named.EndpointName,operation.GetProperty("operationId").GetString());
             Assert.Equal("bearerAuth",Assert.Single(operation.GetProperty("security").EnumerateArray()).EnumerateObject().Single().Name);
             Assert.NotEmpty(operation.GetProperty("x-kafdeck-actions").EnumerateArray());
+            if(path=="/api/v1/declarative/sources/{sourceRef}")
+            {
+                var query=Assert.Single(operation.GetProperty("parameters").EnumerateArray(),x=>x.GetProperty("in").GetString()=="query");
+                Assert.Equal("resourceId",query.GetProperty("name").GetString());Assert.True(query.GetProperty("required").GetBoolean());
+                Assert.DoesNotContain(endpoint.RoutePattern.Parameters,x=>x.Name=="resourceId");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Source_detail_documents_required_bounded_resource_query_and_runtime_rejects_ambiguous_queries()
+    {
+        using var document=JsonDocument.Parse(KafdeckV08BearerOpenApi.Document);
+        var operation=document.RootElement.GetProperty("paths").GetProperty("/api/v1/declarative/sources/{sourceRef}").GetProperty("get");
+        var parameters=operation.GetProperty("parameters").EnumerateArray().ToArray();
+        Assert.Equal(2,parameters.Length);
+        var source=Assert.Single(parameters,x=>x.GetProperty("name").GetString()=="sourceRef");Assert.Equal("path",source.GetProperty("in").GetString());
+        var resource=Assert.Single(parameters,x=>x.GetProperty("name").GetString()=="resourceId");
+        Assert.Equal("query",resource.GetProperty("in").GetString());Assert.True(resource.GetProperty("required").GetBoolean());
+        var schema=resource.GetProperty("schema");Assert.Equal("string",schema.GetProperty("type").GetString());
+        Assert.Equal(1,schema.GetProperty("minLength").GetInt32());Assert.Equal(128,schema.GetProperty("maxLength").GetInt32());
+        Assert.Equal("^[A-Za-z0-9._-]+$",schema.GetProperty("pattern").GetString());
+        foreach(var invalid in new[]{"","?resourceId=","?resourceId=a&resourceId=b","?resourceId=../invalid","?resourceId=valid&extra=true","?resourceId="+new string('a',129)})
+        {
+            var context=new DefaultHttpContext();context.Request.QueryString=new QueryString(invalid);
+            var result=await KafdeckDeclarativeSourceEndpoints.ReadAsync("source",context,null!,null!,null!,CancellationToken.None);
+            Assert.Equal(400,((IStatusCodeHttpResult)result).StatusCode);
         }
     }
 

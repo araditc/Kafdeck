@@ -60,6 +60,16 @@
         "failed": 0,
         "notExecuted": 0
       }
+    },
+    {
+      "path": "artifacts/g5/openapi-fix/g5-openapi-fix.trx",
+      "sha256": "11d903c9558a98fa07b9a3cb960291ddb81a5533c872ba0c435ec50eab984b8e",
+      "counters": {
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "notExecuted": 0
+      }
     }
   ],
   "limits": [

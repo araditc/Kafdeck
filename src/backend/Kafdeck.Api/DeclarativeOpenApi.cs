@@ -65,16 +65,17 @@ internal static class DeclarativeOpenApi
                 verb is "import-check" or "import-preview"?"DeclarativeRead,DeclarativePlan,DeclarativeAdopt,NotificationRead":verb=="plan"?"DeclarativeRead,DeclarativePlan,NotificationRead":"DeclarativeRead,NotificationRead",verb is "plan" or "import-preview");
         Add("/api/v1/declarative/plans/{operationId}","get","v08-declarative-plan-detail",null,"DeclarativeStoredPlan","DeclarativeRead,NotificationRead");
         foreach(var verb in new[]{"apply","recover"})Add("/api/v1/declarative/plans/{operationId}/"+verb,"post","v08-declarative-"+verb,"DeclarativeApplyRequest","MutationStatus","DeclarativeRead,DeclarativePlan,DeclarativeApply,NotificationRead,NotificationManage");
-        Add("/api/v1/declarative/sources/{sourceRef}","get","v08-declarative-source-detail",null,"DeclarativeSourceRevision","DeclarativeRead,NotificationRead");
+        Add("/api/v1/declarative/sources/{sourceRef}","get","v08-declarative-source-detail",null,"DeclarativeSourceRevision","DeclarativeRead,NotificationRead",requiredQuery:"resourceId");
         Add("/api/v1/declarative/sources/{sourceRef}/advance","post","v08-declarative-source-advance","DeclarativeSourceAdvanceRequest","DeclarativeSourceRevision","DeclarativeSourceManage,NotificationRead");
         Add("/api/v1/declarative/compensation/catalog","get","v08-declarative-compensation-catalog",null,"CompensationCatalog","DeclarativeRead");
         Add("/api/v1/declarative/plans/{sourcePlanId}/compensation","get","v08-declarative-compensation-inspect",null,"CompensationEligibility","DeclarativeRead,NotificationRead");
         Add("/api/v1/declarative/plans/{sourcePlanId}/compensation-preview","post","v08-declarative-compensation-preview","DeclarativeManifestRequest","MutationStatus","DeclarativeRead,DeclarativePlan,NotificationRead",true);
 
-        void Add(string path,string method,string name,string? request,string response,string actions,bool idempotency=false)
+        void Add(string path,string method,string name,string? request,string response,string actions,bool idempotency=false,string? requiredQuery=null)
         {
             var parameters=new JsonArray();foreach(var part in path.Split('/').Where(x=>x.StartsWith('{')))
                 parameters.Add(new JsonObject{["name"]=part[1..^1],["in"]="path",["required"]=true,["schema"]=part.Contains("sourceRef",StringComparison.Ordinal)?Identifier():Uuid()});
+            if(requiredQuery is not null)parameters.Add(new JsonObject{["name"]=requiredQuery,["in"]="query",["required"]=true,["schema"]=Identifier(),["description"]="Exactly one resourceId is required. Duplicate values, extra query keys and invalid identifiers are rejected."});
             if(idempotency)parameters.Add(new JsonObject{["name"]="Idempotency-Key",["in"]="header",["required"]=true,["schema"]=Text(128)});
             var responses=new JsonObject{["200"]=new JsonObject{["description"]="Typed authorized result; inspect durable state. HTTP success does not grant effect/approval authority.",["content"]=new JsonObject{["application/json"]=new JsonObject{["schema"]=Ref(response)}}}};
             foreach(var (code,component) in new[]{("400","Invalid"),("401","Unauthenticated"),("403","Denied"),("404","NotFound"),("409","Conflict"),("413","TooLarge"),("503","Unavailable")})
