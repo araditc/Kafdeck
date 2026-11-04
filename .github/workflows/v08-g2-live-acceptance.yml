@@ -271,7 +271,7 @@ jobs:
         run: >-
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release --no-restore --results-directory artifacts/g2-ci/postgres --logger 'trx;LogFileName=postgres-live.trx'
-          --filter 'FullyQualifiedName~V08G3DeclarativeMigrationTests|FullyQualifiedName~V08G3DeclarativePersistenceTests|FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08NotificationGovernanceTests|FullyQualifiedName~V08NotificationGovernanceHttpTests|FullyQualifiedName~V08NotificationGovernancePostgreSqlTests|FullyQualifiedName~V08NotificationHaAdmissionTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
+          --filter 'FullyQualifiedName~V08G3SourcePlanningRaceTests|FullyQualifiedName~V08G3DeclarativeMigrationTests|FullyQualifiedName~V08G3DeclarativePersistenceTests|FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08NotificationGovernanceTests|FullyQualifiedName~V08NotificationGovernanceHttpTests|FullyQualifiedName~V08NotificationGovernancePostgreSqlTests|FullyQualifiedName~V08NotificationHaAdmissionTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
       - name: Require real PostgreSQL evidence
         shell: bash
         run: |

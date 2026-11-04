@@ -184,6 +184,18 @@ public sealed class DeclarativeEndpointService(IW68RuntimeStore store, INotifica
                 var old = await store.GetRegistrationAsync(kind, desired.DeploymentRef, registrationId, token).ConfigureAwait(false);
                 // Provisioning from configuration cannot undo a durable revoke.
                 if (old is { Enabled: false }) return null;
+                if (kind == W68RuntimeRegistrationKind.Source && (old is not null || registeredSource is not null))
+                {
+                    // Planning never advances an existing source. Reuse the
+                    // exact snapshot admitted at the start of this request;
+                    // a concurrent advance (including A→B→A) makes it stale.
+                    return old is not null && old == registeredSource &&
+                        old.OwnerId == desired.OwnerRef && old.RepositoryId == repository &&
+                        old.Path == definition.SubscriptionId && old.PinnedRevision == revision &&
+                        await Authority(token).ConfigureAwait(false) ? old : null;
+                }
+                if (kind == W68RuntimeRegistrationKind.Source && revision != registration.SourceRevision)
+                    return null; // First registration may bootstrap only the configured baseline.
                 var row = new W68RuntimeRegistration(kind, desired.DeploymentRef, registrationId, old?.GenerationId ?? Guid.NewGuid(),
                     old?.Revision ?? 0, desired.OwnerRef, kind == W68RuntimeRegistrationKind.Controller ? actor.PrincipalId : "", repository,
                     repository.Length == 0 ? "" : definition.SubscriptionId, revision, true);

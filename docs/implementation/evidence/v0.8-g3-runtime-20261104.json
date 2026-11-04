@@ -134,6 +134,16 @@
         "failed": 0,
         "notExecuted": 0
       }
+    },
+    {
+      "path": "source-race-v10/source-race-v10.trx",
+      "sha256": "5a78e0f0d2f615d87dcd8cd9603f17dfa3d07fca0dfeff1b86d86a8a03eb301f",
+      "counters": {
+        "total": 4,
+        "passed": 4,
+        "failed": 0,
+        "notExecuted": 0
+      }
     }
   ],
   "limits": [
