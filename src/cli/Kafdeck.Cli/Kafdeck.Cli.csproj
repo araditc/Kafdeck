@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup><Compile Include="../../shared/KafdeckReadContracts.cs" Link="Contracts/KafdeckReadContracts.cs" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../backend/Kafdeck.Core/Kafdeck.Core.csproj" /></ItemGroup>
   <PropertyGroup>
     <DefineConstants>$(DefineConstants);KAFDECK_CLI_READ_CONTRACTS</DefineConstants>
     <OutputType>Exe</OutputType>

@@ -25,15 +25,17 @@ public sealed class MutationCommandService
     private readonly IMutationOperationRepository _repository;
     private readonly MutationApprovalAuthorizer _approvalAuthorizer;
     private readonly MutationRequestAuthorizationService _requestAuthorization;
+    private readonly DeclarativeLifecycleGuard? _declarative;
 
     public MutationCommandService(
         IMutationOperationRepository repository,
         MutationApprovalAuthorizer approvalAuthorizer,
-        MutationRequestAuthorizationService requestAuthorization)
+        MutationRequestAuthorizationService requestAuthorization, DeclarativeLifecycleGuard? declarative = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _approvalAuthorizer = approvalAuthorizer ?? throw new ArgumentNullException(nameof(approvalAuthorizer));
         _requestAuthorization = requestAuthorization ?? throw new ArgumentNullException(nameof(requestAuthorization));
+        _declarative = declarative;
     }
 
     public async Task<MutationCommandResult> ConfirmAsync(
@@ -73,6 +75,13 @@ public sealed class MutationCommandService
             return new MutationCommandResult(MutationCommandOutcome.Forbidden);
         }
 
+        if (snapshot.OperationKind == MutationOperationKind.DeclarativeNotificationSubscription)
+        {
+            if (_requestAuthorization.AuthorizeProofTargets(principal, snapshot.AuthorizationTargets) != KafdeckAuthorizationOutcome.Allowed)
+                return new(MutationCommandOutcome.Forbidden);
+            if (_declarative is null || !await _declarative.IsCurrentAsync(snapshot, cancellationToken).ConfigureAwait(false))
+                return new(MutationCommandOutcome.InvalidState, snapshot, "declarative_plan_stale");
+        }
         if (_requestAuthorization.AuthorizeForDispatch(principal, snapshot) !=
             KafdeckAuthorizationOutcome.Allowed)
         {
@@ -229,8 +238,12 @@ public sealed class MutationCommandService
 
         MutationApprovalAuthorizationEvidence evidence;
         var versionedBearerOperation = snapshot.PolicyVersion.StartsWith("v0.8-bearer:", StringComparison.Ordinal);
-        if ((bearerHuman is not null || versionedBearerOperation) && !_requestAuthorization.IsApprovalAllowed(principal, snapshot))
+        if ((bearerHuman is not null || versionedBearerOperation) && !_requestAuthorization.IsApprovalAllowed(principal, snapshot,
+                requireCurrentPolicy: snapshot.OperationKind != MutationOperationKind.DeclarativeNotificationSubscription))
             return new MutationCommandResult(MutationCommandOutcome.Forbidden);
+        if (approve && snapshot.OperationKind == MutationOperationKind.DeclarativeNotificationSubscription &&
+            (_declarative is null || !await _declarative.IsCurrentAsync(snapshot, cancellationToken).ConfigureAwait(false)))
+            return new(MutationCommandOutcome.InvalidState, snapshot, "declarative_plan_stale");
         TryGetSession(principal, out var session);
         if (session is not null && snapshot.RequesterPrincipalId.StartsWith("oidc-cli-human:", StringComparison.Ordinal) &&
             MutationActor.IsSameHuman(snapshot.RequesterPrincipalId, session.Identity.Key))

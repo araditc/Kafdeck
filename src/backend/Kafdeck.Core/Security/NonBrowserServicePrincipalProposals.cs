@@ -21,6 +21,7 @@ public sealed class NonBrowserServicePrincipalProposal
         AuthorizationAction.KsqlRead,
         AuthorizationAction.DataQualityRead,
         AuthorizationAction.NotificationRead,
+        AuthorizationAction.DeclarativeRead,
         AuthorizationAction.TopicConfigRead,
         AuthorizationAction.BrokerConfigRead,
         AuthorizationAction.RecordRead,

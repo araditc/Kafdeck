@@ -67,7 +67,9 @@ public sealed class NonBrowserReadRegistry
         _ = new NonBrowserPrincipalProposalSet(proposals);
         if (registrations.Any(r => r.MutationActions.Count > 32 || r.MutationActions.Distinct().Count() != r.MutationActions.Count ||
                 r.MutationActions.Any(action => !BearerFamilyRoutes.IsAction(action) && action != AuthorizationAction.NotificationManage)) ||
-            options.Registrations.Any(r => r.ApprovalActions.Count != 0 || r.MutationActions.Contains(AuthorizationAction.NotificationManage)) ||
+            options.Registrations.Any(r => r.ApprovalActions.Count != 0 ||
+                r.MutationActions.Contains(AuthorizationAction.NotificationManage) &&
+                !r.MutationActions.Contains(AuthorizationAction.DeclarativeApply)) ||
             options.HumanRegistrations.Any(r => r.ApprovalActions.Count > 32 || r.ApprovalActions.Distinct().Count() != r.ApprovalActions.Count ||
                 r.ApprovalActions.Any(a => !BearerFamilyRoutes.IsAction(a) && a != AuthorizationAction.NotificationManage)))
             throw new InvalidOperationException("Only explicit admitted family actions and registered human approvals are allowed.");
@@ -133,8 +135,10 @@ public sealed class NonBrowserReadRegistry
                 Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind) is null ||
                 identity.Evidence.ExpiresAtUtc <= DateTimeOffset.UtcNow) return false;
             var registrations = identity.Kind == NonBrowserPrincipalKind.Human ? current.HumanRegistrations : current.Registrations;
-            return (BearerFamilyRoutes.IsAction(action) || identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage) &&
-                registrations.Single(r => r.Id == identity.RegistrationId).MutationActions.Contains(action);
+            var registration = registrations.Single(r => r.Id == identity.RegistrationId);
+            return (BearerFamilyRoutes.IsAction(action) || action == AuthorizationAction.NotificationManage &&
+                (identity.Kind == NonBrowserPrincipalKind.Human || registration.MutationActions.Contains(AuthorizationAction.DeclarativeApply))) &&
+                registration.MutationActions.Contains(action);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return false; }
     }
@@ -408,9 +412,10 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         var readContract = KafdeckReadContracts.Find(route);
         var namedRead = BearerReadBoundary.Matches(context, readContract);
         var family = context.GetEndpoint()?.Metadata.GetMetadata<BearerFamilyRoute>();
+        var declarative = context.GetEndpoint()?.Metadata.GetMetadata<DeclarativeRouteContract>();
         var recoveryRoute = route is not null && RecoveryRoutes.Contains(route);
         var approvalRoute = route is not null && ApprovalRoutes.Contains(route);
-        var governedRoute = route is not null && (MutationRoutes.Contains(route) || approvalRoute || family is not null || recoveryRoute);
+        var governedRoute = route is not null && (MutationRoutes.Contains(route) || approvalRoute || family is not null || recoveryRoute || declarative is not null);
         // Minimal API binding runs before endpoint filters, including for callers
         // without an Authorization header. Bound these dedicated routes first.
         if ((governedRoute || namedRead && readContract!.Body is not null) && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
@@ -436,7 +441,11 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         if (identity is not null && governedRoute)
         {
             var previewAction = BearerTopicMutationScope.PreviewAction(route);
-            var allowed = recoveryRoute ? identity.Kind == NonBrowserPrincipalKind.Human &&
+            var allowed = declarative is not null
+                ? (declarative.Action == AuthorizationAction.DeclarativeRead
+                    ? registry?.IsRegisteredReadAllowed(identity, declarative.Action) == true
+                    : registry?.IsGovernedMutationAllowed(identity, declarative.Action) == true)
+                : recoveryRoute ? identity.Kind == NonBrowserPrincipalKind.Human &&
                     (route == "v08-bearer-notification-recovery-approve"
                         ? registry?.IsGovernedApprovalAllowed(identity, AuthorizationAction.NotificationManage) == true
                         : registry?.IsGovernedMutationAllowed(identity, AuthorizationAction.NotificationManage) == true) :
@@ -484,6 +493,7 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
             _ => null,
         };
         if ((family is not null && !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, family, context.RequestAborted)) ||
+            (declarative is not null && !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, declarative.RequestType, context.RequestAborted)) ||
             (recoveryRoute && !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, recoveryRequestType, context.RequestAborted)))
         {
             context.Response.StatusCode = 400;

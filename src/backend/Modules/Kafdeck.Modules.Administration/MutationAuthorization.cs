@@ -191,10 +191,7 @@ public sealed class MutationApprovalAuthorizer
         {
             var decision = _authorization.Evaluate(
                 approver,
-                new AuthorizationRequest(
-                    target.Action,
-                    target.ClusterId,
-                    target.ResourceName));
+                DeclarativeMutationAuthorization.Request(target));
 
             if (!decision.IsAllowed)
             {
@@ -223,8 +220,8 @@ public sealed class MutationApprovalAuthorizer
     {
         if (!NonBrowserHumanPrincipalId.TryParse(exactPrincipalId, out var parsed) || parsed!.HumanKey != human ||
             operation.AuthorizationTargets.Count == 0 || operation.AuthorizationTargets.Any(target =>
-                !_authorization.EvaluateDirectSubject(human, new(AuthorizationAction.MutationApprove, target.ClusterId, target.ResourceName)).IsAllowed ||
-                !_authorization.EvaluateDirectSubject(human, new(target.Action, target.ClusterId, target.ResourceName)).IsAllowed))
+                !_authorization.EvaluateDirectSubject(human, DeclarativeMutationAuthorization.Request(target) with { Action = AuthorizationAction.MutationApprove }).IsAllowed ||
+                !_authorization.EvaluateDirectSubject(human, DeclarativeMutationAuthorization.Request(target)).IsAllowed))
             throw new MutationStateException("The live human does not have current direct approval and resource permissions.");
         return new(operation.OperationId, exactPrincipalId, operation.PreviewHash,
             ComputeEvidenceHash(operation.OperationId, exactPrincipalId, operation.PreviewHash, operation.AuthorizationTargets));
@@ -253,10 +250,7 @@ public sealed class MutationApprovalAuthorizer
         {
             var decision = _authorization.EvaluateCanonicalDirectSubject(
                 canonicalPrincipalId,
-                new AuthorizationRequest(
-                    target.Action,
-                    target.ClusterId,
-                    target.ResourceName));
+                DeclarativeMutationAuthorization.Request(target));
 
             if (!decision.IsAllowed)
             {

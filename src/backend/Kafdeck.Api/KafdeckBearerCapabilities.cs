@@ -7,7 +7,7 @@ namespace Kafdeck.Api;
 /// <summary>Bounded capability metadata. Reading it never admits or executes a mutation.</summary>
 public static class KafdeckBearerCapabilities
 {
-    public static WebApplication MapKafdeckBearerCapabilities(this WebApplication app, bool mutationsEnabled)
+    public static WebApplication MapKafdeckBearerCapabilities(this WebApplication app, bool mutationsEnabled, bool declarativeEnabled = false)
     {
         // Read discovery is always available under normal read RBAC even when
         // mutation execution is disabled. Never tie it to a write route map.
@@ -15,7 +15,7 @@ public static class KafdeckBearerCapabilities
                 new NamedReadInventoryData(1, false, Kafdeck.Contracts.KafdeckReadContracts.All)))
             .WithName("v08-bearer-read-capabilities")
             .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
-        app.MapGet("/api/v1/automation/capabilities/mutations", () => Results.Ok(CreateInventory(mutationsEnabled)))
+        app.MapGet("/api/v1/automation/capabilities/mutations", () => Results.Ok(CreateInventory(mutationsEnabled, declarativeEnabled)))
             .WithName("v08-bearer-mutation-capabilities")
             .RequireKafdeckAuthorization(AuthorizationAction.SystemRead);
         return app;
@@ -23,10 +23,10 @@ public static class KafdeckBearerCapabilities
 
     // The static inventory remains reusable in compatibility probes. The
     // HTTP endpoint MUST supply the actual host mutation activation bit.
-    public static BearerMutationCapabilityInventory CreateInventory(bool mutationsEnabled = true) => new(1, "supported-ui",
-        Enum.GetValues<MutationOperationKind>().Select(kind => CreateFamily(kind, mutationsEnabled)).ToArray());
+    public static BearerMutationCapabilityInventory CreateInventory(bool mutationsEnabled = true, bool declarativeEnabled = false) => new(1, "supported-ui",
+        Enum.GetValues<MutationOperationKind>().Select(kind => CreateFamily(kind, mutationsEnabled, declarativeEnabled)).ToArray());
 
-    private static BearerMutationFamilyCapability CreateFamily(MutationOperationKind kind, bool mutationsEnabled)
+    private static BearerMutationFamilyCapability CreateFamily(MutationOperationKind kind, bool mutationsEnabled, bool declarativeEnabled)
     {
         var inheritedId = kind switch
         {
@@ -52,6 +52,8 @@ public static class KafdeckBearerCapabilities
         var contracts = BearerFamilyRoutes.Contracts.Where(c => !c.Read &&
             (reconciliation ? ReconciliationPreview(c) : c.AcceptsKind(kind) && !ReconciliationPreview(c))).ToArray();
         var previews = contracts.Where(c => !c.Execution).Select(c => c.Name).ToList();
+        if (kind == MutationOperationKind.DeclarativeNotificationSubscription && declarativeEnabled)
+            previews.AddRange(["v08-declarative-plan", "v08-declarative-import-preview"]);
         if (topic) previews.Add(kind switch
         {
             MutationOperationKind.TopicCreate => "v08-bearer-topic-create-preview",
@@ -72,7 +74,9 @@ public static class KafdeckBearerCapabilities
             inherited is not null ? JsonNamingPolicy.CamelCase.ConvertName(inherited.State.ToString()) : hosted ? "supported" : "blocked",
             inherited is not null ? inherited.Evidence : new[] { kind == MutationOperationKind.FleetUncertaintyDisposition
                 ? "JobReconciliationService and immutable JobReconciliationPlan require current unchanged destination evidence, worker fencing and distinct CRITICAL approval. Physical acceptance is separate."
-                : "BearerFamilyRoutes and the corresponding typed browser mutation endpoints." },
+                : kind == MutationOperationKind.DeclarativeNotificationSubscription
+                    ? "DeclarativeSubscriptionMutationHandler; exact registered source/owner, immutable stored plan, current RBAC, distinct CRITICAL approval and fenced subscription/ownership CAS."
+                    : "BearerFamilyRoutes and the corresponding typed browser mutation endpoints." },
             hosted, hosted ? "namedRoutesAvailable" : unsupported ? "inheritedUnsupported" : "notHosted",
             hosted ? "probeRequired" : unsupported ? "inheritedUnsupported" : guardedProtocol ? "guardedProtocolRequired" : "notAdmitted",
             hosted ? "current-provider-probe-required" : inheritedId ?? "public-handler-not-admitted",

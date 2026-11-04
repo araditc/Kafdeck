@@ -19,6 +19,7 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
     private readonly JsonDocument _identity;
     private readonly string _directory;
     private readonly string _profile;
+    private string? _serviceProfile;
     private readonly ProcessStartInfo _start;
     private Process? _process;
     private Task<string>? _stdout;
@@ -26,6 +27,8 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
     internal Dictionary<string,string> Settings { get; } = new();
     internal Uri Api { get; }
     internal bool Approver { get; set; }
+    internal bool OptionalServiceRequester { get; private set; }
+    internal int ServiceApiCommands { get; private set; }
     internal string ConfigurationFile => Path.Combine(_directory,"appsettings.json");
     internal string Output { get; private set; } = "";
     internal string SafeOutcome { get; private set; } = "none";
@@ -93,6 +96,17 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
         }
     }
     internal void Secret(string name,string value)=>_start.Environment[name]=value;
+    internal void EnableServiceRequester()
+    {
+        var profile = new CliServiceOidcProfile(Field("issuer"), Field("audience"), Field("clientId"),
+            Field("subject"), Field("clientPrivateKeyFile"), Field("caPemFile"));
+        profile.Validate();
+        _serviceProfile = Path.Combine(_directory, "service-public-profile.json");
+        File.WriteAllBytes(_serviceProfile, JsonSerializer.SerializeToUtf8Bytes(new { issuer = profile.Issuer,
+            audience = profile.Audience, clientId = profile.ClientId, expectedSubject = profile.ExpectedSubject,
+            privateKeyFile = profile.PrivateKeyFile, trustedCaPemFile = profile.TrustedCaPemFile }));
+        OptionalServiceRequester = true;
+    }
     internal async Task StartAsync(CancellationToken token)
     {
         if(_process is not null) throw new InvalidOperationException("Stop the owned API before starting it again.");
@@ -117,8 +131,16 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
     internal async Task<int> RunAsync(CancellationToken token,params string[] command)
     {
         using var output=new StringWriter(); using var error=new StringWriter();
-        var args=new[]{"--url",Api.AbsoluteUri,"--oidc-profile",_profile}.Concat(command).ToArray();
-        var result=await CliApplication.RunAsync(args,output,error,token,OpenBrowserAsync);
+        var service = OptionalServiceRequester && !Approver;
+        var previousLogins = CompletedLogins;
+        var args=new[]{"--url",Api.AbsoluteUri,service?"--service-profile":"--oidc-profile",service?_serviceProfile!:_profile}.Concat(command).ToArray();
+        var result=await CliApplication.RunAsync(args,output,error,token,
+            service ? (_, _) => throw new InvalidOperationException("A real service command must never launch a browser.") : OpenBrowserAsync);
+        if (service)
+        {
+            Assert.Equal(previousLogins, CompletedLogins);
+            if (result != CliApplication.UsageError) ServiceApiCommands++;
+        }
         Output=output.ToString();
         // Only closed, bounded status/state/reason values enter failed test
         // assertions. CLI bodies, request data, credentials and provider

@@ -133,6 +133,7 @@ public static class MutationRiskClassifier
         MutationOperationKind.DataJob => MutationRiskClass.High,
         MutationOperationKind.DataGenerator => MutationRiskClass.High,
         MutationOperationKind.FleetUncertaintyDisposition => MutationRiskClass.Critical,
+        MutationOperationKind.DeclarativeNotificationSubscription => MutationRiskClass.Critical,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported mutation operation kind."),
     };
 

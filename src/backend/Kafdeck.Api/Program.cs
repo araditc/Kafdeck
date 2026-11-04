@@ -32,7 +32,15 @@ using Kafdeck.Modules.Topics;
 Activity.DefaultIdFormat = ActivityIdFormat.W3C;
 Activity.ForceDefaultIdFormat = true;
 
-var builder = WebApplication.CreateBuilder(args);
+var declarativeSchemaMigration = args.Contains("--declarative-schema-migrate", StringComparer.Ordinal);
+var declarativeSchemaAdoption = args.Contains("--declarative-adopt-existing", StringComparer.Ordinal);
+var declarativeGenerationAdmission = args.Contains("--declarative-generation-admit", StringComparer.Ordinal);
+if (declarativeGenerationAdmission && declarativeSchemaMigration)
+    throw new InvalidOperationException("Schema migration and generation admission are separate operator actions.");
+if (declarativeSchemaAdoption && !declarativeSchemaMigration)
+    throw new InvalidOperationException("Declarative schema adoption requires explicit migration mode.");
+var builder = WebApplication.CreateBuilder(args.Where(value => value is not
+    ("--declarative-schema-migrate" or "--declarative-adopt-existing" or "--declarative-generation-admit")).ToArray());
 
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
@@ -45,6 +53,15 @@ var dataQualityOptions =
     kafdeckOptions.DataQuality;
 var notificationReadOptions =
     kafdeckOptions.Notifications;
+var declarativeOptions = builder.Configuration.GetSection("Kafdeck:Declarative").Get<DeclarativeRuntimeOptions>() ?? new();
+if (declarativeOptions.Enabled && (kafdeckOptions.Deployment.Mode != AccessMode.Oidc ||
+    mutationOptions?.Enabled != true || notificationReadOptions is not { Enabled: true, ManagementEnabled: true }))
+    throw new KafdeckConfigurationException("Declarative runtime requires OIDC, governed mutations and notification management.");
+if (declarativeOptions.Enabled && declarativeOptions.DeploymentGeneration == Guid.Empty)
+    throw new KafdeckConfigurationException("Declarative runtime requires an explicit outside deployment generation.");
+if (declarativeOptions.Enabled && !declarativeSchemaMigration && !declarativeGenerationAdmission &&
+    !DeclarativeRecoveryAnchor.Allows(declarativeOptions))
+    throw new KafdeckConfigurationException("Declarative runtime requires a pinned active outside recovery authority.");
 var notificationGovernance = NotificationGovernanceOptions.Read(builder.Configuration, kafdeckOptions);
 var productEventsEnabled = NotificationProductEventHosting.ReadActivation(builder.Configuration, kafdeckOptions);
 var notificationRecovery = NotificationRecoveryOptions.Read(builder.Configuration, kafdeckOptions, productEventsEnabled);
@@ -661,7 +678,38 @@ if (notificationRecovery is not null)
     builder.Services.AddKafdeckNotificationRecovery(notificationRecovery);
 }
 
+if (declarativeOptions.Enabled)
+{
+    builder.Services.AddSingleton<IW68RuntimeStore>(services => new W68RuntimeStore(
+        services.GetRequiredService<INotificationDeliveryDbConnectionFactory>(), declarativeOptions.DeploymentGeneration));
+    builder.Services.AddSingleton<DeclarativeRuntimeAuthorizer>();
+    builder.Services.AddSingleton<DeclarativeLifecycleGuard>();
+    builder.Services.AddSingleton<DeclarativeEndpointService>();
+    builder.Services.AddSingleton<DeclarativeSubscriptionMutationHandler>();
+    builder.Services.AddSingleton<IMutationExecutionHandler>(services => services.GetRequiredService<DeclarativeSubscriptionMutationHandler>());
+}
 var app = builder.Build();
+if (declarativeGenerationAdmission)
+{
+    if (!DeclarativeRecoveryAnchor.Allows(declarativeOptions, maintenance: true))
+        throw new KafdeckConfigurationException("Generation admission requires the pinned quarantined outside authority.");
+    var previous = builder.Configuration["Kafdeck:Declarative:PreviousDeploymentGeneration"];
+    Guid? previousGeneration = string.IsNullOrEmpty(previous) ? null : Guid.ParseExact(previous, "D");
+    await W68RuntimeSchema.AdmitGenerationAsync(app.Services.GetRequiredService<INotificationDeliveryDbConnectionFactory>(),
+        declarativeOptions.DeploymentId, previousGeneration, declarativeOptions.DeploymentGeneration,
+        builder.Configuration["Kafdeck:Declarative:GenerationFenceEvidenceSha256"] ?? "");
+    app.Logger.LogInformation("Declarative generation admission verified; outside authority remains quarantined and no workers started.");
+    await app.DisposeAsync();
+    return;
+}
+if (declarativeSchemaMigration)
+{
+    await W68RuntimeSchema.InstallOrUpgradeAsync(app.Services.GetRequiredService<INotificationDeliveryDbConnectionFactory>(),
+        declarativeSchemaAdoption, builder.Configuration["Kafdeck:Declarative:AdoptionEvidenceSha256"]);
+    app.Logger.LogInformation("Declarative schema migration verified; HTTP server and workers were not started.");
+    await app.DisposeAsync();
+    return;
+}
 if (notificationGovernance is not null) await app.Services.InitializeKafdeckNotificationGovernanceAsync();
 
 if (historicalMetricsOptions?.Enabled == true)
@@ -714,6 +762,8 @@ if (notificationReadOptions?.Enabled == true)
     await app.Services.GetRequiredService<INotificationRoutingStore>()
         .InitializeAsync()
         .ConfigureAwait(false);
+    if (declarativeOptions.Enabled)
+        await app.Services.GetRequiredService<IW68RuntimeStore>().InitializeAsync().ConfigureAwait(false);
     if (notificationRecovery is not null) await app.Services.InitializeKafdeckNotificationRecoveryAsync();
 
     app.Logger.LogInformation(
@@ -852,7 +902,8 @@ app.MapKafdeckFleetCapabilities();
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
 app.MapKafdeckV08BearerOpenApi();
-app.MapKafdeckBearerCapabilities(mutationOptions?.Enabled == true);
+app.MapKafdeckBearerCapabilities(mutationOptions?.Enabled == true, declarativeEnabled: declarativeOptions.Enabled);
+app.MapKafdeckDeclarative(declarativeOptions.Enabled);
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();

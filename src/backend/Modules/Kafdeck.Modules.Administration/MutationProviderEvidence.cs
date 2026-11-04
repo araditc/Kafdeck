@@ -63,6 +63,10 @@ public static class MutationProviderEvidence
             ["data-job.conflict-obligations"] = EvidenceValueKind.NonNegativeInt64,
             ["data-generator.plan"] = EvidenceValueKind.Sha256,
             ["data-generator.records"] = EvidenceValueKind.PositiveInt32,
+            ["declarative.plan"] = EvidenceValueKind.CanonicalGuid,
+            ["declarative.plan-fingerprint"] = EvidenceValueKind.Sha256,
+            ["declarative.ownership-revision"] = EvidenceValueKind.PositiveInt64,
+            ["declarative.subscription-revision"] = EvidenceValueKind.PositiveInt64,
         };
 
     private static readonly HashSet<string> VerificationStates =

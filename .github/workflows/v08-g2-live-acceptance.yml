@@ -201,7 +201,7 @@ jobs:
           dotnet restore Kafdeck.slnx --locked-mode
           dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
-            --filter 'FullyQualifiedName~V08G2HumanCliLiveTests|FullyQualifiedName~V08G2ProviderFamilyCliLiveTests|FullyQualifiedName~V08G2DataJobUncertaintyCliLiveTests|FullyQualifiedName~V08G2HumanRecoveryCliLiveTests|FullyQualifiedName~V08W67FamilyBoundaryTests|FullyQualifiedName~V08FleetCapabilityParityTests|FullyQualifiedName~V08W67BearerOpenApiTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08W66PrivateHttpWireTests|FullyQualifiedName~V08W66ProviderCredentialLifecycleTlsTests|FullyQualifiedName~V08W66AuthenticatedWebhookTlsTests|FullyQualifiedName~V08W66ProviderPhysicalTlsTests|FullyQualifiedName~V08W66SmtpPhysicalTlsTests|FullyQualifiedName~V08W66ReceiptPersistenceTests|FullyQualifiedName~V08G2ProductNotificationTests' \
+            --filter 'FullyQualifiedName~V08G3DeclarativeCli|FullyQualifiedName~V08G3DeclarativeManifestTests|FullyQualifiedName~V08W68GovernedApplyBoundaryTests|FullyQualifiedName~V08W68DeclarativeCommitRecoveryTests|FullyQualifiedName~V08W68SourceAdvanceBoundaryTests|FullyQualifiedName~V08W68ApprovalProjectionBoundaryTests|FullyQualifiedName~V08G2HumanCliLiveTests|FullyQualifiedName~V08G2ProviderFamilyCliLiveTests|FullyQualifiedName~V08G2DataJobUncertaintyCliLiveTests|FullyQualifiedName~V08G2HumanRecoveryCliLiveTests|FullyQualifiedName~V08W67FamilyBoundaryTests|FullyQualifiedName~V08FleetCapabilityParityTests|FullyQualifiedName~V08W67BearerOpenApiTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08W66PrivateHttpWireTests|FullyQualifiedName~V08W66ProviderCredentialLifecycleTlsTests|FullyQualifiedName~V08W66AuthenticatedWebhookTlsTests|FullyQualifiedName~V08W66ProviderPhysicalTlsTests|FullyQualifiedName~V08W66SmtpPhysicalTlsTests|FullyQualifiedName~V08W66ReceiptPersistenceTests|FullyQualifiedName~V08G2ProductNotificationTests' \
             --results-directory artifacts/g2-ci --logger 'trx;LogFileName=g2-live.trx'
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-cli-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/human-cli-kafka-effect-evidence.json"
@@ -217,6 +217,9 @@ jobs:
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-data-job-uncertainty-evidence.json"
           done
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-human-kafka-product-notification-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-g3-declarative-cli-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-declarative-cli-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-service-controller-evidence.json"
       - name: Retain sanitized live acceptance evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -268,7 +271,7 @@ jobs:
         run: >-
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj
           --configuration Release --no-restore --results-directory artifacts/g2-ci/postgres --logger 'trx;LogFileName=postgres-live.trx'
-          --filter 'FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08NotificationGovernanceTests|FullyQualifiedName~V08NotificationGovernanceHttpTests|FullyQualifiedName~V08NotificationGovernancePostgreSqlTests|FullyQualifiedName~V08NotificationHaAdmissionTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
+          --filter 'FullyQualifiedName~V08G3DeclarativeMigrationTests|FullyQualifiedName~V08G3DeclarativePersistenceTests|FullyQualifiedName~V08G2PostgreSqlProofTests|FullyQualifiedName~V08G2ProductNotificationTests|FullyQualifiedName~V08NotificationGovernanceTests|FullyQualifiedName~V08NotificationGovernanceHttpTests|FullyQualifiedName~V08NotificationGovernancePostgreSqlTests|FullyQualifiedName~V08NotificationHaAdmissionTests|FullyQualifiedName~V08W66PostgreSqlHostedTlsTests|FullyQualifiedName~V08W66NotificationDeliveryStoreTests|FullyQualifiedName~V08W66DeliveryWorkerTests|FullyQualifiedName~V08W66NotificationRoutingTests|FullyQualifiedName~V05MutationPersistenceTests'
       - name: Require real PostgreSQL evidence
         shell: bash
         run: |
@@ -328,10 +331,12 @@ jobs:
           export KAFDECK_G2_RECOVERY_ROOT="$GITHUB_WORKSPACE/deploy/dev/.generated/g2-recovery/ci"
           export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-ci/recovery"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
-            --filter 'FullyQualifiedName~V08G2PostgreSqlRecoveryTests|FullyQualifiedName~V08G2PostgreSqlSafeResumeTests|FullyQualifiedName~V08W66GovernedRecoveryTests|FullyQualifiedName~V08W66SqliteRestoreResumeTests|FullyQualifiedName~V08W66RecoveryHttpBoundaryTests|FullyQualifiedName~V08W66DeliveryInterlockTests' \
+            --filter 'FullyQualifiedName~V08G3DeclarativePostgreSqlRecoveryTests|FullyQualifiedName~V08G2PostgreSqlRecoveryTests|FullyQualifiedName~V08G2PostgreSqlSafeResumeTests|FullyQualifiedName~V08W66GovernedRecoveryTests|FullyQualifiedName~V08W66SqliteRestoreResumeTests|FullyQualifiedName~V08W66RecoveryHttpBoundaryTests|FullyQualifiedName~V08W66DeliveryInterlockTests' \
             --results-directory artifacts/g2-ci/recovery --logger 'trx;LogFileName=recovery-live.trx'
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-before-claim-failover-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-crash-after-post-failover-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/g3-postgresql-lease-failover-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/g3-postgresql-physical-restore-fence-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-stale-backup-quarantine-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-governed-restore-safe-resume-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-governed-restore-safe-resume-evidence.json"
