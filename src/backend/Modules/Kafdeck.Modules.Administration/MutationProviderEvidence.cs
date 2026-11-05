@@ -75,6 +75,14 @@ public static class MutationProviderEvidence
             ["policy.revision"] = EvidenceValueKind.NonNegativeInt64,
             ["policy.digest"] = EvidenceValueKind.Sha256,
             ["policy.receipt"] = EvidenceValueKind.CanonicalGuid,
+            ["request.id"] = EvidenceValueKind.CanonicalGuid,
+            ["request.hash"] = EvidenceValueKind.Sha256,
+            ["request.revision"] = EvidenceValueKind.PositiveInt64,
+            ["request.receipt"] = EvidenceValueKind.CanonicalGuid,
+            ["rate-card.version"] = EvidenceValueKind.Sha256,
+            ["rate-card.hash"] = EvidenceValueKind.Sha256,
+            ["rate-card.revision"] = EvidenceValueKind.NonNegativeInt64,
+            ["rate-card.receipt"] = EvidenceValueKind.CanonicalGuid,
         };
 
     private static readonly HashSet<string> VerificationStates =

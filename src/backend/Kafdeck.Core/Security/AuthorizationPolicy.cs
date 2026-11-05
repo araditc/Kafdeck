@@ -73,6 +73,11 @@ public enum AuthorizationAction
     GovernancePolicyRead = 65,
     GovernancePolicyManage = 66,
     GovernancePolicyActivate = 67,
+    RequestRead = 68,
+    RequestSubmit = 69,
+    RequestDecide = 70,
+    AttributionRead = 71,
+    RateCardManage = 72,
 }
 
 public enum AuthorizationDecisionReason

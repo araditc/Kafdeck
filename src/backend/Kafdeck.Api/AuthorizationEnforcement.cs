@@ -54,7 +54,7 @@ public sealed class KafdeckAuthorizationService
     // bearer humans retain every existing live registration/approval requirement.
     public bool IsLiveGovernanceApprovalAllowed(ClaimsPrincipal? principal,AuthorizationRequest request)
     {
-        if(request.Action!=AuthorizationAction.GovernancePolicyActivate)return false;
+        if(request.Action is not(AuthorizationAction.GovernancePolicyActivate or AuthorizationAction.RateCardManage))return false;
         if(principal?.Identity is NonBrowserReadIdentity)return IsLiveApprovalAllowed(principal,request);
         if(!OperatorSessionContextFactory.TryCreate(principal,out var session)||session is null)return false;
         return _evaluator.EvaluateDirectSubject(session.Identity.Key,request).IsAllowed&&
@@ -63,13 +63,36 @@ public sealed class KafdeckAuthorizationService
 
     public bool IsCurrentGovernanceApprovalAllowed(string principal,AuthorizationRequest request)
     {
-        if(request.Action!=AuthorizationAction.GovernancePolicyActivate)return false;
+        if(request.Action is not(AuthorizationAction.GovernancePolicyActivate or AuthorizationAction.RateCardManage))return false;
         if(NonBrowserHumanPrincipalId.TryParse(principal,out _))return IsCurrentApprovalAllowed(principal,request);
         // EvaluateCanonicalDirectSubject validates the existing canonical browser principal format.
         // This is a lookup against current direct bindings, never reconstructed claims or roles.
         return principal.StartsWith("oidc:",StringComparison.Ordinal)&&IsDirectSubjectAllowed(principal,request)&&
             IsDirectSubjectAllowed(principal,request with{Action=AuthorizationAction.MutationApprove});
     }
+
+    public bool IsLiveRequestDecisionAllowed(ClaimsPrincipal? principal,AuthorizationRequest request)
+    {
+        if(request.Action!=AuthorizationAction.RequestDecide)return false;
+        if(principal?.Identity is NonBrowserReadIdentity bearer)
+            return bearer.Kind==NonBrowserPrincipalKind.Human&&_nonBrowser?.IsGovernedMutationAllowed(bearer,request.Action)==true&&
+                _evaluator.EvaluateDirectSubject(new(bearer.Evidence.Issuer,bearer.Evidence.Subject),request).IsAllowed;
+        return OperatorSessionContextFactory.TryCreate(principal,out var session)&&session is not null&&
+            _evaluator.EvaluateDirectSubject(session.Identity.Key,request).IsAllowed;
+    }
+
+    public bool IsCurrentRequestDecisionAllowed(string principal,AuthorizationRequest request)
+    {
+        if(request.Action!=AuthorizationAction.RequestDecide)return false;
+        if(NonBrowserHumanPrincipalId.TryParse(principal,out _))
+            return _nonBrowser?.IsCurrentPrincipalAllowed(principal,request,_evaluator)==true;
+        return principal.StartsWith("oidc:",StringComparison.Ordinal)&&IsDirectSubjectAllowed(principal,request);
+    }
+
+    public bool IsCurrentPrincipalAllowed(string principal,AuthorizationRequest request) =>
+        RegisteredBearerPrincipal.TryParse(principal,out _)
+            ? _nonBrowser?.IsCurrentPrincipalAllowed(principal,request,_evaluator)==true
+            : principal.StartsWith("oidc:",StringComparison.Ordinal)&&IsDirectSubjectAllowed(principal,request);
 
     public KafdeckAuthorizationService(KafdeckOptions options, AuthorizationPolicyEvaluator evaluator,
         NonBrowserReadRegistry? nonBrowser = null)

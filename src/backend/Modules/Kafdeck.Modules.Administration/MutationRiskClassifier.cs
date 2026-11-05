@@ -114,6 +114,8 @@ public static class MutationRiskClassifier
         MutationOperationKind.CatalogMutation => MutationRiskClass.Moderate,
         MutationOperationKind.GovernancePolicyVersion => MutationRiskClass.Moderate,
         MutationOperationKind.GovernancePolicyActivation => MutationRiskClass.Critical,
+        MutationOperationKind.ServiceRequestChange or MutationOperationKind.ServiceRequestDecision => MutationRiskClass.Moderate,
+        MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation => MutationRiskClass.High,
         MutationOperationKind.TopicAlter => MutationRiskClass.Moderate,
         MutationOperationKind.TopicIncreasePartitions => MutationRiskClass.High,
         MutationOperationKind.TopicDelete => MutationRiskClass.Critical,

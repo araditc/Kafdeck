@@ -26,6 +26,9 @@ public static class MutationAuthorization
         MutationOperationKind.CatalogMutation => AuthorizationAction.CatalogManage,
         MutationOperationKind.GovernancePolicyVersion => AuthorizationAction.GovernancePolicyManage,
         MutationOperationKind.GovernancePolicyActivation => AuthorizationAction.GovernancePolicyActivate,
+        MutationOperationKind.ServiceRequestChange => AuthorizationAction.RequestSubmit,
+        MutationOperationKind.ServiceRequestDecision => AuthorizationAction.RequestDecide,
+        MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation => AuthorizationAction.RateCardManage,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported mutation operation kind."),
     };
 

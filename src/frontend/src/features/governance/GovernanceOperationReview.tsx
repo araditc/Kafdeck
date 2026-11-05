@@ -6,7 +6,7 @@ export function governanceOutcome(state: string): string {
     case 'executionUnknown': return 'Execution outcome is unknown. Do not retry blindly; inspect positive evidence and reconcile before any follow-up.';
     case 'stalePreview': return 'The reviewed material or active policy changed. Prepare a fresh preview and obtain fresh confirmation and approval.';
     case 'awaitingApproval': return 'A distinct eligible human must approve this exact operation. Catalog assignment and policy files grant no execution rights.';
-    case 'appliedVerified': return 'The backend verified this exact operation. Reload the current catalog or policy state.';
+    case 'appliedVerified': return 'The backend verified this exact operation. Reload the current governed resource state.';
     case 'appliedUnverified': return 'Application was reported but not conclusively verified. Inspect durable evidence before deciding another action.';
     case 'partiallyApplied': return 'Partial application requires reconciliation. No automatic rollback or retry is offered.';
     case 'executing': return 'Execution is in progress. Refresh the same operation; do not create a replacement request.';
@@ -26,7 +26,7 @@ export function governanceOperationActions(operation: MutationStatus, reviewed: 
 }
 
 /** Controls never confer authority: all decisions and effects use the existing backend kernel. */
-export function GovernanceOperationReview({ operation, material, busy, update, execute, recover, refresh, run }: {
+export function GovernanceOperationReview({ operation, material, busy, update, execute, recover, refresh, run, executionAllowed = true, executionBlockReason }: {
   operation: MutationStatus;
   material: unknown;
   busy: boolean;
@@ -35,11 +35,14 @@ export function GovernanceOperationReview({ operation, material, busy, update, e
   recover?: (operation: MutationStatus, signal: AbortSignal) => Promise<MutationStatus>;
   refresh?: (operation: MutationStatus, signal: AbortSignal) => Promise<MutationStatus>;
   run: (action: (signal: AbortSignal) => Promise<void>) => Promise<void>;
+  executionAllowed?: boolean;
+  executionBlockReason?: string;
 }) {
   const [reviewed, setReviewed] = useState(false);
   const [challenge, setChallenge] = useState('');
   useEffect(() => { setReviewed(false); setChallenge(''); }, [operation.operationId, operation.previewHash]);
-  const allowed = governanceOperationActions(operation, reviewed, challenge);
+  const baseAllowed = governanceOperationActions(operation, reviewed, challenge);
+  const allowed = {...baseAllowed, execute: baseAllowed.execute && executionAllowed};
   function act(action: (signal: AbortSignal) => Promise<MutationStatus>) {
     return run(async signal => { const next = await action(signal); if (!signal.aborted) { update(next); setChallenge(''); } });
   }
@@ -54,7 +57,10 @@ export function GovernanceOperationReview({ operation, material, busy, update, e
       {operation.resultCode && <><dt>Result code</dt><dd>{operation.resultCode}</dd></>}
     </dl>
     <p role="status">{governanceOutcome(operation.state)}</p>
-    {operation.riskClass === 'critical' && <p role="alert">Critical policy activation requires confirmation and independent human approval for this exact material.</p>}
+    {!executionAllowed && <p role="status">{executionBlockReason ?? 'A current business requirement still blocks dispatch.'}</p>}
+    {operation.riskClass === 'critical' && <p role="alert">{['governancepolicyactivation','policyactivation'].includes(operation.operationKind.toLowerCase())
+      ? 'Critical policy activation requires confirmation and independent human approval for this exact material.'
+      : 'This critical operation requires confirmation and independent human approval for this exact material.'}</p>}
     <details open><summary>Frozen reviewed material</summary><pre className="automation-proof">{JSON.stringify(material, null, 2)}</pre></details>
     <details><summary>Safe backend evidence</summary><pre className="automation-proof">{JSON.stringify(operation.safeProviderEvidence, null, 2)}</pre></details>
     <fieldset disabled={busy}>

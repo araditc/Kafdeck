@@ -64,6 +64,7 @@ public static class CliGovernanceCommands
 
     public static bool Validate(JsonElement value, CliFamilyInvocation invocation)
     {
+        if (CliWorkflowCommands.IsPayload(invocation.Payload)) return CliWorkflowCommands.Validate(value, invocation);
         if (!Validate(value, invocation.Payload)) return false;
         var scope = invocation.GovernanceScope;
         if (invocation.Route == Prefix + "policies/validate" && !Closed(value,["clusterId","document"],["clusterId","document"])) return false;
@@ -74,6 +75,7 @@ public static class CliGovernanceCommands
     }
     public static bool Validate(JsonElement value, CliFamilyPayload payload) => payload switch
     {
+        CliFamilyPayload.WorkflowRequestChange or CliFamilyPayload.WorkflowRateCardDocument or CliFamilyPayload.WorkflowRateCardActivation => CliWorkflowCommands.Validate(value, payload),
         CliFamilyPayload.GovernanceCatalogChange or CliFamilyPayload.GovernanceCatalogImport => Closed(value, ["clusterId", "changes"], ["clusterId", "changes"]) && Text(value.GetProperty("clusterId"), 128) &&
             value.GetProperty("changes") is {ValueKind:JsonValueKind.Array} changes && changes.GetArrayLength() is >0 and <=500 && changes.EnumerateArray().All(Change),
         CliFamilyPayload.GovernancePolicyDocument => Closed(value, ["clusterId", "document", "idempotencyKey"], ["clusterId", "document"]) &&

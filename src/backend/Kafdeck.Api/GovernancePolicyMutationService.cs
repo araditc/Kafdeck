@@ -59,13 +59,20 @@ public sealed class GovernancePolicyExecutionHandler(MutationOperationKind kind,
     public Task<MutationProviderResult> ExecuteAsync(MutationExecutionContext context,CancellationToken token=default)=>service.ExecuteAsync(context,token);
 }
 
-public sealed class GovernanceMutationPreDispatchGuard(IMutationPreDispatchGuard inner,GovernancePolicyRuntime runtime,GovernancePolicyMutationService service) : IMutationPreDispatchGuard
+public sealed class GovernanceMutationPreDispatchGuard(IMutationPreDispatchGuard inner,GovernancePolicyRuntime runtime,GovernancePolicyMutationService service,
+    ServiceRequestMutationService? requests=null,AttributionMutationService? attribution=null) : IMutationPreDispatchGuard
 {
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(MutationOperationSnapshot operation,CancellationToken token=default)
     {
-        var prior=operation.OperationKind is MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation
-            ? await service.ValidateAsync(operation,token).ConfigureAwait(false)
-            : await inner.ValidateAsync(operation,token).ConfigureAwait(false);
+        var prior=operation.OperationKind switch
+        {
+            MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation => await service.ValidateAsync(operation,token).ConfigureAwait(false),
+            MutationOperationKind.ServiceRequestChange or MutationOperationKind.ServiceRequestDecision => requests is null
+                ? new(MutationPreDispatchGuardOutcome.CapabilityUnsupported,"RequestStoreUnavailable") : await requests.ValidateAsync(operation,token).ConfigureAwait(false),
+            MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation => attribution is null
+                ? new(MutationPreDispatchGuardOutcome.CapabilityUnsupported,"AttributionUnavailable") : await attribution.ValidateAsync(operation,token).ConfigureAwait(false),
+            _ => await inner.ValidateAsync(operation,token).ConfigureAwait(false),
+        };
         return prior.Outcome==MutationPreDispatchGuardOutcome.Allowed ? await runtime.ValidateAsync(operation,token).ConfigureAwait(false) : prior;
     }
 }

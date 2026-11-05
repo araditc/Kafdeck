@@ -26,7 +26,7 @@ public static class GovernanceOpenApi
                     foreach (var parameter in endpoint.RoutePattern.Parameters)
                         parameters.Add(new JsonObject { ["name"] = parameter.Name, ["in"] = "path", ["required"] = true, ["schema"] = new JsonObject { ["type"] = "string" } });
                     foreach (var query in contract.QueryKeys.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                        parameters.Add(new JsonObject { ["name"] = query, ["in"] = "query", ["required"] = query == "clusterId",
+                        parameters.Add(new JsonObject { ["name"] = query, ["in"] = "query", ["required"] = contract.RequiredQueryKeys.Split(',',StringSplitOptions.RemoveEmptyEntries).Contains(query,StringComparer.Ordinal),
                             ["schema"] = query == "pageSize" ? new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 200, ["default"] = 50 } : new JsonObject { ["type"] = "string", ["maxLength"] = 4096 } });
                     if (!contract.Read && raw.EndsWith("/preview", StringComparison.Ordinal)) parameters.Add(new JsonObject { ["name"] = "Idempotency-Key", ["in"] = "header", ["required"] = true,
                         ["schema"] = new JsonObject { ["type"] = "string", ["maxLength"] = 256 } });

@@ -19,7 +19,7 @@ public static class GovernancePolicyCompiler
     public const int MaximumBytes = 256 * 1024;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal)
-    { "topic", "consumerGroup", "schema", "connector", "broker", "cluster", "catalog", "policy", "dataJob", "generator", "acl", "scram", "quota", "notification" };
+    { "topic", "consumerGroup", "schema", "connector", "broker", "cluster", "catalog", "policy", "dataJob", "generator", "acl", "scram", "quota", "notification", "request", "rateCard" };
     private static readonly HashSet<string> Fields = new(StringComparer.Ordinal)
     { "classification", "domain", "teamId", "applicationId", "risk", "requestApproved" };
 
@@ -83,7 +83,7 @@ public static class GovernancePolicyCompiler
     }
 
     public static GovernanceDecision Evaluate(CompiledGovernancePolicy policy, GovernanceFact fact,
-        IReadOnlyDictionary<string, string>? metadata, string? digest = null)
+        IReadOnlyDictionary<string, string>? metadata, string? digest = null,GovernanceApprovedRequestFact? approvedRequest=null)
     {
         var matches = new List<string>();
         var requireRequest = false;
@@ -97,7 +97,7 @@ public static class GovernancePolicyCompiler
             foreach (var condition in rule.Conditions)
             {
                 var value = condition.Field == "risk" ? fact.Risk.ToLowerInvariant() :
-                    condition.Field == "requestApproved" ? null : metadata?.GetValueOrDefault(condition.Field);
+                    condition.Field == "requestApproved" ? approvedRequest is null?null:"true" : metadata?.GetValueOrDefault(condition.Field);
                 if (value is null) return new(false, "GovernanceEvidenceUnavailable", digest, Array.Empty<string>());
                 var equal = string.Equals(value, condition.Value, StringComparison.Ordinal);
                 if (condition.Operator == "equals" ? !equal : equal) { matching = false; break; }
@@ -108,7 +108,7 @@ public static class GovernancePolicyCompiler
             requireRequest |= rule.Outcome == "RequireApprovedRequest";
         }
         // W74 alone may supply real immutable request-revision authority. No caller fixture can fabricate approval.
-        return new(!denied && !requireRequest, denied ? "GovernanceDenied" : requireRequest ? "RequestApprovalRequired" : "Allowed", digest, matches);
+        return new(!denied && (!requireRequest||approvedRequest is not null), denied ? "GovernanceDenied" : requireRequest&&approvedRequest is null ? "RequestApprovalRequired" : "Allowed", digest, matches);
     }
 
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
@@ -118,7 +118,8 @@ public static class GovernancePolicyCompiler
         action.StartsWith("Catalog",StringComparison.Ordinal)?"catalog":action.StartsWith("DataJob",StringComparison.Ordinal)?"dataJob":
         action.StartsWith("DataGenerator",StringComparison.Ordinal)?"generator":action.StartsWith("Acl",StringComparison.Ordinal)?"acl":
         action.StartsWith("Scram",StringComparison.Ordinal)?"scram":action.StartsWith("Quota",StringComparison.Ordinal)?"quota":
-        action.StartsWith("Notification",StringComparison.Ordinal)?"notification":action.StartsWith("Broker",StringComparison.Ordinal)?"broker":"cluster";
+        action.StartsWith("Notification",StringComparison.Ordinal)?"notification":action.StartsWith("Request",StringComparison.Ordinal)?"request":
+        action.StartsWith("RateCard",StringComparison.Ordinal)?"rateCard":action.StartsWith("Broker",StringComparison.Ordinal)?"broker":"cluster";
     private static JsonElement Object(JsonElement value, params string[] required)
     {
         if (value.ValueKind != JsonValueKind.Object) throw new ArgumentException("Policy requires an object.");

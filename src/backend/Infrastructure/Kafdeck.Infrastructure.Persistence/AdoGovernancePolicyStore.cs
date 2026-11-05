@@ -13,7 +13,8 @@ namespace Kafdeck.Infrastructure.Persistence;
 public sealed class AdoGovernancePolicyStore(
     IMutationDbConnectionFactory connections,
     IPolicyMetadataTransactionReader? metadata = null,
-    IGovernanceGenerationTransactionGate? generationGate = null) : IGovernancePolicyStore, IGovernancePolicyTransactionGate
+    IGovernanceGenerationTransactionGate? generationGate = null,
+    IApprovedServiceRequestTransactionReader? approvedRequests=null) : IGovernancePolicyStore, IGovernancePolicyTransactionGate
 {
     public const string PreconditionKey = "v09.governance";
     public const int MaximumVersionsPerCluster=10_000;
@@ -161,7 +162,8 @@ public sealed class AdoGovernancePolicyStore(
     {
         try
         {
-            if (generationGate is not null) await generationGate.ValidateAsync(c, tx, token).ConfigureAwait(false);
+            await ValidateBindingDigestsAsync(c,tx,operation,token).ConfigureAwait(false);
+            var approvedRequest=approvedRequests is null?null:await approvedRequests.ReadApprovedAsync(c,tx,operation,token).ConfigureAwait(false);
             var targets=MutationGovernanceTargets.Project(operation.AuthorizationTargets);
             foreach (var cluster in targets.Select(t=>t.ClusterId).Append(operation.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
             {
@@ -183,7 +185,7 @@ public sealed class AdoGovernancePolicyStore(
                     if(requiresMetadata&&(facts is null||!_topicEvidence.TryGetValue((operation.OperationId,cluster,target.ResourceName),out var observed)||
                         observed.At<DateTimeOffset.UtcNow.AddSeconds(-15)||!facts.TryGetValue("topicIdentity",out var boundIdentity)||boundIdentity!=observed.Identity))
                         throw new GovernanceEffectRejectedException("GovernanceEvidenceUnavailable");
-                    var result = GovernancePolicyCompiler.Evaluate(policy, new(target.ClusterId,kind,target.ResourceName,target.Action.ToString(),operation.Risk.RiskClass.ToString()), facts, state.Digest);
+                    var result = GovernancePolicyCompiler.Evaluate(policy, new(target.ClusterId,kind,target.ResourceName,target.Action.ToString(),operation.Risk.RiskClass.ToString()), facts, state.Digest,approvedRequest);
                     if (!result.Allowed) throw new GovernanceEffectRejectedException(result.Code);
                 }
             }
@@ -191,6 +193,26 @@ public sealed class AdoGovernancePolicyStore(
         catch (GovernanceEffectRejectedException) { throw; }
         catch (OperationCanceledException) { throw; }
         catch (Exception) { throw new GovernanceEffectRejectedException("GovernanceUnavailable"); }
+    }
+
+    /// <summary>Request decisions bind the target's current policy identity without executing it
+    /// or demanding the approval that this business transition is creating.</summary>
+    public async Task ValidateBindingDigestsAsync(DbConnection c,DbTransaction tx,MutationOperationSnapshot operation,CancellationToken token)
+    {
+        if(generationGate is not null)await generationGate.ValidateAsync(c,tx,token).ConfigureAwait(false);
+        foreach(var cluster in MutationGovernanceTargets.Project(operation.AuthorizationTargets).Select(t=>t.ClusterId).Append(operation.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var state=await ReadState(c,tx,cluster,true,token).ConfigureAwait(false);
+            var markers=operation.Preconditions.Where(p=>p.Key==PreconditionKey+":"+cluster).ToArray();
+            if(markers.Length>1||markers.SingleOrDefault()?.Fingerprint!=state.Digest)throw new GovernanceEffectRejectedException("GovernancePolicyChanged",true);
+        }
+    }
+    public async Task ValidateBindingAsync(MutationOperationSnapshot operation,CancellationToken token=default)
+    {
+        await using var db=await connections.OpenAsync(token).ConfigureAwait(false);
+        await using var tx=await db.BeginTransactionAsync(token).ConfigureAwait(false);
+        await ValidateBindingDigestsAsync(db,tx,operation,token).ConfigureAwait(false);
+        await tx.CommitAsync(token).ConfigureAwait(false);
     }
 
     public async Task ValidateOperationAsync(MutationOperationSnapshot operation,CancellationToken token)

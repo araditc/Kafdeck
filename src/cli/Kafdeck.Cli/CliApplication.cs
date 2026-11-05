@@ -61,6 +61,10 @@ public static class CliApplication
                 return await CliDeclarativeCommands.ExecuteAsync(invocation, output, error, requestToken, openBrowser);
 
             using var familyPayload = await CliFamilyCommands.ReadPayloadAsync(invocation.Family, requestToken);
+            if (familyPayload is not null && invocation.Family is { } workflow && CliWorkflowCommands.RequiresHumanDecision(familyPayload.RootElement, workflow.Payload) && invocation.OidcProfileFile is null)
+                throw new CliUsageException("Business request decisions require a registered human OIDC profile; service authority cannot approve or reject a request.");
+            if (familyPayload is not null && invocation.Family is { } compiledWorkflow)
+                invocation = invocation with { Family = CliWorkflowCommands.BindCompiledDecisionRoute(compiledWorkflow, familyPayload.RootElement) };
 
             using var client = await KafdeckCliClient.CreateAsync(
                 invocation,
@@ -536,6 +540,16 @@ public static class CliParser
           kafdeck --oidc-profile <profile> policies <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>
           kafdeck --oidc-profile <profile> policies plan <operation-id>
           kafdeck --oidc-profile <profile> policies reconcile <operation-id>
+          kafdeck --oidc-profile <profile> requests list <cluster-id> [--cursor <opaque>] [--limit <1..200>]
+          kafdeck --oidc-profile <profile> requests <get|history> <cluster-id> <request-id>
+          kafdeck --oidc-profile <profile> requests change-preview <cluster-id> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> requests <plan|recover> <operation-id>
+          kafdeck --oidc-profile <profile> measurements list <cluster-id> <from-utc> <to-utc> [resource-id]
+          kafdeck --oidc-profile <profile> attribution windows <cluster-id> <from-utc> <to-utc> [resource-id]
+          kafdeck --oidc-profile <profile> dashboards show <cluster-id> <from-utc> <to-utc> [resource-id]
+          kafdeck --oidc-profile <profile> rate-cards <versions|state> <cluster-id>
+          kafdeck --oidc-profile <profile> rate-cards <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> rate-cards <plan|recover> <operation-id>
           kafdeck --oidc-profile <profile> records produce-preview <cluster-id> <topic-name> --request-file <closed.json> --idempotency-key <key>
           kafdeck --oidc-profile <profile> records produce-execute <operation-id> --request-file <closed.json>
           kafdeck --oidc-profile <profile> consumer-groups offsets-preview <cluster-id> <group-id> --request-file <closed.json> --idempotency-key <key>
@@ -775,7 +789,7 @@ public static class CliParser
             ResolveBaseUri(url);
 
         var declarative = CliDeclarativeCommands.TryParse(positionals, manifestFile, manifestFormat, declarativeSource, sourceRevision, ownershipRevision, declarativeYes, declarativeResource);
-        var family = CliGovernanceCommands.TryParse(positionals, cursor, limit) ?? CliReadCommands.TryParse(positionals) ?? CliFamilyCommands.TryParse(positionals);
+        var family = CliWorkflowCommands.TryParse(positionals, cursor, limit) ?? CliGovernanceCommands.TryParse(positionals, cursor, limit) ?? CliReadCommands.TryParse(positionals) ?? CliFamilyCommands.TryParse(positionals);
         var invocation = declarative is not null
             ? new CliInvocation(baseUri, tokenFile, CliCommand.Declarative, null, false, Output: output, Declarative: declarative)
             : family is not null
