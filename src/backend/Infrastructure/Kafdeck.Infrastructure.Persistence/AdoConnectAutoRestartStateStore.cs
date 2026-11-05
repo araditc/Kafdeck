@@ -2,6 +2,8 @@ using System.Data.Common;
 using System.Globalization;
 using System.Text.Json;
 using Kafdeck.Modules.Connect;
+using Kafdeck.Modules.Administration;
+using Kafdeck.Core.Security;
 
 namespace Kafdeck.Infrastructure.Persistence;
 
@@ -15,10 +17,14 @@ public sealed class AdoConnectAutoRestartStateStore :
         new(JsonSerializerDefaults.Web);
 
     private readonly IMutationDbConnectionFactory _connectionFactory;
+    private readonly IGovernancePolicyTransactionGate? _governance;
+    private readonly IMutationOperationTransactionReader? _operations;
 
     public AdoConnectAutoRestartStateStore(
-        IMutationDbConnectionFactory connectionFactory)
+        IMutationDbConnectionFactory connectionFactory,IGovernancePolicyTransactionGate? governance=null,
+        IMutationOperationTransactionReader? operations=null)
     {
+        _governance=governance;_operations=operations;
         _connectionFactory =
             connectionFactory ??
             throw new ArgumentNullException(
@@ -373,6 +379,23 @@ public sealed class AdoConnectAutoRestartStateStore :
                 .BeginTransactionAsync(cancellationToken)
                 .ConfigureAwait(false);
 
+        if(_governance is not null && activation.CircuitState==ConnectAutoRestartCircuitState.Dispatching && activation.HasUnresolvedDispatch)
+        {
+            await using var prior=connection.CreateCommand();prior.Transaction=transaction;
+            prior.CommandText="SELECT snapshot_json FROM kafdeck_connect_auto_restart_activations WHERE activation_id=@id AND version=@version";
+            AddParameter(prior,"@id",activation.ActivationId.ToString("D"));AddParameter(prior,"@version",expectedVersion);
+            var json=await prior.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+            var previous=json is null?null:JsonSerializer.Deserialize<ConnectAutoRestartActivation>(json,JsonOptions);
+            if(previous?.UnresolvedDispatchId!=activation.UnresolvedDispatchId)
+            {
+                if(_operations is null) return false;
+                var operation=await _operations.ReadAsync(connection,transaction,activation.ActivationId,cancellationToken).ConfigureAwait(false);
+                if(operation is null)return false;
+                var effect=operation with { AuthorizationTargets=operation.AuthorizationTargets.Append(new MutationAuthorizationTarget(AuthorizationAction.ConnectRestart,activation.Target.ClusterId,activation.Target.AuthorizationResource)).Distinct().ToArray() };
+                try {await _governance.ValidateDispatchAsync(connection,transaction,effect,cancellationToken).ConfigureAwait(false);}
+                catch(GovernanceEffectRejectedException){return false;}
+            }
+        }
         await using var update =
             connection.CreateCommand();
         update.Transaction = transaction;

@@ -17,10 +17,17 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
     private const int SchemaVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IMutationDbConnectionFactory _connectionFactory;
+    private readonly IMutationOperationTransactionReader? _transactionReader;
+    private readonly IGovernancePolicyTransactionGate? _policyGate;
 
-    public AdoFleetMutationStateStore(IMutationDbConnectionFactory connectionFactory)
+    public AdoFleetMutationStateStore(IMutationDbConnectionFactory connectionFactory,
+        IMutationOperationTransactionReader? transactionReader = null, IGovernancePolicyTransactionGate? policyGate = null)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        if (policyGate is not null && transactionReader is null)
+            throw new ArgumentException("A policy dispatch gate requires the owning mutation transaction reader.", nameof(transactionReader));
+        _transactionReader = transactionReader;
+        _policyGate = policyGate;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -569,7 +576,12 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
         }
 
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var before = _policyGate is not null
+            ? await GetProgressAsync(connection, transaction, normalized.OperationId, cancellationToken).ConfigureAwait(false)
+            : null;
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             UPDATE kafdeck_fleet_progress
@@ -596,14 +608,42 @@ public sealed class AdoFleetMutationStateStore : IFleetMutationStateStore
 
         if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
         {
+            if (_policyGate is not null && StartsGovernedDispatch(before, normalized))
+            {
+                try
+                {
+                    var parent = await _transactionReader!.ReadAsync(connection, transaction, normalized.OperationId, cancellationToken).ConfigureAwait(false);
+                    if (parent is null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                        return new FleetProgressSaveResult(FleetProgressSaveOutcome.NotFound, before);
+                    }
+                    // The marker is uncommitted. A concurrent policy activation and this
+                    // dispatch serialize on the same database transaction/connection.
+                    await _policyGate.ValidateDispatchAsync(connection, transaction, parent, cancellationToken).ConfigureAwait(false);
+                }
+                catch (GovernanceEffectRejectedException)
+                {
+                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                    return new FleetProgressSaveResult(FleetProgressSaveOutcome.VersionConflict, before);
+                }
+            }
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new FleetProgressSaveResult(FleetProgressSaveOutcome.Saved, normalized);
         }
 
-        var current = await GetProgressAsync(normalized.OperationId, cancellationToken).ConfigureAwait(false);
+        var current = await GetProgressAsync(connection, transaction, normalized.OperationId, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return current is null
             ? new FleetProgressSaveResult(FleetProgressSaveOutcome.NotFound, null)
             : new FleetProgressSaveResult(FleetProgressSaveOutcome.VersionConflict, current);
     }
+
+    private static bool StartsGovernedDispatch(FleetOperationProgressSnapshot? before, FleetOperationProgressSnapshot next) =>
+        next.Transfer?.PendingBatch is { State: FleetTransferBatchState.DispatchStarted } transfer &&
+            (before?.Transfer?.PendingBatch is not { State: FleetTransferBatchState.DispatchStarted } oldTransfer || oldTransfer.BatchId != transfer.BatchId) ||
+        next.Generator?.PendingBatch is { State: FleetGeneratorBatchState.DispatchStarted } generator &&
+            (before?.Generator?.PendingBatch is not { State: FleetGeneratorBatchState.DispatchStarted } oldGenerator || oldGenerator.BatchId != generator.BatchId);
 
     public async Task<FleetConflictObligationCreateResult> CreateConflictObligationAsync(
         FleetConflictObligationSnapshot obligation,

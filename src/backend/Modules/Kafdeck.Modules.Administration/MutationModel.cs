@@ -51,6 +51,9 @@ public enum MutationOperationKind
     DataJob = 29,
     DataGenerator = 30,
     DeclarativeNotificationSubscription = 31,
+    CatalogMutation = 32,
+    GovernancePolicyVersion = 33,
+    GovernancePolicyActivation = 34,
 }
 
 public enum MutationRiskClass

@@ -125,6 +125,7 @@ public static class CliApplication
             if (CliReadCommands.RawOutput(invocation.Family?.ReadContract)) await output.WriteAsync(body);
             else await WriteJsonAsync(output, body, requestToken);
             if (invocation.Family?.ReadContract is { } readName) return CliReadCommands.Outcome(body, readName);
+            if (CliGovernanceCommands.IsGovernance(invocation.Family)) return CliGovernanceCommands.Outcome(body, invocation.Family!);
             return invocation.Family?.Recovery == true ? RecoveryOutcomeCategory(body) :
                 invocation.Family?.RuntimeProgress == true ? RuntimeProgressOutcomeCategory(body, invocation.Family.Stop) :
                 invocation.Family?.PolicyStatus == true ? AutoRestartStatusCategory(body) :
@@ -196,6 +197,10 @@ public static class CliApplication
         using var document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.String)
             return RemoteError;
+        if (string.Equals(state.GetString(), "failedBeforeDispatch", StringComparison.OrdinalIgnoreCase) &&
+            document.RootElement.TryGetProperty("resultCode", out var governanceCode) && governanceCode.ValueKind == JsonValueKind.String &&
+            governanceCode.GetString() is "GovernanceDenied" or "RequestApprovalRequired")
+            return AuthenticationOrAuthorizationError;
         return state.GetString()?.ToLowerInvariant() switch
         {
             "awaitingapproval" => PendingApproval, "executionunknown" or "executing" => UnknownEffect,
@@ -518,6 +523,18 @@ public static class CliParser
           kafdeck --oidc-profile <profile> [global-options] operations approve <operation-id> <preview-hash>
           kafdeck --oidc-profile <profile> [global-options] operations reject <operation-id> <preview-hash>
           kafdeck --oidc-profile <profile> [global-options] operations cancel <operation-id> <preview-hash>
+          kafdeck --oidc-profile <profile> catalog <teams|applications|topics> <cluster-id> [--cursor <opaque>] [--limit <1..200>]
+          kafdeck --oidc-profile <profile> catalog <get|history> <cluster-id> <teams|applications|topics> <record-id>
+          kafdeck --oidc-profile <profile> catalog change-preview <cluster-id> <teams|applications|topics> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> catalog import-preview <cluster-id> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> catalog plan <operation-id>
+          kafdeck --oidc-profile <profile> catalog recover <operation-id> --request-file <preview-hash.json>
+          kafdeck --oidc-profile <profile> policies <versions|state> <cluster-id>
+          kafdeck --oidc-profile <profile> policies version <cluster-id> <version-id>
+          kafdeck --oidc-profile <profile> policies <validate|explain|dry-run> --request-file <closed.json>
+          kafdeck --oidc-profile <profile> policies <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>
+          kafdeck --oidc-profile <profile> policies plan <operation-id>
+          kafdeck --oidc-profile <profile> policies reconcile <operation-id>
           kafdeck --oidc-profile <profile> records produce-preview <cluster-id> <topic-name> --request-file <closed.json> --idempotency-key <key>
           kafdeck --oidc-profile <profile> records produce-execute <operation-id> --request-file <closed.json>
           kafdeck --oidc-profile <profile> consumer-groups offsets-preview <cluster-id> <group-id> --request-file <closed.json> --idempotency-key <key>
@@ -757,7 +774,7 @@ public static class CliParser
             ResolveBaseUri(url);
 
         var declarative = CliDeclarativeCommands.TryParse(positionals, manifestFile, manifestFormat, declarativeSource, sourceRevision, ownershipRevision, declarativeYes, declarativeResource);
-        var family = CliReadCommands.TryParse(positionals) ?? CliFamilyCommands.TryParse(positionals);
+        var family = CliGovernanceCommands.TryParse(positionals, cursor, limit) ?? CliReadCommands.TryParse(positionals) ?? CliFamilyCommands.TryParse(positionals);
         var invocation = declarative is not null
             ? new CliInvocation(baseUri, tokenFile, CliCommand.Declarative, null, false, Output: output, Declarative: declarative)
             : family is not null
@@ -771,7 +788,7 @@ public static class CliParser
                 limit,
                 output);
 
-        if (invocation.Command !=
+        if (!CliGovernanceCommands.IsGovernance(family) && invocation.Command !=
                 CliCommand.TopicsList &&
             (search is not null ||
              cursor is not null ||
@@ -780,6 +797,9 @@ public static class CliParser
             throw new CliUsageException(
                 "--search, --cursor and --limit are admitted only for 'topics list'.");
         }
+
+        if (CliGovernanceCommands.IsGovernance(family) && search is not null)
+            throw new CliUsageException("Governance collections admit only their exact scope and opaque cursor, not a free-form search.");
 
         if (oidcProfileFile is not null && serviceProfileFile is not null)
             throw new CliUsageException("Choose one human or service OIDC profile.");

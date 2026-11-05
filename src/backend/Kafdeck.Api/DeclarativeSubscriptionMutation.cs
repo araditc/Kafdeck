@@ -92,7 +92,8 @@ public static class DeclarativeSubscriptionMutation
 }
 
 public sealed class DeclarativeSubscriptionMutationHandler(IW68RuntimeStore store, DeclarativeRuntimeAuthorizer authority,
-    MutationRequestAuthorizationService authorization, MutationExecutionRequestContextAccessor requestContext, IMutationOperationRepository? operations = null) : IMutationExecutionHandler
+    MutationRequestAuthorizationService authorization, MutationExecutionRequestContextAccessor requestContext, IMutationOperationRepository? operations = null,
+    AdoGovernancePolicyStore? governance = null) : IMutationExecutionHandler
 {
     public MutationOperationKind OperationKind => MutationOperationKind.DeclarativeNotificationSubscription;
 
@@ -108,8 +109,18 @@ public sealed class DeclarativeSubscriptionMutationHandler(IW68RuntimeStore stor
         W68RuntimeCommitReceipt? receipt;
         try
         {
-            receipt = await store.ApplySubscriptionAsync(plan.PlanId, plan.PlanFingerprint, context.Operation.RequesterPrincipalId,
-                async (stored, token) => CurrentAllowed(stored, context.Operation) && (stored.CompensatesPlanId is null || compensationSource is not null && await DeclarativeCompensationAuthority.IsVerifiedPlanAsync(compensationSource, operations, token).ConfigureAwait(false)), cancellationToken).ConfigureAwait(false);
+            async Task<bool> Current(W68StoredRuntimePlan stored,CancellationToken token)=>CurrentAllowed(stored,context.Operation)&&
+                (stored.CompensatesPlanId is null||compensationSource is not null&&await DeclarativeCompensationAuthority.IsVerifiedPlanAsync(compensationSource,operations,token).ConfigureAwait(false));
+            if(governance is not null)
+            {
+                if(store is not W68RuntimeStore owned)return new(MutationExecutionResultKind.FailedDefinitive,"GovernanceStoreUnsupported");
+                receipt=await owned.ApplySubscriptionWithGovernanceAsync(plan.PlanId,plan.PlanFingerprint,context.Operation.RequesterPrincipalId,Current,governance,context.Operation,cancellationToken).ConfigureAwait(false);
+            }
+            else receipt=await store.ApplySubscriptionAsync(plan.PlanId,plan.PlanFingerprint,context.Operation.RequesterPrincipalId,Current,cancellationToken).ConfigureAwait(false);
+        }
+        catch (GovernanceEffectRejectedException ex)
+        {
+            return new(MutationExecutionResultKind.FailedDefinitive,ex.Code);
         }
         catch (Exception)
         {
@@ -138,7 +149,7 @@ public sealed class DeclarativeSubscriptionMutationHandler(IW68RuntimeStore stor
             var intent = DeclarativeSubscriptionMutation.Intent(plan);
             if (operation.CanonicalIntent != intent.CanonicalIntent || !operation.ResourceKeys.SequenceEqual(intent.ResourceKeys) ||
                 !operation.AuthorizationTargets.SequenceEqual(intent.AuthorizationTargets!) ||
-                !operation.Preconditions.SequenceEqual(intent.Preconditions!.OrderBy(p => p.Key, StringComparer.Ordinal)) ||
+                !MutationGovernancePreconditions.ProviderOnly(operation).SequenceEqual(intent.Preconditions!.OrderBy(p => p.Key, StringComparer.Ordinal)) ||
                 operation.MaterialDigests.Count != 0 || operation.ClusterId != plan.Key.DeploymentId ||
                 !operation.Risk.RequiresIndependentApproval || operation.Risk.RiskClass != MutationRiskClass.Critical ||
                 !CurrentAllowed(plan, operation)) return null;

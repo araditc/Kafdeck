@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Kafdeck.Core.Security;
+using Kafdeck.Core.Governance;
 using Kafdeck.Infrastructure.Configuration;
 using Kafdeck.Modules.Administration;
 
@@ -13,6 +14,7 @@ public enum MutationAdmissionOutcome
     Unauthenticated = 4,
     Forbidden = 5,
     InvalidRequest = 6,
+    Unavailable = 7,
 }
 
 public sealed record MutationAdmissionResult(
@@ -28,12 +30,14 @@ public sealed class MutationAdmissionService
     private readonly MutationRequestAuthorizationService _authorization;
     private readonly MutationOptions _options;
     private readonly TimeProvider _timeProvider;
+    private readonly IGovernancePolicyStore? _governance;
 
     public MutationAdmissionService(
         IMutationOperationRepository repository,
         MutationRequestAuthorizationService authorization,
         KafdeckOptions options,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IGovernancePolicyStore? governance = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -42,6 +46,7 @@ public sealed class MutationAdmissionService
             throw new InvalidOperationException(
                 "Mutation admission service requires configured mutation options.");
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _governance = governance;
     }
 
     public Task<MutationAdmissionResult> AdmitAsync(
@@ -147,7 +152,7 @@ public sealed class MutationAdmissionService
             ? targets.Where(t => t.Action is Kafdeck.Core.Security.AuthorizationAction.DeclarativeRead or
                 Kafdeck.Core.Security.AuthorizationAction.DeclarativePlan or Kafdeck.Core.Security.AuthorizationAction.DeclarativeAdopt or
                 Kafdeck.Core.Security.AuthorizationAction.NotificationRead).ToArray() : targets;
-        var authorization = intent.Kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription
+        var authorization = intent.Kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription or MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation
             ? _authorization.AuthorizeProofTargets(principal, admissionTargets)
             : _authorization.AuthorizeTargets(principal, targets);
         if (authorization == KafdeckAuthorizationOutcome.Unauthenticated)
@@ -160,6 +165,25 @@ public sealed class MutationAdmissionService
             return new MutationAdmissionResult(MutationAdmissionOutcome.Forbidden);
         }
 
+        // Bind every physical authorization scope, including cross-cluster transfer destinations.
+        // Never-used disabled governance changes neither legacy material nor its fingerprint.
+        if (_governance is not null)
+        {
+            try
+            {
+                var conditions = (intent.Preconditions ?? Array.Empty<MutationPrecondition>()).ToList();
+                if (conditions.Any(p => p.Key.StartsWith("v09.governance:", StringComparison.Ordinal)))
+                    return new(MutationAdmissionOutcome.InvalidRequest, Code: "GovernancePreconditionReserved");
+                foreach (var cluster in targets.Select(t => t.ClusterId).Append(intent.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+                {
+                    var current = await _governance.GetStateAsync(cluster, cancellationToken).ConfigureAwait(false);
+                    if (current.Digest is not null) conditions.Add(new("v09.governance:" + cluster, current.Digest));
+                }
+                intent = intent with { Preconditions = conditions };
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception) { return new(MutationAdmissionOutcome.Unavailable, Code: "GovernanceUnavailable"); }
+        }
         var now = _timeProvider.GetUtcNow();
         MutationOperation operation;
         try

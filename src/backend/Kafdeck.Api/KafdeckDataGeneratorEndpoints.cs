@@ -657,6 +657,7 @@ public static class KafdeckDataGeneratorEndpoints
                     title:
                         "Generator authorization denied"),
 
+            MutationAdmissionOutcome.Unavailable => Results.Problem(statusCode: 503, title: "Governance authority is unavailable", extensions: new Dictionary<string, object?> { ["code"] = "GovernanceUnavailable" }),
             MutationAdmissionOutcome.InvalidRequest =>
                 Results.Problem(
                     statusCode:

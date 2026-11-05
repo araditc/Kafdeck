@@ -9,16 +9,18 @@ public sealed class W57GovernedDataJobEffectGuard :
     private readonly MutationExecutionRequestContextAccessor _requestContext;
     private readonly MutationRequestAuthorizationService _authorization;
     private readonly GovernedDataJobPreconditionValidator _validator;
+    private readonly GovernancePolicyRuntime? _governance;
 
     public W57GovernedDataJobEffectGuard(
         MutationExecutionRequestContextAccessor requestContext,
         MutationRequestAuthorizationService authorization,
-        GovernedDataJobPreconditionValidator validator)
+        GovernedDataJobPreconditionValidator validator, GovernancePolicyRuntime? governance = null)
     {
         _requestContext = requestContext ??
             throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ??
             throw new ArgumentNullException(nameof(authorization));
+        _governance = governance;
         _validator = validator ??
             throw new ArgumentNullException(nameof(validator));
     }
@@ -75,9 +77,7 @@ public sealed class W57GovernedDataJobEffectGuard :
             return preconditions;
         }
 
-        return MutationCurrentRequesterAuthorization.Evaluate(
-            _requestContext,
-            _authorization,
-            operation);
+        var final = MutationCurrentRequesterAuthorization.Evaluate(_requestContext,_authorization,operation);
+        return final.Outcome==MutationPreDispatchGuardOutcome.Allowed && _governance is not null ? await _governance.ValidateAsync(operation,cancellationToken).ConfigureAwait(false) : final;
     }
 }

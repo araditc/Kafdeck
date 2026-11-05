@@ -1,6 +1,6 @@
 # ADR-0010 — Governance at the existing effect boundary
 
-- Status: Proposed; accepted scope, planning admission pending
+- Status: Accepted; W72 PR #437, protected main `d8d9e6319b536760993d840ce084dfc832c543de`, exact-head CODEOWNER review and seven successful applicable main workflows; admission recorded in #426.
 - Date: 2026-11-05
 - Related: [RFC-0009](../rfcs/0009-v0.9-governance-enterprise-hardening.md), [ADR-0006](0006-durable-mutation-operations.md), [ADR-0009](0009-automation-principals-telemetry-declarative-ownership.md)
 

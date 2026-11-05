@@ -24,6 +24,8 @@ import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from
 import { CommandPalette } from './CommandPalette.js';
 import { StatusBadge } from './StatusBadge.js';
 import { AutomationPanel } from '../features/automation/AutomationPanel.js';
+import { CatalogPanel } from '../features/governance/CatalogPanel.js';
+import { PolicyPanel } from '../features/governance/PolicyPanel.js';
 import { fleetCapabilityStatusKind } from './statusPresentation.js';
 
 function observationText(envelope: ApiEnvelope<unknown>) {
@@ -334,6 +336,7 @@ export function AppShell() {
           <li className="nav-item"><a className="nav-link" href="#ecosystem">Ecosystem</a></li>
           <li className="nav-item"><a className="nav-link" href="#fleet">Fleet</a></li>
           {operator && <li className="nav-item"><a className="nav-link" href="#automation">Automation</a></li>}
+          {operator && selectedClusterId && <><li className="nav-item"><a className="nav-link" href="#ownership-catalog">Ownership catalog</a></li><li className="nav-item"><a className="nav-link" href="#governance-policy">Governance policy</a></li></>}
           {managementSurfaces.navigation && <li className="nav-item"><a className="nav-link" href="#notifications">Notifications</a></li>}
         </ul>
       </div>
@@ -351,6 +354,10 @@ export function AppShell() {
           </div>
           {loading && <div className="alert alert-info kafdeck-status" role="status">Loading cluster observations…</div>}
           {operator && <AutomationPanel key={operator.authenticatedAt} notificationsAvailable={managementSurfaces.navigation} />}
+          {operator && selectedClusterId && <>
+            <CatalogPanel key={`catalog:${operator.email ?? ''}:${operator.authenticatedAt}:${selectedClusterId}`} clusterId={selectedClusterId} />
+            <PolicyPanel key={`policy:${operator.email ?? ''}:${operator.authenticatedAt}:${selectedClusterId}`} clusterId={selectedClusterId} />
+          </>}
           {error && <div className="alert alert-danger kafdeck-status" role="alert">{error}</div>}
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">No authorized clusters are available.</div>}
           <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">

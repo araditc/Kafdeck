@@ -34,6 +34,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly IScramEffectAuthorizationGuard? _scramAuthorization;
     private readonly JobReconciliationService? _reconciliation;
     private readonly DeclarativeSubscriptionMutationHandler? _declarative;
+    private readonly CatalogMutationHandler? _catalog;
 
     public W39MutationPreDispatchGuard(
         MutationExecutionRequestContextAccessor requestContext,
@@ -51,7 +52,8 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         IAclEffectAuthorizationGuard? aclAuthorization = null,
         ScramMutationPreconditionValidator? scram = null,
         IScramEffectAuthorizationGuard? scramAuthorization = null, JobReconciliationService? reconciliation = null,
-        DeclarativeSubscriptionMutationHandler? declarative = null)
+        DeclarativeSubscriptionMutationHandler? declarative = null,
+        CatalogMutationHandler? catalog = null)
     {
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -70,6 +72,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _scramAuthorization = scramAuthorization;
         _reconciliation = reconciliation;
         _declarative = declarative;
+        _catalog = catalog;
     }
 
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(
@@ -88,6 +91,10 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         MutationPreDispatchGuardResult preconditions;
         switch (operation.OperationKind)
         {
+            case MutationOperationKind.CatalogMutation:
+                if (_catalog is null) return Unsupported();
+                preconditions = await _catalog.ValidateAsync(operation, cancellationToken).ConfigureAwait(false);
+                break;
             case MutationOperationKind.DeclarativeNotificationSubscription:
                 if (_declarative is null) return Unsupported();
                 preconditions = await _declarative.ValidateAsync(operation, cancellationToken).ConfigureAwait(false);

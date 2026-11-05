@@ -32,4 +32,4 @@ Implementation should not outrun an unresolved RFC when the RFC is required by g
 
 ### v0.9 planning
 
-- [RFC-0009 — Governance, Enterprise Operations & Hardening](0009-v0.9-governance-enterprise-hardening.md) — scope accepted 2026-11-05; W72 review, planning admission pending. Full W73–W82 implementation is gated on protected-main admission.
+- [RFC-0009 — Governance, Enterprise Operations & Hardening](0009-v0.9-governance-enterprise-hardening.md) — accepted, W72 admitted through PR #437 at protected main `d8d9e63`; W73/W75 implementation follows its complete scope and separate runtime acceptance gates.

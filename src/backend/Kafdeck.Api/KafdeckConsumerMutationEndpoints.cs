@@ -184,6 +184,7 @@ public static class KafdeckConsumerMutationEndpoints
                 statusCode: StatusCodes.Status403Forbidden,
                 type: "urn:kafdeck:problem:mutation-authorization-denied",
                 title: "Mutation access denied"),
+            MutationAdmissionOutcome.Unavailable => Results.Problem(statusCode: 503, title: "Governance authority is unavailable", extensions: new Dictionary<string, object?> { ["code"] = "GovernanceUnavailable" }),
             MutationAdmissionOutcome.InvalidRequest => Results.Problem(
                 statusCode: StatusCodes.Status400BadRequest,
                 type: "urn:kafdeck:problem:mutation-admission-invalid",

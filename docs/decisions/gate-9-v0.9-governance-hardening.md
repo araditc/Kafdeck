@@ -1,7 +1,7 @@
 # Gate 9 — v0.9 Governance, Enterprise Operations & Hardening
 
 - Date: 2026-11-05
-- Status: SCOPE ACCEPTED; W72 PREPARATION ACTIVE; PLANNING ADMISSION PENDING
+- Status: SCOPE ACCEPTED; W72 ADMITTED; W73/W75 IMPLEMENTATION
 - Authority: Project owner, explicit Codex chat decision
 - Scope: [#424](https://github.com/araditc/Kafdeck/issues/424)
 - Tracker: [#425](https://github.com/araditc/Kafdeck/issues/425); planning [W72 #426](https://github.com/araditc/Kafdeck/issues/426)
@@ -24,7 +24,7 @@ Owner scope authorization permits preparing W72. W73–W82 remain blocked until 
 
 ## Open gates
 
-- W72 planning PR and protected-main admission evidence.
+- W72 admission completed through PR #437 at `d8d9e6319b536760993d840ce084dfc832c543de`; #426 records required approval, zero unresolved threads and all seven applicable main workflows. W73/W75 runtime acceptance is recorded separately in #427/#429.
 - Implementation and actual complete W73–W82 acceptance.
 - Separate owner exact-SHA/artifact publication decision.
 

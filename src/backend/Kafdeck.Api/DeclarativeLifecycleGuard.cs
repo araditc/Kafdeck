@@ -31,7 +31,7 @@ public sealed class DeclarativeLifecycleGuard(IW68RuntimeStore store, Declarativ
             plan.ExpiresAtUtc > DateTimeOffset.UtcNow && operation.CanonicalIntent == intent.CanonicalIntent &&
             operation.ClusterId == plan.Key.DeploymentId && operation.AuthorizationTargets.SequenceEqual(intent.AuthorizationTargets!) &&
             operation.ResourceKeys.SequenceEqual(intent.ResourceKeys) &&
-            operation.Preconditions.SequenceEqual(intent.Preconditions!.OrderBy(p => p.Key, StringComparer.Ordinal)) && operation.MaterialDigests.Count == 0 &&
+            MutationGovernancePreconditions.ProviderOnly(operation).SequenceEqual(intent.Preconditions!.OrderBy(p => p.Key, StringComparer.Ordinal)) && operation.MaterialDigests.Count == 0 &&
             authorization.IsStoredRegistrationCurrent(plan.RequesterPrincipalId, plan.Key.DeploymentId, plan.OwnerId, plan.SourceId,
                 plan.SourceRevisionHash, plan.Key.ResourceId, plan.ControllerId, operation.AuthorizationTargets.Select(t => t.Action).Distinct().ToArray());
     }

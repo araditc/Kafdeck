@@ -588,13 +588,13 @@ public sealed class ConnectMutationPreconditionValidator
     private static bool PreconditionMatches(
         MutationOperationSnapshot operation,
         string fingerprint) =>
-        operation.Preconditions.Count == 1 &&
+        MutationGovernancePreconditions.ProviderOnly(operation).Count == 1 &&
         string.Equals(
-            operation.Preconditions[0].Key,
+            MutationGovernancePreconditions.ProviderOnly(operation)[0].Key,
             "connect.connector",
             StringComparison.Ordinal) &&
         string.Equals(
-            operation.Preconditions[0].Fingerprint,
+            MutationGovernancePreconditions.ProviderOnly(operation)[0].Fingerprint,
             fingerprint,
             StringComparison.Ordinal);
 

@@ -6,6 +6,8 @@ Acceptance date: **2026-09-16**
 
 This document consolidates the requested feature inventory into a product-safe target model. It preserves the intended capabilities while explicitly marking features that require reframing, sequencing or exclusion.
 
+v0.9 ownership catalog and policy implementation is described in the [W73/W75 runtime contract](../api/v0.9-catalog-policy-runtime.md); canonical real acceptance is tracked in #427/#429. Catalog assignment grants no authority, business requests remain W74, measured attribution remains W76, and all hardening/distribution/readiness work remains W77–W82. This implementation does not promote a release or convert future target capabilities into blanket support claims.
+
 Legend:
 - **TARGET** — accepted as a long-term Kafdeck capability.
 - **REFRAME** — product goal is valid but the implementation/claim must change.
