@@ -8,6 +8,7 @@ const dist=path.join(root,'src/frontend/dist'),evidence=process.env.KAFDECK_V09_
 const hash='a'.repeat(64),now='2026-11-05T00:00:00Z';
 const ids={catalog:'11111111-1111-4111-8111-111111111111',version:'22222222-2222-4222-8222-222222222222',activation:'33333333-3333-4333-8333-333333333333',wrong:'44444444-4444-4444-8444-444444444444',versionId:'5'.repeat(64)};
 const document='{"schemaVersion":1,"rules":[]}';
+const activeDocument=JSON.stringify({schemaVersion:1,rules:[{id:'deny-create',priority:1,scope:{clusterId:'alpha',resourceKind:'topic',resourceIds:['orders'],action:'TopicCreate'},conditions:[],outcome:'Deny'}]});
 const server=createServer((req,res)=>{
   const name=decodeURIComponent(new URL(req.url,'http://localhost').pathname),file=path.resolve(dist,name==='/'?'index.html':'.'+name);
   if(!file.startsWith(dist+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);res.end();return;}
@@ -38,8 +39,8 @@ const server=createServer((req,res)=>{
         const op=status(ids.catalog,'catalogMutation');operations.set(op.operationId,{op,changes:body.changes});return send(preview(op,body.changes));
       }
       if(p.includes('/catalog/operations/')){const id=p.split('/').pop();if(id===ids.wrong)return send(preview({...status(id,'catalogMutation'),clusterId:'hidden'},[{name:'hidden'}]));const value=operations.get(id);return send(preview(value.op,value.changes));}
-      if(p.endsWith('/policies/versions'))return send({items:[{versionId:ids.versionId,clusterId:'alpha',contentHash:hash,document,createdBy:'fixture',createdAtUtc:now}],nextCursor:null});
-      if(p.endsWith('/policies/active'))return send({clusterId:'alpha',revision:0,enabled:false,versionId:null,contentHash:null,digest:hash});
+      if(p.endsWith('/policies/versions'))return send({items:[{versionId:ids.versionId,clusterId:'alpha',contentHash:hash,document:activeDocument,createdBy:'fixture',createdAtUtc:now}],nextCursor:null});
+      if(p.endsWith('/policies/active'))return send({clusterId:'alpha',revision:1,enabled:true,versionId:ids.versionId,contentHash:hash,digest:hash});
       if(p.endsWith('/policies/validate')){assert.deepEqual(Object.keys(request.postDataJSON()).sort(),['clusterId','document']);assert.equal(request.postDataJSON().clusterId,'alpha');return send({valid:true,contentHash:hash,document});}
       if(p.endsWith('/policies/explain'))return send({allowed:false,code:'RequestApprovalRequired',digest:hash,matchedRuleIds:['require-review']});
       if(p.endsWith('/policies/dry-run'))return send({items:[{allowed:false,code:'RequestApprovalRequired',digest:hash,matchedRuleIds:['require-review']}]});
@@ -76,6 +77,12 @@ const server=createServer((req,res)=>{
     await catalog.getByLabel('Existing catalog operation ID').fill(ids.wrong);await catalog.getByRole('button',{name:'Inspect frozen catalog operation',exact:true}).click();
     await catalog.getByText(/does not match this scope/).waitFor();assert.equal(await catalog.getByRole('article',{name:'Immutable governance operation'}).count(),0);
     await policy.getByLabel('Closed schema JSON (maximum 256 KiB)').fill(document);await policy.getByRole('button',{name:'Validate closed policy',exact:true}).click();await policy.getByRole('region',{name:'Policy validation result'}).waitFor();
+    console.log('Governance fixture probe: active-version-dt');
+    const currentVersion=(await policy.locator('dt').filter({hasText:/^Active version$/}).locator('xpath=following-sibling::dd[1]').textContent()).trim();assert.equal(currentVersion,ids.versionId);
+    console.log('Governance fixture probe: active-version-select');await policy.getByLabel('Immutable policy version').selectOption(currentVersion);
+    console.log('Governance fixture probe: selected-version-summary');
+    const visibleDocument=await policy.getByText('Selected immutable version',{exact:true}).locator('..').locator('pre').textContent();
+    console.log('Governance fixture probe: selected-version-json');assert.equal(JSON.parse(visibleDocument).rules[0].outcome,'Deny');
     await policy.getByRole('button',{name:'Preview governed version write',exact:true}).click();
     const policyReview=policy.getByRole('article',{name:'Immutable governance operation'});await policyReview.waitFor();
     await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();await policyReview.getByRole('button',{name:'Confirm exact preview',exact:true}).click();await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();

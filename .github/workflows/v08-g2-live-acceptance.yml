@@ -313,6 +313,8 @@ jobs:
             artifacts/g4-ci/g4-live.trx
             artifacts/g5-ci/*.trx
             artifacts/g2-ci/identity/*-evidence.json
+            artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.png
+            artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.json
           if-no-files-found: error
       - name: Stop isolated identity process
         if: always()

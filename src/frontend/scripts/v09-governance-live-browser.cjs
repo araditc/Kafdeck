@@ -5,11 +5,13 @@ const root=path.resolve(__dirname,'../../..');
 const sourceIdentity=require('./governance-browser-source.cjs');
 const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/playwright'));
 (async()=>{
-  let browser,phase='input',lastHttp={endpoint:'none',status:0};
+  let browser,phase='input',lastHttp={endpoint:'none',status:0},failurePage=null,failureApiOrigin=null,failureEvidence=null,signedIn=false;
+  const safeCounts={apiVersions:0,apiActivePresent:0,domActiveTerms:0,domOptions:0,domActivePresent:0,domSelectedSummaries:0,domSelectedPre:0,screenshotCaptured:0};
   try{
     const [apiUrl,manifestPath,evidencePath]=process.argv.slice(2);
     if(!apiUrl||!manifestPath||!evidencePath)throw Error('input');
     const api=new URL(apiUrl),manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8').replace(/^\uFEFF/,'')),issuer=new URL(manifest.issuer);
+    failureApiOrigin=api.origin;failureEvidence=evidencePath;
     for(const endpoint of [api,issuer])if(!['127.0.0.1','[::1]','localhost'].includes(endpoint.hostname))throw Error('disposable loopback lab only');
     if(!manifest.browserClientId||!manifest.humanUsername||!manifest.humanPasswordFile||!manifest.approverUsername||!manifest.approverPasswordFile)throw Error('browser lab identity missing');
     const launch={headless:true,channel:'chromium'};if(process.env.KAFDECK_G2_BROWSER_EXECUTABLE)launch.executablePath=process.env.KAFDECK_G2_BROWSER_EXECUTABLE;
@@ -17,12 +19,14 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     // Only disposable loopback test certificates are ignored in this browser context.
     // Genuine backend/CLI TLS validation is independent evidence; this is not a TLS conformance claim.
     const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000}}),page=await context.newPage();
+    failurePage=page;
     page.setDefaultTimeout(30000);const requests=[];
     page.on('request',request=>{const url=new URL(request.url());if(url.origin===api.origin&&url.pathname.startsWith('/api/v1/governance/'))requests.push({path:url.pathname,method:request.method()});});
     // Only compiled endpoint labels and numeric statuses may enter public
     // diagnostics. Never print a URL, query, request body, response or token.
     const endpointLabel=pathname=>{
       const exact={'/api/v1/governance/policies/validate':'policy-validate','/api/v1/governance/policies/explain':'policy-explain','/api/v1/governance/policies/dry-run':'policy-dry-run',
+        '/api/v1/governance/policies/active':'policy-state-read','/api/v1/governance/policies/versions':'policy-versions-read',
         '/api/v1/governance/policies/versions/preview':'policy-version-preview','/api/v1/governance/policies/activations/preview':'policy-activation-preview'};
       if(exact[pathname])return exact[pathname];
       if(/^\/api\/v1\/mutations\/[a-f0-9-]+\/confirm$/i.test(pathname))return 'mutation-confirm';
@@ -30,8 +34,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       if(/^\/api\/v1\/mutations\/[a-f0-9-]+\/execute$/i.test(pathname))return 'mutation-execute';
       return null;
     };
-    async function checkedClick(target,control,endpoint,expected=200){
-      const pending=target.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&endpointLabel(url.pathname)===endpoint&&response.request().method()==='POST';});
+    async function checkedClick(target,control,endpoint,expected=200,method='POST'){
+      const pending=target.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&endpointLabel(url.pathname)===endpoint&&response.request().method()===method;});
       await control.click();const response=await pending;lastHttp={endpoint,status:response.status()};assert.equal(lastHttp.status,expected);
     }
     async function signIn(target,user,passwordFile){
@@ -40,7 +44,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const returned=target.waitForURL(url=>url.origin===api.origin&&!url.pathname.includes('signin-oidc'),{timeout:60000});
       await target.locator('#kc-login').click();await returned;await target.goto(new URL('/',api).href,{waitUntil:'domcontentloaded'});
     }
-    phase='genuine-oidc-sign-in';await signIn(page,manifest.humanUsername,manifest.humanPasswordFile);
+    phase='genuine-oidc-sign-in';await signIn(page,manifest.humanUsername,manifest.humanPasswordFile);signedIn=true;
     phase='real-browser-cookie-csrf-denial';
     const csrfDenied=await context.request.post(new URL('/api/v1/governance/catalog/teams/preview',api).href,
       {headers:{'Idempotency-Key':'csrf-negative-'+crypto.randomUUID()},data:{clusterId:'permitted',changes:[{kind:'Team',expectedRevision:0,name:'csrf-negative'}]}});
@@ -77,11 +81,31 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await policy.getByLabel('Closed schema JSON (maximum 256 KiB)').fill('{"schemaVersion":1,"rules":[]}');
     phase='policy-validation-submit';await checkedClick(page,policy.getByRole('button',{name:'Validate closed policy',exact:true}),'policy-validate');
     phase='policy-validation-result';await policy.getByRole('region',{name:'Policy validation result'}).waitFor();
-    phase='policy-active-selector';
-    const currentVersion=(await policy.locator('dt').filter({hasText:/^Active version$/}).locator('xpath=following-sibling::dd[1]').textContent()).trim();assert.match(currentVersion,/^[a-f0-9]{64}$/);
-    await policy.getByLabel('Immutable policy version').selectOption(currentVersion);
-    const visibleDocument=await policy.getByText('Selected immutable version',{exact:true}).locator('..').locator('pre').textContent();
-    const currentPolicy=JSON.parse(visibleDocument);
+    phase='policy-state-explicit-refresh';
+    const refreshedVersions=page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&endpointLabel(url.pathname)==='policy-versions-read'&&response.request().method()==='GET';});
+    await checkedClick(page,policy.getByRole('button',{name:'Reload authorized policy state',exact:true}),'policy-state-read',200,'GET');
+    const refreshed=await refreshedVersions;lastHttp={endpoint:'policy-versions-read',status:refreshed.status()};assert.equal(lastHttp.status,200);
+    phase='policy-state-refresh-rendered';await page.waitForFunction(()=>document.querySelector('#governance-policy')?.getAttribute('aria-busy')==='false'&&document.querySelector('#governance-policy fieldset')?.disabled===false);
+    phase='policy-api-active';
+    const activeResponse=await context.request.get(new URL('/api/v1/governance/policies/active?clusterId=permitted',api).href);lastHttp={endpoint:'policy-active',status:activeResponse.status()};assert.equal(lastHttp.status,200);
+    const actualActive=await activeResponse.json();assert.equal(actualActive.enabled,true);assert.match(actualActive.versionId,/^[a-f0-9]{64}$/);
+    phase='policy-api-versions';
+    const versionsResponse=await context.request.get(new URL('/api/v1/governance/policies/versions?clusterId=permitted&pageSize=200',api).href);lastHttp={endpoint:'policy-versions',status:versionsResponse.status()};assert.equal(lastHttp.status,200);
+    const actualVersions=await versionsResponse.json();assert.ok(Array.isArray(actualVersions.items));safeCounts.apiVersions=actualVersions.items.length;
+    const actualVersion=actualVersions.items.find(item=>item.versionId===actualActive.versionId);safeCounts.apiActivePresent=Number(!!actualVersion);assert.ok(actualVersion);
+    phase='policy-dom-active-term';
+    const activeTerm=policy.locator('dt').filter({hasText:/^Active version$/});safeCounts.domActiveTerms=await activeTerm.count();assert.equal(safeCounts.domActiveTerms,1);
+    const currentVersion=(await activeTerm.locator('xpath=following-sibling::dd[1]').textContent({timeout:5000})).trim();assert.equal(currentVersion,actualActive.versionId);
+    phase='policy-dom-active-option';
+    const versionSelect=policy.getByLabel('Immutable policy version');const optionValues=await versionSelect.locator('option').evaluateAll(options=>options.map(option=>option.value));
+    safeCounts.domOptions=optionValues.length;safeCounts.domActivePresent=Number(optionValues.includes(currentVersion));assert.equal(safeCounts.domActivePresent,1);
+    phase='policy-dom-select-active';await versionSelect.selectOption(currentVersion,{timeout:10000});
+    phase='policy-dom-selected-summary';
+    const selectedSummary=policy.getByText('Selected immutable version',{exact:true});await selectedSummary.waitFor({state:'visible',timeout:10000});safeCounts.domSelectedSummaries=await selectedSummary.count();assert.equal(safeCounts.domSelectedSummaries,1);
+    phase='policy-dom-selected-pre';const selectedPre=selectedSummary.locator('..').locator('pre');safeCounts.domSelectedPre=await selectedPre.count();assert.equal(safeCounts.domSelectedPre,1);
+    const visibleDocument=await selectedPre.textContent({timeout:5000});assert.equal(visibleDocument,actualVersion.document);
+    phase='policy-dom-selected-json';const currentPolicy=JSON.parse(visibleDocument);
+    phase='policy-active-denial-rule';
     const deny=currentPolicy.rules.find(rule=>rule.outcome==='Deny'&&rule.scope.clusterId==='permitted'&&rule.scope.resourceKind==='topic'&&rule.scope.action==='TopicCreate'&&Array.isArray(rule.scope.resourceIds)&&rule.scope.resourceIds.length>0);
     assert.ok(deny,'The actual fixture policy must contain the scoped TopicCreate denial selector.');
     await policy.getByLabel('Resource kind',{exact:true}).selectOption(deny.scope.resourceKind);
@@ -148,6 +172,17 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     console.log('V09_GENUINE_GOVERNANCE_BROWSER_PASSED');await context.close();
   }catch{
     // Keep credentials, issuer URLs, authorization codes and tokens out of public CI logs.
-    console.error('V09_GENUINE_GOVERNANCE_BROWSER_FAILED phase='+phase+' endpoint='+lastHttp.endpoint+' status='+lastHttp.status);process.exitCode=3;
+    try{
+      if(signedIn&&failurePage&&!failurePage.isClosed()&&failureEvidence){
+        const current=new URL(failurePage.url());
+        if(current.origin===failureApiOrigin&&current.pathname==='/'&&await failurePage.locator('input[type="password"]').count()===0&&await failurePage.getByRole('button',{name:'Sign out',exact:true}).count()===1){
+          const screenshot=failureEvidence.endsWith('-evidence.json')?failureEvidence.replace(/-evidence\.json$/,'-failure.png'):failureEvidence.replace(/\.json$/,'-browser-failure.png');
+          fs.mkdirSync(path.dirname(screenshot),{recursive:true});await failurePage.screenshot({path:screenshot,fullPage:true,timeout:5000});safeCounts.screenshotCaptured=1;
+          fs.writeFileSync(screenshot.replace(/\.png$/,'.json'),JSON.stringify({failed:true,phase,lastHttp,safeCounts},null,2));
+        }
+      }
+    }catch{/* A diagnostic failure must never disclose browser exception details. */}
+    const counts=Object.entries(safeCounts).map(([name,value])=>name+':'+Math.max(0,Math.min(10000,Number.isInteger(value)?value:0))).join(',');
+    console.error('V09_GENUINE_GOVERNANCE_BROWSER_FAILED phase='+phase+' endpoint='+lastHttp.endpoint+' status='+lastHttp.status+' counts='+counts);process.exitCode=3;
   }finally{if(browser)await browser.close();}
 })();
