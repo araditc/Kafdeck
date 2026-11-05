@@ -780,6 +780,7 @@ public static class KafdeckDataJobEndpoints
                     title:
                         "Data-job authorization denied"),
 
+            MutationAdmissionOutcome.Unavailable => Results.Problem(statusCode: 503, title: "Governance authority is unavailable", extensions: new Dictionary<string, object?> { ["code"] = "GovernanceUnavailable" }),
             MutationAdmissionOutcome.InvalidRequest =>
                 Results.Problem(
                     statusCode:

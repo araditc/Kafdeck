@@ -371,3 +371,7 @@ Original Gate 8 scope and planning-admission entries above remain historical rec
 > تأیید کامل؛ شروع W72
 
 All W72–W82 themes remain accepted: catalog, requests/approvals, policy, measured attribution/dashboards, hardening/compatibility, independent security review, accessibility/i18n/Persian, upgrade/restore/air-gap, OCI/native/Helm and measured budgets/readiness. Runtime implementation starts only after complete governed planning admission on protected main and successful applicable main checks. New authority/bypass, arbitrary execution, production chaos/deployment, public runtime plugins and publication are not authorized. Exact-SHA/artifact publication remains separately owner-gated. v0.8 release identity and registry access remain unchanged.
+
+### W72 planning admission — 2026-11-05
+
+PR #437 was approved by CODEOWNER `akhiabanchian` on exact head `a6bfc207d025b2114488e08c537d3d4e460fdcbf` with all 14 checks successful and no unresolved threads. The merged tree at `d8d9e6319b536760993d840ce084dfc832c543de` equals that reviewed tree; all seven applicable main workflows succeeded. W72 #426 closed and tracker #425 activated dependency-valid lanes. The reviewed package contains the author architecture/security assessment; W78 independent implemented-system review remains required. This admission authorizes implementation under the complete scope and preserves separate runtime acceptance and publication gates.

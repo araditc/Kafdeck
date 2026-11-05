@@ -232,7 +232,7 @@ public sealed class ConsumerMutationPreconditionValidator
         }
 
         if (!TryGetUniquePreconditions(
-                operation.Preconditions,
+                MutationGovernancePreconditions.ProviderOnly(operation),
                 out var preconditions))
         {
             return Stale("consumer_precondition_shape_changed");

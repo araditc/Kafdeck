@@ -517,5 +517,8 @@ public sealed class MutationDispatchService
             MutationOperationKind.DataJob or
             MutationOperationKind.DataGenerator or
             MutationOperationKind.DeclarativeNotificationSubscription or
+            MutationOperationKind.CatalogMutation or
+            MutationOperationKind.GovernancePolicyVersion or
+            MutationOperationKind.GovernancePolicyActivation or
             MutationOperationKind.FleetUncertaintyDisposition;
 }

@@ -5,6 +5,8 @@ using Kafdeck.Core.Notifications;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Mvc;
+using Kafdeck.Infrastructure.Persistence;
+using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Api;
 
@@ -51,6 +53,8 @@ public static class KafdeckNotificationGovernanceEndpoints
                     authorization.PolicyFingerprint==policyFingerprint &&
                     Allowed(context,authorization,destinationId);
                 if(!CurrentAuthority()) return Denied(KafdeckAuthorizationOutcome.Forbidden);
+                // Existing global controls retain their original null-cluster RBAC. Policy uses
+                // the reserved deployment scope and cannot invent a physical Kafka cluster.
                 var state=await store.ChangeAsync(change,CurrentAuthority,context.RequestAborted).ConfigureAwait(false);
                 if(state is null) return Results.Problem(statusCode:409,title:"Notification governance revision conflict",
                     type:"urn:kafdeck:problem:notification-governance-conflict");
@@ -59,6 +63,9 @@ public static class KafdeckNotificationGovernanceEndpoints
                 return Results.Ok(new NotificationManagedDestinationReceipt(destinationId,state.Revision,state.ProfileEnabled,state.CredentialEnabled));
             }
             catch(ArgumentException) { return Invalid(); }
+            catch(GovernanceEffectRejectedException ex) { return Results.Problem(statusCode:403,title:ex.Code,extensions:new Dictionary<string,object?>{{"code",ex.Code}}); }
+            catch(GovernanceGenerationException) { return Results.Problem(statusCode:503,title:"GovernanceUnavailable"); }
+            catch(System.Data.Common.DbException) { return Results.Problem(statusCode:503,title:"GovernanceUnavailable"); }
         }).WithName("v08-notification-governance-change")
           .RequireKafdeckAuthorization(AuthorizationAction.NotificationManage,resourceRouteKey:"destinationId")
           .RequireKafdeckAntiforgery();

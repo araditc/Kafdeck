@@ -161,7 +161,7 @@ public sealed class GovernedDataJobPreconditionValidator
         var expectedPreconditions =
             expected.Preconditions ??
             Array.Empty<MutationPrecondition>();
-        if (!operation.Preconditions.SequenceEqual(
+        if (!MutationGovernancePreconditions.ProviderOnly(operation).SequenceEqual(
                 expectedPreconditions))
         {
             return false;

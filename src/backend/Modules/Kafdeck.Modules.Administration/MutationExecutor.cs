@@ -566,8 +566,24 @@ public sealed class MutationExecutor
                            $"Execution lease renewal failed before dispatch: {renewedLease.Outcome}.");
             }
 
+            var beforeDispatch = operation.Snapshot;
             operation.MarkDispatchStarted(_timeProvider.GetUtcNow());
-            await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                await PersistNextAsync(operation, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (GovernanceEffectRejectedException rejected)
+            {
+                // The owning persistence transaction rejected before dispatch became durable.
+                // Restore the actual pre-dispatch aggregate, never retain its local-only marker.
+                operation = MutationOperation.Restore(beforeDispatch);
+                if (rejected.Stale) operation.MarkStaleBeforeDispatch(_timeProvider.GetUtcNow());
+                else operation.Complete(MutationExecutionResultKind.FailedBeforeDispatch,rejected.Code,_timeProvider.GetUtcNow());
+                await PersistNextAsync(operation,CancellationToken.None).ConfigureAwait(false);
+                releaseResourceClaims = true;
+                await WriteAuditAsync(operation.Snapshot,rejected.Stale ? MutationAuditEventType.StalePreview : MutationAuditEventType.Completed,rejected.Code,CancellationToken.None).ConfigureAwait(false);
+                return operation.Snapshot;
+            }
             await TryWritePostDispatchAuditAsync(
                 operation.Snapshot,
                 MutationAuditEventType.DispatchStarted,

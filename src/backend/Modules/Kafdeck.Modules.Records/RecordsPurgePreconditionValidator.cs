@@ -108,7 +108,7 @@ public sealed class RecordsPurgePreconditionValidator
 
         var preconditions =
             new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var item in operation.Preconditions)
+        foreach (var item in MutationGovernancePreconditions.ProviderOnly(operation))
         {
             if (item is null ||
                 !preconditions.TryAdd(

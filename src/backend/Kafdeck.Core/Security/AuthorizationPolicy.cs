@@ -69,6 +69,10 @@ public enum AuthorizationAction
     DeclarativeAdopt = 61,
     DeclarativeApply = 62,
     DeclarativeSourceManage = 63,
+    CatalogManage = 64,
+    GovernancePolicyRead = 65,
+    GovernancePolicyManage = 66,
+    GovernancePolicyActivate = 67,
 }
 
 public enum AuthorizationDecisionReason

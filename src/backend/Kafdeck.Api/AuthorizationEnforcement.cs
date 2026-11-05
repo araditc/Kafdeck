@@ -50,6 +50,27 @@ public sealed class KafdeckAuthorizationService
             IsDirectSubjectAllowed(principal, request) && IsDirectSubjectAllowed(principal, request with { Action = AuthorizationAction.MutationApprove });
     }
 
+    // Closed v0.9 activation authority. Browser operators do not acquire a CLI registration;
+    // bearer humans retain every existing live registration/approval requirement.
+    public bool IsLiveGovernanceApprovalAllowed(ClaimsPrincipal? principal,AuthorizationRequest request)
+    {
+        if(request.Action!=AuthorizationAction.GovernancePolicyActivate)return false;
+        if(principal?.Identity is NonBrowserReadIdentity)return IsLiveApprovalAllowed(principal,request);
+        if(!OperatorSessionContextFactory.TryCreate(principal,out var session)||session is null)return false;
+        return _evaluator.EvaluateDirectSubject(session.Identity.Key,request).IsAllowed&&
+            _evaluator.EvaluateDirectSubject(session.Identity.Key,request with{Action=AuthorizationAction.MutationApprove}).IsAllowed;
+    }
+
+    public bool IsCurrentGovernanceApprovalAllowed(string principal,AuthorizationRequest request)
+    {
+        if(request.Action!=AuthorizationAction.GovernancePolicyActivate)return false;
+        if(NonBrowserHumanPrincipalId.TryParse(principal,out _))return IsCurrentApprovalAllowed(principal,request);
+        // EvaluateCanonicalDirectSubject validates the existing canonical browser principal format.
+        // This is a lookup against current direct bindings, never reconstructed claims or roles.
+        return principal.StartsWith("oidc:",StringComparison.Ordinal)&&IsDirectSubjectAllowed(principal,request)&&
+            IsDirectSubjectAllowed(principal,request with{Action=AuthorizationAction.MutationApprove});
+    }
+
     public KafdeckAuthorizationService(KafdeckOptions options, AuthorizationPolicyEvaluator evaluator,
         NonBrowserReadRegistry? nonBrowser = null)
     {

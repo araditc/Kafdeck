@@ -9,15 +9,17 @@ public sealed class ConfiguredDataGeneratorEffectGuard :
 {
     private readonly AuthorizationPolicyEvaluator _authorization;
     private readonly BearerRuntimeAuthorization? _bearerAuthorization;
+    private readonly GovernancePolicyRuntime? _governance;
     private readonly MutationApprovalAuthorizer _approval;
     private readonly DataGeneratorPreconditionValidator _preconditions;
 
     public ConfiguredDataGeneratorEffectGuard(
         AuthorizationPolicyEvaluator authorization,
         MutationApprovalAuthorizer approval,
-        DataGeneratorPreconditionValidator preconditions, BearerRuntimeAuthorization? bearerAuthorization = null)
+        DataGeneratorPreconditionValidator preconditions, BearerRuntimeAuthorization? bearerAuthorization = null, GovernancePolicyRuntime? governance = null)
     {
         _bearerAuthorization = bearerAuthorization;
+        _governance = governance;
         _authorization =
             authorization ??
             throw new ArgumentNullException(
@@ -86,7 +88,7 @@ public sealed class ConfiguredDataGeneratorEffectGuard :
                 "data_generator_approver_authorization_revoked");
         }
 
-        return MutationPreDispatchGuardResult.Allowed;
+        return _governance is null ? MutationPreDispatchGuardResult.Allowed : await _governance.ValidateAsync(operation,cancellationToken).ConfigureAwait(false);
     }
 
     private bool RequesterAllowed(

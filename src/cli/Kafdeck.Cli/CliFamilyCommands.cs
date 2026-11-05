@@ -4,8 +4,8 @@ namespace Kafdeck.Cli;
 
 public sealed record CliFamilyInvocation(string Route, bool Preview, CliFamilyPayload Payload, string? RequestFile = null,
     bool HumanOnly = false, bool Read = false, bool Recovery = false, string Method = "post", bool RuntimeProgress = false, bool Stop = false, bool PolicyStatus = false,
-    string? ReadContract = null);
-public enum CliFamilyPayload { Empty, RecordsPreview, RecordsExecution, Purge, ConsumerOffsets, ConsumerDelete, SchemaRegister, SchemaCompatibility, SchemaDelete, SchemaExecution, ConnectConfiguration, ConnectControl, RecoveryPreview, RecoveryReview, DataJob, Generator, BatchReconciliation, AutoRestart, AutoRestartApply, ReconciliationProof, NamedReadRequest }
+    string? ReadContract = null, string? GovernanceScope = null);
+public enum CliFamilyPayload { Empty, RecordsPreview, RecordsExecution, Purge, ConsumerOffsets, ConsumerDelete, SchemaRegister, SchemaCompatibility, SchemaDelete, SchemaExecution, ConnectConfiguration, ConnectControl, RecoveryPreview, RecoveryReview, DataJob, Generator, BatchReconciliation, AutoRestart, AutoRestartApply, ReconciliationProof, NamedReadRequest, GovernanceCatalogChange, GovernanceCatalogImport, GovernancePolicyDocument, GovernancePolicyActivation, GovernancePolicyFact, GovernancePolicyDryRun, GovernanceCatalogRecovery }
 
 /// <summary>Named family commands only. Structured files have a closed request schema, never a path/handler/actor selector.</summary>
 public static class CliFamilyCommands
@@ -90,8 +90,9 @@ public static class CliFamilyCommands
         if (invocation is null || invocation.Payload == CliFamilyPayload.Empty) return null;
         if (string.IsNullOrWhiteSpace(invocation.RequestFile)) throw new CliUsageException("This named command requires --request-file.");
         await using var stream = new FileStream(invocation.RequestFile, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
-        if (stream.Length is < 1 or > MaxRequestBytes) throw new CliUsageException("The closed family request must be 1..65536 bytes.");
-        var buffer = new byte[MaxRequestBytes + 1];
+        var maximumBytes = CliGovernanceCommands.RequestByteLimit(invocation);
+        if (stream.Length < 1 || stream.Length > maximumBytes) throw new CliUsageException($"The closed family request must be 1..{maximumBytes} bytes.");
+        var buffer = new byte[maximumBytes + 1];
         var length = 0;
         try
         {
@@ -101,7 +102,7 @@ public static class CliFamilyCommands
                 if (read == 0) break;
                 length += read;
             }
-            if (length > MaxRequestBytes) throw new CliUsageException("The closed family request is too large.");
+            if (length > maximumBytes) throw new CliUsageException("The closed family request is too large.");
             JsonDocument document;
             try
             {
@@ -110,7 +111,8 @@ public static class CliFamilyCommands
                 if (reader.Read()) { document.Dispose(); throw new JsonException(); }
             }
             catch (JsonException) { throw new CliUsageException("Invalid closed family request JSON."); }
-            if (invocation.ReadContract is { } readName ? !CliReadCommands.Validate(document.RootElement, readName) : !ValidatePayload(document.RootElement, invocation.Payload))
+            if (CliGovernanceCommands.IsGovernance(invocation) ? !CliGovernanceCommands.Validate(document.RootElement, invocation) :
+                invocation.ReadContract is { } readName ? !CliReadCommands.Validate(document.RootElement, readName) : !ValidatePayload(document.RootElement, invocation.Payload))
             { document.Dispose(); throw new CliUsageException("The request does not match this named family's closed schema."); }
             return document;
         }
@@ -152,6 +154,8 @@ public static class CliFamilyCommands
         CliFamilyPayload.AutoRestart => Object(value, ("enabled", Scalar), ("taskId", Scalar), ("maxAttempts", Scalar), ("initialBackoffSeconds", Scalar),
             ("maxBackoffSeconds", Scalar), ("activationLifetimeSeconds", Scalar), ("maxActivePoliciesPerProfile", Scalar), ("jitterBasisPoints", Scalar)),
         CliFamilyPayload.AutoRestartApply => Object(value, ("operationId", Scalar), ("taskId", Scalar)),
+        CliFamilyPayload.GovernanceCatalogChange or CliFamilyPayload.GovernanceCatalogImport or CliFamilyPayload.GovernancePolicyDocument or
+            CliFamilyPayload.GovernancePolicyActivation or CliFamilyPayload.GovernancePolicyFact or CliFamilyPayload.GovernancePolicyDryRun or CliFamilyPayload.GovernanceCatalogRecovery => CliGovernanceCommands.Validate(value, payload),
         _ => false,
     };
     private static bool Records(JsonElement value) => Array(value, r => Object(r, ("key", Scalar), ("value", Scalar),

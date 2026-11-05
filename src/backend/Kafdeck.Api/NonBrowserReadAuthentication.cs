@@ -187,7 +187,8 @@ public sealed class NonBrowserReadRegistry
         var registration = Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind);
         return registration is not null &&
             identity.Evidence.ExpiresAtUtc > DateTimeOffset.UtcNow && (registration.RequestedReadActions.Contains(action) ||
-                identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage && IsGovernedMutationAllowed(identity, action)) &&
+                (identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage ||
+                    action == AuthorizationAction.CatalogManage) && IsGovernedMutationAllowed(identity, action)) &&
             evaluator.HasApplicableDirectSubjectPermission(new(identity.Evidence.Issuer, identity.Evidence.Subject), action, clusterId);
     }
 
@@ -413,13 +414,32 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         var namedRead = BearerReadBoundary.Matches(context, readContract);
         var family = context.GetEndpoint()?.Metadata.GetMetadata<BearerFamilyRoute>();
         var declarative = context.GetEndpoint()?.Metadata.GetMetadata<DeclarativeRouteContract>();
+        var governance = context.GetEndpoint()?.Metadata.GetMetadata<GovernanceRouteContract>();
         var recoveryRoute = route is not null && RecoveryRoutes.Contains(route);
         var approvalRoute = route is not null && ApprovalRoutes.Contains(route);
-        var governedRoute = route is not null && (MutationRoutes.Contains(route) || approvalRoute || family is not null || recoveryRoute || declarative is not null);
+        var governedRoute = route is not null && (MutationRoutes.Contains(route) || approvalRoute || family is not null || recoveryRoute || declarative is not null || governance is not null);
         // Minimal API binding runs before endpoint filters, including for callers
         // without an Authorization header. Bound these dedicated routes first.
         if ((governedRoute || namedRead && readContract!.Body is not null) && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
-            bodyLimit.MaxRequestBodySize = 64 * 1024;
+            bodyLimit.MaxRequestBodySize = governance?.MaxBodyBytes ?? 64 * 1024;
+        if (governance is not null)
+        {
+            if (context.Request.ContentLength > governance.MaxBodyBytes)
+            {
+                context.Response.StatusCode = 413;
+                return;
+            }
+            var queryKeys = governance.QueryKeys.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+            if (context.Request.Query.Count > queryKeys.Count || context.Request.Query.Any(pair =>
+                    !queryKeys.Contains(pair.Key) || pair.Value.Count != 1 || pair.Value[0] is not { Length: <= 4096 } value || value.Any(char.IsControl)) ||
+                !await BearerFamilyRoutes.ValidateBodyAsync(context.Request, governance.RequestType, context.RequestAborted,
+                    maxBodyBytes: governance.MaxBodyBytes))
+            {
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsJsonAsync(new { code = "InvalidGovernanceRequest", status = 400 }, context.RequestAborted);
+                return;
+            }
+        }
         if (!context.Request.Headers.TryGetValue("Authorization", out var authorization))
         {
             await next(context);
@@ -441,7 +461,10 @@ public sealed class NonBrowserReadBoundaryMiddleware(RequestDelegate next)
         if (identity is not null && governedRoute)
         {
             var previewAction = BearerTopicMutationScope.PreviewAction(route);
-            var allowed = declarative is not null
+            var allowed = governance is not null
+                ? governance.Read ? registry?.IsRegisteredReadAllowed(identity, governance.Action) == true :
+                    registry?.IsGovernedMutationAllowed(identity, governance.Action) == true
+                : declarative is not null
                 ? (declarative.Action == AuthorizationAction.DeclarativeRead
                     ? registry?.IsRegisteredReadAllowed(identity, declarative.Action) == true
                     : registry?.IsGovernedMutationAllowed(identity, declarative.Action) == true)

@@ -9,15 +9,17 @@ public sealed class ConfiguredGovernedDataJobEffectGuard :
 {
     private readonly AuthorizationPolicyEvaluator _authorization;
     private readonly BearerRuntimeAuthorization? _bearerAuthorization;
+    private readonly GovernancePolicyRuntime? _governance;
     private readonly MutationApprovalAuthorizer _approval;
     private readonly GovernedDataJobPreconditionValidator _preconditions;
 
     public ConfiguredGovernedDataJobEffectGuard(
         AuthorizationPolicyEvaluator authorization,
         MutationApprovalAuthorizer approval,
-        GovernedDataJobPreconditionValidator preconditions, BearerRuntimeAuthorization? bearerAuthorization = null)
+        GovernedDataJobPreconditionValidator preconditions, BearerRuntimeAuthorization? bearerAuthorization = null, GovernancePolicyRuntime? governance = null)
     {
         _bearerAuthorization = bearerAuthorization;
+        _governance = governance;
         _authorization =
             authorization ??
             throw new ArgumentNullException(
@@ -91,7 +93,7 @@ public sealed class ConfiguredGovernedDataJobEffectGuard :
                 "data_job_approver_authorization_revoked");
         }
 
-        return MutationPreDispatchGuardResult.Allowed;
+        return _governance is null ? MutationPreDispatchGuardResult.Allowed : await _governance.ValidateAsync(operation,cancellationToken).ConfigureAwait(false);
     }
 
     private bool RequesterAllowed(

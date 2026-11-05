@@ -111,6 +111,9 @@ public static class MutationRiskClassifier
     private static MutationRiskClass BaseRisk(MutationOperationKind kind) => kind switch
     {
         MutationOperationKind.TopicCreate => MutationRiskClass.Low,
+        MutationOperationKind.CatalogMutation => MutationRiskClass.Moderate,
+        MutationOperationKind.GovernancePolicyVersion => MutationRiskClass.Moderate,
+        MutationOperationKind.GovernancePolicyActivation => MutationRiskClass.Critical,
         MutationOperationKind.TopicAlter => MutationRiskClass.Moderate,
         MutationOperationKind.TopicIncreasePartitions => MutationRiskClass.High,
         MutationOperationKind.TopicDelete => MutationRiskClass.Critical,

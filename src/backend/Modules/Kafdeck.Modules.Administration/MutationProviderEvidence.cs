@@ -67,6 +67,14 @@ public static class MutationProviderEvidence
             ["declarative.plan-fingerprint"] = EvidenceValueKind.Sha256,
             ["declarative.ownership-revision"] = EvidenceValueKind.PositiveInt64,
             ["declarative.subscription-revision"] = EvidenceValueKind.PositiveInt64,
+            ["catalog.plan"] = EvidenceValueKind.CanonicalGuid,
+            ["catalog.content-hash"] = EvidenceValueKind.Sha256,
+            ["catalog.changed"] = EvidenceValueKind.PositiveInt32,
+            ["policy.version"] = EvidenceValueKind.Sha256,
+            ["policy.hash"] = EvidenceValueKind.Sha256,
+            ["policy.revision"] = EvidenceValueKind.NonNegativeInt64,
+            ["policy.digest"] = EvidenceValueKind.Sha256,
+            ["policy.receipt"] = EvidenceValueKind.CanonicalGuid,
         };
 
     private static readonly HashSet<string> VerificationStates =

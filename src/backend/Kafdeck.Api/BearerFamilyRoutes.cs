@@ -105,11 +105,13 @@ internal static class BearerFamilyRoutes
     });
 
     public static bool IsAction(AuthorizationAction action) => BearerTopicMutationScope.IsAction(action) ||
+        action is AuthorizationAction.CatalogManage or AuthorizationAction.GovernancePolicyManage or AuthorizationAction.GovernancePolicyActivate ||
         action is AuthorizationAction.DeclarativePlan or AuthorizationAction.DeclarativeAdopt or AuthorizationAction.DeclarativeApply or AuthorizationAction.DeclarativeSourceManage ||
         action is AuthorizationAction.DataJobPlan or AuthorizationAction.DataJobExecute or AuthorizationAction.DataGeneratorPlan or
             AuthorizationAction.DataGeneratorExecute or AuthorizationAction.ConnectRestart or AuthorizationAction.MutationReconcile ||
         Contracts.Any(c => !c.Read && c.Action == action);
-    public static bool IsKind(MutationOperationKind kind) => kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription || BearerTopicMutationScope.IsKind(kind) || Contracts.Any(c => c.Kind == kind);
+    public static bool IsKind(MutationOperationKind kind) => kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription or
+        MutationOperationKind.CatalogMutation or MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation || BearerTopicMutationScope.IsKind(kind) || Contracts.Any(c => c.Kind == kind);
     public static string Path(bool bearer, string original) => bearer ? original.Replace("/api/v1/", "/api/v1/automation/", StringComparison.Ordinal) : original;
     public static string Name(bool bearer, string original) => bearer ? Contract(original).Name : original;
     private static BearerFamilyRoute Contract(string original) => Contracts.Single(c => c.OriginalName == original);
@@ -168,11 +170,12 @@ internal static class BearerFamilyRoutes
         TimeSpan? bodyDeadline = null) => ValidateBodyAsync(request, contract.RequestType, token, bodyDeadline);
 
     public static async Task<bool> ValidateBodyAsync(HttpRequest request, Type? requestType, CancellationToken token,
-        TimeSpan? bodyDeadline = null)
+        TimeSpan? bodyDeadline = null, int maxBodyBytes = 64 * 1024)
     {
         if (requestType is null)
             return request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature>()?.CanHaveBody != true;
-        request.EnableBuffering(64 * 1024, 64 * 1024);
+        if (maxBodyBytes is < 1 or > 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(maxBodyBytes));
+        request.EnableBuffering(Math.Min(64 * 1024, maxBodyBytes), maxBodyBytes);
         var timeout = bodyDeadline ?? TimeSpan.FromSeconds(10);
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromSeconds(10)) throw new ArgumentOutOfRangeException(nameof(bodyDeadline));
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);

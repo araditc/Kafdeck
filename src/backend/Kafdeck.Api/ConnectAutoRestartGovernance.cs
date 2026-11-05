@@ -60,12 +60,13 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
     private readonly NonBrowserReadRegistry? _registrations;
     private readonly IMutationOperationRepository? _operations;
     private readonly BearerRuntimeAuthorization? _bearerAuthorization;
+    private readonly GovernancePolicyRuntime? _governance;
 
     public ConfiguredConnectAutoRestartGovernancePort(
         KafdeckOptions options,
         AuthorizationPolicyEvaluator authorization,
         IConnectAutoRestartRuntimePolicyProvider runtimePolicy, NonBrowserReadRegistry? registrations = null,
-        IMutationOperationRepository? operations = null, BearerRuntimeAuthorization? bearerAuthorization = null)
+        IMutationOperationRepository? operations = null, BearerRuntimeAuthorization? bearerAuthorization = null, GovernancePolicyRuntime? governance = null)
     {
         _options =
             options ?? throw new ArgumentNullException(nameof(options));
@@ -78,6 +79,7 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
         _registrations = registrations;
         _operations = operations;
         _bearerAuthorization = bearerAuthorization;
+        _governance = governance;
     }
 
     public Task<ConnectAutoRestartGovernanceSnapshot> GetAdmissionAsync(
@@ -116,6 +118,17 @@ public sealed class ConfiguredConnectAutoRestartGovernancePort :
                 (operation.ResultCode is "auto_restart_policy_enabled" or "auto_restart_policy_replaced") &&
                 _bearerAuthorization?.IsRequesterAllowed(operation) == true &&
                 _bearerAuthorization?.IsApproverAllowed(operation) == true;
+        }
+
+        if (requireAppliedOperation && _governance is not null)
+        {
+            var source = _operations is null ? null : await _operations.GetAsync(activation.ActivationId,cancellationToken).ConfigureAwait(false);
+            if (source is null) allowed=false;
+            else
+            {
+                var effect = source with { AuthorizationTargets = source.AuthorizationTargets.Append(new MutationAuthorizationTarget(AuthorizationAction.ConnectRestart,activation.Target.ClusterId,activation.Target.AuthorizationResource)).Distinct().ToArray() };
+                allowed &= (await _governance.ValidateAsync(effect,cancellationToken).ConfigureAwait(false)).Outcome == MutationPreDispatchGuardOutcome.Allowed;
+            }
         }
 
         var providerFingerprint =

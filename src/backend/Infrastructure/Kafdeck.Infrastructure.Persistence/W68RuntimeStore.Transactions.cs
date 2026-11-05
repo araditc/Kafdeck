@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Globalization;
 using System.Text.Json;
 using Kafdeck.Core.Notifications;
+using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Infrastructure.Persistence;
 
@@ -54,14 +55,27 @@ public sealed partial class W68RuntimeStore
         return receipt;
     }
 
-    public async Task<W68RuntimeCommitReceipt?> ApplySubscriptionAsync(Guid planId, string expectedPlanHash,
+    public Task<W68RuntimeCommitReceipt?> ApplySubscriptionAsync(Guid planId, string expectedPlanHash,
         string authenticatedPrincipalId, Func<W68StoredRuntimePlan, CancellationToken, Task<bool>> currentAuthority,
-        CancellationToken token = default)
+        CancellationToken token = default) => ApplySubscriptionCoreAsync(planId,expectedPlanHash,authenticatedPrincipalId,currentAuthority,null,null,token);
+
+    public async Task<W68RuntimeCommitReceipt?> ApplySubscriptionWithGovernanceAsync(Guid planId,string expectedPlanHash,
+        string authenticatedPrincipalId,Func<W68StoredRuntimePlan,CancellationToken,Task<bool>> currentAuthority,
+        AdoGovernancePolicyStore policy,MutationOperationSnapshot operation,CancellationToken token=default)
+    {
+        await using var lease=await policy.AcquireMetadataLeaseAsync(connections,operation,null,token).ConfigureAwait(false);
+        return await ApplySubscriptionCoreAsync(planId,expectedPlanHash,authenticatedPrincipalId,currentAuthority,policy,operation,token).ConfigureAwait(false);
+    }
+
+    private async Task<W68RuntimeCommitReceipt?> ApplySubscriptionCoreAsync(Guid planId,string expectedPlanHash,
+        string authenticatedPrincipalId,Func<W68StoredRuntimePlan,CancellationToken,Task<bool>> currentAuthority,
+        AdoGovernancePolicyStore? policy,MutationOperationSnapshot? operation,CancellationToken token)
     {
         Principal(authenticatedPrincipalId);
         if (planId == Guid.Empty || !Sha(expectedPlanHash)) throw new ArgumentException("Invalid declarative plan reference.");
         await using var c = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var t = await BeginAsync(c, token).ConfigureAwait(false);
+        if(policy is not null)await policy.ValidateMetadataTransactionAsync(c,t,operation,null,token).ConfigureAwait(false);
         await LockAsync(c, t, token).ConfigureAwait(false);
         var plan = await PlanAsync(c, t, planId, token).ConfigureAwait(false);
         if (plan is null || plan.RequesterPrincipalId != authenticatedPrincipalId ||
@@ -159,6 +173,7 @@ public sealed partial class W68RuntimeStore
             """, token, ("@now", Timestamp(c, await NowAsync(c, t, token).ConfigureAwait(false))),
             ("@d", plan.Key.DeploymentId), ("@scope", plan.LeaseScopeId), ("@holder", plan.LeaseHolderId),
             ("@epoch", plan.LeaseEpoch)).ConfigureAwait(false) != 1) return null;
+        if(policy is not null)await policy.ValidateMetadataTransactionAsync(c,t,operation,null,token).ConfigureAwait(false);
         await t.CommitAsync(token).ConfigureAwait(false);
         return receipt;
     }

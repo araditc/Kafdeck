@@ -59,16 +59,18 @@ public sealed class W42AclEffectAuthorizationGuard :
     private readonly MutationExecutionRequestContextAccessor _requestContext;
     private readonly MutationRequestAuthorizationService _authorization;
     private readonly MutationApprovalAuthorizer _approvalAuthorizer;
+    private readonly GovernancePolicyRuntime? _governance;
 
     public W42AclEffectAuthorizationGuard(
         MutationExecutionRequestContextAccessor requestContext,
         MutationRequestAuthorizationService authorization,
-        MutationApprovalAuthorizer approvalAuthorizer)
+        MutationApprovalAuthorizer approvalAuthorizer, GovernancePolicyRuntime? governance = null)
     {
         _requestContext = requestContext ??
             throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ??
             throw new ArgumentNullException(nameof(authorization));
+        _governance = governance;
         _approvalAuthorizer = approvalAuthorizer ??
             throw new ArgumentNullException(nameof(approvalAuthorizer));
     }
@@ -86,7 +88,7 @@ public sealed class W42AclEffectAuthorizationGuard :
         if (requester.Outcome != MutationPreDispatchGuardOutcome.Allowed ||
             !operation.Risk.RequiresIndependentApproval)
         {
-            return Task.FromResult(requester);
+            return requester.Outcome == MutationPreDispatchGuardOutcome.Allowed && _governance is not null ? _governance.ValidateAsync(operation,cancellationToken) : Task.FromResult(requester);
         }
 
         if (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
@@ -114,8 +116,7 @@ public sealed class W42AclEffectAuthorizationGuard :
                 "current_required_approver_eligibility_unavailable_or_denied"));
         }
 
-        return Task.FromResult(
-            MutationPreDispatchGuardResult.Allowed);
+        return _governance?.ValidateAsync(operation,cancellationToken) ?? Task.FromResult(MutationPreDispatchGuardResult.Allowed);
     }
 
     private static MutationPreDispatchGuardResult Denied(string code) =>
@@ -136,16 +137,18 @@ public sealed class W43ScramEffectAuthorizationGuard :
     private readonly MutationExecutionRequestContextAccessor _requestContext;
     private readonly MutationRequestAuthorizationService _authorization;
     private readonly MutationApprovalAuthorizer _approvalAuthorizer;
+    private readonly GovernancePolicyRuntime? _governance;
 
     public W43ScramEffectAuthorizationGuard(
         MutationExecutionRequestContextAccessor requestContext,
         MutationRequestAuthorizationService authorization,
-        MutationApprovalAuthorizer approvalAuthorizer)
+        MutationApprovalAuthorizer approvalAuthorizer, GovernancePolicyRuntime? governance = null)
     {
         _requestContext = requestContext ??
             throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ??
             throw new ArgumentNullException(nameof(authorization));
+        _governance = governance;
         _approvalAuthorizer = approvalAuthorizer ??
             throw new ArgumentNullException(nameof(approvalAuthorizer));
     }
@@ -162,7 +165,7 @@ public sealed class W43ScramEffectAuthorizationGuard :
             operation);
         if (requester.Outcome != MutationPreDispatchGuardOutcome.Allowed)
         {
-            return Task.FromResult(requester);
+            return requester.Outcome == MutationPreDispatchGuardOutcome.Allowed && _governance is not null ? _governance.ValidateAsync(operation,cancellationToken) : Task.FromResult(requester);
         }
 
         if (!operation.Risk.RequiresIndependentApproval ||

@@ -433,6 +433,21 @@ public sealed class MutationOperation
     }
 
     // A positive backend transaction receipt resolves acknowledgement loss.
+    public void ReconcileVerifiedGovernanceCommit(Guid receiptOperationId,int receiptKind,string materialHash,string receiptPreviewHash,
+        string versionId,string contentHash,long revision,DateTimeOffset committedAtUtc,DateTimeOffset nowUtc)
+    {
+        RequireState(MutationOperationState.ExecutionUnknown);
+        if(Snapshot.OperationKind is not(MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation)||
+            receiptKind!=(int)Snapshot.OperationKind||receiptOperationId!=Snapshot.OperationId||Snapshot.DispatchStartedAtUtc is null||
+            receiptPreviewHash!=Snapshot.PreviewHash||materialHash!=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Snapshot.CanonicalIntent))).ToLowerInvariant()||
+            versionId is not {Length:64}||contentHash is not {Length:64}||revision<0||committedAtUtc<Snapshot.CreatedAtUtc||committedAtUtc>nowUtc)
+            throw new MutationStateException("Matching positive governance commit evidence is required.");
+        Snapshot=Snapshot with{ResultCode="GovernanceCommitReceiptRecovered",SafeProviderEvidence=MutationProviderEvidence.Normalize(new Dictionary<string,string>
+        { ["policy.version"]=versionId,["policy.hash"]=contentHash,["policy.revision"]=revision.ToString(System.Globalization.CultureInfo.InvariantCulture),["policy.receipt"]=receiptOperationId.ToString("D") })};
+        Transition(MutationOperationState.AppliedVerified,nowUtc);
+    }
+
+    // A positive backend transaction receipt resolves acknowledgement loss.
     // This never authorizes another dispatch or infers success from absence.
     public void ReconcileVerifiedDeclarativeCommit(Guid receiptOperationId, string planFingerprint,
         long ownershipRevision, long subscriptionRevision, DateTimeOffset committedAtUtc, DateTimeOffset nowUtc)
@@ -453,6 +468,30 @@ public sealed class MutationOperation
                 ["declarative.plan-fingerprint"] = planFingerprint,
                 ["declarative.ownership-revision"] = ownershipRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["declarative.subscription-revision"] = subscriptionRevision.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            })
+        };
+        Transition(MutationOperationState.AppliedVerified, nowUtc);
+    }
+
+    // A catalog DB transaction receipt proves a completed metadata effect, never permission to dispatch again.
+    public void ReconcileVerifiedCatalogCommit(Guid receiptOperationId, string materialHash, int changedCount,
+        DateTimeOffset committedAtUtc, DateTimeOffset nowUtc)
+    {
+        RequireState(MutationOperationState.ExecutionUnknown);
+        if (Snapshot.OperationKind != MutationOperationKind.CatalogMutation || receiptOperationId != Snapshot.OperationId ||
+            Snapshot.DispatchStartedAtUtc is null || materialHash is not { Length: 64 } ||
+            !materialHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            Snapshot.Preconditions.Count(p => p.Key == "catalog.material" && p.Fingerprint == materialHash) != 1 ||
+            changedCount is < 1 or > 500 || changedCount != Snapshot.ResourceKeys.Count || committedAtUtc == default ||
+            committedAtUtc < Snapshot.CreatedAtUtc || committedAtUtc > Snapshot.PreviewExpiresAtUtc || committedAtUtc > nowUtc)
+            throw new MutationStateException("A matching durable catalog commit receipt is required.");
+        Snapshot = Snapshot with
+        {
+            ResultCode = "catalog_commit_receipt_recovered",
+            SafeProviderEvidence = MutationProviderEvidence.Normalize(new Dictionary<string, string>
+            {
+                ["catalog.plan"] = receiptOperationId.ToString("D"), ["catalog.content-hash"] = materialHash,
+                ["catalog.changed"] = changedCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
             })
         };
         Transition(MutationOperationState.AppliedVerified, nowUtc);

@@ -200,7 +200,7 @@ public sealed class DataGeneratorPreconditionValidator
             expected.Preconditions ??
             Array.Empty<MutationPrecondition>();
 
-        if (!operation.Preconditions.SequenceEqual(
+        if (!MutationGovernancePreconditions.ProviderOnly(operation).SequenceEqual(
                 expectedPreconditions))
         {
             return false;

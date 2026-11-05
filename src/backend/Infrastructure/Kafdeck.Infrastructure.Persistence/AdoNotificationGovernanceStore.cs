@@ -5,7 +5,7 @@ using Kafdeck.Core.Notifications;
 namespace Kafdeck.Infrastructure.Persistence;
 
 /// <summary>Shared authoritative state with transactional CAS/audit. Never stores secret material or locators.</summary>
-public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnectionFactory connections) : INotificationGovernanceStore
+public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnectionFactory connections,AdoGovernancePolicyStore? policy=null) : INotificationGovernanceStore
 {
     public const int AuditRowsPerDestination = 1000;
     public async Task InitializeAsync(CancellationToken token)
@@ -41,8 +41,10 @@ public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnec
     {
         ArgumentNullException.ThrowIfNull(change);
         ArgumentNullException.ThrowIfNull(currentAuthority);
+        await using var policyLease=policy is null?null:await policy.AcquireMetadataLeaseAsync(connections,null,change.DestinationId,token).ConfigureAwait(false);
         await using var connection = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
+        if(policy is not null)await policy.ValidateMetadataTransactionAsync(connection,transaction,null,change.DestinationId,token).ConfigureAwait(false);
         await using var clock = connection.CreateCommand();
         clock.Transaction=transaction; clock.CommandText=connections.DatabaseUtcNowSql;
         var time = await clock.ExecuteScalarAsync(token).ConfigureAwait(false);
@@ -85,6 +87,7 @@ public sealed class AdoNotificationGovernanceStore(INotificationDeliveryDbConnec
         // state or its audit row; disposing the uncommitted transaction rolls
         // both writes back. No fallback to previous approval is admitted.
         if (!currentAuthority()) return null;
+        if(policy is not null)await policy.ValidateMetadataTransactionAsync(connection,transaction,null,change.DestinationId,token).ConfigureAwait(false);
         await transaction.CommitAsync(token).ConfigureAwait(false);
         return new(change.DestinationId,change.CandidateId,change.CandidateFingerprint,revision,change.ProfileEnabled,change.CredentialEnabled,now);
     }

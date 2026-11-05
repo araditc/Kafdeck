@@ -204,6 +204,39 @@ jobs:
           go build -trimpath -buildvcs=false -o "$lab/terraform-provider-kafdeck_v0.8.0" .
           echo "KAFDECK_G4_TERRAFORM_BIN=$lab/terraform/terraform" >> "$GITHUB_ENV"
           echo "KAFDECK_G4_PROVIDER_BIN=$lab/terraform-provider-kafdeck_v0.8.0" >> "$GITHUB_ENV"
+      - name: Setup Node for real governance browser acceptance
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.x'
+      - name: Build actual UI and install pinned browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd src/frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npm test && npm run build)
+          (cd deploy/dev/browser-g2 && npm ci --ignore-scripts --no-audit --no-fund && npx --no-install playwright install --with-deps chromium)
+          node src/frontend/scripts/v09-governance-browser.cjs
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
+      - name: Prove W73 and W75 real catalog policy identity clients and effects
+        shell: bash
+        env:
+          KAFDECK_TEST_POSTGRES: 'Host=127.0.0.1;Port=5432;Username=kafdeck;Password=kafdeck-g2-ci-only;Database=kafdeck;Pooling=false'
+        run: |
+          set -euo pipefail
+          export KAFDECK_KEYCLOAK_G2_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/g2/identity/lab.json"
+          export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/g2-ci/identity"
+          export KAFDECK_G2_KAFKA_BOOTSTRAP=127.0.0.1:9092
+          export KAFDECK_G2_KAFKA_DELETE_CAPABLE=1
+          export KAFDECK_V09_REAL_BROWSER=1
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V09&FullyQualifiedName!~V09W73CatalogRecoveryTests' \
+            --results-directory artifacts/g2-ci --logger 'trx;LogFileName=v09-live.trx'
+          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/v09-live.trx V09W73CatalogLiveTests:2 V09W75PolicyLiveTests:2
+          for provider in sqlite postgres; do
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w73-catalog-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w75-policy-evidence.json"
+          done
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-w73-w75-real-browser-evidence.json"
       - name: Build and prove actual PKCE CLI and provider sockets
         shell: bash
         env:
@@ -217,8 +250,6 @@ jobs:
           export KAFDECK_G2_KAFKA_DESTINATION_BOOTSTRAP=127.0.0.1:9094
           export KAFDECK_G2_SCHEMA_REGISTRY_URL=http://127.0.0.1:18081/
           export KAFDECK_G2_CONNECT_URL=http://127.0.0.1:18083/
-          dotnet restore Kafdeck.slnx --locked-mode
-          dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V08G3DeclarativeCli|FullyQualifiedName~V08G3DeclarativeManifestTests|FullyQualifiedName~V08W68GovernedApplyBoundaryTests|FullyQualifiedName~V08W68DeclarativeCommitRecoveryTests|FullyQualifiedName~V08W68SourceAdvanceBoundaryTests|FullyQualifiedName~V08W68ApprovalProjectionBoundaryTests|FullyQualifiedName~V08G2HumanCliLiveTests|FullyQualifiedName~V08G2ProviderFamilyCliLiveTests|FullyQualifiedName~V08G2DataJobUncertaintyCliLiveTests|FullyQualifiedName~V08G2HumanRecoveryCliLiveTests|FullyQualifiedName~V08W67FamilyBoundaryTests|FullyQualifiedName~V08FleetCapabilityParityTests|FullyQualifiedName~V08W67BearerOpenApiTests|FullyQualifiedName~V08W67ServiceCliBoundaryTests|FullyQualifiedName~V08W66PrivateHttpWireTests|FullyQualifiedName~V08W66ProviderCredentialLifecycleTlsTests|FullyQualifiedName~V08W66AuthenticatedWebhookTlsTests|FullyQualifiedName~V08W66ProviderPhysicalTlsTests|FullyQualifiedName~V08W66SmtpPhysicalTlsTests|FullyQualifiedName~V08W66ReceiptPersistenceTests|FullyQualifiedName~V08G2ProductNotificationTests' \
             --results-directory artifacts/g2-ci --logger 'trx;LogFileName=g2-live.trx'
@@ -279,9 +310,13 @@ jobs:
           name: g2-live-acceptance
           path: |
             artifacts/g2-ci/g2-live.trx
+            artifacts/g2-ci/v09-live.trx
+            artifacts/v09/governance-ui-evidence.json
             artifacts/g4-ci/g4-live.trx
             artifacts/g5-ci/*.trx
             artifacts/g2-ci/identity/*-evidence.json
+            artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.png
+            artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.json
           if-no-files-found: error
       - name: Stop isolated identity process
         if: always()
@@ -394,6 +429,11 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-stale-backup-quarantine-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-governed-restore-safe-resume-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-governed-restore-safe-resume-evidence.json"
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
+            --filter 'FullyQualifiedName~V09W73CatalogRecoveryTests' \
+            --results-directory artifacts/g2-ci/recovery --logger 'trx;LogFileName=v09-recovery-live.trx'
+          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/recovery/v09-recovery-live.trx V09W73CatalogRecoveryTests:2
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-w73-w75-catalog-policy-restore-evidence.json"
       - name: Retain bounded PostgreSQL control stage diagnostics
         if: always()
         shell: pwsh
@@ -440,6 +480,7 @@ jobs:
           name: g2-postgresql-failover-restore
           path: |
             artifacts/g2-ci/recovery/recovery-live.trx
+            artifacts/g2-ci/recovery/v09-recovery-live.trx
             artifacts/g2-ci/recovery/*-evidence.json
           if-no-files-found: error
 

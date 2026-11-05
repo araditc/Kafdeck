@@ -87,7 +87,7 @@ public sealed class SchemaMutationPreconditionValidator
         }
 
         if (!TryGetUniquePreconditions(
-                operation.Preconditions,
+                MutationGovernancePreconditions.ProviderOnly(operation),
                 out var preconditions) ||
             preconditions!.Count != canonical.References.Count + 1 ||
             !preconditions.TryGetValue(
@@ -231,7 +231,7 @@ public sealed class SchemaMutationPreconditionValidator
                 AuthorizationAction.SchemaAlter,
                 authResource) ||
             !TryGetSinglePrecondition(
-                operation.Preconditions,
+                MutationGovernancePreconditions.ProviderOnly(operation),
                 "schema.compatibility",
                 out var expectedFingerprint))
         {
@@ -355,7 +355,7 @@ public sealed class SchemaMutationPreconditionValidator
                 AuthorizationAction.SchemaDelete,
                 authResource) ||
             !TryGetSinglePrecondition(
-                operation.Preconditions,
+                MutationGovernancePreconditions.ProviderOnly(operation),
                 "schema.delete-target",
                 out var expectedFingerprint))
         {

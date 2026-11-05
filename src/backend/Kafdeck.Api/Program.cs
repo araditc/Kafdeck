@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Kafdeck.Api;
 using Kafdeck.Core;
 using Kafdeck.Core.Catalog;
+using Kafdeck.Core.Governance;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.Kafka;
@@ -35,16 +36,22 @@ Activity.ForceDefaultIdFormat = true;
 var declarativeSchemaMigration = args.Contains("--declarative-schema-migrate", StringComparer.Ordinal);
 var declarativeSchemaAdoption = args.Contains("--declarative-adopt-existing", StringComparer.Ordinal);
 var declarativeGenerationAdmission = args.Contains("--declarative-generation-admit", StringComparer.Ordinal);
+var governanceGenerationAdmission = args.Contains("--governance-generation-admit", StringComparer.Ordinal);
+if (governanceGenerationAdmission && (declarativeGenerationAdmission || declarativeSchemaMigration || declarativeSchemaAdoption))
+    throw new InvalidOperationException("Governance generation admission is a separate quarantined operator action.");
 if (declarativeGenerationAdmission && declarativeSchemaMigration)
     throw new InvalidOperationException("Schema migration and generation admission are separate operator actions.");
 if (declarativeSchemaAdoption && !declarativeSchemaMigration)
     throw new InvalidOperationException("Declarative schema adoption requires explicit migration mode.");
 var builder = WebApplication.CreateBuilder(args.Where(value => value is not
-    ("--declarative-schema-migrate" or "--declarative-adopt-existing" or "--declarative-generation-admit")).ToArray());
+    ("--declarative-schema-migrate" or "--declarative-adopt-existing" or "--declarative-generation-admit" or "--governance-generation-admit")).ToArray());
 
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
 var mutationOptions = kafdeckOptions.Administration?.Mutations;
+var governanceOptions = builder.Configuration.GetSection("Kafdeck:Governance").Get<GovernanceRuntimeOptions>() ?? new();
+governanceOptions.Validate(kafdeckOptions.Deployment.Mode == AccessMode.Oidc, mutationOptions?.Enabled == true, governanceGenerationAdmission);
+builder.Services.AddSingleton(governanceOptions);
 var observabilityOptions =
     ObservabilityOptions.Effective(kafdeckOptions);
 var historicalMetricsOptions =
@@ -489,13 +496,36 @@ if (mutationOptions?.Enabled == true)
             services.GetRequiredService<IMutationDbConnectionFactory>(),
             captureProductNotifications: productEventsEnabled,
             notificationProductPolicy: productEventsEnabled
-                ? services.GetRequiredService<NotificationProductEventPolicy>() : null));
+                ? services.GetRequiredService<NotificationProductEventPolicy>() : null,
+            governance: services.GetRequiredService<IGovernancePolicyTransactionGate>()));
+    builder.Services.AddSingleton<IMutationOperationTransactionReader>(services =>
+        (IMutationOperationTransactionReader)services.GetRequiredService<IMutationOperationRepository>());
+    builder.Services.AddSingleton<AdoGovernanceGenerationGate>(services => new(
+        services.GetRequiredService<IMutationDbConnectionFactory>(), governanceOptions.DeploymentGeneration));
+    builder.Services.AddSingleton<IGovernanceGenerationTransactionGate>(services => services.GetRequiredService<AdoGovernanceGenerationGate>());
+    builder.Services.AddKafdeckCatalog(governanceOptions.DeploymentGeneration?.ToString("D") ?? "unconfigured");
+    builder.Services.AddSingleton<AdoGovernancePolicyStore>(services => new(
+        services.GetRequiredService<IMutationDbConnectionFactory>(),
+        services.GetRequiredService<IPolicyMetadataTransactionReader>(),
+        services.GetRequiredService<IGovernanceGenerationTransactionGate>()));
+    builder.Services.AddSingleton<IGovernancePolicyStore>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
+    builder.Services.AddSingleton<IGovernancePolicyTransactionGate>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
+    builder.Services.AddSingleton<GovernancePolicyRuntime>();
+    builder.Services.AddSingleton<GovernancePolicyMutationService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler>(services => new GovernancePolicyExecutionHandler(
+        MutationOperationKind.GovernancePolicyVersion, services.GetRequiredService<GovernancePolicyMutationService>()));
+    builder.Services.AddSingleton<IMutationExecutionHandler>(services => new GovernancePolicyExecutionHandler(
+        MutationOperationKind.GovernancePolicyActivation, services.GetRequiredService<GovernancePolicyMutationService>()));
     builder.Services.AddSingleton<IFleetMutationStateStore>(services =>
         new AdoFleetMutationStateStore(
-            services.GetRequiredService<IMutationDbConnectionFactory>()));
+            services.GetRequiredService<IMutationDbConnectionFactory>(),
+            transactionReader: services.GetRequiredService<IMutationOperationTransactionReader>(),
+            policyGate: services.GetRequiredService<IGovernancePolicyTransactionGate>()));
     builder.Services.AddSingleton<IConnectAutoRestartStateStore>(services =>
         new AdoConnectAutoRestartStateStore(
-            services.GetRequiredService<IMutationDbConnectionFactory>()));
+            services.GetRequiredService<IMutationDbConnectionFactory>(),
+            services.GetRequiredService<IGovernancePolicyTransactionGate>(),
+            services.GetRequiredService<IMutationOperationTransactionReader>()));
     builder.Services.AddSingleton<IMutationAuditSink, LoggingMutationAuditSink>();
     builder.Services.AddSingleton<MutationApprovalAuthorizer>();
     builder.Services.AddSingleton<MutationRequestAuthorizationService>();
@@ -638,7 +668,10 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<RecordsPurgeExecutionService>();
     builder.Services.AddSingleton<IMutationExecutionHandler, RecordsPurgeExecutionHandler>();
 
-    builder.Services.AddSingleton<IMutationPreDispatchGuard, W39MutationPreDispatchGuard>();
+    builder.Services.AddSingleton<W39MutationPreDispatchGuard>();
+    builder.Services.AddSingleton<IMutationPreDispatchGuard>(services => new GovernanceMutationPreDispatchGuard(
+        services.GetRequiredService<W39MutationPreDispatchGuard>(), services.GetRequiredService<GovernancePolicyRuntime>(),
+        services.GetRequiredService<GovernancePolicyMutationService>()));
     builder.Services.AddSingleton<MutationExecutionHandlerRegistry>(services =>
         new MutationExecutionHandlerRegistry(
             services.GetServices<IMutationExecutionHandler>()));
@@ -663,6 +696,26 @@ if (mutationOptions?.Enabled == true)
 }
 
 builder.Services.AddKafdeckNotificationProductEvents(productEventsEnabled);
+// Keep durable policy authority reachable when mutation endpoints/workers are disabled.
+if (mutationOptions is { Enabled: false, Persistence: { } dormantPersistence })
+{
+    builder.Services.AddSingleton<IMutationDbConnectionFactory>(services => dormantPersistence.Provider switch
+    {
+        MutationPersistenceProvider.Sqlite => new SqliteMutationDbConnectionFactory(dormantPersistence.SqliteDatabasePath!),
+        MutationPersistenceProvider.PostgreSql => new PostgreSqlMutationDbConnectionFactory(services.GetRequiredService<SecretResolver>().Resolve(dormantPersistence.ConnectionString!).Reveal()),
+        _ => throw new KafdeckConfigurationException("Unsupported governance authority persistence provider."),
+    });
+    builder.Services.AddSingleton<AdoGovernanceGenerationGate>(services => new(services.GetRequiredService<IMutationDbConnectionFactory>(), governanceOptions.DeploymentGeneration));
+    builder.Services.AddSingleton<IGovernanceGenerationTransactionGate>(services => services.GetRequiredService<AdoGovernanceGenerationGate>());
+    builder.Services.AddSingleton<AdoCatalogStore>(services => new(services.GetRequiredService<IMutationDbConnectionFactory>(),
+        governanceOptions.DeploymentGeneration?.ToString("D") ?? "unconfigured", services.GetRequiredService<IGovernanceGenerationTransactionGate>()));
+    builder.Services.AddSingleton<ICatalogStore>(services => services.GetRequiredService<AdoCatalogStore>());
+    builder.Services.AddSingleton<IPolicyMetadataTransactionReader>(services => services.GetRequiredService<AdoCatalogStore>());
+    builder.Services.AddSingleton<AdoGovernancePolicyStore>(services => new(services.GetRequiredService<IMutationDbConnectionFactory>(),
+        services.GetRequiredService<IPolicyMetadataTransactionReader>(), services.GetRequiredService<IGovernanceGenerationTransactionGate>()));
+    builder.Services.AddSingleton<IGovernancePolicyStore>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
+    builder.Services.AddSingleton<IGovernancePolicyTransactionGate>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
+}
 if (notificationGovernance is not null) builder.Services.AddKafdeckNotificationGovernance(notificationGovernance);
 if (notificationRecovery is not null)
 {
@@ -689,6 +742,17 @@ if (declarativeOptions.Enabled)
     builder.Services.AddSingleton<IMutationExecutionHandler>(services => services.GetRequiredService<DeclarativeSubscriptionMutationHandler>());
 }
 var app = builder.Build();
+if (governanceGenerationAdmission)
+{
+    var previous = Guid.ParseExact(builder.Configuration["Kafdeck:Governance:PreviousDeploymentGeneration"] ?? "", "D");
+    await app.Services.GetRequiredService<AdoGovernanceGenerationGate>().AdmitRestoredGenerationAsync(previous,
+        governanceOptions.DeploymentGeneration!.Value,
+        builder.Configuration["Kafdeck:Governance:FencedWorkersEvidenceSha256"] ?? "",
+        builder.Configuration["Kafdeck:Governance:RestoreEvidenceSha256"] ?? "");
+    app.Logger.LogInformation("Governance restore generation admitted in quarantine; HTTP and workers were not started.");
+    await app.DisposeAsync();
+    return;
+}
 if (declarativeGenerationAdmission)
 {
     if (!DeclarativeRecoveryAnchor.Allows(declarativeOptions, maintenance: true))
@@ -711,6 +775,12 @@ if (declarativeSchemaMigration)
     return;
 }
 if (notificationGovernance is not null) await app.Services.InitializeKafdeckNotificationGovernanceAsync();
+if (mutationOptions?.Persistence is not null)
+{
+    await app.Services.GetRequiredService<AdoGovernanceGenerationGate>().InitializeAsync();
+    await app.Services.GetRequiredService<ICatalogStore>().InitializeAsync(CancellationToken.None);
+    await app.Services.GetRequiredService<AdoGovernancePolicyStore>().InitializeAsync();
+}
 
 if (historicalMetricsOptions?.Enabled == true)
 {
@@ -904,6 +974,9 @@ app.MapKafdeckV07OpenApi();
 app.MapKafdeckV08BearerOpenApi();
 app.MapKafdeckBearerCapabilities(mutationOptions?.Enabled == true, declarativeEnabled: declarativeOptions.Enabled);
 app.MapKafdeckDeclarative(declarativeOptions.Enabled);
+if (governanceOptions.CatalogEnabled) app.MapKafdeckCatalog();
+if (governanceOptions.PoliciesEnabled) app.MapKafdeckGovernancePolicies();
+app.MapGovernanceOpenApi();
 if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();

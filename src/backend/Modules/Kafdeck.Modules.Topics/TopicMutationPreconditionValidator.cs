@@ -277,7 +277,7 @@ public sealed class TopicMutationPreconditionValidator
         MutationOperationSnapshot operation,
         string key)
     {
-        var matches = operation.Preconditions
+        var matches = MutationGovernancePreconditions.ProviderOnly(operation)
             .Where(item => string.Equals(item.Key, key, StringComparison.Ordinal))
             .Take(2)
             .ToArray();

@@ -8,7 +8,7 @@ using Kafdeck.Modules.Administration;
 
 namespace Kafdeck.Infrastructure.Persistence;
 
-public sealed class AdoMutationOperationRepository : IMutationOperationRepository
+public sealed class AdoMutationOperationRepository : IMutationOperationRepository, IMutationOperationTransactionReader
 {
     private const int MutationSchemaVersion = 5;
     private const int PreviousMutationSchemaVersion = 4;
@@ -17,17 +17,29 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
     private readonly TimeProvider _timeProvider;
     private readonly bool _captureProductNotifications;
     private readonly NotificationProductEventPolicy _notificationProductPolicy;
+    private readonly IGovernancePolicyTransactionGate? _governance;
 
     public AdoMutationOperationRepository(
         IMutationDbConnectionFactory connectionFactory,
         TimeProvider? timeProvider = null,
         bool captureProductNotifications = false,
-        NotificationProductEventPolicy? notificationProductPolicy = null)
+        NotificationProductEventPolicy? notificationProductPolicy = null,
+        IGovernancePolicyTransactionGate? governance = null)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _timeProvider = timeProvider ?? TimeProvider.System;
         _captureProductNotifications = captureProductNotifications;
         _notificationProductPolicy = notificationProductPolicy ?? new();
+        _governance = governance;
+    }
+
+    public async Task<MutationOperationSnapshot?> ReadAsync(DbConnection connection,DbTransaction transaction,Guid operationId,CancellationToken token)
+    {
+        await using var command=connection.CreateCommand();command.Transaction=transaction;
+        command.CommandText="SELECT snapshot_json FROM kafdeck_mutation_operations WHERE operation_id=@id";
+        AddParameter(command,"@id",operationId.ToString("D"));
+        var value=await command.ExecuteScalarAsync(token).ConfigureAwait(false) as string;
+        return value is null?null:JsonSerializer.Deserialize<MutationOperationSnapshot>(value,JsonOptions)??throw new InvalidOperationException("Mutation snapshot is invalid.");
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -455,10 +467,28 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
         return Array.AsReadOnly(items.ToArray());
     }
 
-    public async Task<MutationSaveResult> TrySaveAsync(
+    public Task<MutationSaveResult> TrySaveAsync(
         MutationOperationSnapshot operation,
         long expectedVersion,
+        CancellationToken cancellationToken = default) =>
+        TrySaveCoreAsync(operation, expectedVersion, null, cancellationToken);
+
+    /// <summary>Closed application recovery uses an owning-store receipt/generation guard in the SAME CAS transaction.</summary>
+    public Task<MutationSaveResult> TrySaveGuardedAsync(
+        MutationOperationSnapshot operation,
+        long expectedVersion,
+        Func<DbConnection, DbTransaction, CancellationToken, Task> guard,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+        return TrySaveCoreAsync(operation, expectedVersion, guard, cancellationToken);
+    }
+
+    private async Task<MutationSaveResult> TrySaveCoreAsync(
+        MutationOperationSnapshot operation,
+        long expectedVersion,
+        Func<DbConnection, DbTransaction, CancellationToken, Task>? guard,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(operation);
         if (expectedVersion < 0 || operation.Version != checked(expectedVersion + 1))
@@ -470,6 +500,20 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
 
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        if (guard is not null) await guard(connection, transaction, cancellationToken).ConfigureAwait(false);
+        if (_governance is not null && operation.State == MutationOperationState.Executing && operation.DispatchStartedAtUtc is not null)
+        {
+            // Only the first durable dispatch-start transition is gated here. Outcome persistence
+            // after a possible effect must never be denied by a later policy change.
+            await using var priorCommand = connection.CreateCommand();
+            priorCommand.Transaction = transaction;
+            priorCommand.CommandText = "SELECT snapshot_json FROM kafdeck_mutation_operations WHERE operation_id=@id AND version=@version";
+            AddParameter(priorCommand,"@id",operation.OperationId.ToString("D"));
+            AddParameter(priorCommand,"@version",expectedVersion);
+            var priorJson = await priorCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+            if (priorJson is not null && (JsonSerializer.Deserialize<MutationOperationSnapshot>(priorJson,JsonOptions) ?? throw new InvalidOperationException("Mutation snapshot is invalid.")).DispatchStartedAtUtc is null)
+                await _governance.ValidateDispatchAsync(connection,transaction,operation,cancellationToken).ConfigureAwait(false);
+        }
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText =
@@ -502,6 +546,7 @@ public sealed class AdoMutationOperationRepository : IMutationOperationRepositor
             if (_captureProductNotifications)
                 await MutationNotificationOutbox.CaptureVerifiedAsync(connection, transaction, operation,
                     _notificationProductPolicy, _connectionFactory.SupportsSelectForUpdate, cancellationToken).ConfigureAwait(false);
+            if (guard is not null) await guard(connection, transaction, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new MutationSaveResult(MutationSaveOutcome.Saved, operation);
         }
