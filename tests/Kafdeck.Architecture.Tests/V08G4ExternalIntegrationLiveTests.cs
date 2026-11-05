@@ -4,6 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kafdeck.Cli;
 using Kafdeck.Core.Notifications;
+using Kafdeck.Core.Governance;
+using Kafdeck.Core.Security;
+using Kafdeck.Infrastructure.Persistence;
 using Kafdeck.Modules.Administration;
 using Xunit;
 using Fixture = Kafdeck.Architecture.Tests.V08G3DeclarativeCliLiveTests.Fixture;
@@ -179,6 +182,88 @@ public sealed class V08G4ExternalIntegrationLiveTests
             actualTerraformStateVersionZeroUpgrade = true, durableUnknownFaultInjectionNeverRedispatched = true, foreignOwnerDenied = true,
             reviewedSourceAdvanceAndTypedUpdate = true, actualTypedDataSourceRead = true, concurrentWriterDriftNotSilentlyRepaired = true,
             secondApiRefreshWithFirstStopped = postgres }, token);
+    }
+
+    [G3DeclarativeLiveTheory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Actual_Terraform_and_MCP_cannot_bypass_active_global_notification_policy(bool postgres)
+    {
+        RequirePostgres(postgres);
+        using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(12));var token=deadline.Token;
+        var evidence=Evidence();await using var f=await Fixture.CreateAsync(evidence,postgres,token);f.EnableService();
+        f.Lab.Settings["Kafdeck:Governance:DeploymentGeneration"]=f.Generation.ToString("D");
+        var tfControl=await f.CommitAsync("w75-tf-control","Active",token);var mcpControl=await f.CommitAsync("w75-mcp-control","Active",token);
+        var tfBlocked=await f.CommitAsync("w75-tf-denied","Active",token);var mcpBlocked=await f.CommitAsync("w75-mcp-denied","Active",token);
+        var oldBlocked=await f.CommitAsync("w75-old-denied","Active",token);
+        var settings=f.Lab.Settings;
+        var connections=postgres? (IMutationDbConnectionFactory)new PostgreSqlMutationDbConnectionFactory(
+            await File.ReadAllTextAsync(settings["Kafdeck:Administration:Mutations:Persistence:ConnectionString"][5..],token)):
+            new SqliteMutationDbConnectionFactory(settings["Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath"]);
+        var generation=new AdoGovernanceGenerationGate(connections,f.Generation);await generation.InitializeAsync(token);
+        var policy=new AdoGovernancePolicyStore(connections,generationGate:generation);await policy.InitializeAsync(token);
+        await f.Lab.StartAsync(token);await using var mcp=await McpProcess.StartAsync(f,true,token);
+        async Task<int> TerraformApply(Artifact artifact,Preview preview)
+        {
+            var root=Path.Combine(evidence,"w75-terraform-private-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+            var provider=RequiredFile("KAFDECK_G4_PROVIDER_BIN");
+            var mirror=Path.Combine(root,"mirror","registry.terraform.io","araditc","kafdeck","0.8.0",OperatingSystem.IsWindows()?"windows_amd64":OperatingSystem.IsMacOS()?"darwin_arm64":"linux_amd64");
+            Directory.CreateDirectory(mirror);File.Copy(provider,Path.Combine(mirror,Path.GetFileName(provider)));
+            var cli=Path.Combine(root,"terraform.rc");
+            await File.WriteAllTextAsync(cli,"provider_installation { filesystem_mirror { path = "+JsonSerializer.Serialize(Path.Combine(root,"mirror").Replace('\\','/'))+" include = [\"registry.terraform.io/araditc/kafdeck\"] } }",token);
+            await WriteConfiguration(root,f.Lab.Api,new(){{"managed",Resource(artifact,preview)}},token);
+            var runner=new TerraformProcess(RequiredFile("KAFDECK_G4_TERRAFORM_BIN"),root,cli,f.Lab.ServiceProfileFile);
+            Assert.Equal(0,await runner.RunAsync(token,"init","-input=false","-no-color"));
+            return await runner.RunAsync(token,"apply","-input=false","-auto-approve","-no-color");
+        }
+        var tfControlPlan=await f.PlanAsync(tfControl,0,token);await f.ApproveAsync(tfControlPlan,token);
+        Assert.Equal(0,await TerraformApply(tfControl,tfControlPlan));
+        var mcpControlPlan=await f.PlanAsync(mcpControl,0,token);await f.ApproveAsync(mcpControlPlan,token);
+        Assert.False(IsError(await mcp.ToolAsync("declarative_apply",new{planId=mcpControlPlan.Id,planFingerprint=mcpControlPlan.Hash},token)));
+        Assert.Equal(1,(await f.Routing.GetSubscriptionAsync(tfControl.Resource,token))!.Revision);
+        Assert.Equal(1,(await f.Routing.GetSubscriptionAsync(mcpControl.Resource,token))!.Revision);
+        var oldPlan=await f.PlanAsync(oldBlocked,0,token);await f.ApproveAsync(oldPlan,token);
+        var oldOperation=await f.Operations.GetAsync(oldPlan.Id,token);Assert.NotNull(oldOperation);
+        var serverTarget=Assert.Single(oldOperation.AuthorizationTargets,t=>t.Action==AuthorizationAction.NotificationManage&&t.ResourceName==oldBlocked.Resource);
+        Assert.Null(DeclarativeMutationAuthorization.Request(serverTarget).ClusterId);
+        var ownershipBefore=await f.CountAsync("kafdeck_declarative_ownership_audit",token);
+        var commitsBefore=await f.CountAsync("kafdeck_declarative_commit_receipts",token);
+        var runtimeBefore=await f.CountAsync("kafdeck_declarative_runtime_audit",token);
+        // Trusted fixture policy seeding is not claimed as product activation/approval evidence.
+        // The actual client plans still require genuine service identity and separate human approval.
+        var compiled=GovernancePolicyCompiler.Compile(JsonSerializer.Serialize(new{schemaVersion=1,rules=new[]{new{id="deny-reviewed-global-controls",priority=1,
+            scope=new{clusterId="$deployment",resourceKind="notification",resourceIds=new[]{tfBlocked.Resource,mcpBlocked.Resource,oldBlocked.Resource},action=serverTarget.Action.ToString()},
+            conditions=Array.Empty<object>(),outcome="Deny"}}}));
+        Assert.False(GovernancePolicyCompiler.Evaluate(compiled,new("$deployment","notification",serverTarget.ResourceName,serverTarget.Action.ToString(),"critical"),null).Allowed);
+        var before=await policy.GetStateAsync("$deployment",token);
+        var binding=before.Digest is null?Array.Empty<MutationPrecondition>():new[]{new MutationPrecondition("v09.governance:$deployment",before.Digest)};
+        var version=await policy.StageAsync("$deployment",compiled,"trusted-acceptance-policy-owner",token);
+        await policy.CommitVersionAsync(V09W75RecoverySeed.Operation(MutationOperationKind.GovernancePolicyVersion,AuthorizationAction.GovernancePolicyManage,"$deployment",version.VersionId,binding),version.VersionId,version.ContentHash,()=>true,token);
+        await policy.ActivateAsync(V09W75RecoverySeed.Operation(MutationOperationKind.GovernancePolicyActivation,AuthorizationAction.GovernancePolicyActivate,"$deployment","active",binding),version.VersionId,version.ContentHash,before.Revision,true,()=>true,token);
+        Assert.True((await policy.GetStateAsync("$deployment",token)).Enabled);
+        _=await mcp.ToolAsync("declarative_apply",new{planId=oldPlan.Id,planFingerprint=oldPlan.Hash},token);
+        var oldAfter=await f.Operations.GetAsync(oldPlan.Id,token);Assert.NotNull(oldAfter);
+        var tfPlan=await f.PlanAsync(tfBlocked,0,token);await f.ApproveAsync(tfPlan,token);
+        var mcpPlan=await f.PlanAsync(mcpBlocked,0,token);await f.ApproveAsync(mcpPlan,token);
+        var logins=f.Lab.CompletedLogins;Assert.True(logins>0);
+        var tfExit=await TerraformApply(tfBlocked,tfPlan);
+        var mcpReply=await mcp.ToolAsync("declarative_apply",new{planId=mcpPlan.Id,planFingerprint=mcpPlan.Hash},token);
+        var replay=await mcp.ToolAsync("declarative_apply",new{planId=mcpPlan.Id,planFingerprint=mcpPlan.Hash},token);
+        var tfAfter=await f.Operations.GetAsync(tfPlan.Id,token);var mcpAfter=await f.Operations.GetAsync(mcpPlan.Id,token);
+        Assert.NotNull(tfAfter);Assert.NotNull(mcpAfter);
+        var tfDenied=tfExit!=0&&tfAfter.State==MutationOperationState.FailedBeforeDispatch&&tfAfter.ResultCode=="GovernanceDenied";
+        var mcpDenied=mcpAfter.State==MutationOperationState.FailedBeforeDispatch&&mcpAfter.ResultCode=="GovernanceDenied"&&IsError(replay);
+        var staleFenced=oldAfter.State==MutationOperationState.StalePreview;
+        var noEffects=await f.Routing.GetSubscriptionAsync(tfBlocked.Resource,token) is null&&await f.Routing.GetSubscriptionAsync(mcpBlocked.Resource,token) is null&&await f.Routing.GetSubscriptionAsync(oldBlocked.Resource,token) is null;
+        var auditsUnchanged=ownershipBefore==await f.CountAsync("kafdeck_declarative_ownership_audit",token)&&commitsBefore==await f.CountAsync("kafdeck_declarative_commit_receipts",token)&&runtimeBefore==await f.CountAsync("kafdeck_declarative_runtime_audit",token);
+        await File.WriteAllBytesAsync(Path.Combine(evidence,(postgres?"postgres":"sqlite")+"-w75-automation-policy-evidence.json"),JsonSerializer.SerializeToUtf8Bytes(new{
+            status=tfDenied&&mcpDenied&&staleFenced&&noEffects&&auditsUnchanged?"Passed":"Failed",provider=postgres?"PostgreSQL":"SQLite",
+            genuineKeycloakService=true,actualTerraformPlugin=true,actualPackagedMcpStdio=true,positiveControlsApplied=true,trustedPolicyFixtureSeeding=true,
+            sourceTargetDerivedFromActualW68Plan=true,canonicalGlobalScope="$deployment",policyContentHash=compiled.ContentHash,
+            distinctHumanClientPlanApproval=true,tfDenied,mcpDenied,staleFenced,noEffects,auditsUnchanged,
+            firstMcpTransportError=IsError(mcpReply),terminalBackendCode=mcpAfter.ResultCode,serviceEffectsHaveNoBrowserCallbacks=logins==f.Lab.CompletedLogins}),token);
+        Assert.True(staleFenced,"Global policy activation failed to stale a pre-existing approved automation plan.");
+        Assert.True(tfDenied,"Actual Terraform bypassed the active global notification policy.");Assert.True(mcpDenied,"Actual MCP bypassed the active global notification policy.");
+        Assert.True(noEffects&&auditsUnchanged,"Denied automation changed product state or its durable audit.");
     }
 
     private static Dictionary<string,object> Resource(Artifact artifact, Preview plan) => new()

@@ -162,7 +162,8 @@ public sealed class AdoGovernancePolicyStore(
         try
         {
             if (generationGate is not null) await generationGate.ValidateAsync(c, tx, token).ConfigureAwait(false);
-            foreach (var cluster in operation.AuthorizationTargets.Select(t=>t.ClusterId).Append(operation.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+            var targets=MutationGovernanceTargets.Project(operation.AuthorizationTargets);
+            foreach (var cluster in targets.Select(t=>t.ClusterId).Append(operation.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
             {
                 var state = await ReadState(c, tx, cluster, true, token).ConfigureAwait(false);
                 var markers = operation.Preconditions.Where(p => p.Key == PreconditionKey+":"+cluster).ToArray();
@@ -173,7 +174,7 @@ public sealed class AdoGovernancePolicyStore(
                 if (version is null || version.ContentHash != state.ContentHash) throw new GovernanceEffectRejectedException("GovernanceUnavailable");
                 var policy = GovernancePolicyCompiler.Compile(version.Document);
                 if (policy.ContentHash != version.ContentHash) throw new GovernanceEffectRejectedException("GovernanceUnavailable");
-                foreach (var target in operation.AuthorizationTargets.Where(t=>t.ClusterId==cluster))
+                foreach (var target in targets.Where(t=>t.ClusterId==cluster))
                 {
                     var kind = ResourceKind(target.Action.ToString());
                     var facts = kind == "topic" && metadata is not null ? await metadata.ReadAsync(c, tx, target.ClusterId, target.ResourceName, token).ConfigureAwait(false) : null;
