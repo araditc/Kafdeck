@@ -140,12 +140,15 @@ public sealed record GovernancePolicyVersion(string VersionId, string ClusterId,
 public sealed record GovernancePolicyState(string ClusterId, long Revision, bool Enabled, string? VersionId, string? ContentHash, string? Digest);
 public sealed record GovernanceCommitReceipt(Guid OperationId,int OperationKind,string ClusterId,string VersionId,string ContentHash,
     string Actor,string PreviewHash,string MaterialHash,string? BoundDigest,string? DeploymentGeneration,long Revision,bool Enabled,DateTimeOffset CommittedAtUtc);
+public sealed class GovernancePolicyCapacityException():InvalidOperationException("PolicyVersionCapacityExceeded");
 public interface IGovernancePolicyStore
 {
     Task InitializeAsync(CancellationToken token = default);
     Task<GovernancePolicyState> GetStateAsync(string clusterId, CancellationToken token = default);
     Task<GovernancePolicyVersion?> GetVersionAsync(string clusterId, string versionId, bool includeDraft = false, CancellationToken token = default);
     Task<IReadOnlyList<GovernancePolicyVersion>> ListVersionsAsync(string clusterId, string? afterId, int limit, CancellationToken token = default);
+    Task<IReadOnlyList<GovernancePolicyVersion>> ListAuthorizedVersionsAsync(string clusterId,string? afterId,int pageSize,
+        Func<string,bool> authorizedVersionId,CancellationToken token=default);
     Task<GovernancePolicyVersion> StageAsync(string clusterId, CompiledGovernancePolicy policy, string actor, CancellationToken token = default);
 }
 

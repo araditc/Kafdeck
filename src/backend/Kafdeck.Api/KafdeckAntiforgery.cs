@@ -86,6 +86,9 @@ public static class KafdeckAntiforgeryExtensions
             if (http.User.Identity is NonBrowserReadIdentity &&
                 http.GetEndpoint()?.Metadata.GetMetadata<DeclarativeRouteContract>() is not null)
                 return await next(invocation).ConfigureAwait(false);
+            if (http.User.Identity is NonBrowserReadIdentity &&
+                http.GetEndpoint()?.Metadata.GetMetadata<GovernanceRouteContract>() is not null)
+                return await next(invocation).ConfigureAwait(false);
             var read = Kafdeck.Contracts.KafdeckReadContracts.Find(http.GetEndpoint()?.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName);
             if (http.User.Identity is NonBrowserReadIdentity && read?.Method == "post" && BearerReadBoundary.Matches(http, read))
                 return await next(invocation).ConfigureAwait(false);

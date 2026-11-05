@@ -16,6 +16,7 @@ public sealed class AdoGovernancePolicyStore(
     IGovernanceGenerationTransactionGate? generationGate = null) : IGovernancePolicyStore, IGovernancePolicyTransactionGate
 {
     public const string PreconditionKey = "v09.governance";
+    public const int MaximumVersionsPerCluster=10_000;
     public const string SchemaManifest = """
             CREATE TABLE IF NOT EXISTS governance_policy_schema (version INTEGER PRIMARY KEY, fingerprint TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS governance_policy_versions (
@@ -110,6 +111,19 @@ public sealed class AdoGovernancePolicyStore(
         await using var c = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var tx = await c.BeginTransactionAsync(token).ConfigureAwait(false);
         if (generationGate is not null) await generationGate.ValidateAsync(c, tx, token).ConfigureAwait(false);
+        if(connections.SupportsSelectForUpdate)
+        {
+            await using var quota=Command(c,tx,"SELECT pg_advisory_xact_lock(hashtextextended(@cluster,7502))",("@cluster",clusterId));
+            await quota.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        }
+        var existing=await ReadVersion(c,tx,clusterId,id,true,token).ConfigureAwait(false);
+        if(existing is not null)
+        {
+            if(existing.ContentHash!=policy.ContentHash||existing.Document!=policy.CanonicalJson)throw new InvalidOperationException("Draft fingerprint conflict.");
+            await tx.CommitAsync(token).ConfigureAwait(false);return existing;
+        }
+        await using(var capacity=Command(c,tx,"SELECT COUNT(*) FROM (SELECT 1 FROM governance_policy_versions WHERE cluster_id=@cluster LIMIT 10000) bounded",("@cluster",clusterId)))
+            if(Convert.ToInt64(await capacity.ExecuteScalarAsync(token).ConfigureAwait(false),CultureInfo.InvariantCulture)>=MaximumVersionsPerCluster)throw new GovernancePolicyCapacityException();
         // A draft is immutable preview material only. Neither listing nor enforcement sees it before the governed version effect commits.
         await using var command = Command(c, tx, """
             INSERT INTO governance_policy_versions(cluster_id,version_id,content_hash,document_json,created_by,created_at_utc,committed)
@@ -120,6 +134,27 @@ public sealed class AdoGovernancePolicyStore(
         if (version.ContentHash != policy.ContentHash || version.Document != policy.CanonicalJson) throw new InvalidOperationException("Draft fingerprint conflict.");
         await tx.CommitAsync(token).ConfigureAwait(false);
         return version;
+    }
+
+    /// <summary>Scope before pagination. At most the public cluster capacity is scanned and only
+    /// pageSize+1 authorized records are retained; hidden records never create a continuation.</summary>
+    public async Task<IReadOnlyList<GovernancePolicyVersion>> ListAuthorizedVersionsAsync(string clusterId,string? afterId,int pageSize,
+        Func<string,bool> authorizedVersionId,CancellationToken token=default)
+    {
+        GovernancePolicyCompiler.Bounded(clusterId,256);ArgumentNullException.ThrowIfNull(authorizedVersionId);
+        if(afterId is not null)GovernancePolicyCompiler.Bounded(afterId,64);
+        if(pageSize is <1 or >200)throw new ArgumentOutOfRangeException(nameof(pageSize));
+        await using var c=await connections.OpenAsync(token).ConfigureAwait(false);
+        await using var command=Command(c,null,"SELECT version_id,cluster_id,content_hash,document_json,created_by,created_at_utc FROM governance_policy_versions WHERE cluster_id=@cluster AND committed=1 AND version_id>@after ORDER BY version_id LIMIT 10001",("@cluster",clusterId),("@after",afterId??""));
+        await using var reader=await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+        var result=new List<GovernancePolicyVersion>(pageSize+1);var scanned=0;
+        while(await reader.ReadAsync(token).ConfigureAwait(false))
+        {
+            if(++scanned>MaximumVersionsPerCluster)throw new GovernancePolicyCapacityException();
+            if(!authorizedVersionId(reader.GetString(0)))continue;
+            result.Add(Version(reader));if(result.Count>pageSize)break;
+        }
+        return result;
     }
 
     public async Task ValidateDispatchAsync(DbConnection c, DbTransaction tx, MutationOperationSnapshot operation, CancellationToken token)

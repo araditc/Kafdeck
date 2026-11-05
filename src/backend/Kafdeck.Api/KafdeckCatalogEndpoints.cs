@@ -31,10 +31,11 @@ public static class KafdeckCatalogEndpoints
                 {
                     if (!Collection(context, auth, clusterId, AuthorizationAction.CatalogRead)) return Denied(context);
                     var size = PageSize(pageSize); var after = Decode(cursor, context, auth, digests, clusterId, family);
-                    var rows = await store.ListAsync(clusterId, kind, after, size + 1, context.RequestAborted).ConfigureAwait(false);
+                    var rows = await store.ListAuthorizedAsync(clusterId, kind, after, size + 1, row => Readable(context, auth, row), context.RequestAborted).ConfigureAwait(false);
                     var output = new List<CatalogRecord>();
                     foreach (var row in rows.Take(size))
-                        if (Readable(context, auth, row)) output.Add(row with { TopicIdentityCurrent = await CurrentTopic(row, topics, context.RequestAborted).ConfigureAwait(false) });
+                        output.Add(row with { TopicIdentityCurrent = await CurrentTopic(row, topics, context.RequestAborted).ConfigureAwait(false) });
+                    if (rows.Any(row => !Readable(context, auth, row))) return Denied(context);
                     return Results.Ok(new CatalogPage<CatalogRecord>(output, rows.Count > size ? Encode(rows[size - 1].Id, context, auth, digests, clusterId, family) : null));
                 })).WithName("v09-catalog-" + family + "-list").WithMetadata(new GovernanceRouteContract(AuthorizationAction.CatalogRead, true, ResponseType: typeof(CatalogPage<CatalogRecord>)));
 
@@ -54,8 +55,9 @@ public static class KafdeckCatalogEndpoints
                     var page = PageSize(pageSize); var scope = family + "/" + id + "/history";
                     var decoded = Decode(cursor, context, auth, digests, clusterId, scope);
                     var after = decoded is null ? 0 : long.Parse(decoded, CultureInfo.InvariantCulture);
-                    var rows = await store.HistoryAsync(clusterId, kind, id, after, page + 1, context.RequestAborted).ConfigureAwait(false);
-                    return Results.Ok(new CatalogPage<CatalogHistoryItem>(rows.Take(page).Where(i => Readable(context, auth, i.Record)).ToArray(), rows.Count > page ? Encode(rows[page - 1].Record.Revision.ToString(CultureInfo.InvariantCulture), context, auth, digests, clusterId, scope) : null));
+                    var rows = await store.HistoryAuthorizedAsync(clusterId, kind, id, after, page + 1, snapshot => Readable(context, auth, snapshot), context.RequestAborted).ConfigureAwait(false);
+                    if (rows.Any(snapshot => !Readable(context, auth, snapshot.Record))) return Denied(context);
+                    return Results.Ok(new CatalogPage<CatalogHistoryItem>(rows.Take(page).ToArray(), rows.Count > page ? Encode(rows[page - 1].Record.Revision.ToString(CultureInfo.InvariantCulture), context, auth, digests, clusterId, scope) : null));
                 })).WithName("v09-catalog-" + family + "-history").WithMetadata(new GovernanceRouteContract(AuthorizationAction.CatalogRead, true, ResponseType: typeof(CatalogPage<CatalogHistoryItem>)));
 
             app.MapPost("/api/v1/governance/catalog/" + family + "/preview", async (CatalogPreviewRequest request, HttpContext context,
@@ -135,6 +137,14 @@ public static class KafdeckCatalogEndpoints
             var preliminary = new CatalogPlannedChange(change, id, null);
             if (!Allowed(context, auth, AuthorizationAction.CatalogManage, request.ClusterId, CatalogContract.Resource(preliminary)) ||
                 !Allowed(context, auth, AuthorizationAction.CatalogRead, request.ClusterId, CatalogContract.Resource(preliminary))) return Denied(context);
+            CatalogRecord? previous = null;
+            if (change.Id is not null)
+            {
+                previous = await store.GetAsync(request.ClusterId, change.Kind, change.Id, deadline.Token).ConfigureAwait(false);
+                if (previous is null || !Readable(context, auth, previous) ||
+                    !Allowed(context, auth, AuthorizationAction.CatalogManage, request.ClusterId, CatalogContract.Resource(previous))) return Results.NotFound();
+                if (previous.TopicName != change.TopicName) return Conflict("CatalogTopicIdentityChanged");
+            }
             foreach (var (refKind, refId) in new[] { (CatalogEntityKind.Team, change.TeamId), (CatalogEntityKind.Application, change.ApplicationId) })
                 if (refId is not null && !Allowed(context, auth, AuthorizationAction.CatalogRead, request.ClusterId, "catalog:" + refKind.ToString().ToLowerInvariant() + ":" + refId)) return Denied(context);
             string? identityFingerprint = null;
@@ -143,7 +153,6 @@ public static class KafdeckCatalogEndpoints
                 // Archiving an existing descriptive assignment must remain possible after its physical topic disappeared.
                 // It preserves the old identity/revision and cannot create or transfer current ownership.
                 if (change.Id is null || change.RebindTopicIdentity) return Problem(400, "CatalogArchiveRequiresExistingAssignment");
-                var previous = await store.GetAsync(request.ClusterId, CatalogEntityKind.Topic, change.Id, deadline.Token).ConfigureAwait(false);
                 if (previous is null || previous.TopicName != change.TopicName) return Conflict("CatalogArchiveAssignmentChanged");
                 identityFingerprint = previous.TopicIdentity;
             }

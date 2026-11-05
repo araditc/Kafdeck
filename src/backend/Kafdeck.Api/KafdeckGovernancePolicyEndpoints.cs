@@ -51,6 +51,7 @@ public static class KafdeckGovernancePolicyEndpoints
             return await SafeAsync(async()=>
             {
                 var take=pageSize??50;if(take is <1 or >200)throw new ArgumentException("Invalid page size.");
+                var authority=auth.PolicyFingerprint;
                 var actor=MutationActor.TryCreate(h.User,out var who)?who!.PrincipalId:"local";
                 var protector=protection.CreateProtector("Kafdeck.v09.policy-cursor.v1");
                 string? after=null;
@@ -61,9 +62,10 @@ public static class KafdeckGovernancePolicyEndpoints
                     if(parsed.ClusterId!=clusterId||parsed.Actor!=actor||parsed.Authority!=auth.PolicyFingerprint||parsed.Expires<=DateTimeOffset.UtcNow)throw new ArgumentException("Invalid cursor.");
                     after=parsed.AfterId;
                 }
-                var rows=await store.ListVersionsAsync(clusterId,after,take+1,h.RequestAborted).ConfigureAwait(false);
-                var visible=rows.Where(r=>Allowed(h,auth,AuthorizationAction.GovernancePolicyRead,clusterId,r.VersionId)).Take(take).ToArray();
-                var next=rows.Count>take?protector.Protect(JsonSerializer.Serialize(new PolicyCursor(clusterId,actor,auth.PolicyFingerprint,rows[take-1].VersionId,DateTimeOffset.UtcNow.AddMinutes(10)),Json)):null;
+                var rows=await store.ListAuthorizedVersionsAsync(clusterId,after,take,id=>Allowed(h,auth,AuthorizationAction.GovernancePolicyRead,clusterId,id),h.RequestAborted).ConfigureAwait(false);
+                if(auth.PolicyFingerprint!=authority)return Problem(409,"PolicyAuthorityChanged");
+                var visible=rows.Take(take).ToArray();
+                var next=rows.Count>take?protector.Protect(JsonSerializer.Serialize(new PolicyCursor(clusterId,actor,authority,rows[take-1].VersionId,DateTimeOffset.UtcNow.AddMinutes(10)),Json)):null;
                 return Results.Ok(new PolicyVersionListData(visible,next));
             }).ConfigureAwait(false);
         }).WithName("v09-policy-versions").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,ResponseType:typeof(PolicyVersionListData)));
@@ -192,6 +194,7 @@ public static class KafdeckGovernancePolicyEndpoints
         try{return await f().ConfigureAwait(false);}
         catch(Exception ex)when(ex is ArgumentException or JsonException or FormatException or CryptographicException or OverflowException){return Problem(400,"InvalidPolicy");}
         catch(GovernanceEffectRejectedException ex){return Problem(ex.Stale?409:403,ex.Code);}
+        catch(GovernancePolicyCapacityException){return Problem(409,"PolicyVersionCapacityExceeded");}
         catch(OperationCanceledException){throw;}
         catch(Exception){return Problem(503,"GovernanceUnavailable");}
     }

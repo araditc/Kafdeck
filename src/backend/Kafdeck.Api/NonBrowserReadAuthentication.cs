@@ -187,7 +187,8 @@ public sealed class NonBrowserReadRegistry
         var registration = Find(identity.Evidence.Subject, identity.Evidence.ClientId, identity.RegistrationId, identity.Kind);
         return registration is not null &&
             identity.Evidence.ExpiresAtUtc > DateTimeOffset.UtcNow && (registration.RequestedReadActions.Contains(action) ||
-                identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage && IsGovernedMutationAllowed(identity, action)) &&
+                (identity.Kind == NonBrowserPrincipalKind.Human && action == AuthorizationAction.NotificationManage ||
+                    action == AuthorizationAction.CatalogManage) && IsGovernedMutationAllowed(identity, action)) &&
             evaluator.HasApplicableDirectSubjectPermission(new(identity.Evidence.Issuer, identity.Evidence.Subject), action, clusterId);
     }
 

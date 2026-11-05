@@ -40,7 +40,11 @@ public interface ICatalogStore
     Task<CatalogRecord?> GetAsync(string clusterId, CatalogEntityKind kind, string id, CancellationToken token);
     Task<CatalogRecord?> FindTopicAsync(string clusterId, string topicName, CancellationToken token);
     Task<IReadOnlyList<CatalogRecord>> ListAsync(string clusterId, CatalogEntityKind kind, string? afterId, int take, CancellationToken token);
+    Task<IReadOnlyList<CatalogRecord>> ListAuthorizedAsync(string clusterId, CatalogEntityKind kind, string? afterId, int take,
+        Func<CatalogRecord, bool> canRead, CancellationToken token);
     Task<IReadOnlyList<CatalogHistoryItem>> HistoryAsync(string clusterId, CatalogEntityKind kind, string id, long afterRevision, int take, CancellationToken token);
+    Task<IReadOnlyList<CatalogHistoryItem>> HistoryAuthorizedAsync(string clusterId, CatalogEntityKind kind, string id, long afterRevision, int take,
+        Func<CatalogRecord, bool> canRead, CancellationToken token);
     Task<CatalogPlan?> GetPlanAsync(Guid planId, CancellationToken token);
     Task<CatalogPlan> StageAsync(CatalogPlan plan, CancellationToken token);
     Task ValidateAsync(CatalogPlan plan, CancellationToken token);
@@ -54,6 +58,8 @@ public sealed class CatalogConflictException(string code) : InvalidOperationExce
 
 public static class CatalogContract
 {
+    public const int MaxEntitiesPerScope = 10_000;
+    public const int MaxRevisionsPerEntity = 10_000;
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() }, MaxDepth = 12,

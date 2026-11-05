@@ -26,6 +26,10 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       await target.locator('#kc-login').click();await returned;await target.goto(new URL('/',api).href,{waitUntil:'domcontentloaded'});
     }
     phase='genuine-oidc-sign-in';await signIn(page,manifest.humanUsername,manifest.humanPasswordFile);
+    phase='real-browser-cookie-csrf-denial';
+    const csrfDenied=await context.request.post(new URL('/api/v1/governance/catalog/teams/preview',api).href,
+      {headers:{'Idempotency-Key':'csrf-negative-'+crypto.randomUUID()},data:{clusterId:'permitted',changes:[{kind:'Team',expectedRevision:0,name:'csrf-negative'}]}});
+    assert.equal(csrfDenied.status(),403);
     phase='actual-generated-contract';
     const discoveryResponse=await context.request.get(new URL('/api/v1/openapi/v0.9-governance.json',api).href);assert.equal(discoveryResponse.status(),200);
     const governanceDiscovery=await discoveryResponse.json();assert.equal(governanceDiscovery.openapi,'3.1.0');

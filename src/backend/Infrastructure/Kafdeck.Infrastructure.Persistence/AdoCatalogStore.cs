@@ -76,6 +76,28 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
             return rows;
         }, token).ConfigureAwait(false);
     }
+    public async Task<IReadOnlyList<CatalogRecord>> ListAuthorizedAsync(string clusterId, CatalogEntityKind kind, string? afterId,
+        int take, Func<CatalogRecord, bool> canRead, CancellationToken token)
+    {
+        ValidateScope(clusterId, kind); ArgumentNullException.ThrowIfNull(canRead);
+        if (take is < 1 or > 201) throw new ArgumentOutOfRangeException(nameof(take));
+        if (afterId is not null) CatalogContract.Id(afterId);
+        return await ReadAsync<IReadOnlyList<CatalogRecord>>(async (db, tx) =>
+        {
+            await using var command = Command(db, tx, "SELECT body FROM catalog_owned_entities WHERE cluster_id=@cluster AND kind=@kind AND id>@after ORDER BY id LIMIT @scan",
+                ("@cluster", clusterId), ("@kind", (int)kind), ("@after", afterId ?? ""), ("@scan", CatalogContract.MaxEntitiesPerScope + 1));
+            await using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+            var rows = new List<CatalogRecord>(); var scanned = 0;
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                if (++scanned > CatalogContract.MaxEntitiesPerScope) throw new CatalogConflictException("CatalogCapacityInvariantViolated");
+                var row = Deserialize<CatalogRecord>(reader.GetString(0));
+                if (canRead(row)) rows.Add(row);
+                if (rows.Count == take) break;
+            }
+            return rows;
+        }, token).ConfigureAwait(false);
+    }
     public async Task<IReadOnlyList<CatalogHistoryItem>> HistoryAsync(string clusterId, CatalogEntityKind kind, string id, long afterRevision, int take, CancellationToken token)
     {
         ValidateScope(clusterId, kind); CatalogContract.Id(id);
@@ -89,6 +111,29 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
             while (await reader.ReadAsync(token).ConfigureAwait(false)) rows.Add(new(Deserialize<CatalogRecord>(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
                 Guid.Parse(reader.GetString(3)), DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture),
                 reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture)));
+            return rows;
+        }, token).ConfigureAwait(false);
+    }
+    public async Task<IReadOnlyList<CatalogHistoryItem>> HistoryAuthorizedAsync(string clusterId, CatalogEntityKind kind, string id,
+        long afterRevision, int take, Func<CatalogRecord, bool> canRead, CancellationToken token)
+    {
+        ValidateScope(clusterId, kind); CatalogContract.Id(id); ArgumentNullException.ThrowIfNull(canRead);
+        if (afterRevision < 0 || take is < 1 or > 201) throw new ArgumentOutOfRangeException(nameof(take));
+        return await ReadAsync<IReadOnlyList<CatalogHistoryItem>>(async (db, tx) =>
+        {
+            await using var command = Command(db, tx, "SELECT body,actor_fingerprint,authority_fingerprint,operation_id,effective_from_utc,effective_to_utc FROM catalog_owned_history WHERE cluster_id=@cluster AND kind=@kind AND id=@id AND revision>@after ORDER BY revision LIMIT @scan",
+                ("@cluster", clusterId), ("@kind", (int)kind), ("@id", id), ("@after", afterRevision), ("@scan", CatalogContract.MaxRevisionsPerEntity + 1));
+            await using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+            var rows = new List<CatalogHistoryItem>(); var scanned = 0;
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                if (++scanned > CatalogContract.MaxRevisionsPerEntity) throw new CatalogConflictException("CatalogHistoryCapacityInvariantViolated");
+                var record = Deserialize<CatalogRecord>(reader.GetString(0));
+                if (!canRead(record)) continue;
+                rows.Add(new(record, reader.GetString(1), reader.GetString(2), Guid.Parse(reader.GetString(3)),
+                    DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture), reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture)));
+                if (rows.Count == take) break;
+            }
             return rows;
         }, token).ConfigureAwait(false);
     }
@@ -213,10 +258,20 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
     {
         if (plan.DeploymentGeneration != DeploymentGeneration) throw new CatalogConflictException("CatalogRestoreGenerationChanged");
         var pending = plan.Changes.ToDictionary(i => (i.Change.Kind, i.Id));
+        foreach (var group in plan.Changes.GroupBy(item => item.Change.Kind))
+        {
+            var count = Convert.ToInt64(await ScalarAsync(db, tx, "SELECT COUNT(*) FROM catalog_owned_entities WHERE cluster_id=@cluster AND kind=@kind", token,
+                ("@cluster", plan.ClusterId), ("@kind", (int)group.Key)).ConfigureAwait(false), CultureInfo.InvariantCulture);
+            if (count + group.Count(item => item.Change.ExpectedRevision == 0) > CatalogContract.MaxEntitiesPerScope)
+                throw new CatalogConflictException("CatalogCapacityExceeded");
+        }
         foreach (var item in plan.Changes)
         {
             var old = await LoadAsync(db, tx, plan.ClusterId, item.Change.Kind, item.Id, token).ConfigureAwait(false);
             if ((old?.Revision ?? 0) != item.Change.ExpectedRevision) throw new CatalogConflictException("CatalogRevisionConflict");
+            var revisions = Convert.ToInt64(await ScalarAsync(db, tx, "SELECT COUNT(*) FROM catalog_owned_history WHERE cluster_id=@cluster AND kind=@kind AND id=@id", token,
+                ("@cluster", plan.ClusterId), ("@kind", (int)item.Change.Kind), ("@id", item.Id)).ConfigureAwait(false), CultureInfo.InvariantCulture);
+            if (revisions >= CatalogContract.MaxRevisionsPerEntity) throw new CatalogConflictException("CatalogHistoryCapacityExceeded");
             if (old is not null && (old.Kind != item.Change.Kind || old.TopicName != item.Change.TopicName ||
                 old.TopicIdentity != item.TopicIdentity && !item.Change.RebindTopicIdentity))
                 throw new CatalogConflictException("CatalogTopicIdentityChanged");
