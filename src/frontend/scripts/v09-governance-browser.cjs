@@ -17,13 +17,14 @@ const server=createServer((req,res)=>{
 (async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
   const browser=await chromium.launch({headless:true,channel:'chromium'});
-  const operations=new Map();let effects=0,authenticated=true,denied=false,independent=false,csrf=0,imports=0;const outside=[];
+  const operations=new Map();let effects=0,authenticated=true,denied=false,csrf=0,imports=0,approverPrivateStatusAttempts=0;const outside=[];
   const status=(id,kind,critical=false)=>({operationId:id,clusterId:'alpha',operationKind:kind,riskClass:critical?'critical':'moderate',confirmationMode:critical?'typedTarget':'explicit',requiresIndependentApproval:critical,requiresExecutionMaterial:false,state:'previewed',previewHash:hash,previewExpiresAtUtc:'2099-11-05T01:00:00Z',confirmationChallenge:critical?'activate alpha':null,resultCode:null,safeProviderEvidence:{},version:1,createdAtUtc:now,updatedAtUtc:now});
   const preview=(op,changes)=>({operation:op,planId:op.operationId,contentHash:hash,changes,expiresAtUtc:op.previewExpiresAtUtc});
   try{
     const context=await browser.newContext({viewport:{width:1440,height:1000}});
-    await context.route('**/*',async route=>{
+    const fixtureRoute=async route=>{
       const request=route.request(),url=new URL(request.url()),p=url.pathname;
+      const fixtureApprover=request.headers()['x-kafdeck-ui-fixture']==='approver';
       if(url.origin!==origin){outside.push(url.origin);return route.abort();}
       if(!p.startsWith('/api/v1/'))return route.continue();
       const send=(value,code=200)=>route.fulfill({status:code,contentType:'application/json',body:JSON.stringify(value)});
@@ -42,23 +43,24 @@ const server=createServer((req,res)=>{
       if(p.endsWith('/policies/versions'))return send({items:[{versionId:ids.versionId,clusterId:'alpha',contentHash:hash,document:activeDocument,createdBy:'fixture',createdAtUtc:now}],nextCursor:null});
       if(p.endsWith('/policies/active'))return send({clusterId:'alpha',revision:1,enabled:true,versionId:ids.versionId,contentHash:hash,digest:hash});
       if(p.endsWith('/policies/validate')){assert.deepEqual(Object.keys(request.postDataJSON()).sort(),['clusterId','document']);assert.equal(request.postDataJSON().clusterId,'alpha');return send({valid:true,contentHash:hash,document});}
-      if(p.endsWith('/policies/explain'))return send({allowed:false,code:'RequestApprovalRequired',digest:hash,matchedRuleIds:['require-review']});
-      if(p.endsWith('/policies/dry-run'))return send({items:[{allowed:false,code:'RequestApprovalRequired',digest:hash,matchedRuleIds:['require-review']}]});
+      if(p.endsWith('/policies/explain')){assert.equal(request.postDataJSON().action,'TopicCreate');return send({allowed:false,code:'GovernanceDenied',digest:hash,matchedRuleIds:['deny-create']});}
+      if(p.endsWith('/policies/dry-run')){assert.equal(request.postDataJSON().fixtures[0].action,'TopicCreate');return send({items:[{allowed:false,code:'GovernanceDenied',digest:hash,matchedRuleIds:['deny-create']}]});}
       if(p.endsWith('/policies/versions/preview')||p.endsWith('/policies/activations/preview')){
         const activation=p.includes('/activations/'),op=status(activation?ids.activation:ids.version,activation?'governancePolicyActivation':'governancePolicyVersion',activation);operations.set(op.operationId,{op});return send(op);
       }
-      if(p.includes('/policies/operations/')){const op=operations.get(p.split('/').pop()).op;return send({operationId:op.operationId,previewHash:op.previewHash,kind:op.operationKind,clusterId:'alpha',versionId:ids.versionId,contentHash:hash,document,expectedRevision:0,enabled:true});}
+      if(p.includes('/policies/operations/')){const op=operations.get(p.split('/').pop()).op;return send({operation:op,operationId:op.operationId,previewHash:op.previewHash,kind:op.operationKind,clusterId:'alpha',versionId:ids.versionId,contentHash:hash,document:op.operationKind==='governancePolicyActivation'?activeDocument:document,expectedRevision:1,enabled:true});}
       if(p.startsWith('/api/v1/mutations/')){
         const parts=p.split('/'),id=parts[4],value=operations.get(id);if(!value)return send({title:'Unavailable'},404);
-        if(parts.length===5)return send(value.op);
+        if(parts.length===5){if(fixtureApprover){approverPrivateStatusAttempts++;return send({title:'Requester-only status'},403);}return send(value.op);}
         assert.equal(request.headers()['x-kafdeck-csrf'],'fixture-csrf');
         if(parts[5]==='confirm')value.op.state=value.op.requiresIndependentApproval?'awaitingApproval':'ready';
-        if(parts[5]==='approve'){if(!independent)return send({title:'Distinct human required'},403);value.op.state='ready';}
+        if(parts[5]==='approve'){if(!fixtureApprover)return send({title:'Distinct human required'},403);value.op.state='ready';}
         if(parts[5]==='execute'){assert.equal(value.op.state,'ready');effects++;value.op.state='appliedVerified';}
         return send(value.op);
       }
       return send({title:'Fixture endpoint unavailable'},403);
-    });
+    };
+    await context.route('**/*',fixtureRoute);
     const page=await context.newPage();await page.goto(origin);
     const catalog=page.locator('#ownership-catalog'),policy=page.locator('#governance-policy');
     await catalog.getByText('No authorized entries in this page.',{exact:true}).waitFor();
@@ -83,6 +85,9 @@ const server=createServer((req,res)=>{
     console.log('Governance fixture probe: selected-version-summary');
     const visibleDocument=await policy.getByText('Selected immutable version',{exact:true}).locator('..').locator('pre').textContent();
     console.log('Governance fixture probe: selected-version-json');assert.equal(JSON.parse(visibleDocument).rules[0].outcome,'Deny');
+    console.log('Governance fixture resource-kind labels:',JSON.stringify({exact:await policy.getByLabel('Resource kind',{exact:true}).count(),partial:await policy.getByLabel('Resource kind').count()}));
+    await policy.getByLabel('Resource kind').selectOption('topic');
+    await policy.getByLabel('Exact resource ID',{exact:true}).fill('orders');await policy.getByLabel('Registered action',{exact:true}).fill('TopicCreate');
     await policy.getByRole('button',{name:'Preview governed version write',exact:true}).click();
     const policyReview=policy.getByRole('article',{name:'Immutable governance operation'});await policyReview.waitFor();
     await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();await policyReview.getByRole('button',{name:'Confirm exact preview',exact:true}).click();await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();
@@ -93,14 +98,26 @@ const server=createServer((req,res)=>{
     await policyReview.getByLabel('Exact confirmation challenge:',{exact:false}).fill('activate alpha');await confirm.click();
     await policyReview.getByRole('button',{name:'Submit independent human approval',exact:true}).click();await policy.getByText(/not authorized for this scope/).waitFor();
     assert.equal(await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).isDisabled(),true);
-    independent=true;await policyReview.getByRole('button',{name:'Submit independent human approval',exact:true}).click();await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();await policyReview.getByText('appliedVerified',{exact:false}).waitFor();assert.equal(effects,3);
-    await policy.getByLabel('Exact resource ID').fill('orders');await policy.getByRole('button',{name:'Explain current decision',exact:true}).click();await policy.getByLabel('Current policy explanation').getByText(/RequestApprovalRequired/).waitFor();
-    await policy.getByRole('button',{name:'Dry-run this fixture',exact:true}).click();await policy.getByLabel('Read-only dry-run results').getByText(/RequestApprovalRequired/).waitFor();
+    const approverContext=await browser.newContext({viewport:{width:1440,height:1000},extraHTTPHeaders:{'X-Kafdeck-UI-Fixture':'approver'}});
+    await approverContext.route('**/*',fixtureRoute);const approver=await approverContext.newPage();await approver.goto(origin);
+    const approvalPanel=approver.locator('#governance-policy');await approvalPanel.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
+    await approvalPanel.getByLabel('Existing policy operation ID').fill(ids.activation);await approvalPanel.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();
+    const approvalReview=approvalPanel.getByRole('article',{name:'Immutable governance operation'});await approvalReview.waitFor();
+    await approvalReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
+    await approvalReview.getByRole('button',{name:'Submit independent human approval',exact:true}).click();await approvalReview.getByText('ready',{exact:false}).waitFor();
+    await page.goto(origin);await policy.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
+    await policy.getByLabel('Existing policy operation ID').fill(ids.activation);await policy.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();await policyReview.waitFor();
+    await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
+    await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();await policyReview.getByText('appliedVerified',{exact:false}).waitFor();assert.equal(effects,3);assert.equal(approverPrivateStatusAttempts,0);await approverContext.close();
+    assert.equal(await policy.getByLabel('Resource kind').count(),1);await policy.getByLabel('Resource kind').selectOption('topic');
+    await policy.getByLabel('Exact resource ID',{exact:true}).fill('orders');await policy.getByLabel('Registered action',{exact:true}).fill('TopicCreate');
+    await policy.getByRole('button',{name:'Explain current decision',exact:true}).click();await policy.getByLabel('Current policy explanation').getByText(/GovernanceDenied/).waitFor();
+    await policy.getByRole('button',{name:'Dry-run this fixture',exact:true}).click();await policy.getByLabel('Read-only dry-run results').getByText(/GovernanceDenied/).waitFor();
     await page.setViewportSize({width:390,height:844});await policy.scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true);
     authenticated=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await catalog.waitFor({state:'hidden'});await policy.waitFor({state:'hidden'});
     authenticated=true;denied=true;await page.reload();await page.locator('#ownership-catalog').getByText(/not authorized for this scope/).waitFor();assert.equal(await page.getByRole('button',{name:'Preview exact metadata change',exact:true}).isDisabled(),true);
     assert.deepEqual(outside,[]);assert.ok(csrf>=5);fs.mkdirSync(path.dirname(evidence),{recursive:true});
-    fs.writeFileSync(evidence,JSON.stringify({...sourceIdentity(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:true,genuineAuthenticationDatabaseOrEffectClaimed:false,catalogPreviewConfirmExecute:true,policyVersionAndCriticalActivation:true,distinctHumanDenialUi:true,unknownNeverDispatch:true,crossScopeRejected:true,import501RejectedBeforeNetwork:true,csrf:true,untrustedMetadataEscaped:true,sessionLossClearsPanels:true,scopeDenialDisablesControls:true,mobileWidth:390,noHorizontalOverflow:true,noExternalRequests:true,fixtureEffects:effects},null,2));
+    fs.writeFileSync(evidence,JSON.stringify({...sourceIdentity(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:true,genuineAuthenticationDatabaseOrEffectClaimed:false,catalogPreviewConfirmExecute:true,policyVersionAndCriticalActivation:true,distinctHumanDenialUi:true,separateApproverContext:true,approverUsesScopedFrozenReview:true,requesterReloadResume:true,wrappedSelectLabelMatched:true,exactExplanationAndDryRunLocators:true,unknownNeverDispatch:true,crossScopeRejected:true,import501RejectedBeforeNetwork:true,csrf:true,untrustedMetadataEscaped:true,sessionLossClearsPanels:true,scopeDenialDisablesControls:true,mobileWidth:390,noHorizontalOverflow:true,noExternalRequests:true,fixtureEffects:effects},null,2));
     console.log('W73/W75 compiled governance UI acceptance passed (explicit API fixtures).');await context.close();
   }finally{await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});

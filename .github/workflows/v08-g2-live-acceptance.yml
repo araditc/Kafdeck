@@ -214,6 +214,7 @@ jobs:
           set -euo pipefail
           (cd src/frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npm test && npm run build)
           (cd deploy/dev/browser-g2 && npm ci --ignore-scripts --no-audit --no-fund && npx --no-install playwright install --with-deps chromium)
+          node src/frontend/scripts/v09-governance-browser.cjs
           dotnet restore Kafdeck.slnx --locked-mode
           dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
       - name: Prove W73 and W75 real catalog policy identity clients and effects
@@ -310,6 +311,7 @@ jobs:
           path: |
             artifacts/g2-ci/g2-live.trx
             artifacts/g2-ci/v09-live.trx
+            artifacts/v09/governance-ui-evidence.json
             artifacts/g4-ci/g4-live.trx
             artifacts/g5-ci/*.trx
             artifacts/g2-ci/identity/*-evidence.json

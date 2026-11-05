@@ -108,8 +108,12 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     phase='policy-active-denial-rule';
     const deny=currentPolicy.rules.find(rule=>rule.outcome==='Deny'&&rule.scope.clusterId==='permitted'&&rule.scope.resourceKind==='topic'&&rule.scope.action==='TopicCreate'&&Array.isArray(rule.scope.resourceIds)&&rule.scope.resourceIds.length>0);
     assert.ok(deny,'The actual fixture policy must contain the scoped TopicCreate denial selector.');
-    await policy.getByLabel('Resource kind',{exact:true}).selectOption(deny.scope.resourceKind);
+    // A wrapping label also includes its select option text. Chromium's exact
+    // label name therefore differs from the visible "Resource kind" prefix.
+    phase='policy-denial-kind-select';const resourceKindSelect=policy.getByLabel('Resource kind');assert.equal(await resourceKindSelect.count(),1);await resourceKindSelect.selectOption(deny.scope.resourceKind);
+    phase='policy-denial-resource-fill';
     await policy.getByLabel('Exact resource ID',{exact:true}).fill(deny.scope.resourceIds[0]);
+    phase='policy-denial-action-fill';
     await policy.getByLabel('Registered action',{exact:true}).fill(deny.scope.action);
     phase='policy-explanation-submit';await checkedClick(page,policy.getByRole('button',{name:'Explain current decision',exact:true}),'policy-explain');
     phase='policy-explanation-denied-result';await policy.getByLabel('Current policy explanation').getByText(/GovernanceDenied/).waitFor();
