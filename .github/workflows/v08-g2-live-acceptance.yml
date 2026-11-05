@@ -284,9 +284,12 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g5-compensation-evidence.json"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V08G4' --results-directory artifacts/g4-ci --logger 'trx;LogFileName=g4-live.trx'
+          python3 scripts/ci/require-complete-trx.py artifacts/g4-ci/g4-live.trx V08G4ExternalIntegrationLiveTests:6
           for provider in sqlite postgres; do
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-terraform-evidence.json"
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-mcp-evidence.json"
+            python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["status"] == "Passed"; assert all(p[k] for k in ("actualTerraformPlugin", "actualPackagedMcpStdio", "positiveControlsApplied", "tfDenied", "mcpDenied", "staleFenced", "noEffects", "auditsUnchanged"))' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w75-automation-policy-evidence.json"
           done
       - name: Package external integration artifacts without publication
         shell: pwsh

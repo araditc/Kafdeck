@@ -174,7 +174,7 @@ public sealed class MutationAdmissionService
                 var conditions = (intent.Preconditions ?? Array.Empty<MutationPrecondition>()).ToList();
                 if (conditions.Any(p => p.Key.StartsWith("v09.governance:", StringComparison.Ordinal)))
                     return new(MutationAdmissionOutcome.InvalidRequest, Code: "GovernancePreconditionReserved");
-                foreach (var cluster in targets.Select(t => t.ClusterId).Append(intent.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+                foreach (var cluster in MutationGovernanceTargets.Project(targets).Select(t => t.ClusterId).Append(intent.ClusterId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
                 {
                     var current = await _governance.GetStateAsync(cluster, cancellationToken).ConfigureAwait(false);
                     if (current.Digest is not null) conditions.Add(new("v09.governance:" + cluster, current.Digest));
