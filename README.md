@@ -30,7 +30,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **This source build was prepared as the v0.8 candidate.** Publication status and the actual latest stable release are authoritative in [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest). The v0.7 capability descriptions below record the published baseline used during candidate preparation. Read-only remains the default operating posture. v0.7 adds governed Schema Registry lifecycle and developer tooling, multi-profile Kafka Connect with bounded auto-restart, controlled SerDe and finite data jobs/generation, bounded ksqlDB and Streams/lineage evidence, plus a keyboard-first Command Palette. Governed mutations remain opt-in, and unsupported or unsafe provider capabilities remain explicit `Blocked`/`Unsupported` states rather than falling through to a generic provider/CLI escape path.
+> **v0.8 was released on 2026-11-05.** See the [release](https://github.com/araditc/Kafdeck/releases/tag/v0.8) and [accepted evidence](docs/implementation/evidence/v0.8-g5-accepted-20261105.json) for exact source, image, packages and tested boundaries. Read-only remains the default; governed mutations and automation are opt-in and retain current authorization, risk, independent critical approval, durable recovery and audit.
 
 ## Why Kafdeck?
 
@@ -45,9 +45,11 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). The governed manifest selects **v0.8 as the prepared build candidate** (runtime/package version0.8.0). **v0.7 is the historical published baseline at candidate preparation**, not a claim about the current latest release. The manifest candidate status describes the publication input; actual publication status is recorded by [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest). Candidate selection does not create a tag, GitHub Release or GHCR publication; promotion requires a separate explicit owner decision for the exact tested source and verified artifacts. The main branch can also contain capabilities that have passed implementation gates but are not part of a later published release.
+Stable release **v0.8** is published from protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce`. [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest) is authoritative for the latest stable release. All W61–W71 workstreams and tracker [#209](https://github.com/araditc/Kafdeck/issues/209) are complete; [G5/W71](https://github.com/araditc/Kafdeck/issues/220) and the separate G6 publication gate are closed.
 
-| Capability | Introduced | Published v0.7 baseline posture |
+The release-input snapshot records **v0.8 as the prepared build candidate**. **v0.7 is the historical published baseline at candidate preparation**. These fields record the publication input; the published runtime/package version is `0.8.0`, and GitHub Releases records publication status.
+
+| Capability | Introduced | Released capability posture |
 | --- | --- | --- |
 | Cluster & broker explorer | v0.1 | Available; bounded, cancellable, evidence-based |
 | Operator Identity / OIDC / RBAC | v0.2 | Available; OIDC is the recommended multi-user production mode |
@@ -58,6 +60,15 @@ Stable releases are published through [GitHub Releases](https://github.com/aradi
 | Developer & Streaming Ecosystem Platform | v0.7 | Published baseline; governed Schema/Connect/data tooling, bounded streaming integrations, Command Palette and evidence-driven status truth |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
+
+## v0.8 operational additions
+
+- Bounded OpenTelemetry/Prometheus signals, explicit metric history, analytics/SLO and authorized data-quality monitoring.
+- Six configured notifier transports (Webhook, Email, Slack, Teams, Telegram, PagerDuty), durable recovery, genuine Keycloak authentication and governed REST/CLI automation.
+- Explicit NotificationSubscription ownership, source CAS and immutable GitOps plans, a real Terraform provider and authenticated MCP stdio tools over the same backend authority.
+- A fresh independently governed Active/Paused metadata inverse and integrated operator automation workflows. Delivered notifications, deleted data and unadmitted families do not acquire rollback support.
+
+Provider-dependent metrics remain Unknown/Unsupported when trustworthy evidence is absent. Terraform destroy remains unadmitted. See [v0.8 release notes](docs/releases/v0.8.md) and the [operator workflow](docs/operator/v0.8-automation-workflow.md).
 
 ## Feature matrix
 
@@ -233,19 +244,20 @@ A typical request flows like this:
 
 ### Recommended path: OCI / Docker
 
-Kafdeck releases are published as a single non-root OCI image. The current release is:
+Kafdeck v0.8 is distributed as a non-root OCI image. Pin the verified immutable digest:
 
 ~~~text
-ghcr.io/araditc/kafdeck:v0.7
+ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
 ~~~
 
-For this historical v0.7 baseline, pin its immutable digest:
+GHCR access is **private under the existing package policy**. Authenticate with a GitHub identity allowed to read the package and a token with `read:packages` when Docker prompts for its password:
 
-~~~text
-ghcr.io/araditc/kafdeck@sha256:2e089bfe4788d93e7f9b5d03fac117001daccd06c244f1017648d5ccf57535c8
+~~~sh
+docker login ghcr.io --username YOUR_GITHUB_LOGIN
+docker pull ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
 ~~~
 
-Do not rely on <code>latest</code>.
+The v0.8 application image is published by digest. Use the digest recorded above for Docker/Podman commands. [Release assets](https://github.com/araditc/Kafdeck/releases/tag/v0.8) contain the five Terraform ZIPs, MCP package and SHA256SUMS. The runtime image contains no APT package manager. Any customized image must be built and verified before deployment.
 
 ### 1. Start a container-reachable Kafka for evaluation
 
@@ -295,13 +307,13 @@ Create <code>appsettings.Production.json</code>:
 
 ### 3. Run the released image
 
-The examples below use the historical published baseline tag <code>v0.7</code>. For that baseline, prefer its immutable digest shown above; select the actual current release from [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest).
+The examples below use the exact verified v0.8 image digest. Complete the registry login above before running them.
 
 #### Windows / Docker Desktop
 
 ~~~powershell
 $env:KAFDECK_DEPLOYMENT_TOKEN = "change-this-local-token"
-docker run --rm --name kafdeck --network kafdeck-demo -p 8080:8080 -e KAFDECK_DEPLOYMENT_TOKEN=$env:KAFDECK_DEPLOYMENT_TOKEN -v "$PWD\appsettings.Production.json:/app/appsettings.Production.json:ro" ghcr.io/araditc/kafdeck:v0.7
+docker run --rm --name kafdeck --network kafdeck-demo -p 8080:8080 -e KAFDECK_DEPLOYMENT_TOKEN=$env:KAFDECK_DEPLOYMENT_TOKEN -v "$PWD\appsettings.Production.json:/app/appsettings.Production.json:ro" ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
 ~~~
 
 #### Linux / Docker Engine
@@ -315,7 +327,7 @@ docker run --rm \
   -p 8080:8080 \
   -e KAFDECK_DEPLOYMENT_TOKEN \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro" \
-  ghcr.io/araditc/kafdeck:v0.7
+  ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
 ~~~
 
 Then open Kafdeck from another machine by using the server's reachable address, for example:
@@ -339,7 +351,7 @@ podman run --rm \
   -p 8080:8080 \
   -e KAFDECK_DEPLOYMENT_TOKEN \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro,Z" \
-  ghcr.io/araditc/kafdeck:v0.7
+  ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
 ~~~
 
 For Podman, create a Podman network and ensure Kafka advertises a broker hostname reachable on that network. The Docker-specific <code>kafdeck-demo</code> recipe above is not automatically shared with Podman.
@@ -670,7 +682,7 @@ docker run --rm \
   -e KAFDECK_OIDC_CLIENT_SECRET \
   -v "$PWD/kafdeck-https.pfx:/run/secrets/kafdeck-https.pfx:ro" \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro" \
-  ghcr.io/araditc/kafdeck:v0.7
+  ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
 ~~~
 
 Inject <code>KAFDECK_HTTPS_CERT_PASSWORD</code> through your orchestrator/secret manager; it is an ASP.NET/Kestrel setting and does not use Kafdeck's <code>env:</code> secret-reference syntax. In production, use a certificate whose SAN matches the hostname operators use.
@@ -775,7 +787,7 @@ curl http://127.0.0.1:8080/healthz
 
 Kafdeck product capabilities are exposed through versioned HTTP routes under <code>/api/v1</code>. The UI uses the same backend-authoritative contracts rather than bypassing authorization.
 
-The retained v0.7 legacy OpenAPI contract is available both at runtime and in the repository:
+The governed v0.8 bearer OpenAPI document is available at `GET /api/v1/openapi/v0.8-bearer.json` with current `SystemRead` authorization; see [bearer/CLI parity](docs/api/v0.8-bearer-cli-parity.md). The retained v0.7 legacy contract remains available:
 
 - runtime: <code>GET /api/v1/openapi/v0.7.json</code>
 - checked in: [docs/api/openapi-v0.7.json](docs/api/openapi-v0.7.json)
@@ -786,7 +798,7 @@ Earlier versioned API documents remain in [docs/api/](docs/api/) as historical r
 
 Compatibility is evidence-based rather than assumed from a Kafka-compatible endpoint.
 
-The v0.7 release validation matrix retains:
+The verified v0.8 release matrix retains:
 
 | Kafka | Tier |
 | --- | --- |
@@ -978,7 +990,7 @@ The roadmap is public and capability-driven:
 
 [**View the Kafdeck Roadmap →**](ROADMAP.md)
 
-The v0.8 source build, prepared as the candidate, adds observability, governed automation and platform APIs; see the [v0.8 candidate notes](docs/releases/v0.8.md) and [publication decision packet](docs/releases/v0.8-publication-packet.md). The historical candidate-preparation baseline is v0.7; consult [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest) for actual publication and latest stable identity. Later roadmap themes cover governance/enterprise hardening and the v1.0 stability/compatibility milestone.
+v0.8 is [released](https://github.com/araditc/Kafdeck/releases/tag/v0.8) with accepted observability, governed automation and platform APIs. The next roadmap phase is v0.9 governance/enterprise hardening, followed by v1.0 stability. Detailed v0.9 scope and implementation admission remain future owner-governed decisions.
 
 Nothing in the roadmap should be interpreted as currently available until it is implemented, validated, and released.
 

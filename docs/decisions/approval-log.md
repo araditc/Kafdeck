@@ -344,3 +344,19 @@ The accepted scope adds bounded OpenTelemetry/Prometheus observability, explicit
 ### Implementation gate
 
 W62–W71 remain blocked until W61 is admitted through protected-main governance.
+
+
+## Gate 8 delivery and separate v0.8 publication — 2026-11-05
+
+- **Status:** W61–W71 / G0–G6 COMPLETE; v0.8 PUBLISHED.
+- **Authority:** Project owner, explicit Codex chat publication decision.
+- **Accepted source:** `cbedd025ab97db10fb21407ea5188c08d6a4d8ce`; G5/tracker #220/#209 closed after all 14 main producer workflows and the complete 124-file strict Main packet passed.
+- **Owner-reviewed archive SHA256:** `6c333ee26e8d433ea49faf7d578238b9db5577656959c31404ce032fbad6bd34`.
+
+The owner answered the exact-SHA/archive publication request:
+
+> انتشار همین SHA را تأیید می‌کنم
+
+[Publication run41986146327](https://github.com/araditc/Kafdeck/actions/runs/41986146327) published [v0.8](https://github.com/araditc/Kafdeck/releases/tag/v0.8), immutable source tag and signed image `ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45` from that archive without rebuilding. Five Terraform ZIPs, MCP nupkg and SHA256SUMS were checked. Registry digest/config and cosign signature/readiness/SPDX verification succeeded with owner-authenticated access; GHCR retains its existing private policy. The first malformed-input dispatch stopped before publication; the corrected structured-input execution used the identical approved source/archive.
+
+Original Gate 8 scope and planning-admission entries above remain historical records. Detailed evidence: [accepted v0.8 release evidence](../implementation/evidence/v0.8-g5-accepted-20261105.json). This decision does not authorize production deployment, Terraform/NuGet Registry publication, or detailed v0.9 scope/implementation/publication.
