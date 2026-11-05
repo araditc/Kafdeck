@@ -3,6 +3,8 @@ name: codeql
 on:
   pull_request:
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
@@ -15,6 +17,8 @@ on:
     tags:
       - 'v*'
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'

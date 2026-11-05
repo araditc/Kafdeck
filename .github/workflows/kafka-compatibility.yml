@@ -3,6 +3,8 @@ name: kafka-compatibility
 on:
   pull_request:
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'docs/implementation/v0.8-g5*'
       - 'scripts/release/**'
       - 'docs/releases/v0.8*'
@@ -19,6 +21,8 @@ on:
     tags:
       - 'v*'
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'docs/implementation/v0.8-g5*'
       - 'scripts/release/**'
       - 'docs/releases/v0.8*'

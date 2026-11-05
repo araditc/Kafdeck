@@ -3,16 +3,19 @@ name: release-supply-chain
 on:
   pull_request:
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'Dockerfile'
       - 'src/**'
       - '.github/workflows/release-supply-chain.yml'
       - '.github/workflows/publish-release.yml'
-      - '.github/release/release.json'
       - 'tools/Kafdeck.OfflineProbe/**'
       - 'scripts/release/**'
   push:
     branches: [main]
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'Dockerfile'
       - 'src/**'
       - 'tools/Kafdeck.OfflineProbe/**'
