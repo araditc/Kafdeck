@@ -33,6 +33,7 @@ public static class KafdeckAttributionEndpoints
                 var size=Size(pageSize);var query=new MeasurementQuery(clusterId,fromUtc.ToUniversalTime(),toUtc.ToUniversalTime(),resourceId,size);
                 AttributionContract.Query(query);var scope=Scope(family,query);query=query with{AfterId=Decode(cursor,scope,h,auth,protection)};
                 bool Visible(MeasurementAccessScope w)=>Allowed(h,auth,AuthorizationAction.AttributionRead,w.ClusterId,w.ResourceId)&&
+                    Allowed(h,auth,AuthorizationAction.TopicRead,w.ClusterId,w.ResourceId)&&
                     (w.TeamId is null||Allowed(h,auth,AuthorizationAction.CatalogRead,w.ClusterId,"catalog:team:"+w.TeamId))&&
                     (w.ApplicationId is null||Allowed(h,auth,AuthorizationAction.CatalogRead,w.ClusterId,"catalog:application:"+w.ApplicationId));
                 var found=await store.QueryAuthorizedAsync(query,Visible,h.RequestAborted).ConfigureAwait(false);

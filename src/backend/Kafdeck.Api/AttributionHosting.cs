@@ -27,16 +27,29 @@ public static class AttributionHosting
     }
 }
 
-public sealed class AttributionCollectionService(IEnumerable<IAttributionMeasurementSource> sources,IAttributionStore store,ICatalogStore catalog)
+public sealed class AttributionCollectionService(IEnumerable<IAttributionMeasurementSource> sources,IAttributionStore store,ICatalogStore catalog,
+    ILogger<AttributionCollectionService>? logger=null)
 {
     public async Task<int> CollectAsync(CancellationToken token)
     {
-        var count=0;
+        token.ThrowIfCancellationRequested();var count=0;
         foreach(var source in sources)
         {
-            var acquired=await source.AcquireAsync(token).ConfigureAwait(false);var resolved=new List<MeasurementWindow>(acquired.Count);
-            foreach(var window in acquired)resolved.Add(window with{Ownership=await OwnershipAsync(window,token).ConfigureAwait(false)});
-            await store.AppendAsync(resolved,token).ConfigureAwait(false);count=checked(count+resolved.Count);
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                var acquired=await source.AcquireAsync(token).ConfigureAwait(false);token.ThrowIfCancellationRequested();
+                var resolved=new List<MeasurementWindow>(acquired.Count);
+                foreach(var window in acquired)resolved.Add(window with{Ownership=await OwnershipAsync(window,token).ConfigureAwait(false)});
+                token.ThrowIfCancellationRequested();await store.AppendAsync(resolved,token).ConfigureAwait(false);count=checked(count+resolved.Count);
+            }
+            catch(OperationCanceledException)when(token.IsCancellationRequested){throw;}
+            catch(Exception)
+            {
+                token.ThrowIfCancellationRequested();
+                // No exception, source address, credentials or remote response material enters diagnostics.
+                logger?.LogWarning(new EventId(7601,"AttributionSourceUnavailable"),"An attribution source is unavailable; other registered sources will still be collected.");
+            }
         }
         return count;
     }
@@ -63,11 +76,21 @@ public sealed class AttributionCollectionHostedService(AttributionCollectionServ
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer=new PeriodicTimer(TimeSpan.FromSeconds(options.PollSeconds));
-        do
+        try
         {
-            try{await collection.CollectAsync(stoppingToken).ConfigureAwait(false);await store.DeleteExpiredMeasurementsAsync(options.RetentionDays,DateTimeOffset.UtcNow,stoppingToken).ConfigureAwait(false);}
-            catch(OperationCanceledException)when(stoppingToken.IsCancellationRequested){break;}
-            catch(Exception){logger.LogWarning("Attribution measurement collection is unavailable; no synthetic measurements were inserted.");}
-        }while(await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+            do{await RunCycleAsync(stoppingToken).ConfigureAwait(false);}while(await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+        }
+        catch(OperationCanceledException)when(stoppingToken.IsCancellationRequested){}
+    }
+    internal async Task RunCycleAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        try{await collection.CollectAsync(token).ConfigureAwait(false);}
+        catch(OperationCanceledException)when(token.IsCancellationRequested){throw;}
+        catch(Exception){token.ThrowIfCancellationRequested();logger.LogWarning(new EventId(7602,"AttributionCollectionUnavailable"),"Attribution collection is unavailable; retention remains independently scheduled.");}
+        token.ThrowIfCancellationRequested();
+        try{await store.DeleteExpiredMeasurementsAsync(options.RetentionDays,DateTimeOffset.UtcNow,token).ConfigureAwait(false);}
+        catch(OperationCanceledException)when(token.IsCancellationRequested){throw;}
+        catch(Exception){token.ThrowIfCancellationRequested();logger.LogWarning(new EventId(7603,"AttributionRetentionUnavailable"),"Attribution measurement retention is unavailable.");}
     }
 }
