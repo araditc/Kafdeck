@@ -58,7 +58,9 @@ export function GovernanceOperationReview({ operation, material, busy, update, e
     </dl>
     <p role="status">{governanceOutcome(operation.state)}</p>
     {!executionAllowed && <p role="status">{executionBlockReason ?? 'A current business requirement still blocks dispatch.'}</p>}
-    {operation.riskClass === 'critical' && <p role="alert">This critical operation requires confirmation and independent human approval for this exact material.</p>}
+    {operation.riskClass === 'critical' && <p role="alert">{['governancepolicyactivation','policyactivation'].includes(operation.operationKind.toLowerCase())
+      ? 'Critical policy activation requires confirmation and independent human approval for this exact material.'
+      : 'This critical operation requires confirmation and independent human approval for this exact material.'}</p>}
     <details open><summary>Frozen reviewed material</summary><pre className="automation-proof">{JSON.stringify(material, null, 2)}</pre></details>
     <details><summary>Safe backend evidence</summary><pre className="automation-proof">{JSON.stringify(operation.safeProviderEvidence, null, 2)}</pre></details>
     <fieldset disabled={busy}>
