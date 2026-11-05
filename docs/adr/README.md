@@ -17,3 +17,7 @@ ADRs record durable architecture decisions.
 - References/related RFCs where relevant
 
 Accepted ADRs are not rewritten to hide history. A later change creates a new ADR and marks the previous ADR as superseded.
+
+## v0.9 proposal
+
+- [ADR-0010 — Governance at the existing effect boundary](0010-governance-effect-boundary.md) — Proposed, W72 planning admission pending; preserves ADR-0006/0009 safety and provider boundaries.

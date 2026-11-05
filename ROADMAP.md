@@ -239,9 +239,9 @@ Capabilities:
 
 Scope authority: **Issue #208 / Gate 8 — owner accepted 2026-09-27**. W61–W71 and tracker **#209** are complete. G5 was accepted at protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce` after all 14 producer workflows and the 124-file strict Main packet passed; PR #422 removed unused vulnerable APT components. The owner separately authorized publication of this exact source/archive on 2026-11-05. [v0.8](https://github.com/araditc/Kafdeck/releases/tag/v0.8) and its signed GHCR digest `sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45` were published through [run41986146327](https://github.com/araditc/Kafdeck/actions/runs/41986146327). GHCR access remains private and requires an authorized `read:packages` token. See [accepted evidence](docs/implementation/evidence/v0.8-g5-accepted-20261105.json).
 
-## v0.9 — Governance, Enterprise Operations & Hardening — NEXT / SCOPE PLANNING
+## v0.9 — Governance, Enterprise Operations & Hardening — SCOPE ACCEPTED / W72 PLANNING
 
-The themes below define the next roadmap phase. Detailed Gate 9 scope, RFC/acceptance workstreams and implementation admission must be recorded before new runtime capabilities are activated. The released v0.8 contracts and safety boundaries remain the baseline.
+The owner accepted the complete scope in [#424](https://github.com/araditc/Kafdeck/issues/424) on 2026-11-05 and authorized [W72 #426](https://github.com/araditc/Kafdeck/issues/426). [Tracker #425](https://github.com/araditc/Kafdeck/issues/425) retains W72–W82. [RFC-0009](docs/rfcs/0009-v0.9-governance-enterprise-hardening.md), [Gate 9](docs/decisions/gate-9-v0.9-governance-hardening.md) and the [full execution plan](docs/implementation/v0.9-full-scope-delivery-execution-plan.md) define planning admission, contracts and real acceptance. W72 preparation is active; runtime W73–W82 remains blocked until protected-main planning admission and post-merge verification. Released v0.8 remains the baseline; publication requires separate exact-SHA owner approval.
 
 Governance:
 - Application/team/topic ownership catalog

@@ -29,3 +29,7 @@ Implementation should not outrun an unresolved RFC when the RFC is required by g
 - RFC-0003 — v0.3 Safe Data Explorer and Server-Side Masking — accepted/implemented.
 - RFC-0004 — v0.4 Consumers, Schemas & Ecosystem Read Views — accepted/implemented/released.
 - RFC-0005 — v0.5 Safe Administration & Controlled Mutations — planning/review; implementation blocked until governed admission.
+
+### v0.9 planning
+
+- [RFC-0009 — Governance, Enterprise Operations & Hardening](0009-v0.9-governance-enterprise-hardening.md) — scope accepted 2026-11-05; W72 review, planning admission pending. Full W73–W82 implementation is gated on protected-main admission.
