@@ -191,8 +191,11 @@ public sealed class V09W75PolicyLiveTests
         {
             await process.WaitForExitAsync(token); var stdout = await output; var stderr = await error;
             var phase = System.Text.RegularExpressions.Regex.Match(stderr, @"phase=([a-z-]{1,96})", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            var endpoint = System.Text.RegularExpressions.Regex.Match(stderr, @"endpoint=([a-z-]{1,48})", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            var status = System.Text.RegularExpressions.Regex.Match(stderr, @"status=([0-9]{1,3})", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
             Assert.True(process.ExitCode == 0 && stdout.Contains("V09_GENUINE_GOVERNANCE_BROWSER_PASSED", StringComparison.Ordinal),
-                "Genuine browser acceptance failed; phase=" + (phase.Success ? phase.Groups[1].Value : "withheld"));
+                "Genuine browser acceptance failed; phase=" + (phase.Success ? phase.Groups[1].Value : "withheld") +
+                "; endpoint=" + (endpoint.Success ? endpoint.Groups[1].Value : "none") + "; status=" + (status.Success ? status.Groups[1].Value : "none"));
             Assert.True(File.Exists(evidence), "Genuine browser sanitized evidence is required.");
         }
         finally { if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(CancellationToken.None); } }

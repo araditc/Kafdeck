@@ -532,6 +532,7 @@ public static class CliParser
           kafdeck --oidc-profile <profile> policies <versions|state> <cluster-id>
           kafdeck --oidc-profile <profile> policies version <cluster-id> <version-id>
           kafdeck --oidc-profile <profile> policies <validate|explain|dry-run> --request-file <closed.json>
+            Validation input is {"clusterId":"exact-scope","document":"closed policy JSON"}; validation never grants global read or execution rights.
           kafdeck --oidc-profile <profile> policies <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>
           kafdeck --oidc-profile <profile> policies plan <operation-id>
           kafdeck --oidc-profile <profile> policies reconcile <operation-id>

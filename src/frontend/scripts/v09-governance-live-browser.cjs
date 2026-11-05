@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'../../..');
 const sourceIdentity=require('./governance-browser-source.cjs');
 const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/playwright'));
 (async()=>{
-  let browser,phase='input';
+  let browser,phase='input',lastHttp={endpoint:'none',status:0};
   try{
     const [apiUrl,manifestPath,evidencePath]=process.argv.slice(2);
     if(!apiUrl||!manifestPath||!evidencePath)throw Error('input');
@@ -19,6 +19,21 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000}}),page=await context.newPage();
     page.setDefaultTimeout(30000);const requests=[];
     page.on('request',request=>{const url=new URL(request.url());if(url.origin===api.origin&&url.pathname.startsWith('/api/v1/governance/'))requests.push({path:url.pathname,method:request.method()});});
+    // Only compiled endpoint labels and numeric statuses may enter public
+    // diagnostics. Never print a URL, query, request body, response or token.
+    const endpointLabel=pathname=>{
+      const exact={'/api/v1/governance/policies/validate':'policy-validate','/api/v1/governance/policies/explain':'policy-explain','/api/v1/governance/policies/dry-run':'policy-dry-run',
+        '/api/v1/governance/policies/versions/preview':'policy-version-preview','/api/v1/governance/policies/activations/preview':'policy-activation-preview'};
+      if(exact[pathname])return exact[pathname];
+      if(/^\/api\/v1\/mutations\/[a-f0-9-]+\/confirm$/i.test(pathname))return 'mutation-confirm';
+      if(/^\/api\/v1\/mutations\/[a-f0-9-]+\/approve$/i.test(pathname))return 'mutation-approve';
+      if(/^\/api\/v1\/mutations\/[a-f0-9-]+\/execute$/i.test(pathname))return 'mutation-execute';
+      return null;
+    };
+    async function checkedClick(target,control,endpoint,expected=200){
+      const pending=target.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&endpointLabel(url.pathname)===endpoint&&response.request().method()==='POST';});
+      await control.click();const response=await pending;lastHttp={endpoint,status:response.status()};assert.equal(lastHttp.status,expected);
+    }
     async function signIn(target,user,passwordFile){
       await target.goto(new URL('/api/v1/auth/login',api).href,{waitUntil:'domcontentloaded'});
       await target.locator('#username').fill(user);await target.locator('#password').fill(fs.readFileSync(passwordFile,'utf8').trim());
@@ -56,34 +71,47 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await catalog.getByRole('button',{name:'Read immutable record history',exact:true}).click();
     const history=catalog.getByRole('table',{name:'Immutable revisions; latest 1000 loaded history entries retained'});await history.waitFor();
     assert.match(await history.textContent(),new RegExp(teamName));
-    phase='real-policy-validate-explain-dry-run';
+    phase='policy-state-ready';
     await page.waitForFunction(()=>!document.querySelector('#governance-policy fieldset')?.disabled);
+    phase='policy-validation-input';
     await policy.getByLabel('Closed schema JSON (maximum 256 KiB)').fill('{"schemaVersion":1,"rules":[]}');
-    await policy.getByRole('button',{name:'Validate closed policy',exact:true}).click();await policy.getByRole('region',{name:'Policy validation result'}).waitFor();
-    await policy.getByLabel('Resource kind',{exact:true}).selectOption('topic');
-    await policy.getByLabel('Exact resource ID',{exact:true}).fill('browser-policy-read-probe');
-    await policy.getByLabel('Registered action',{exact:true}).fill('TopicCreate');
-    await policy.getByRole('button',{name:'Explain current decision',exact:true}).click();await policy.getByLabel('Current policy explanation').waitFor();
-    await policy.getByRole('button',{name:'Dry-run this fixture',exact:true}).click();await policy.getByLabel('Read-only dry-run results').waitFor();
-    phase='real-ui-policy-version-write';
+    phase='policy-validation-submit';await checkedClick(page,policy.getByRole('button',{name:'Validate closed policy',exact:true}),'policy-validate');
+    phase='policy-validation-result';await policy.getByRole('region',{name:'Policy validation result'}).waitFor();
+    phase='policy-active-selector';
     const currentVersion=(await policy.locator('dt').filter({hasText:/^Active version$/}).locator('xpath=following-sibling::dd[1]').textContent()).trim();assert.match(currentVersion,/^[a-f0-9]{64}$/);
+    await policy.getByLabel('Immutable policy version').selectOption(currentVersion);
+    const visibleDocument=await policy.getByText('Selected immutable version',{exact:true}).locator('..').locator('pre').textContent();
+    const currentPolicy=JSON.parse(visibleDocument);
+    const deny=currentPolicy.rules.find(rule=>rule.outcome==='Deny'&&rule.scope.clusterId==='permitted'&&rule.scope.resourceKind==='topic'&&rule.scope.action==='TopicCreate'&&Array.isArray(rule.scope.resourceIds)&&rule.scope.resourceIds.length>0);
+    assert.ok(deny,'The actual fixture policy must contain the scoped TopicCreate denial selector.');
+    await policy.getByLabel('Resource kind',{exact:true}).selectOption(deny.scope.resourceKind);
+    await policy.getByLabel('Exact resource ID',{exact:true}).fill(deny.scope.resourceIds[0]);
+    await policy.getByLabel('Registered action',{exact:true}).fill(deny.scope.action);
+    phase='policy-explanation-submit';await checkedClick(page,policy.getByRole('button',{name:'Explain current decision',exact:true}),'policy-explain');
+    phase='policy-explanation-denied-result';await policy.getByLabel('Current policy explanation').getByText(/GovernanceDenied/).waitFor();
+    phase='policy-dry-run-submit';await checkedClick(page,policy.getByRole('button',{name:'Dry-run this fixture',exact:true}),'policy-dry-run');
+    phase='policy-dry-run-denied-result';await policy.getByLabel('Read-only dry-run results').getByText(/GovernanceDenied/).waitFor();
+    phase='policy-version-preview';
     const activationRevision=Number((await policy.locator('dt').filter({hasText:/^Active revision$/}).locator('xpath=following-sibling::dd[1]').textContent()).trim());assert.ok(Number.isSafeInteger(activationRevision));
-    await policy.getByRole('button',{name:'Preview governed version write',exact:true}).click();
+    await checkedClick(page,policy.getByRole('button',{name:'Preview governed version write',exact:true}),'policy-version-preview');
     const policyReview=policy.getByRole('article',{name:'Immutable governance operation'});await policyReview.waitFor();
     await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
-    await policyReview.getByRole('button',{name:'Confirm exact preview',exact:true}).click();await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();await policyReview.getByText('appliedVerified',{exact:false}).waitFor();
-    phase='real-ui-critical-activation-request';
+    phase='policy-version-confirm';await checkedClick(page,policyReview.getByRole('button',{name:'Confirm exact preview',exact:true}),'mutation-confirm');
+    phase='policy-version-execute';await checkedClick(page,policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}),'mutation-execute');
+    phase='policy-version-verified';await policyReview.getByText('appliedVerified',{exact:false}).waitFor();
+    phase='policy-activation-preview';
     await policy.getByRole('button',{name:'Reload authorized policy state',exact:true}).click();
     await policy.getByRole('button',{name:'Create key for an intentionally new policy request',exact:true}).click();
     await policy.getByLabel('Immutable policy version').selectOption(currentVersion);
-    await policy.getByRole('button',{name:'Preview critical activation change',exact:true}).click();
+    await checkedClick(page,policy.getByRole('button',{name:'Preview critical activation change',exact:true}),'policy-activation-preview');
     await policyReview.getByText(/Critical policy activation/).waitFor();
     const activationId=(await policyReview.locator('dd code').first().textContent()).trim();
     const challenge=(await policyReview.locator('label').filter({hasText:'Exact confirmation challenge:'}).locator('code').textContent()).trim();
     await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
     await policyReview.getByLabel('Exact confirmation challenge:',{exact:false}).fill(challenge);
-    await policyReview.getByRole('button',{name:'Confirm exact preview',exact:true}).click();
-    await policyReview.getByRole('button',{name:'Submit independent human approval',exact:true}).click();await policy.getByText(/not authorized for this scope/).waitFor();
+    phase='policy-activation-confirm';await checkedClick(page,policyReview.getByRole('button',{name:'Confirm exact preview',exact:true}),'mutation-confirm');
+    phase='policy-self-approval-denied';
+    await checkedClick(page,policyReview.getByRole('button',{name:'Submit independent human approval',exact:true}),'mutation-approve',403);await policy.getByText(/not authorized for this scope/).waitFor();
     assert.equal(await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).isDisabled(),true);
     phase='real-independent-human-ui-approval';
     const approverContext=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000}}),approver=await approverContext.newPage();approver.setDefaultTimeout(30000);
@@ -93,7 +121,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await approvalPanel.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();
     const approvalReview=approvalPanel.getByRole('article',{name:'Immutable governance operation'});await approvalReview.waitFor();
     await approvalReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
-    await approvalReview.getByRole('button',{name:'Submit independent human approval',exact:true}).click();await approvalReview.getByText('ready',{exact:false}).waitFor();
+    phase='policy-independent-approval-submit';await checkedClick(approver,approvalReview.getByRole('button',{name:'Submit independent human approval',exact:true}),'mutation-approve');
+    phase='policy-independent-approval-ready';await approvalReview.getByText('ready',{exact:false}).waitFor();
     // Returning to a tab deliberately revalidates the operator and clears old
     // authorization-bound UI state. Reopen the exact durable operation after
     // a genuine requester reload instead of assuming stale component state.
@@ -102,7 +131,9 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await policy.getByLabel('Existing policy operation ID').fill(activationId);
     await policy.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();await policyReview.waitFor();
     await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
-    await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();await policyReview.getByText('appliedVerified',{exact:false}).waitFor();
+    phase='policy-activation-execute';await checkedClick(page,policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}),'mutation-execute');
+    phase='policy-activation-verified';await policyReview.getByText('appliedVerified',{exact:false}).waitFor();
+    phase='policy-activation-state-reload';
     await policy.getByRole('button',{name:'Reload authorized policy state',exact:true}).click();
     await page.waitForFunction(expected=>{const labels=Array.from(document.querySelectorAll('#governance-policy dt'));return labels.find(item=>item.textContent==='Active revision')?.nextElementSibling?.textContent===String(expected);},activationRevision+1);
     assert.equal((await policy.locator('dt').filter({hasText:/^Active version$/}).locator('xpath=following-sibling::dd[1]').textContent()).trim(),currentVersion);
@@ -117,6 +148,6 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     console.log('V09_GENUINE_GOVERNANCE_BROWSER_PASSED');await context.close();
   }catch{
     // Keep credentials, issuer URLs, authorization codes and tokens out of public CI logs.
-    console.error('V09_GENUINE_GOVERNANCE_BROWSER_FAILED phase='+phase);process.exitCode=3;
+    console.error('V09_GENUINE_GOVERNANCE_BROWSER_FAILED phase='+phase+' endpoint='+lastHttp.endpoint+' status='+lastHttp.status);process.exitCode=3;
   }finally{if(browser)await browser.close();}
 })();

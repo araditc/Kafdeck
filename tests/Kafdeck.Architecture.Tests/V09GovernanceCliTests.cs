@@ -80,6 +80,17 @@ public sealed class V09GovernanceCliTests
         using var duplicate=JsonDocument.Parse("{\"document\":\"{}\",\"document\":\"{}\"}");
         Assert.False(CliGovernanceCommands.Validate(duplicate.RootElement,CliFamilyPayload.GovernancePolicyDocument));
     }
+    [Theory]
+    [InlineData("{\"clusterId\":\"alpha\",\"document\":\"{}\"}",true)]
+    [InlineData("{\"document\":\"{}\"}",false)]
+    [InlineData("{\"clusterId\":\"other\",\"document\":\"{}\"}",false)]
+    [InlineData("{\"clusterId\":\"alpha\",\"document\":\"{}\",\"idempotencyKey\":\"not-a-mutation\"}",false)]
+    public void Validation_requires_explicit_matching_scope_without_global_read_or_mutation_fields(string json,bool expected)
+    {
+        var invocation=CliGovernanceCommands.TryParse(["policies","validate","alpha"])!;
+        using var document=JsonDocument.Parse(json);
+        Assert.Equal(expected,CliGovernanceCommands.Validate(document.RootElement,invocation));
+    }
     [Fact]
     public void Catalog_character_bounds_preserve_valid_Persian_labels_while_body_bytes_stay_bounded()
     {

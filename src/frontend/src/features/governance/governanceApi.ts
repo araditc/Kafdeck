@@ -128,7 +128,7 @@ export const policyApi = {
   active(clusterId: string, signal?: AbortSignal) { return readJson<PolicyActive>(`${base}/policies/active?${new URLSearchParams({clusterId: boundedScope(clusterId)})}`, signal); },
   operation(id: string, signal?: AbortSignal) { return readJson<PolicyOperationMaterial>(`${base}/policies/operations/${exactId(id)}`, signal); },
   recover(operation: MutationStatus, signal?: AbortSignal) { return postJson<MutationStatus>(`${base}/policies/operations/${exactId(operation.operationId)}/reconcile`, {}, {signal}); },
-  validate(document: string, signal?: AbortSignal) { boundedPolicy(document); return postJson<PolicyValidation>(`${base}/policies/validate`, {document}, {signal}); },
+  validate(clusterId: string, document: string, signal?: AbortSignal) { boundedScope(clusterId); boundedPolicy(document); return postJson<PolicyValidation>(`${base}/policies/validate`, {clusterId, document}, {signal}); },
   explain(fixture: PolicyFixture, signal?: AbortSignal) { boundedScope(fixture.clusterId); return postJson<PolicyDecision>(`${base}/policies/explain`, fixture, {signal}); },
   dryRun(fixtures: PolicyFixture[], signal?: AbortSignal) {
     if (!fixtures.length || fixtures.length > 100) throw new Error('Dry-run requires 1–100 scoped fixtures.'); fixtures.forEach(item => boundedScope(item.clusterId));

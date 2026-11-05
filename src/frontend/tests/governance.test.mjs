@@ -90,3 +90,14 @@ test('policy transport preserves raw duplicate keys for authoritative rejection 
     assert.equal(request.init.credentials,'same-origin');
   }finally{globalThis.fetch=original; if(priorWindow===undefined)delete globalThis.window;else globalThis.window=priorWindow;}
 });
+test('policy validation binds the exact selected cluster without broadening to global authority',async()=>{
+  const original=globalThis.fetch, priorWindow=globalThis.window, calls=[];
+  globalThis.window={location:{hash:''},history:{replaceState(){}}};
+  globalThis.fetch=async(path,init)=>{calls.push({path,init});return new Response(JSON.stringify(path==='/api/v1/auth/csrf'?{headerName:'X-Kafdeck-CSRF',requestToken:'fixture-token'}:{valid:true,contentHash:hash,document:'{}'}),{status:200});};
+  try{
+    await policyApi.validate('alpha','{"schemaVersion":1,"rules":[]}');
+    const request=calls.find(row=>row.path.endsWith('/policies/validate'));
+    assert.deepEqual(JSON.parse(request.init.body),{clusterId:'alpha',document:'{"schemaVersion":1,"rules":[]}'});
+    assert.throws(()=>policyApi.validate('../other','{}'));
+  }finally{globalThis.fetch=original;if(priorWindow===undefined)delete globalThis.window;else globalThis.window=priorWindow;}
+});

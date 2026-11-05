@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.DataProtection;
 namespace Kafdeck.Api;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record PolicyDocumentRequest(string Document);
+public sealed record PolicyDocumentRequest(string ClusterId,string Document);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PolicyVersionPreviewRequest(string ClusterId,string Document,string? IdempotencyKey=null);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -33,11 +33,7 @@ public static class KafdeckGovernancePolicyEndpoints
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public static WebApplication MapKafdeckGovernancePolicies(this WebApplication app)
     {
-        app.MapPost(Prefix+"/validate",(PolicyDocumentRequest request,HttpContext h,KafdeckAuthorizationService auth)=>
-        {
-            if(auth.AuthorizeCollection(h.User,AuthorizationAction.GovernancePolicyRead,null)!=KafdeckAuthorizationOutcome.Allowed)return Denied();
-            return Safe(()=>{var p=GovernancePolicyCompiler.Compile(request.Document);return Results.Ok(new PolicyValidationData(true,p.ContentHash,p.CanonicalJson));});
-        }).WithName("v09-policy-validate").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,typeof(PolicyDocumentRequest),QueryKeys:"",ResponseType:typeof(PolicyValidationData)));
+        app.MapKafdeckPolicyValidation();
 
         app.MapGet(Prefix+"/active",async (string clusterId,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store)=>
         {
@@ -155,6 +151,16 @@ public static class KafdeckGovernancePolicyEndpoints
         }).ConfigureAwait(false)).WithName("v09-policy-reconcile").WithMetadata(new GovernanceRouteContract(AuthorizationAction.MutationReconcile,false,QueryKeys:"",ResponseType:typeof(MutationStatusData))).RequireKafdeckAntiforgery();
         return app;
     }
+
+    internal static RouteHandlerBuilder MapKafdeckPolicyValidation(this WebApplication app)=>
+        app.MapPost(Prefix+"/validate",(PolicyDocumentRequest request,HttpContext h,KafdeckAuthorizationService auth)=>Safe(()=>
+        {
+            GovernancePolicyCompiler.Bounded(request.ClusterId,256);
+            if(auth.AuthorizeCollection(h.User,AuthorizationAction.GovernancePolicyRead,request.ClusterId)!=KafdeckAuthorizationOutcome.Allowed)return Denied();
+            var policy=GovernancePolicyCompiler.Compile(request.Document);
+            if(policy.Document.Rules.Any(rule=>rule.Scope.ClusterId!=request.ClusterId))throw new ArgumentException("Policy rule scope differs from validation scope.");
+            return Results.Ok(new PolicyValidationData(true,policy.ContentHash,policy.CanonicalJson));
+        })).WithName("v09-policy-validate").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,typeof(PolicyDocumentRequest),QueryKeys:"",ResponseType:typeof(PolicyValidationData)));
 
     private static async Task<GovernanceDecision> Explain(PolicyExplainRequest f,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store,ICatalogStore catalog,ICatalogTopicIdentityPort topics)
     {

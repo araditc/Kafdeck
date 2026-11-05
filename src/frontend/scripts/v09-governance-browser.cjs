@@ -40,7 +40,7 @@ const server=createServer((req,res)=>{
       if(p.includes('/catalog/operations/')){const id=p.split('/').pop();if(id===ids.wrong)return send(preview({...status(id,'catalogMutation'),clusterId:'hidden'},[{name:'hidden'}]));const value=operations.get(id);return send(preview(value.op,value.changes));}
       if(p.endsWith('/policies/versions'))return send({items:[{versionId:ids.versionId,clusterId:'alpha',contentHash:hash,document,createdBy:'fixture',createdAtUtc:now}],nextCursor:null});
       if(p.endsWith('/policies/active'))return send({clusterId:'alpha',revision:0,enabled:false,versionId:null,contentHash:null,digest:hash});
-      if(p.endsWith('/policies/validate'))return send({valid:true,contentHash:hash,document});
+      if(p.endsWith('/policies/validate')){assert.deepEqual(Object.keys(request.postDataJSON()).sort(),['clusterId','document']);assert.equal(request.postDataJSON().clusterId,'alpha');return send({valid:true,contentHash:hash,document});}
       if(p.endsWith('/policies/explain'))return send({allowed:false,code:'RequestApprovalRequired',digest:hash,matchedRuleIds:['require-review']});
       if(p.endsWith('/policies/dry-run'))return send({items:[{allowed:false,code:'RequestApprovalRequired',digest:hash,matchedRuleIds:['require-review']}]});
       if(p.endsWith('/policies/versions/preview')||p.endsWith('/policies/activations/preview')){

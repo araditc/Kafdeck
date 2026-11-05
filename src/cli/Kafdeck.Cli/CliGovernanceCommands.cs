@@ -45,6 +45,7 @@ public static class CliGovernanceCommands
             if (command == "plan" && args.Count == 3) return NoPage(Read("policies/operations/" + Id(args[2])), cursor, limit);
             if (command is "reconcile" or "recover" && args.Count == 3) return NoPage(new(Prefix+"policies/operations/"+Id(args[2])+"/reconcile",false,CliFamilyPayload.Empty),cursor,limit);
             if (command == "validate" && args.Count == 2) return NoPage(Post("policies/validate", CliFamilyPayload.GovernancePolicyDocument, false), cursor, limit);
+            if (command == "validate" && args.Count == 3) return NoPage(Post("policies/validate", CliFamilyPayload.GovernancePolicyDocument, false, Scope(2)), cursor, limit);
             if (command is "explain" or "dry-run" && args.Count == 2) return NoPage(Post("policies/" + command,
                 command == "explain" ? CliFamilyPayload.GovernancePolicyFact : CliFamilyPayload.GovernancePolicyDryRun, false), cursor, limit);
             if (command is "explain" or "dry-run" && args.Count == 3) return NoPage(Post("policies/" + command,
@@ -65,7 +66,8 @@ public static class CliGovernanceCommands
     {
         if (!Validate(value, invocation.Payload)) return false;
         var scope = invocation.GovernanceScope;
-        if (scope is null) return invocation.Payload != CliFamilyPayload.GovernancePolicyDocument || Closed(value,["document"],["document"]);
+        if (invocation.Route == Prefix + "policies/validate" && !Closed(value,["clusterId","document"],["clusterId","document"])) return false;
+        if (scope is null) return true;
         if (invocation.Payload == CliFamilyPayload.GovernancePolicyDryRun)
             return value.GetProperty("fixtures").EnumerateArray().All(item => item.GetProperty("clusterId").GetString() == scope);
         return value.TryGetProperty("clusterId", out var cluster) && cluster.GetString() == scope;
@@ -74,8 +76,8 @@ public static class CliGovernanceCommands
     {
         CliFamilyPayload.GovernanceCatalogChange or CliFamilyPayload.GovernanceCatalogImport => Closed(value, ["clusterId", "changes"], ["clusterId", "changes"]) && Text(value.GetProperty("clusterId"), 128) &&
             value.GetProperty("changes") is {ValueKind:JsonValueKind.Array} changes && changes.GetArrayLength() is >0 and <=500 && changes.EnumerateArray().All(Change),
-        CliFamilyPayload.GovernancePolicyDocument => Closed(value, ["clusterId", "document", "idempotencyKey"], ["document"]) &&
-            Text(value.GetProperty("document"), 256 * 1024, controls: true) && Optional(value, "clusterId", v => Text(v,128)) && Optional(value,"idempotencyKey",v=>Text(v,256)),
+        CliFamilyPayload.GovernancePolicyDocument => Closed(value, ["clusterId", "document", "idempotencyKey"], ["clusterId", "document"]) &&
+            Text(value.GetProperty("document"), 256 * 1024, controls: true) && Text(value.GetProperty("clusterId"),128) && Optional(value,"idempotencyKey",v=>Text(v,256)),
         CliFamilyPayload.GovernancePolicyActivation => Closed(value,["clusterId","versionId","expectedRevision","enabled","idempotencyKey"],["clusterId","versionId","expectedRevision","enabled"]) &&
             Text(value.GetProperty("clusterId"),128) && value.GetProperty("versionId").ValueKind==JsonValueKind.String && value.GetProperty("versionId").GetString() is {Length:64} version && version.All(c=>c is >= '0' and <= '9' or >= 'a' and <= 'f') && Revision(value.GetProperty("expectedRevision")) && Boolean(value.GetProperty("enabled")) && Optional(value,"idempotencyKey",v=>Text(v,256)),
         CliFamilyPayload.GovernancePolicyFact => Fact(value),

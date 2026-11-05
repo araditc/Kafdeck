@@ -75,7 +75,7 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
       <button className="btn btn-outline-secondary" type="button" disabled={operation?.state === 'executionUnknown' || operation?.state === 'executing'} onClick={() => { setKey(crypto.randomUUID()); invalidatePreview(); }}>Create key for an intentionally new policy request</button>
       <p>Retain the same key and operation reference after an uncertain response. Use a new key only for an intentionally new request.</p>
       <div className="d-flex flex-wrap gap-2">
-        <button className="btn btn-outline-primary" type="button" onClick={() => void run(async signal => { const value = await policyApi.validate(document, signal); if (!signal.aborted) setValidation(value); })}>Validate closed policy</button>
+        <button className="btn btn-outline-primary" type="button" onClick={() => void run(async signal => { const value = await policyApi.validate(clusterId, document, signal); if (!signal.aborted) setValidation(value); })}>Validate closed policy</button>
         <button className="btn btn-outline-warning" type="button" onClick={() => void run(async signal => { const status = await policyApi.previewVersion(clusterId, document, key, signal); if (!signal.aborted) await inspect(status.operationId, signal); })}>Preview governed version write</button>
       </div>
       {validation && <section aria-label="Policy validation result"><p role="status">Valid: {String(validation.valid)}; canonical hash <code>{validation.contentHash}</code>.</p><pre className="automation-proof">{typeof validation.document === 'string' ? validation.document : JSON.stringify(validation.document, null, 2)}</pre></section>}
