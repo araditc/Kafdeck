@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "skopeoImage": "quay.io/skopeo/stable@sha256:2681eccb8b02c495b013c2669cbf7f41d5c0b0b0e644e7c69bd3ea9bcb20641f",
+  "source": "https://github.com/containers/image_build/tree/main/skopeo",
+  "checkedOn": "2026-11-05",
+  "digestSource": "https://quay.io/api/v1/repository/skopeo/stable/tag/?specificTag=latest&onlyActiveTags=true",
+  "localTestRegistryImage": "registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e"
+}

@@ -13,7 +13,7 @@ public sealed class V08W67BearerOpenApiTests
         var root = json.RootElement;
         Assert.Equal("3.1.0", root.GetProperty("openapi").GetString());
         var paths = root.GetProperty("paths");
-        Assert.Equal(49 + Kafdeck.Contracts.KafdeckReadContracts.All.Count, paths.EnumerateObject().Count());
+        Assert.Equal(49 + 15 + Kafdeck.Contracts.KafdeckReadContracts.All.Count, paths.EnumerateObject().Count());
         Assert.All(paths.EnumerateObject(), path => Assert.StartsWith("/api/v1/", path.Name, StringComparison.Ordinal));
         Assert.Equal("bearer", root.GetProperty("components").GetProperty("securitySchemes").GetProperty("bearerAuth").GetProperty("scheme").GetString());
         var schemas = root.GetProperty("components").GetProperty("schemas");

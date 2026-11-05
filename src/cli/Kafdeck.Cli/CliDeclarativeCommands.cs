@@ -36,6 +36,19 @@ public static class CliDeclarativeCommands
             return new("source-advance", file, format, SourceRef: args[2], ExpectedSourceGeneration: generation,
                 ExpectedSourceRevision: expectedSource, ExpectedSourceHash: args[5]);
         }
+        if (args.Count == 2 && args[1] == "compensation-catalog" || args.Count == 3 && args[1] == "compensation")
+        {
+            if (file is not null || format is not null || source is not null || revision is not null || ownershipRevision is not null || yes || resource is not null) throw Invalid();
+            if (args[1] == "compensation-catalog") return new("compensation-catalog");
+            if (!Guid.TryParseExact(args[2], "D", out var parent) || parent == Guid.Empty) throw Invalid();
+            return new("compensation", PlanId: parent);
+        }
+        if (args.Count == 3 && args[1] == "compensation-preview")
+        {
+            if (!Guid.TryParseExact(args[2], "D", out var parent) || parent == Guid.Empty || resource is not null || yes || file is null || !Identifier(source) || !Hash(revision) ||
+                !long.TryParse(ownershipRevision, NumberStyles.None, CultureInfo.InvariantCulture, out var inverseExpected) || inverseExpected < 0) throw Invalid();
+            return new("compensation-preview", file, Format(file,format), source, revision, inverseExpected, PlanId:parent);
+        }
         if (resource is not null) throw Invalid();
         if (args.Count == 2 && args[1] == "capabilities" || args.Count == 3 && args[1] == "show")
         {
@@ -82,7 +95,7 @@ public static class CliDeclarativeCommands
     {
         var command = invocation.Declarative!;
         // Parse and validate before opening credential files, OIDC or any socket.
-        var request = command.Command is "apply" or "recover" or "show" or "capabilities" or "source-show" ? null : await ReadRequestAsync(command, token);
+        var request = command.Command is "apply" or "recover" or "show" or "capabilities" or "source-show" or "compensation" or "compensation-catalog" ? null : await ReadRequestAsync(command, token);
         if (command.Command == "validate")
         {
             var json = JsonSerializer.SerializeToElement(request);
@@ -106,7 +119,7 @@ public static class CliDeclarativeCommands
         }
         var path = BuildRoute(command);
         var body = command.Command is "apply" or "recover" ? (object)new { planFingerprint = command.PlanFingerprint } : request;
-        var result = await SendAsync(client, path, body, invocation.IdempotencyKey, error, token, command.Command is "show" or "capabilities" or "source-show");
+        var result = await SendAsync(client, path, body, invocation.IdempotencyKey, error, token, command.Command is "show" or "capabilities" or "source-show" or "compensation" or "compensation-catalog");
         if (result.Body is null) return result.Exit;
         if (command.Command == "reconcile" && command.Yes)
         {
@@ -140,8 +153,8 @@ public static class CliDeclarativeCommands
             return CliApplication.MutationOutcomeCategory(current);
         }
         await output.WriteLineAsync(result.Body);
-        if (command.Command is "capabilities" or "source-show" or "source-advance") return CliApplication.Success;
-        return command.Command is "plan" or "import-preview" or "apply" or "recover" or "reconcile" or "show"
+        if (command.Command is "capabilities" or "source-show" or "compensation" or "compensation-catalog" or "source-advance") return CliApplication.Success;
+        return command.Command is "compensation-preview" or "plan" or "import-preview" or "apply" or "recover" or "reconcile" or "show"
             ? CliApplication.MutationOutcomeCategory(result.Body) : DriftExit(result.Body);
     }
 
@@ -214,6 +227,8 @@ public static class CliDeclarativeCommands
     private static CliUsageException Invalid() => new("Declarative command requires its exact closed manifest/source/revision or stored plan arguments.");
     internal static string BuildRoute(CliDeclarativeInvocation invocation) => invocation.Command switch
     {
+        "compensation-catalog" => "/api/v1/declarative/compensation/catalog",
+        "compensation" or "compensation-preview" => $"/api/v1/declarative/plans/{invocation.PlanId:D}/{invocation.Command}",
         "apply" or "recover" => $"/api/v1/declarative/plans/{invocation.PlanId:D}/{invocation.Command}",
         "show" => $"/api/v1/declarative/plans/{invocation.PlanId:D}",
         "capabilities" => "/api/v1/declarative/capabilities",

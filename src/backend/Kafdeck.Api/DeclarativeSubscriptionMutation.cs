@@ -92,7 +92,7 @@ public static class DeclarativeSubscriptionMutation
 }
 
 public sealed class DeclarativeSubscriptionMutationHandler(IW68RuntimeStore store, DeclarativeRuntimeAuthorizer authority,
-    MutationRequestAuthorizationService authorization, MutationExecutionRequestContextAccessor requestContext) : IMutationExecutionHandler
+    MutationRequestAuthorizationService authorization, MutationExecutionRequestContextAccessor requestContext, IMutationOperationRepository? operations = null) : IMutationExecutionHandler
 {
     public MutationOperationKind OperationKind => MutationOperationKind.DeclarativeNotificationSubscription;
 
@@ -104,11 +104,12 @@ public sealed class DeclarativeSubscriptionMutationHandler(IW68RuntimeStore stor
     {
         var plan = await LoadAuthorizedAsync(context.Operation, cancellationToken).ConfigureAwait(false);
         if (plan is null) return new(MutationExecutionResultKind.FailedBeforeDispatch, "declarative_plan_or_authority_stale");
+        var compensationSource = plan.CompensatesPlanId is { } sourceId ? await store.GetPlanAsync(sourceId, cancellationToken).ConfigureAwait(false) : null;
         W68RuntimeCommitReceipt? receipt;
         try
         {
             receipt = await store.ApplySubscriptionAsync(plan.PlanId, plan.PlanFingerprint, context.Operation.RequesterPrincipalId,
-                (stored, token) => Task.FromResult(CurrentAllowed(stored, context.Operation)), cancellationToken).ConfigureAwait(false);
+                async (stored, token) => CurrentAllowed(stored, context.Operation) && (stored.CompensatesPlanId is null || compensationSource is not null && await DeclarativeCompensationAuthority.IsVerifiedPlanAsync(compensationSource, operations, token).ConfigureAwait(false)), cancellationToken).ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -132,7 +133,7 @@ public sealed class DeclarativeSubscriptionMutationHandler(IW68RuntimeStore stor
             var reference = DeclarativeSubscriptionMutation.ReadReference(operation.CanonicalIntent);
             if (reference.Id != operation.OperationId) return null;
             var plan = await store.LoadPlanAsync(reference.Id, token).ConfigureAwait(false);
-            if (plan is null || plan.PlanFingerprint != reference.Hash) return null;
+            if (plan is null || plan.PlanFingerprint != reference.Hash || plan.CompensatesPlanId is { } sourceId && !await DeclarativeCompensationAuthority.IsVerifiedAsync(sourceId, operations, store, token).ConfigureAwait(false)) return null;
             DeclarativeSubscriptionMutation.Validate(plan);
             var intent = DeclarativeSubscriptionMutation.Intent(plan);
             if (operation.CanonicalIntent != intent.CanonicalIntent || !operation.ResourceKeys.SequenceEqual(intent.ResourceKeys) ||

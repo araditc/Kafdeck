@@ -187,7 +187,7 @@ public sealed partial class W68RuntimeStore
         if (!OwnershipMatches(plan, owner)) return null;
         var subscription = await AdoNotificationRoutingStore.ReadSubscriptionInTransactionAsync(c, t, plan.Key.ResourceId,
             connections.SupportsSelectForUpdate, token).ConfigureAwait(false);
-        return SubscriptionMatches(plan, subscription) ? new(owner, subscription, now) : null;
+        return SubscriptionMatches(plan, subscription) && await CompensationAllowsAsync(c, t, plan, owner, subscription, token).ConfigureAwait(false) ? new(owner, subscription, now) : null;
     }
 
     private static bool OwnershipMatches(W68StoredRuntimePlan plan, W68RuntimeOwnership? owner)

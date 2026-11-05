@@ -23,6 +23,7 @@ import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 import { CommandPalette } from './CommandPalette.js';
 import { StatusBadge } from './StatusBadge.js';
+import { AutomationPanel } from '../features/automation/AutomationPanel.js';
 import { fleetCapabilityStatusKind } from './statusPresentation.js';
 
 function observationText(envelope: ApiEnvelope<unknown>) {
@@ -332,6 +333,7 @@ export function AppShell() {
           <li className="nav-item"><a className="nav-link" href="#schemas">Schemas</a></li>
           <li className="nav-item"><a className="nav-link" href="#ecosystem">Ecosystem</a></li>
           <li className="nav-item"><a className="nav-link" href="#fleet">Fleet</a></li>
+          {operator && <li className="nav-item"><a className="nav-link" href="#automation">Automation</a></li>}
           {managementSurfaces.navigation && <li className="nav-item"><a className="nav-link" href="#notifications">Notifications</a></li>}
         </ul>
       </div>
@@ -348,10 +350,11 @@ export function AppShell() {
             </div>
           </div>
           {loading && <div className="alert alert-info kafdeck-status" role="status">Loading cluster observations…</div>}
+          {operator && <AutomationPanel key={operator.authenticatedAt} notificationsAvailable={managementSurfaces.navigation} />}
           {error && <div className="alert alert-danger kafdeck-status" role="alert">{error}</div>}
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">No authorized clusters are available.</div>}
           <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
-            <h2 id="fleet-title" className="card-title">Fleet Operations — v0.6</h2>
+            <h2 id="fleet-title" className="card-title">Fleet Operations</h2>
             <p className="text-secondary">Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.</p>
             {fleetError && <div className="alert alert-danger" role="alert">{fleetError}</div>}
             {!fleetError && fleetCapabilities.length === 0 && <p role="status">Loading fleet capability status…</p>}

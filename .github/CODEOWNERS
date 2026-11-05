@@ -8,3 +8,7 @@
 /docs/architecture/ @ammarheidari @akhiabanchian
 /docs/adr/ @ammarheidari @akhiabanchian
 /docs/decisions/ @ammarheidari @akhiabanchian
+
+# Exact-source publication identity and immutable tooling policy.
+/.github/release/release-owners.json @ammarheidari @akhiabanchian
+/.github/release/publication-tooling.json @ammarheidari @akhiabanchian

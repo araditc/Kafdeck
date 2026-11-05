@@ -6,7 +6,7 @@ using Kafdeck.Modules.Administration;
 namespace Kafdeck.Api;
 
 /// <summary>Read-only freshness at confirm/approval. Current caller authorization remains in MutationCommandService.</summary>
-public sealed class DeclarativeLifecycleGuard(IW68RuntimeStore store, DeclarativeRuntimeAuthorizer authorization)
+public sealed class DeclarativeLifecycleGuard(IW68RuntimeStore store, DeclarativeRuntimeAuthorizer authorization, IMutationOperationRepository? operations = null)
 {
     public async Task<bool> IsCurrentAsync(MutationOperationSnapshot operation, CancellationToken token = default)
     {
@@ -14,8 +14,10 @@ public sealed class DeclarativeLifecycleGuard(IW68RuntimeStore store, Declarativ
         {
             var reference = DeclarativeSubscriptionMutation.ReadReference(operation.CanonicalIntent);
             if (reference.Id != operation.OperationId || operation.OperationKind != MutationOperationKind.DeclarativeNotificationSubscription) return false;
+            var target = await store.GetPlanAsync(reference.Id, token).ConfigureAwait(false);
+            var source = target?.CompensatesPlanId is { } sourceId ? await store.GetPlanAsync(sourceId, token).ConfigureAwait(false) : null;
             return await store.IsPlanCurrentAsync(reference.Id, reference.Hash,
-                (plan, _) => Task.FromResult(Current(plan, operation)), token).ConfigureAwait(false);
+                async (plan, ct) => Current(plan, operation) && (plan.CompensatesPlanId is null || source is not null && await DeclarativeCompensationAuthority.IsVerifiedPlanAsync(source, operations, ct).ConfigureAwait(false)), token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or JsonException or KeyNotFoundException or FormatException or DbException or TimeoutException)
         { return false; }

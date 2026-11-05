@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-05",
+  "baselineMain": "595e81d7aa0b122668590dd30987224cce93be79",
+  "scope": "W71 R1-R6",
+  "status": "ImplementationCandidatePendingExactHeadCIAndMain",
+  "proofs": [
+    {
+      "path": "artifacts/g5/contracts-v8/g5-contract-v8.trx",
+      "sha256": "c48376a7b852a24831f34bb6c8b23c5e37691729221b0e2acde7a32dc7f69b99",
+      "counters": {
+        "total": 29,
+        "passed": 29,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g5/sqlite-live-v8/g5-sqlite-v8.trx",
+      "sha256": "b2341f84c53e181dbe15904ada632a58bda1cc41f7442aa22d9431789f8c66d5",
+      "counters": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g5/live-v4/g5-compensation.trx",
+      "sha256": "635ce8f0e7e28d8e570052f4f3eb9c525709f7ecba3e2b4da980dbc22308e6e3",
+      "counters": {
+        "total": 2,
+        "passed": 1,
+        "failed": 1,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g5/live-v4/postgres-g5-compensation-evidence.json",
+      "sha256": "6a6d9b6b6de598d80ca76f956bc72d532878a4f3faf382bac69dd31a009a9804"
+    },
+    {
+      "path": "artifacts/g5/sqlite-live-v8/sqlite-g5-compensation-evidence.json",
+      "sha256": "7901bbeceafad773906c0aa6baf53e5e5cc71f2915fb6aebee95163be78b8fb3"
+    },
+    {
+      "path": "artifacts/g5/automation-ui-evidence.json",
+      "sha256": "dbde5cf6db847cf3c557f1b6d333a0384ab0680eaed5196054e4166fea538933"
+    },
+    {
+      "path": "artifacts/g5/packet-kafka-fixture-checks.json",
+      "sha256": "3405a0c9357275b89afa1087be37581b69bb32e3c70442d702274a5bea7cfeb8"
+    },
+    {
+      "path": "artifacts/g5/regression-final/g5-regression-final.trx",
+      "sha256": "34c4ef5f36a12fbfd9fa4366c8e4b108fc42435ca737634799789bd3282669e6",
+      "counters": {
+        "total": 2266,
+        "passed": 2266,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    },
+    {
+      "path": "artifacts/g5/openapi-fix/g5-openapi-fix.trx",
+      "sha256": "11d903c9558a98fa07b9a3cb960291ddb81a5533c872ba0c435ec50eab984b8e",
+      "counters": {
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "notExecuted": 0
+      }
+    }
+  ],
+  "limits": [
+    "The v4 combined live run had PostgreSQL PASS and SQLite FAIL; it is retained as diagnostic history, not a fully successful suite. Final SQLite v8 passes after the shared-cache transaction fix. Exact-head CI must repeat both final cases.",
+    "UI browser uses explicit API fixtures; genuine OIDC/approved effects are separate tests. Collector tests are synthetic, not runtime evidence.",
+    "Native Kafka matrix, image/SBOM/offline startup and protected-main packet require exact-source CI; no publication is authorized or performed.",
+    "Overlapping totals are not added."
+  ]
+}

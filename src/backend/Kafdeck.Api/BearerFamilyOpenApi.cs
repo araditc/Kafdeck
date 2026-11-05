@@ -60,8 +60,9 @@ internal static class BearerFamilyOpenApi
         schemas["MutationStatus"]!["properties"]!["reconciliationReview"] = new JsonObject { ["anyOf"] = new JsonArray(
             Schema(typeof(Kafdeck.Modules.Administration.JobReconciliationPlan), schemas), new JsonObject { ["type"] = "null" }) };
         BearerReadOpenApi.Extend(paths, schemas);
+        DeclarativeOpenApi.Extend(paths, schemas);
         document["info"]!["title"] = "Kafdeck v0.8 governed bearer mutation contracts";
-        document["info"]!["description"] = "Closed default-off topic, record, consumer, schema and Connect family routes using existing governed planners and durable execution. Exact registered subject/client/action AND direct backend RBAC; separate human-only approval activation and current MutationApprove plus every underlying action scope. Cookie/deployment collisions denied. Immutable actor/policy/current-state binding and unknown outcomes retained. This contract is not complete provider acceptance or full G2 closure; missing runtime families are not admitted.";
+        document["info"]!["description"] = "Finite read and default-off topic, record, consumer, schema, Connect, declarative NotificationSubscription and safe metadata compensation contracts. Exact registered subject/client/action AND current backend RBAC; independent human approval remains mandatory for CRITICAL effects. Cookie/deployment collisions denied. Immutable actor/policy/source/ownership/generation binding, current CAS and durable unknown outcomes retained. Source advance, planning, approval and effects are separate authorities. Unadmitted families and destructive inverses remain unavailable; this document neither grants authority nor publishes a release.";
         return document.ToJsonString();
     }
 

@@ -8,7 +8,7 @@
 
 Secure, vendor-neutral, operations-first visibility for Apache Kafka.
 
-[![Latest Release](https://img.shields.io/badge/release-v0.7-2ea44f)](https://github.com/araditc/Kafdeck/releases/tag/v0.7)
+[![Latest Release](https://img.shields.io/github/v/release/araditc/Kafdeck)](https://github.com/araditc/Kafdeck/releases/latest)
 [![Quality Gate](https://github.com/araditc/Kafdeck/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/araditc/Kafdeck/actions/workflows/quality-gate.yml)
 [![CodeQL](https://github.com/araditc/Kafdeck/actions/workflows/codeql.yml/badge.svg)](https://github.com/araditc/Kafdeck/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/github/license/araditc/Kafdeck)](LICENSE)
@@ -30,7 +30,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **v0.7 is the current release line.** Read-only remains the default operating posture. v0.7 adds governed Schema Registry lifecycle and developer tooling, multi-profile Kafka Connect with bounded auto-restart, controlled SerDe and finite data jobs/generation, bounded ksqlDB and Streams/lineage evidence, plus a keyboard-first Command Palette. Governed mutations remain opt-in, and unsupported or unsafe provider capabilities remain explicit `Blocked`/`Unsupported` states rather than falling through to a generic provider/CLI escape path.
+> **This source build was prepared as the v0.8 candidate.** Publication status and the actual latest stable release are authoritative in [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest). The v0.7 capability descriptions below record the published baseline used during candidate preparation. Read-only remains the default operating posture. v0.7 adds governed Schema Registry lifecycle and developer tooling, multi-profile Kafka Connect with bounded auto-restart, controlled SerDe and finite data jobs/generation, bounded ksqlDB and Streams/lineage evidence, plus a keyboard-first Command Palette. Governed mutations remain opt-in, and unsupported or unsafe provider capabilities remain explicit `Blocked`/`Unsupported` states rather than falling through to a generic provider/CLI escape path.
 
 ## Why Kafdeck?
 
@@ -45,9 +45,9 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). **v0.7 is the active/current release identity selected by the governed release manifest.** The protected-main publication workflow owns the immutable source tag, GitHub Release and GHCR promotion for that identity. The main branch can also contain capabilities that have passed implementation gates but are not part of a later published release.
+Stable releases are published through [GitHub Releases](https://github.com/araditc/Kafdeck/releases). The governed manifest selects **v0.8 as the prepared build candidate** (runtime/package version0.8.0). **v0.7 is the historical published baseline at candidate preparation**, not a claim about the current latest release. The manifest candidate status describes the publication input; actual publication status is recorded by [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest). Candidate selection does not create a tag, GitHub Release or GHCR publication; promotion requires a separate explicit owner decision for the exact tested source and verified artifacts. The main branch can also contain capabilities that have passed implementation gates but are not part of a later published release.
 
-| Current capability | Introduced | Current v0.7 posture |
+| Capability | Introduced | Published v0.7 baseline posture |
 | --- | --- | --- |
 | Cluster & broker explorer | v0.1 | Available; bounded, cancellable, evidence-based |
 | Operator Identity / OIDC / RBAC | v0.2 | Available; OIDC is the recommended multi-user production mode |
@@ -55,13 +55,13 @@ Stable releases are published through [GitHub Releases](https://github.com/aradi
 | Consumers / Schemas / Ecosystem observations | v0.4 | Available and extended by later releases |
 | Governed Kafka administration | v0.5 | Available when mutation mode and durable prerequisites are explicitly enabled |
 | Fleet capability boundary / secure remote UI | v0.6 | Capability-driven; unsupported or unsafe operations remain explicit Blocked/Unsupported |
-| Developer & Streaming Ecosystem Platform | v0.7 | Active release; governed Schema/Connect/data tooling, bounded streaming integrations, Command Palette and evidence-driven status truth |
+| Developer & Streaming Ecosystem Platform | v0.7 | Published baseline; governed Schema/Connect/data tooling, bounded streaming integrations, Command Palette and evidence-driven status truth |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
 
 ## Feature matrix
 
-The release table above records when capability families first appeared. The sections below describe the **current v0.7 behavior**.
+The release table above records when capability families first appeared. The sections below describe the **published v0.7 baseline behavior**.
 
 ### Cluster and broker operations
 
@@ -239,7 +239,7 @@ Kafdeck releases are published as a single non-root OCI image. The current relea
 ghcr.io/araditc/kafdeck:v0.7
 ~~~
 
-For production, pin the immutable v0.7 digest:
+For this historical v0.7 baseline, pin its immutable digest:
 
 ~~~text
 ghcr.io/araditc/kafdeck@sha256:2e089bfe4788d93e7f9b5d03fac117001daccd06c244f1017648d5ccf57535c8
@@ -295,7 +295,7 @@ Create <code>appsettings.Production.json</code>:
 
 ### 3. Run the released image
 
-The examples below use the current released tag <code>v0.7</code>. For production, prefer the immutable digest shown above.
+The examples below use the historical published baseline tag <code>v0.7</code>. For that baseline, prefer its immutable digest shown above; select the actual current release from [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest).
 
 #### Windows / Docker Desktop
 
@@ -775,7 +775,7 @@ curl http://127.0.0.1:8080/healthz
 
 Kafdeck product capabilities are exposed through versioned HTTP routes under <code>/api/v1</code>. The UI uses the same backend-authoritative contracts rather than bypassing authorization.
 
-The current v0.7 OpenAPI contract is available both at runtime and in the repository:
+The retained v0.7 legacy OpenAPI contract is available both at runtime and in the repository:
 
 - runtime: <code>GET /api/v1/openapi/v0.7.json</code>
 - checked in: [docs/api/openapi-v0.7.json](docs/api/openapi-v0.7.json)
@@ -978,7 +978,7 @@ The roadmap is public and capability-driven:
 
 [**View the Kafdeck Roadmap →**](ROADMAP.md)
 
-With v0.7 released, the next planned themes start at v0.8: observability, automation and platform APIs; then governance/enterprise hardening and the v1.0 stability/compatibility milestone.
+The v0.8 source build, prepared as the candidate, adds observability, governed automation and platform APIs; see the [v0.8 candidate notes](docs/releases/v0.8.md) and [publication decision packet](docs/releases/v0.8-publication-packet.md). The historical candidate-preparation baseline is v0.7; consult [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest) for actual publication and latest stable identity. Later roadmap themes cover governance/enterprise hardening and the v1.0 stability/compatibility milestone.
 
 Nothing in the roadmap should be interpreted as currently available until it is implemented, validated, and released.
 

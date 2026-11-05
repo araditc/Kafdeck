@@ -90,34 +90,34 @@ docker exec kafdeck-kafka "$kafka_configs" --bootstrap-server localhost:9092 --a
 # This keeps an authorization-fixture defect from obscuring TLS/SASL compatibility.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter 'FullyQualifiedName~KafkaAdapterIntegrationTests&FullyQualifiedName!~KafkaAdapterIntegrationTestsAuthorization'
+  --filter 'FullyQualifiedName~KafkaAdapterIntegrationTests&FullyQualifiedName!~KafkaAdapterIntegrationTestsAuthorization' --logger "trx;LogFileName=kafka-1.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # W33 mutation evidence runs before restricted ACL fixtures are installed. The
 # test uses only the four admitted typed topic mutation operations and verifies
 # each post-condition through the read-only administration adapter.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaTopicMutationIntegrationTests
+  --filter FullyQualifiedName~KafkaTopicMutationIntegrationTests --logger "trx;LogFileName=kafka-2.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # W34 record-production evidence also runs before restricted ACL fixtures.
 # It verifies the typed producer adapter and bounded batch execution against
 # broker acknowledgements without relying on a replay/readback proof.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaRecordProduceIntegrationTests
+  --filter FullyQualifiedName~KafkaRecordProduceIntegrationTests --logger "trx;LogFileName=kafka-3.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # W35 consumer-administration evidence runs while the broker is unrestricted.
 # It proves exact-group/partition observation, explicit offset alteration,
 # committed-offset deletion and whole-group deletion through typed Admin APIs.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaConsumerMutationIntegrationTests
+  --filter FullyQualifiedName~KafkaConsumerMutationIntegrationTests --logger "trx;LogFileName=kafka-4.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # W38 destructive purge evidence uses a unique topic per test and verifies
 # typed DeleteRecords through the observed low-watermark post-condition.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaRecordsPurgeIntegrationTests
+  --filter FullyQualifiedName~KafkaRecordsPurgeIntegrationTests --logger "trx;LogFileName=kafka-5.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # W42 ACL mutation evidence runs before restricted fixtures while the plaintext
 # integration identity is a broker super-user. It exercises only the typed
@@ -125,14 +125,14 @@ KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
 # through bounded DescribeAcls readback before exact cleanup.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaAclMutationIntegrationTests
+  --filter FullyQualifiedName~KafkaAclMutationIntegrationTests --logger "trx;LogFileName=kafka-6.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # W43 SCRAM evidence uses a unique synthetic user and request-scoped random
 # credential bytes. It proves typed create/upsert, rotation, exact-user metadata
 # observation and delete without persisting or logging credential material.
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaScramMutationIntegrationTests
+  --filter FullyQualifiedName~KafkaScramMutationIntegrationTests --logger "trx;LogFileName=kafka-7.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 # Explicitly retain metadata Describe while denying DescribeConfigs so the second
 # pass exercises genuine partial access rather than a total authorization failure.
@@ -141,7 +141,7 @@ docker exec kafdeck-kafka "$kafka_acls" --bootstrap-server localhost:9092 --add 
 
 KAFDECK_RUN_KAFKA_INTEGRATION=1 KAFDECK_TEST_SECRETS_DIR="$(pwd)/$secrets_dir" \
   dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore \
-  --filter FullyQualifiedName~KafkaAdapterIntegrationTestsAuthorization
+  --filter FullyQualifiedName~KafkaAdapterIntegrationTestsAuthorization --logger "trx;LogFileName=kafka-8.trx" --results-directory "artifacts/kafka-${KAFDECK_KAFKA_VERSION:-4.3.1}"
 
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-w35-control
 docker exec kafdeck-kafka "$kafka_topics" --bootstrap-server localhost:9092 --delete --topic kafdeck-ci-smoke

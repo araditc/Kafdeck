@@ -3,22 +3,28 @@ name: codeql
 on:
   pull_request:
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
       - 'src/mcp/**'
       - 'providers/terraform/**'
+      - 'scripts/release/**'
       - '.github/workflows/codeql.yml'
   push:
     branches: [main]
     tags:
       - 'v*'
     paths:
+      - 'Directory.Build.props'
+      - '.github/release/**'
       - 'src/backend/**'
       - 'tests/backend/**'
       - 'src/frontend/**'
       - 'src/mcp/**'
       - 'providers/terraform/**'
+      - 'scripts/release/**'
       - '.github/workflows/codeql.yml'
 
 permissions:
