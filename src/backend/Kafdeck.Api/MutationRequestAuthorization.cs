@@ -65,7 +65,7 @@ public sealed class MutationRequestAuthorizationService
         {
             if (operation.Risk.RequiresIndependentApproval && operation.State is MutationOperationState.Ready or MutationOperationState.Executing &&
                 (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
-                 operation.AuthorizationTargets.Any(target => !(operation.OperationKind==MutationOperationKind.GovernancePolicyActivation
+                 operation.AuthorizationTargets.Any(target => !(operation.OperationKind is MutationOperationKind.GovernancePolicyActivation or MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation
                      ? _authorization.IsCurrentGovernanceApprovalAllowed(operation.ApprovedByPrincipalId,DeclarativeMutationAuthorization.Request(target))
                      : _authorization.IsCurrentApprovalAllowed(operation.ApprovedByPrincipalId,DeclarativeMutationAuthorization.Request(target))))))
                 return KafdeckAuthorizationOutcome.Forbidden;
@@ -101,13 +101,14 @@ public sealed class MutationRequestAuthorizationService
             MutationActor.TryCreate(principal, out var actor) && actor?.HumanKey is not null &&
             !MutationActor.IsSameHuman(operation.RequesterPrincipalId, actor.HumanKey) &&
             operation.AuthorizationTargets.Count > 0 && operation.AuthorizationTargets.All(target =>
-                operation.OperationKind==MutationOperationKind.GovernancePolicyActivation
+                operation.OperationKind is MutationOperationKind.GovernancePolicyActivation or MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation
                     ? _authorization.IsLiveGovernanceApprovalAllowed(principal,DeclarativeMutationAuthorization.Request(target))
                     : _authorization.IsLiveApprovalAllowed(principal, DeclarativeMutationAuthorization.Request(target)));
     }
 
     private static bool IsProofKind(MutationOperationKind? kind) => kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription or
-        MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation;
+        MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation or
+        MutationOperationKind.ServiceRequestChange or MutationOperationKind.ServiceRequestDecision or MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation;
 
     public string PolicyVersionFor(ClaimsPrincipal? principal, MutationOperationKind? kind = null) => principal?.Identity is NonBrowserReadIdentity || IsProofKind(kind)
         ? "v0.8-bearer:" + _authorization.PolicyFingerprint : MutationAdmissionService.PolicyVersion;

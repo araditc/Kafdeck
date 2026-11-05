@@ -152,7 +152,8 @@ public sealed class MutationAdmissionService
             ? targets.Where(t => t.Action is Kafdeck.Core.Security.AuthorizationAction.DeclarativeRead or
                 Kafdeck.Core.Security.AuthorizationAction.DeclarativePlan or Kafdeck.Core.Security.AuthorizationAction.DeclarativeAdopt or
                 Kafdeck.Core.Security.AuthorizationAction.NotificationRead).ToArray() : targets;
-        var authorization = intent.Kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription or MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation
+        var authorization = intent.Kind is MutationOperationKind.FleetUncertaintyDisposition or MutationOperationKind.DeclarativeNotificationSubscription or MutationOperationKind.GovernancePolicyVersion or MutationOperationKind.GovernancePolicyActivation or
+            MutationOperationKind.ServiceRequestChange or MutationOperationKind.ServiceRequestDecision or MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation
             ? _authorization.AuthorizeProofTargets(principal, admissionTargets)
             : _authorization.AuthorizeTargets(principal, targets);
         if (authorization == KafdeckAuthorizationOutcome.Unauthenticated)

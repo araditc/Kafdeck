@@ -497,6 +497,32 @@ public sealed class MutationOperation
         Transition(MutationOperationState.AppliedVerified, nowUtc);
     }
 
+    // Only immutable same-transaction request/rate-card receipts may resolve acknowledgement loss.
+    // Current authority, outside generation and guarded CAS are separately checked by the owning store.
+    public void ReconcileVerifiedWorkflowCommit(Guid receiptOperationId,int receiptKind,string materialHash,string receiptPreviewHash,
+        string entityId,string contentHash,long revision,DateTimeOffset committedAtUtc,DateTimeOffset nowUtc)
+    {
+        RequireState(MutationOperationState.ExecutionUnknown);
+        var request=Snapshot.OperationKind is MutationOperationKind.ServiceRequestChange or MutationOperationKind.ServiceRequestDecision;
+        var rate=Snapshot.OperationKind is MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation;
+        static bool Hash(string value)=>value is {Length:64}&&value.All(c=>c is >= '0' and <= '9' or >= 'a' and <= 'f');
+        var requestId=Guid.Empty;
+        if((!request&&!rate)||receiptKind!=(int)Snapshot.OperationKind||receiptOperationId!=Snapshot.OperationId||Snapshot.DispatchStartedAtUtc is null||
+            receiptPreviewHash!=Snapshot.PreviewHash||!Hash(contentHash)||revision<(request?1:0)||
+            materialHash!=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Snapshot.CanonicalIntent))).ToLowerInvariant()||
+            request&&(!Guid.TryParseExact(entityId,"N",out requestId)||requestId==Guid.Empty||entityId!=entityId.ToLowerInvariant())||
+            rate&&!Hash(entityId)||committedAtUtc<Snapshot.CreatedAtUtc||committedAtUtc>nowUtc)
+            throw new MutationStateException("Matching positive workflow commit evidence is required.");
+        var prefix=request?"request":"rate-card";
+        Snapshot=Snapshot with{ResultCode="WorkflowCommitReceiptRecovered",SafeProviderEvidence=MutationProviderEvidence.Normalize(new Dictionary<string,string>
+        {
+            [prefix+(request?".id":".version")]=request?requestId.ToString("D"):entityId,
+            [prefix+".hash"]=contentHash,[prefix+".revision"]=revision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            [prefix+".receipt"]=receiptOperationId.ToString("D")
+        })};
+        Transition(MutationOperationState.AppliedVerified,nowUtc);
+    }
+
     private void Transition(MutationOperationState state, DateTimeOffset nowUtc)
     {
         Snapshot = Snapshot with

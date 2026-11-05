@@ -5,7 +5,7 @@ namespace Kafdeck.Cli;
 public sealed record CliFamilyInvocation(string Route, bool Preview, CliFamilyPayload Payload, string? RequestFile = null,
     bool HumanOnly = false, bool Read = false, bool Recovery = false, string Method = "post", bool RuntimeProgress = false, bool Stop = false, bool PolicyStatus = false,
     string? ReadContract = null, string? GovernanceScope = null);
-public enum CliFamilyPayload { Empty, RecordsPreview, RecordsExecution, Purge, ConsumerOffsets, ConsumerDelete, SchemaRegister, SchemaCompatibility, SchemaDelete, SchemaExecution, ConnectConfiguration, ConnectControl, RecoveryPreview, RecoveryReview, DataJob, Generator, BatchReconciliation, AutoRestart, AutoRestartApply, ReconciliationProof, NamedReadRequest, GovernanceCatalogChange, GovernanceCatalogImport, GovernancePolicyDocument, GovernancePolicyActivation, GovernancePolicyFact, GovernancePolicyDryRun, GovernanceCatalogRecovery }
+public enum CliFamilyPayload { Empty, RecordsPreview, RecordsExecution, Purge, ConsumerOffsets, ConsumerDelete, SchemaRegister, SchemaCompatibility, SchemaDelete, SchemaExecution, ConnectConfiguration, ConnectControl, RecoveryPreview, RecoveryReview, DataJob, Generator, BatchReconciliation, AutoRestart, AutoRestartApply, ReconciliationProof, NamedReadRequest, GovernanceCatalogChange, GovernanceCatalogImport, GovernancePolicyDocument, GovernancePolicyActivation, GovernancePolicyFact, GovernancePolicyDryRun, GovernanceCatalogRecovery, WorkflowRequestChange, WorkflowRateCardDocument, WorkflowRateCardActivation }
 
 /// <summary>Named family commands only. Structured files have a closed request schema, never a path/handler/actor selector.</summary>
 public static class CliFamilyCommands
@@ -121,6 +121,7 @@ public static class CliFamilyCommands
 
     public static bool ValidatePayload(JsonElement value, CliFamilyPayload payload) => payload switch
     {
+        CliFamilyPayload.WorkflowRequestChange or CliFamilyPayload.WorkflowRateCardDocument or CliFamilyPayload.WorkflowRateCardActivation => CliWorkflowCommands.Validate(value, payload),
         CliFamilyPayload.RecordsPreview => Object(value, ("records", Records), ("schemaValidation", v => Object(v, ("validatorId", Scalar), ("schemaIdentity", Scalar)))),
         CliFamilyPayload.RecordsExecution => Object(value, ("records", Records)),
         CliFamilyPayload.Purge => Object(value, ("targets", v => Array(v, p => Object(p, ("topicName", Scalar), ("partition", Scalar),

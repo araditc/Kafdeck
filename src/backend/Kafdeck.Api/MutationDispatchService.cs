@@ -520,5 +520,7 @@ public sealed class MutationDispatchService
             MutationOperationKind.CatalogMutation or
             MutationOperationKind.GovernancePolicyVersion or
             MutationOperationKind.GovernancePolicyActivation or
+            MutationOperationKind.ServiceRequestChange or MutationOperationKind.ServiceRequestDecision or
+            MutationOperationKind.RateCardVersion or MutationOperationKind.RateCardActivation or
             MutationOperationKind.FleetUncertaintyDisposition;
 }

@@ -12,7 +12,7 @@ using Xunit.Abstractions;
 namespace Kafdeck.Architecture.Tests;
 
 [Collection("Native notification recovery")]
-public sealed class V09W73CatalogRecoveryTests(ITestOutputHelper output)
+public sealed partial class V09W73CatalogRecoveryTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task Actual_SQLite_backup_restore_preserves_catalog_active_policy_and_pending_plan_then_fences_old_generation()

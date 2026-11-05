@@ -17,7 +17,7 @@ namespace Kafdeck.Architecture.Tests;
 
 /// <summary>Actual packaged clients, real HTTPS IdP, shipped API and isolated durable stores.
 /// No token, client console or private API configuration enters assertion messages or evidence.</summary>
-public sealed class V08G4ExternalIntegrationLiveTests
+public sealed partial class V08G4ExternalIntegrationLiveTests
 {
     [G3DeclarativeLiveTheory]
     [InlineData(false)] [InlineData(true)]

@@ -5,6 +5,7 @@ using Kafdeck.Api;
 using Kafdeck.Core;
 using Kafdeck.Core.Catalog;
 using Kafdeck.Core.Governance;
+using Kafdeck.Core.Attribution;
 using Kafdeck.Core.Consumers;
 using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.Kafka;
@@ -52,6 +53,8 @@ var mutationOptions = kafdeckOptions.Administration?.Mutations;
 var governanceOptions = builder.Configuration.GetSection("Kafdeck:Governance").Get<GovernanceRuntimeOptions>() ?? new();
 governanceOptions.Validate(kafdeckOptions.Deployment.Mode == AccessMode.Oidc, mutationOptions?.Enabled == true, governanceGenerationAdmission);
 builder.Services.AddSingleton(governanceOptions);
+var attributionOptions=builder.Configuration.GetSection("Kafdeck:Governance:Attribution").Get<AttributionRuntimeOptions>()??new();
+attributionOptions.Validate();
 var observabilityOptions =
     ObservabilityOptions.Effective(kafdeckOptions);
 var historicalMetricsOptions =
@@ -499,19 +502,29 @@ if (mutationOptions?.Enabled == true)
                 ? services.GetRequiredService<NotificationProductEventPolicy>() : null,
             governance: services.GetRequiredService<IGovernancePolicyTransactionGate>()));
     builder.Services.AddSingleton<IMutationOperationTransactionReader>(services =>
-        (IMutationOperationTransactionReader)services.GetRequiredService<IMutationOperationRepository>());
+        new AdoMutationOperationRepository(services.GetRequiredService<IMutationDbConnectionFactory>()));
     builder.Services.AddSingleton<AdoGovernanceGenerationGate>(services => new(
         services.GetRequiredService<IMutationDbConnectionFactory>(), governanceOptions.DeploymentGeneration));
     builder.Services.AddSingleton<IGovernanceGenerationTransactionGate>(services => services.GetRequiredService<AdoGovernanceGenerationGate>());
     builder.Services.AddKafdeckCatalog(governanceOptions.DeploymentGeneration?.ToString("D") ?? "unconfigured");
+    builder.Services.AddSingleton<IServiceRequestCurrentAuthority,ServiceRequestAuthority>();
+    builder.Services.AddSingleton<AdoServiceRequestStore>();
+    builder.Services.AddSingleton<IApprovedServiceRequestTransactionReader>(services=>services.GetRequiredService<AdoServiceRequestStore>());
     builder.Services.AddSingleton<AdoGovernancePolicyStore>(services => new(
         services.GetRequiredService<IMutationDbConnectionFactory>(),
         services.GetRequiredService<IPolicyMetadataTransactionReader>(),
-        services.GetRequiredService<IGovernanceGenerationTransactionGate>()));
+        services.GetRequiredService<IGovernanceGenerationTransactionGate>(),
+        services.GetRequiredService<IApprovedServiceRequestTransactionReader>()));
     builder.Services.AddSingleton<IGovernancePolicyStore>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
     builder.Services.AddSingleton<IGovernancePolicyTransactionGate>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
+    builder.Services.AddKafdeckAttribution(attributionOptions,governanceOptions.AttributionEnabled);
     builder.Services.AddSingleton<GovernancePolicyRuntime>();
     builder.Services.AddSingleton<GovernancePolicyMutationService>();
+    builder.Services.AddSingleton<ServiceRequestMutationService>();
+    builder.Services.AddSingleton<IMutationExecutionHandler>(services=>new ServiceRequestExecutionHandler(
+        MutationOperationKind.ServiceRequestChange,services.GetRequiredService<ServiceRequestMutationService>()));
+    builder.Services.AddSingleton<IMutationExecutionHandler>(services=>new ServiceRequestExecutionHandler(
+        MutationOperationKind.ServiceRequestDecision,services.GetRequiredService<ServiceRequestMutationService>()));
     builder.Services.AddSingleton<IMutationExecutionHandler>(services => new GovernancePolicyExecutionHandler(
         MutationOperationKind.GovernancePolicyVersion, services.GetRequiredService<GovernancePolicyMutationService>()));
     builder.Services.AddSingleton<IMutationExecutionHandler>(services => new GovernancePolicyExecutionHandler(
@@ -671,7 +684,8 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<W39MutationPreDispatchGuard>();
     builder.Services.AddSingleton<IMutationPreDispatchGuard>(services => new GovernanceMutationPreDispatchGuard(
         services.GetRequiredService<W39MutationPreDispatchGuard>(), services.GetRequiredService<GovernancePolicyRuntime>(),
-        services.GetRequiredService<GovernancePolicyMutationService>()));
+        services.GetRequiredService<GovernancePolicyMutationService>(),services.GetRequiredService<ServiceRequestMutationService>(),
+        services.GetRequiredService<AttributionMutationService>()));
     builder.Services.AddSingleton<MutationExecutionHandlerRegistry>(services =>
         new MutationExecutionHandlerRegistry(
             services.GetServices<IMutationExecutionHandler>()));
@@ -711,10 +725,19 @@ if (mutationOptions is { Enabled: false, Persistence: { } dormantPersistence })
         governanceOptions.DeploymentGeneration?.ToString("D") ?? "unconfigured", services.GetRequiredService<IGovernanceGenerationTransactionGate>()));
     builder.Services.AddSingleton<ICatalogStore>(services => services.GetRequiredService<AdoCatalogStore>());
     builder.Services.AddSingleton<IPolicyMetadataTransactionReader>(services => services.GetRequiredService<AdoCatalogStore>());
+    builder.Services.AddSingleton<IMutationOperationTransactionReader>(services=>new AdoMutationOperationRepository(services.GetRequiredService<IMutationDbConnectionFactory>()));
+    builder.Services.AddSingleton<IServiceRequestCurrentAuthority,ServiceRequestAuthority>();
+    builder.Services.AddSingleton<AdoServiceRequestStore>();
+    builder.Services.AddSingleton<IApprovedServiceRequestTransactionReader>(services=>services.GetRequiredService<AdoServiceRequestStore>());
     builder.Services.AddSingleton<AdoGovernancePolicyStore>(services => new(services.GetRequiredService<IMutationDbConnectionFactory>(),
-        services.GetRequiredService<IPolicyMetadataTransactionReader>(), services.GetRequiredService<IGovernanceGenerationTransactionGate>()));
+        services.GetRequiredService<IPolicyMetadataTransactionReader>(), services.GetRequiredService<IGovernanceGenerationTransactionGate>(),
+        services.GetRequiredService<IApprovedServiceRequestTransactionReader>()));
     builder.Services.AddSingleton<IGovernancePolicyStore>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
     builder.Services.AddSingleton<IGovernancePolicyTransactionGate>(services => services.GetRequiredService<AdoGovernancePolicyStore>());
+    builder.Services.AddSingleton<AdoAttributionStore>(services=>new(services.GetRequiredService<IMutationDbConnectionFactory>(),
+        services.GetRequiredService<IGovernanceGenerationTransactionGate>(),services.GetRequiredService<IGovernancePolicyTransactionGate>(),
+        services.GetRequiredService<AdoCatalogStore>()));
+    builder.Services.AddSingleton<IAttributionStore>(services=>services.GetRequiredService<AdoAttributionStore>());
 }
 if (notificationGovernance is not null) builder.Services.AddKafdeckNotificationGovernance(notificationGovernance);
 if (notificationRecovery is not null)
@@ -779,7 +802,9 @@ if (mutationOptions?.Persistence is not null)
 {
     await app.Services.GetRequiredService<AdoGovernanceGenerationGate>().InitializeAsync();
     await app.Services.GetRequiredService<ICatalogStore>().InitializeAsync(CancellationToken.None);
+    await app.Services.GetRequiredService<AdoServiceRequestStore>().InitializeAsync();
     await app.Services.GetRequiredService<AdoGovernancePolicyStore>().InitializeAsync();
+    await app.Services.GetRequiredService<AdoAttributionStore>().InitializeAsync();
 }
 
 if (historicalMetricsOptions?.Enabled == true)
@@ -976,6 +1001,8 @@ app.MapKafdeckBearerCapabilities(mutationOptions?.Enabled == true, declarativeEn
 app.MapKafdeckDeclarative(declarativeOptions.Enabled);
 if (governanceOptions.CatalogEnabled) app.MapKafdeckCatalog();
 if (governanceOptions.PoliciesEnabled) app.MapKafdeckGovernancePolicies();
+if (governanceOptions.RequestsEnabled) app.MapKafdeckServiceRequestEndpoints();
+if (governanceOptions.AttributionEnabled) app.MapKafdeckAttribution();
 app.MapGovernanceOpenApi();
 if (mutationOptions?.Enabled == true)
 {

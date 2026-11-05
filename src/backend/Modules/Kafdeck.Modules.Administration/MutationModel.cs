@@ -54,6 +54,10 @@ public enum MutationOperationKind
     CatalogMutation = 32,
     GovernancePolicyVersion = 33,
     GovernancePolicyActivation = 34,
+    ServiceRequestChange = 35,
+    RateCardVersion = 36,
+    RateCardActivation = 37,
+    ServiceRequestDecision = 38,
 }
 
 public enum MutationRiskClass

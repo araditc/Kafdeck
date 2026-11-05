@@ -8,9 +8,19 @@ namespace Kafdeck.Infrastructure.Persistence;
 
 /// <summary>Catalog-owned SQL. Plans, revisions, references and receipts commit atomically on the owning connection.</summary>
 public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, string deploymentGeneration,
-    IGovernanceGenerationTransactionGate? generationGate = null) : ICatalogStore, IPolicyMetadataTransactionReader
+    IGovernanceGenerationTransactionGate? generationGate = null) : ICatalogStore, IPolicyMetadataTransactionReader, ICatalogActiveReferenceTransactionReader
 {
     public string DeploymentGeneration { get; } = CatalogContract.Bound(deploymentGeneration, "generation", 128, false);
+    public async Task<bool> IsActiveReferenceAsync(DbConnection connection,DbTransaction transaction,string clusterId,
+        CatalogEntityKind kind,string id,CancellationToken token)
+    {
+        ValidateScope(clusterId,kind);CatalogContract.Id(id);
+        if(kind is not(CatalogEntityKind.Team or CatalogEntityKind.Application))throw new ArgumentException("Unsupported active catalog reference kind.");
+        await GenerationAsync(connection,transaction,token).ConfigureAwait(false);
+        var sql="SELECT body FROM catalog_owned_entities WHERE cluster_id=@cluster AND kind=@kind AND id=@id"+(connections.SupportsSelectForUpdate?" FOR UPDATE":"");
+        var body=await ScalarAsync(connection,transaction,sql,token,("@cluster",clusterId),("@kind",(int)kind),("@id",id)).ConfigureAwait(false);
+        return body is string json&&!Deserialize<CatalogRecord>(json).Archived;
+    }
     private const string Schema = """
         CREATE TABLE IF NOT EXISTS catalog_owned_schema(version INTEGER PRIMARY KEY,digest TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS catalog_owned_entities(

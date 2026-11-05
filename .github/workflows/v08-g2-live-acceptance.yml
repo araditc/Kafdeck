@@ -40,7 +40,8 @@ jobs:
 
   real-human-cli-and-transports:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # W74/W76 add genuine multi-human, measured-window and external-client journeys.
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:18.6-alpine
@@ -215,6 +216,7 @@ jobs:
           (cd src/frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npm test && npm run build)
           (cd deploy/dev/browser-g2 && npm ci --ignore-scripts --no-audit --no-fund && npx --no-install playwright install --with-deps chromium)
           node src/frontend/scripts/v09-governance-browser.cjs
+          node src/frontend/scripts/v09-workflows-browser.cjs
           dotnet restore Kafdeck.slnx --locked-mode
           dotnet build Kafdeck.slnx --configuration Release --no-restore -warnaserror
       - name: Prove W73 and W75 real catalog policy identity clients and effects
@@ -231,12 +233,24 @@ jobs:
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V09&FullyQualifiedName!~V09W73CatalogRecoveryTests' \
             --results-directory artifacts/g2-ci --logger 'trx;LogFileName=v09-live.trx'
-          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/v09-live.trx V09W73CatalogLiveTests:2 V09W75PolicyLiveTests:2
+          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/v09-live.trx V09W73CatalogLiveTests:2 V09W75PolicyLiveTests:2 V09W74RequestLiveTests:2 V09W76AttributionLiveTests:2
           for provider in sqlite postgres; do
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w73-catalog-evidence.json"
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w75-policy-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w74-request-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w76-attribution-evidence.json"
+            python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert all(p[k] for k in ("realKeycloak", "actualShippedCliAndApi", "actualKafka", "realDistinctHumanBusinessApproval", "missingRequestNoBrokerEffect", "approvedRequestBrokerEffect", "positiveRequestReceiptRecoveredThroughGenuineCli", "wrongActorRecoveryDenied", "noRecoveryRedispatch")); assert p["fixturePolicySeeding"] is False' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w74-request-evidence.json"
+            python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert all(p[k] for k in ("actualTlsHttp", "certificateAndHostnameValidated", "metricsAcquiredFromPhysicalCounter", "kafkaMetadataIdentityFromActualBroker", "genuineKeycloakCli", "governedHighRateVersionAndActivation", "ownershipAtMeasurementPreserved", "actualCounterResetNullEstimate", "positiveReceiptRecoveryNoRedispatch")); assert p["actualControlledBodyBytes"] == 98304 and p["kafkaBillableTrafficClaimed"] is False' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w76-attribution-evidence.json"
           done
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-w73-w75-real-browser-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-w74-real-browser-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-w76-real-browser-evidence.json"
+          for lane in w74 w76; do
+            python3 -c 'import json,subprocess,sys; p=json.load(open(sys.argv[1])); assert p["sourceSha"] == subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); assert p["apiFixtures"] is False and p["tokenInjection"] is False and p["genuineKeycloakBrowserSession"] is True and p["actualCompiledUi"] is True' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/sqlite-$lane-real-browser-evidence.json"
+          done
       - name: Build and prove actual PKCE CLI and provider sockets
         shell: bash
         env:
@@ -284,12 +298,14 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g5-compensation-evidence.json"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V08G4' --results-directory artifacts/g4-ci --logger 'trx;LogFileName=g4-live.trx'
-          python3 scripts/ci/require-complete-trx.py artifacts/g4-ci/g4-live.trx V08G4ExternalIntegrationLiveTests:6
+          python3 scripts/ci/require-complete-trx.py artifacts/g4-ci/g4-live.trx V08G4ExternalIntegrationLiveTests:8
           for provider in sqlite postgres; do
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-terraform-evidence.json"
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-g4-mcp-evidence.json"
             python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["status"] == "Passed"; assert all(p[k] for k in ("actualTerraformPlugin", "actualPackagedMcpStdio", "positiveControlsApplied", "tfDenied", "mcpDenied", "staleFenced", "noEffects", "auditsUnchanged"))' \
               "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w75-automation-policy-evidence.json"
+            python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["status"] == "Passed"; assert all(p[k] for k in ("actualTerraformPlugin", "actualInstalledMcpStdio", "realDistinctHumanBusinessApproval", "independentCriticalKernelApprovalAlsoRequired", "missingRequestDenied", "submittedRequestDenied", "approvedTerraformEffect", "approvedMcpEffect", "cancelledRequestDenied", "expiredRequestDenied", "noDeniedProductWrites", "lateCancelCannotClearUnknown", "unknownNeverRedispatched", "serviceDecisionHttpDenied", "serviceDecisionRoleAndRegistrationGranted", "serviceDecisionRequestVersionUnchanged"))' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w74-automation-request-evidence.json"
           done
       - name: Package external integration artifacts without publication
         shell: pwsh
@@ -315,11 +331,14 @@ jobs:
             artifacts/g2-ci/g2-live.trx
             artifacts/g2-ci/v09-live.trx
             artifacts/v09/governance-ui-evidence.json
+            artifacts/v09/workflows-ui-evidence.json
             artifacts/g4-ci/g4-live.trx
             artifacts/g5-ci/*.trx
             artifacts/g2-ci/identity/*-evidence.json
             artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.png
             artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.json
+            artifacts/g2-ci/identity/sqlite-w74-real-browser-failure.*
+            artifacts/g2-ci/identity/sqlite-w76-real-browser-failure.*
           if-no-files-found: error
       - name: Stop isolated identity process
         if: always()
@@ -435,8 +454,10 @@ jobs:
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V09W73CatalogRecoveryTests' \
             --results-directory artifacts/g2-ci/recovery --logger 'trx;LogFileName=v09-recovery-live.trx'
-          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/recovery/v09-recovery-live.trx V09W73CatalogRecoveryTests:2
+          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/recovery/v09-recovery-live.trx V09W73CatalogRecoveryTests:4
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-w73-w75-catalog-policy-restore-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-w74-requests-restore-evidence.json"
+          test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-w76-attribution-restore-evidence.json"
       - name: Retain bounded PostgreSQL control stage diagnostics
         if: always()
         shell: pwsh

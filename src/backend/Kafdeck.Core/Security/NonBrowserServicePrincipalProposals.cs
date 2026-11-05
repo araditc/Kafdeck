@@ -23,6 +23,8 @@ public sealed class NonBrowserServicePrincipalProposal
         AuthorizationAction.NotificationRead,
         AuthorizationAction.DeclarativeRead,
         AuthorizationAction.GovernancePolicyRead,
+        AuthorizationAction.RequestRead,
+        AuthorizationAction.AttributionRead,
         AuthorizationAction.TopicConfigRead,
         AuthorizationAction.BrokerConfigRead,
         AuthorizationAction.RecordRead,

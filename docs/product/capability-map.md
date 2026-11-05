@@ -173,3 +173,5 @@ A capability is not complete unless it has:
 - API contract,
 - documented failure/partial-result states,
 - accessibility implications where UI is involved.
+
+W74 request workflows and W76 measured attribution use the [request/attribution implementation contract](../api/v0.9-requests-attribution-runtime.md). Exact runtime acceptance remains in #428/#430; registered measured-counter inputs do not imply Kafka billable throughput, and request approval does not grant execution rights.

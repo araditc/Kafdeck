@@ -9,4 +9,5 @@ internal sealed record GovernanceRouteContract(
     Type? RequestType = null,
     int MaxBodyBytes = 256 * 1024,
     string QueryKeys = "clusterId,pageSize,cursor",
-    Type? ResponseType = null);
+    Type? ResponseType = null,
+    string RequiredQueryKeys = "clusterId");
