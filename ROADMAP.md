@@ -218,7 +218,7 @@ Kafdeck does not implement a full stream-processing SQL engine merely to duplica
 
 Scope authority: **Issue #178 / Gate 7 — owner accepted 2026-09-26**. W51 planning was admitted through PR **#191**; W52–W59 completed through PRs **#192–#197, #200 and #201**; W60 **#190** completed through PR **#202**. Owner publication authorization was granted on **2026-09-27** under gate **#203**. Release activation PR **#204** merged as `23b3777461649f53f602ebf49c1ffd3607b546f7`; the protected-main release workflow published immutable tag/GitHub Release **v0.7** and promoted signed GHCR digest `sha256:2e089bfe4788d93e7f9b5d03fac117001daccd06c244f1017648d5ccf57535c8`.
 
-## v0.8 — Observability, Automation & Platform APIs — SCOPE ACCEPTED / PLANNING ACTIVE
+## v0.8 — Observability, Automation & Platform APIs — RELEASED
 
 Capabilities:
 - OpenTelemetry traces/metrics/logs
@@ -237,9 +237,11 @@ Capabilities:
 - MCP server/agent tools only after RBAC and mutation safety are enforced; MCP has no privileged bypass
 - Revert/compensation only for operations with a defined safe inverse
 
-Scope authority: **Issue #208 / Gate 8 — owner accepted 2026-09-27**. Tracker **#209** owns live state and W61 **#210** owns the governed planning package. W62–W71 implementation remains blocked until W61 receives exact-head applicable CI, substantive architecture/security review, fresh CODEOWNER approval, zero unresolved required threads and expected-head guarded protected-main merge. v0.8 release/tag/GitHub Release/GHCR publication remains separately owner-gated.
+Scope authority: **Issue #208 / Gate 8 — owner accepted 2026-09-27**. W61–W71 and tracker **#209** are complete. G5 was accepted at protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce` after all 14 producer workflows and the 124-file strict Main packet passed; PR #422 removed unused vulnerable APT components. The owner separately authorized publication of this exact source/archive on 2026-11-05. [v0.8](https://github.com/araditc/Kafdeck/releases/tag/v0.8) and its signed GHCR digest `sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45` were published through [run41986146327](https://github.com/araditc/Kafdeck/actions/runs/41986146327). GHCR access remains private and requires an authorized `read:packages` token. See [accepted evidence](docs/implementation/evidence/v0.8-g5-accepted-20261105.json).
 
-## v0.9 — Governance, Enterprise Operations & Hardening
+## v0.9 — Governance, Enterprise Operations & Hardening — NEXT / SCOPE PLANNING
+
+The themes below define the next roadmap phase. Detailed Gate 9 scope, RFC/acceptance workstreams and implementation admission must be recorded before new runtime capabilities are activated. The released v0.8 contracts and safety boundaries remain the baseline.
 
 Governance:
 - Application/team/topic ownership catalog

@@ -1,6 +1,7 @@
 # ADR-0009 — Automation Principals, Telemetry Authority and Declarative Ownership
 
-- **Status:** PROPOSED
+- **Status:** ACCEPTED through W61 PR #221 / protected main `f206c31eed3c5c87bf40ec308520c48ac422898c`
+- **Delivery:** v0.8 released; see [accepted v0.8 release evidence](../implementation/evidence/v0.8-g5-accepted-20261105.json)
 - **Scope:** v0.8
 - **Authority:** #208 / #209 / W61 #210
 

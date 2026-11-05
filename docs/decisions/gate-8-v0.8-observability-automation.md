@@ -1,7 +1,7 @@
 # Gate 8 — v0.8 Observability, Automation & Platform APIs Scope
 
 - **Date:** 2026-09-27
-- **Status:** SCOPE ACCEPTED; PLANNING ADMISSION PENDING
+- **Status:** SCOPE ACCEPTED; W61–W71 COMPLETE; v0.8 PUBLISHED (delivery update 2026-11-05)
 - **Authority:** Project Owner, Ammar Heidari
 - **Scope issue:** #208
 - **Tracker:** #209
@@ -42,8 +42,12 @@ W61 may define detailed contracts, numerical ceilings, provider/client matrices,
 
 ## Implementation gate
 
-W62–W71 are blocked until W61 receives exact-head CI, substantive architecture/security review, fresh CODEOWNER approval, zero unresolved required threads, expected-head guarded protected-main merge and post-merge tracker activation.
+The original rule below was satisfied by W61 PR #221 / protected main `f206c31eed3c5c87bf40ec308520c48ac422898c`; W62–W71 subsequently completed. Before implementation, W61 had to receive exact-head CI, substantive architecture/security review, fresh CODEOWNER approval, zero unresolved required threads, expected-head guarded protected-main merge and post-merge tracker activation.
 
 ## Release gate
 
 Planning admission and implementation completion do not themselves authorize v0.8 publication.
+
+## Delivery and separate publication completion
+
+G5 and tracker #209/#220 closed at protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce`. The owner explicitly approved publication of that source and archive SHA256 `6c333ee26e8d433ea49faf7d578238b9db5577656959c31404ce032fbad6bd34` on 2026-11-05. [Publication run41986146327](https://github.com/araditc/Kafdeck/actions/runs/41986146327) created immutable tag/Release v0.8 and verified signed GHCR digest `sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45`, with six checked package assets. GHCR remains private. See [accepted v0.8 release evidence](../implementation/evidence/v0.8-g5-accepted-20261105.json). This record does not approve detailed v0.9 scope or implementation.

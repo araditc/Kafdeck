@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-05",
+  "status": "G0-G6CompletePublishedVerified",
+  "sourceSha": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+  "runtimeVersion": "0.8.0",
+  "release": {
+    "tag": "v0.8",
+    "url": "https://github.com/araditc/Kafdeck/releases/tag/v0.8",
+    "publishedAtUtc": "2026-11-05T07:22:58Z",
+    "gitTagVerified": true,
+    "latestStableVerifiedAtPublication": true
+  },
+  "acceptance": {
+    "workstreams": "W61-W71",
+    "closedIssues": [
+      210,
+      211,
+      212,
+      213,
+      214,
+      215,
+      216,
+      217,
+      218,
+      219,
+      220
+    ],
+    "closedTracker": 209,
+    "mode": "Main",
+    "status": "EvidenceCompleteAwaitingOwnerPublicationDecision",
+    "verifiedFiles": 124,
+    "missing": [],
+    "localPacketSha256": "5ca3cf7eaf183f46fbf00e119a3ff3b80088314b1bfa25db083c2e9f5fc82982",
+    "signedWorkflowPacketSha256": "bfe3688d9765c49fefc134cf64a71dc4538747beb1a589970ebde7e0c604a28e",
+    "runs": [
+      {
+        "id": 41981729275,
+        "name": "codeql",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729275",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729660,
+        "name": "quality-gate",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729660",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729661,
+        "name": "kafka-compatibility",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729661",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729719,
+        "name": "v04-benchmark",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729719",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729748,
+        "name": "container",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729748",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729765,
+        "name": "v03-benchmark",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729765",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729792,
+        "name": "publish-release",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729792",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729839,
+        "name": "v08-g1-live-acceptance",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729839",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729844,
+        "name": "release-supply-chain",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729844",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729848,
+        "name": "kafka-smoke",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729848",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729863,
+        "name": "v08-g2-keycloak-upgrade",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729863",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981729961,
+        "name": "v08-g2-identity-lifecycle",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981729961",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981730111,
+        "name": "v08-g2-live-acceptance",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981730111",
+        "event": "push",
+        "conclusion": "success"
+      },
+      {
+        "id": 41981744539,
+        "name": "v05-persistence",
+        "url": "https://github.com/araditc/Kafdeck/actions/runs/41981744539",
+        "event": "workflow_dispatch",
+        "conclusion": "success"
+      }
+    ],
+    "selectedSuites": [
+      {
+        "file": "recovery-live.trx",
+        "sha256": "f8f3ccd217c07531505ce104b6f52412212bcb67135ff0f09baaa5c81a36aa98",
+        "counters": {
+          "total": 60,
+          "passed": 60,
+          "failed": 0,
+          "notExecuted": 0
+        }
+      },
+      {
+        "file": "g2-live.trx",
+        "sha256": "8336f7ec9c37cd5a4b6dbaec28449dcb26727e94b91c0b89b94909e639fc60e5",
+        "counters": {
+          "total": 297,
+          "passed": 297,
+          "failed": 0,
+          "notExecuted": 0
+        }
+      },
+      {
+        "file": "g4-live.trx",
+        "sha256": "66c9dcac3630ee6b60912fcd3989ffe339966b7e98325b615a37019d7cb2e306",
+        "counters": {
+          "total": 36,
+          "passed": 36,
+          "failed": 0,
+          "notExecuted": 0
+        }
+      },
+      {
+        "file": "g5-compensation.trx",
+        "sha256": "2d563204b120bca04bb03ce21ff7e442dce66d791a51ac68cef8a2bb03ae6cc7",
+        "counters": {
+          "total": 2,
+          "passed": 2,
+          "failed": 0,
+          "notExecuted": 0
+        }
+      },
+      {
+        "file": "g5-regression.trx",
+        "sha256": "cf23bf497969a0119a3f254d57632d49dc84410ac448cc4f361c155bfc7aa83f",
+        "counters": {
+          "total": 272,
+          "passed": 272,
+          "failed": 0,
+          "notExecuted": 0
+        }
+      },
+      {
+        "file": "postgres-live.trx",
+        "sha256": "1dde672eb083e77a4bcc61b69d4b371a44c71d7cb0191b9fe205cb15294d1ebe",
+        "counters": {
+          "total": 181,
+          "passed": 181,
+          "failed": 0,
+          "notExecuted": 0
+        }
+      }
+    ]
+  },
+  "publication": {
+    "runId": 41986146327,
+    "url": "https://github.com/araditc/Kafdeck/actions/runs/41986146327",
+    "ownerAuthorization": "Explicit owner approval for this exact source and archive in Codex chat",
+    "archiveSha256": "6c333ee26e8d433ea49faf7d578238b9db5577656959c31404ce032fbad6bd34",
+    "image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+    "imageId": "sha256:281c8c1114fb8e3396abf6d7e2ef246d5d75fe3ee54179fcc65c3be07c618010",
+    "sbomSha256": "2b443f76e8ce3e5723ce670798ab71792c4f22306b047eeb0507b69e0e0de824",
+    "noCandidateRebuild": true,
+    "signatureAndAttestationsVerified": true,
+    "readinessPredicateType": "https://kafdeck.io/attestations/main-readiness/v1",
+    "sbomPredicateType": "https://spdx.dev/Document",
+    "signedSbomAptPackages": 0,
+    "registryVisibility": "private",
+    "requiresRegistryAuthentication": true,
+    "anonymousRegistryPullVerified": false,
+    "registryVerification": "Authenticated Skopeo digest/config and cosign verification in the owner-authorized workflow",
+    "assetVerification": "GitHub server-computed SHA256 compared with independently hashed accepted-main bytes; checksum manifest downloaded and checked",
+    "assets": [
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_linux_amd64.zip",
+        "sha256": "f61c8820a93919ae3e876a81d55eeccbe1e726d84fe057725ef5ac0eebba6ac6"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_linux_arm64.zip",
+        "sha256": "4aa581ced02323250d2d9c6df14ee19553a15ddf903b4b3658f33436d2dbea60"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_windows_amd64.zip",
+        "sha256": "c1c4161cb560d6e0992ea9404af118ecc86a0fa69081d903f457f4db5ae11876"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_darwin_amd64.zip",
+        "sha256": "cc68890f39837362ba50624f889d40500aa818776cfeb33c3e9d924c234fd5fb"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_darwin_arm64.zip",
+        "sha256": "ad3869fd1e954ce9521320dff5d85ac141a77255a600c61d4e40c98c4d098f49"
+      },
+      {
+        "file": "Kafdeck.Mcp.0.8.0.nupkg",
+        "sha256": "dd9039778332f6b90a64b4adaf5b080dd6dea1f02a16e165e3df5b819b66deed"
+      }
+    ]
+  },
+  "limits": [
+    "Overlapping test totals are not summed.",
+    "Browser interaction fixtures and genuine Keycloak/provider-effect evidence are separate.",
+    "Physical provider fixtures do not certify every external SaaS tenant.",
+    "Three-OS loopback boundaries and five cross-built Terraform ZIPs are not full runtime acceptance on every OS/architecture.",
+    "Local and signed-workflow packet hashes describe separately serialized evidence packets; archive and extracted-file byte hashes are bound independently.",
+    "Publication does not authorize production deployment or Terraform/NuGet Registry publication."
+  ]
+}
