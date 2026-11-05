@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -18,6 +19,7 @@ internal sealed class V09W76MeasuredTrafficFixture:IAsyncDisposable
     private long bytes;
     private long startBytes;
     private DateTimeOffset started;
+    private long startedTimestamp;
     private MeasuredCounterWindow? closed;
     private string resource="";
     private string identity="";
@@ -31,7 +33,7 @@ internal sealed class V09W76MeasuredTrafficFixture:IAsyncDisposable
     internal ConfiguredAttributionMeasurementSource Source(string cluster)=>new(new(){SourceId="controlled-resource-meter",ClusterId=cluster,Provider="KafdeckMeasuredCountersV1",Endpoint=Endpoint.AbsoluteUri},
         new NotificationDnsEndpointResolver(tls,NotificationAddressPolicy.NoConfiguredNat64),Factory(),new SecretResolver());
     internal void Begin(string resourceId,string resourceIdentity)
-    {resource=resourceId;identity=resourceIdentity;started=DateTimeOffset.UtcNow;startBytes=PhysicalBytes;}
+    {resource=resourceId;identity=resourceIdentity;started=DateTimeOffset.UtcNow;startedTimestamp=Stopwatch.GetTimestamp();startBytes=PhysicalBytes;}
     internal void ResetCounter()=>Interlocked.Exchange(ref bytes,0);
     internal async Task SendTrafficAsync(int count,CancellationToken token)
     {
@@ -42,8 +44,19 @@ internal sealed class V09W76MeasuredTrafficFixture:IAsyncDisposable
     }
     internal async Task CloseAsync(CancellationToken token)
     {
-        var remaining=started.AddMinutes(1)-DateTimeOffset.UtcNow;if(remaining>TimeSpan.Zero)await Task.Delay(remaining,token);
-        closed=new(resource,"trafficBytes","bytes",started,DateTimeOffset.UtcNow,startBytes.ToString(CultureInfo.InvariantCulture),PhysicalBytes.ToString(CultureInfo.InvariantCulture),"Complete","physical-body-counter-v1",identity);
+        // Task.Delay may finish fractionally early on some timer implementations. Observe the actual
+        // UTC and monotonic deadlines rather than treating one completed delay as a measured interval.
+        var minimum=TimeSpan.FromSeconds(61);
+        DateTimeOffset ended;
+        while(true)
+        {
+            token.ThrowIfCancellationRequested();ended=DateTimeOffset.UtcNow;
+            var wallRemaining=minimum-(ended-started);var elapsedRemaining=minimum-Stopwatch.GetElapsedTime(startedTimestamp);
+            var remaining=wallRemaining>elapsedRemaining?wallRemaining:elapsedRemaining;
+            if(remaining<=TimeSpan.Zero)break;
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Clamp(Math.Ceiling(remaining.TotalMilliseconds)+10,10,1000)),token);
+        }
+        closed=new(resource,"trafficBytes","bytes",started,ended,startBytes.ToString(CultureInfo.InvariantCulture),PhysicalBytes.ToString(CultureInfo.InvariantCulture),"Complete","physical-body-counter-v1",identity);
     }
     private async Task Serve(SslStream stream,CancellationToken token)
     {
