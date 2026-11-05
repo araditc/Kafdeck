@@ -201,7 +201,7 @@ public sealed class V08G4ExternalIntegrationLiveTests
             new SqliteMutationDbConnectionFactory(settings["Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath"]);
         var generation=new AdoGovernanceGenerationGate(connections,f.Generation);await generation.InitializeAsync(token);
         var policy=new AdoGovernancePolicyStore(connections,generationGate:generation);await policy.InitializeAsync(token);
-        await f.Lab.StartAsync(token);await using var mcp=await McpProcess.StartAsync(f,true,token);
+        await f.Lab.StartAsync(token);
         async Task<int> TerraformApply(Artifact artifact,Preview preview)
         {
             var root=Path.Combine(evidence,"w75-terraform-private-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
@@ -218,7 +218,8 @@ public sealed class V08G4ExternalIntegrationLiveTests
         var tfControlPlan=await f.PlanAsync(tfControl,0,token);await f.ApproveAsync(tfControlPlan,token);
         Assert.Equal(0,await TerraformApply(tfControl,tfControlPlan));
         var mcpControlPlan=await f.PlanAsync(mcpControl,0,token);await f.ApproveAsync(mcpControlPlan,token);
-        Assert.False(IsError(await mcp.ToolAsync("declarative_apply",new{planId=mcpControlPlan.Id,planFingerprint=mcpControlPlan.Hash},token)));
+        await using(var controlMcp=await McpProcess.StartAsync(f,true,token))
+            Assert.False(IsError(await controlMcp.ToolAsync("declarative_apply",new{planId=mcpControlPlan.Id,planFingerprint=mcpControlPlan.Hash},token)));
         Assert.Equal(1,(await f.Routing.GetSubscriptionAsync(tfControl.Resource,token))!.Revision);
         Assert.Equal(1,(await f.Routing.GetSubscriptionAsync(mcpControl.Resource,token))!.Revision);
         var oldPlan=await f.PlanAsync(oldBlocked,0,token);await f.ApproveAsync(oldPlan,token);
@@ -240,12 +241,18 @@ public sealed class V08G4ExternalIntegrationLiveTests
         await policy.CommitVersionAsync(V09W75RecoverySeed.Operation(MutationOperationKind.GovernancePolicyVersion,AuthorizationAction.GovernancePolicyManage,"$deployment",version.VersionId,binding),version.VersionId,version.ContentHash,()=>true,token);
         await policy.ActivateAsync(V09W75RecoverySeed.Operation(MutationOperationKind.GovernancePolicyActivation,AuthorizationAction.GovernancePolicyActivate,"$deployment","active",binding),version.VersionId,version.ContentHash,before.Revision,true,()=>true,token);
         Assert.True((await policy.GetStateAsync("$deployment",token)).Enabled);
-        _=await mcp.ToolAsync("declarative_apply",new{planId=oldPlan.Id,planFingerprint=oldPlan.Hash},token);
+        await using(var oldMcp=await McpProcess.StartAsync(f,true,token))
+            _=await oldMcp.ToolAsync("declarative_apply",new{planId=oldPlan.Id,planFingerprint=oldPlan.Hash},token);
         var oldAfter=await f.Operations.GetAsync(oldPlan.Id,token);Assert.NotNull(oldAfter);
         var tfPlan=await f.PlanAsync(tfBlocked,0,token);await f.ApproveAsync(tfPlan,token);
-        var mcpPlan=await f.PlanAsync(mcpBlocked,0,token);await f.ApproveAsync(mcpPlan,token);
-        var logins=f.Lab.CompletedLogins;Assert.True(logins>0);
+        var tfLogins=f.Lab.CompletedLogins;Assert.True(tfLogins>0);
         var tfExit=await TerraformApply(tfBlocked,tfPlan);
+        var tfNoBrowserCallbacks=tfLogins==f.Lab.CompletedLogins;
+        // Acquire each short-lived service bearer immediately before its actual effect.
+        // Human approvals and Terraform must not age the independent MCP credential/plan.
+        var mcpPlan=await f.PlanAsync(mcpBlocked,0,token);await f.ApproveAsync(mcpPlan,token);
+        var mcpLogins=f.Lab.CompletedLogins;
+        await using var mcp=await McpProcess.StartAsync(f,true,token);
         var mcpReply=await mcp.ToolAsync("declarative_apply",new{planId=mcpPlan.Id,planFingerprint=mcpPlan.Hash},token);
         var replay=await mcp.ToolAsync("declarative_apply",new{planId=mcpPlan.Id,planFingerprint=mcpPlan.Hash},token);
         var tfAfter=await f.Operations.GetAsync(tfPlan.Id,token);var mcpAfter=await f.Operations.GetAsync(mcpPlan.Id,token);
@@ -254,13 +261,20 @@ public sealed class V08G4ExternalIntegrationLiveTests
         var mcpDenied=mcpAfter.State==MutationOperationState.FailedBeforeDispatch&&mcpAfter.ResultCode=="GovernanceDenied"&&IsError(replay);
         var staleFenced=oldAfter.State==MutationOperationState.StalePreview;
         var noEffects=await f.Routing.GetSubscriptionAsync(tfBlocked.Resource,token) is null&&await f.Routing.GetSubscriptionAsync(mcpBlocked.Resource,token) is null&&await f.Routing.GetSubscriptionAsync(oldBlocked.Resource,token) is null;
-        var auditsUnchanged=ownershipBefore==await f.CountAsync("kafdeck_declarative_ownership_audit",token)&&commitsBefore==await f.CountAsync("kafdeck_declarative_commit_receipts",token)&&runtimeBefore==await f.CountAsync("kafdeck_declarative_runtime_audit",token);
+        var ownershipAfter=await f.CountAsync("kafdeck_declarative_ownership_audit",token);
+        var commitsAfter=await f.CountAsync("kafdeck_declarative_commit_receipts",token);
+        var runtimeAfter=await f.CountAsync("kafdeck_declarative_runtime_audit",token);
+        // Plan/attempt audit is expected to advance; denied effects cannot commit ownership or receipts.
+        var auditsUnchanged=ownershipBefore==ownershipAfter&&commitsBefore==commitsAfter;
         await File.WriteAllBytesAsync(Path.Combine(evidence,(postgres?"postgres":"sqlite")+"-w75-automation-policy-evidence.json"),JsonSerializer.SerializeToUtf8Bytes(new{
             status=tfDenied&&mcpDenied&&staleFenced&&noEffects&&auditsUnchanged?"Passed":"Failed",provider=postgres?"PostgreSQL":"SQLite",
             genuineKeycloakService=true,actualTerraformPlugin=true,actualPackagedMcpStdio=true,positiveControlsApplied=true,trustedPolicyFixtureSeeding=true,
             sourceTargetDerivedFromActualW68Plan=true,canonicalGlobalScope="$deployment",policyContentHash=compiled.ContentHash,
             distinctHumanClientPlanApproval=true,tfDenied,mcpDenied,staleFenced,noEffects,auditsUnchanged,
-            firstMcpTransportError=IsError(mcpReply),terminalBackendCode=mcpAfter.ResultCode,serviceEffectsHaveNoBrowserCallbacks=logins==f.Lab.CompletedLogins}),token);
+            ownershipAuditBefore=ownershipBefore,ownershipAuditAfter=ownershipAfter,effectReceiptsBefore=commitsBefore,effectReceiptsAfter=commitsAfter,
+            runtimeAttemptAuditBefore=runtimeBefore,runtimeAttemptAuditAfter=runtimeAfter,
+            firstMcpTransportError=IsError(mcpReply),terminalBackendCode=mcpAfter.ResultCode,
+            serviceEffectsHaveNoBrowserCallbacks=tfNoBrowserCallbacks&&mcpLogins==f.Lab.CompletedLogins}),token);
         Assert.True(staleFenced,"Global policy activation failed to stale a pre-existing approved automation plan.");
         Assert.True(tfDenied,"Actual Terraform bypassed the active global notification policy.");Assert.True(mcpDenied,"Actual MCP bypassed the active global notification policy.");
         Assert.True(noEffects&&auditsUnchanged,"Denied automation changed product state or its durable audit.");
