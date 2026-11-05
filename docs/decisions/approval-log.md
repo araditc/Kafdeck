@@ -360,3 +360,14 @@ The owner answered the exact-SHA/archive publication request:
 [Publication run41986146327](https://github.com/araditc/Kafdeck/actions/runs/41986146327) published [v0.8](https://github.com/araditc/Kafdeck/releases/tag/v0.8), immutable source tag and signed image `ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45` from that archive without rebuilding. Five Terraform ZIPs, MCP nupkg and SHA256SUMS were checked. Registry digest/config and cosign signature/readiness/SPDX verification succeeded with owner-authenticated access; GHCR retains its existing private policy. The first malformed-input dispatch stopped before publication; the corrected structured-input execution used the identical approved source/archive.
 
 Original Gate 8 scope and planning-admission entries above remain historical records. Detailed evidence: [accepted v0.8 release evidence](../implementation/evidence/v0.8-g5-accepted-20261105.json). This decision does not authorize production deployment, Terraform/NuGet Registry publication, or detailed v0.9 scope/implementation/publication.
+
+## Gate 9 — v0.9 full scope and W72 authorization — 2026-11-05
+
+- Status: SCOPE ACCEPTED; W72 PREPARATION ACTIVE; PLANNING ADMISSION PENDING.
+- Authority: Project owner, explicit Codex chat answer to complete scope #424 and W72 preparation request.
+- Scope: [#424](https://github.com/araditc/Kafdeck/issues/424); tracker [#425](https://github.com/araditc/Kafdeck/issues/425); W72 [#426](https://github.com/araditc/Kafdeck/issues/426).
+- Decision record: [Gate 9](gate-9-v0.9-governance-hardening.md); [RFC-0009](../rfcs/0009-v0.9-governance-enterprise-hardening.md).
+
+> تأیید کامل؛ شروع W72
+
+All W72–W82 themes remain accepted: catalog, requests/approvals, policy, measured attribution/dashboards, hardening/compatibility, independent security review, accessibility/i18n/Persian, upgrade/restore/air-gap, OCI/native/Helm and measured budgets/readiness. Runtime implementation starts only after complete governed planning admission on protected main and successful applicable main checks. New authority/bypass, arbitrary execution, production chaos/deployment, public runtime plugins and publication are not authorized. Exact-SHA/artifact publication remains separately owner-gated. v0.8 release identity and registry access remain unchanged.
