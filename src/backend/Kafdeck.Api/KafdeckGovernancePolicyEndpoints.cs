@@ -86,18 +86,7 @@ public static class KafdeckGovernancePolicyEndpoints
             }).ConfigureAwait(false);
         }).WithName("v09-policy-operation").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,QueryKeys:"",ResponseType:typeof(PolicyOperationReviewData)));
 
-        app.MapPost(Prefix+"/explain",async (PolicyExplainRequest request,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store,ICatalogStore catalog,ICatalogTopicIdentityPort topics)=>
-            await SafeAsync(async()=>Results.Ok(await Explain(request,h,auth,store,catalog,topics).ConfigureAwait(false))).ConfigureAwait(false))
-            .WithName("v09-policy-explain").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,typeof(PolicyExplainRequest),QueryKeys:"",ResponseType:typeof(GovernanceDecision)));
-
-        app.MapPost(Prefix+"/dry-run",async (PolicyDryRunRequest request,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store,ICatalogStore catalog,ICatalogTopicIdentityPort topics)=>
-            await SafeAsync(async()=>
-            {
-                if(request.Fixtures is not {Count:>0 and <=100})throw new ArgumentException("Dry run requires 1–100 fixtures.");
-                var results=new List<GovernanceDecision>();
-                foreach(var f in request.Fixtures)results.Add(await Explain(f,h,auth,store,catalog,topics).ConfigureAwait(false));
-                return Results.Ok(new PolicyDryRunData(results));
-            }).ConfigureAwait(false)).WithName("v09-policy-dry-run").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,typeof(PolicyDryRunRequest),QueryKeys:"",ResponseType:typeof(PolicyDryRunData)));
+        app.MapKafdeckPolicyEvaluation();
 
         app.MapPost(Prefix+"/versions/preview",async (PolicyVersionPreviewRequest request,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store,MutationAdmissionService admission)=>
             await SafeAsync(async()=>
@@ -152,6 +141,23 @@ public static class KafdeckGovernancePolicyEndpoints
         return app;
     }
 
+    internal static void MapKafdeckPolicyEvaluation(this WebApplication app)
+    {
+        app.MapPost(Prefix+"/explain",async (PolicyExplainRequest request,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store,ICatalogStore catalog,ICatalogTopicIdentityPort topics)=>
+            await SafeAsync(async()=>Results.Ok(await Explain(request,h,auth,store,catalog,topics).ConfigureAwait(false))).ConfigureAwait(false))
+            .WithName("v09-policy-explain").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,typeof(PolicyExplainRequest),QueryKeys:"",ResponseType:typeof(GovernanceDecision)));
+
+        app.MapPost(Prefix+"/dry-run",async (PolicyDryRunRequest request,HttpContext h,KafdeckAuthorizationService auth,IGovernancePolicyStore store,ICatalogStore catalog,ICatalogTopicIdentityPort topics)=>
+            await SafeAsync(async()=>
+            {
+                if(request.Fixtures is not {Count:>0 and <=100})throw new ArgumentException("Dry run requires 1–100 fixtures.");
+                var results=new List<GovernanceDecision>();
+                foreach(var f in request.Fixtures)results.Add(await Explain(f,h,auth,store,catalog,topics).ConfigureAwait(false));
+                return Results.Ok(new PolicyDryRunData(results));
+            }).ConfigureAwait(false)).WithName("v09-policy-dry-run").WithMetadata(new GovernanceRouteContract(AuthorizationAction.GovernancePolicyRead,true,typeof(PolicyDryRunRequest),QueryKeys:"",ResponseType:typeof(PolicyDryRunData)));
+
+    }
+
     internal static RouteHandlerBuilder MapKafdeckPolicyValidation(this WebApplication app)=>
         app.MapPost(Prefix+"/validate",(PolicyDocumentRequest request,HttpContext h,KafdeckAuthorizationService auth)=>Safe(()=>
         {
@@ -177,7 +183,7 @@ public static class KafdeckGovernancePolicyEndpoints
             var row=await catalog.FindTopicAsync(f.ClusterId,f.ResourceId,h.RequestAborted).ConfigureAwait(false);
             var live=await topics.ObserveAsync(f.ClusterId,f.ResourceId,h.RequestAborted).ConfigureAwait(false);
             if(row is not null&&!row.Archived&&live is not null&&row.TopicIdentity==live.Fingerprint)
-                facts=new Dictionary<string,string>{{"classification",row.Classification??""},{"domain",row.Domain??""},{"teamId",row.TeamId??""},{"applicationId",row.ApplicationId??""}};
+                facts=GovernancePolicyMetadata.FromCatalog(row);
         }
         return GovernancePolicyCompiler.Evaluate(GovernancePolicyCompiler.Compile(v.Document),new(f.ClusterId,f.ResourceKind,f.ResourceId,action.ToString(),risk.ToString()),facts,state.Digest);
     }

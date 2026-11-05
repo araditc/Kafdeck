@@ -101,3 +101,15 @@ test('policy validation binds the exact selected cluster without broadening to g
     assert.throws(()=>policyApi.validate('../other','{}'));
   }finally{globalThis.fetch=original;if(priorWindow===undefined)delete globalThis.window;else globalThis.window=priorWindow;}
 });
+test('policy receipt reconciliation sends a bodyless POST while retaining antiforgery and same-origin credentials',async()=>{
+  const original=globalThis.fetch, priorWindow=globalThis.window, calls=[];
+  globalThis.window={location:{hash:''},history:{replaceState(){}}};
+  globalThis.fetch=async(path,init)=>{calls.push({path,init});return new Response(JSON.stringify(path==='/api/v1/auth/csrf'?{headerName:'X-Kafdeck-CSRF',requestToken:'fixture-token'}:{...operation,state:'appliedVerified'}),{status:200});};
+  try{
+    await policyApi.recover({...operation,operationKind:'governancePolicyActivation',state:'executionUnknown'});
+    const request=calls.find(row=>row.path===`/api/v1/governance/policies/operations/${id}/reconcile`);
+    assert.equal(request.init.method,'POST');assert.equal(request.init.body,undefined);
+    assert.equal(request.init.credentials,'same-origin');assert.equal(request.init.headers['X-Kafdeck-CSRF'],'fixture-token');
+    assert.equal(request.init.headers['Idempotency-Key'],undefined);
+  }finally{globalThis.fetch=original;if(priorWindow===undefined)delete globalThis.window;else globalThis.window=priorWindow;}
+});

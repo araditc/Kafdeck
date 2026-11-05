@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Globalization;
 using System.Text.Json;
 using Kafdeck.Core.Catalog;
+using Kafdeck.Core.Governance;
 
 namespace Kafdeck.Infrastructure.Persistence;
 
@@ -317,13 +318,7 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
             ("@cluster", clusterId), ("@topic", resourceId)).ConfigureAwait(false);
         if (json is not string value) return null;
         var row = Deserialize<CatalogRecord>(value);
-        if (row.Archived || row.TopicIdentity is not { Length: 64 }) return null;
-        var result = new Dictionary<string, string>(StringComparer.Ordinal) { ["topicIdentity"] = row.TopicIdentity, ["revision"] = row.Revision.ToString(CultureInfo.InvariantCulture) };
-        if (row.Classification is not null) result["classification"] = row.Classification;
-        if (row.TeamId is not null) result["teamId"] = row.TeamId;
-        if (row.ApplicationId is not null) result["applicationId"] = row.ApplicationId;
-        if (row.Domain is not null) result["domain"] = row.Domain;
-        return result;
+        return GovernancePolicyMetadata.FromCatalog(row);
     }
     private async Task<T> ReadAsync<T>(Func<DbConnection, DbTransaction, Task<T>> read, CancellationToken token)
     {

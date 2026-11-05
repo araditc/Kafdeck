@@ -127,7 +127,7 @@ export const policyApi = {
   versions(clusterId: string, cursor?: string | null, signal?: AbortSignal) { return readJson<Page<PolicyVersion>>(`${base}/policies/versions?${query(clusterId, cursor)}`, signal); },
   active(clusterId: string, signal?: AbortSignal) { return readJson<PolicyActive>(`${base}/policies/active?${new URLSearchParams({clusterId: boundedScope(clusterId)})}`, signal); },
   operation(id: string, signal?: AbortSignal) { return readJson<PolicyOperationMaterial>(`${base}/policies/operations/${exactId(id)}`, signal); },
-  recover(operation: MutationStatus, signal?: AbortSignal) { return postJson<MutationStatus>(`${base}/policies/operations/${exactId(operation.operationId)}/reconcile`, {}, {signal}); },
+  recover(operation: MutationStatus, signal?: AbortSignal) { return postJson<MutationStatus>(`${base}/policies/operations/${exactId(operation.operationId)}/reconcile`, undefined, {signal}); },
   validate(clusterId: string, document: string, signal?: AbortSignal) { boundedScope(clusterId); boundedPolicy(document); return postJson<PolicyValidation>(`${base}/policies/validate`, {clusterId, document}, {signal}); },
   explain(fixture: PolicyFixture, signal?: AbortSignal) { boundedScope(fixture.clusterId); return postJson<PolicyDecision>(`${base}/policies/explain`, fixture, {signal}); },
   dryRun(fixtures: PolicyFixture[], signal?: AbortSignal) {
