@@ -48,8 +48,20 @@ jobs:
           printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak.zip" | sha256sum --check
           unzip -q "$lab/keycloak.zip" -d "$lab"
           chmod +x "$lab/keycloak-26.8.1/bin/kc.sh"
-          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 https://archive.apache.org/dist/kafka/4.3.1/kafka_2.13-4.3.1.tgz --output "$lab/kafka.tgz"
-          printf '%s  %s\n' c7d7b2318cb51aa0c61d3246a51c349210073c5c9b754947ef965a439f2f939e8600f204e134a75ac31faf3829c9370960ef7c6a9886c8a1dbf0339a21f4c54c "$lab/kafka.tgz" | sha512sum --check
+          kafka_verified=0
+          for kafka_base in https://downloads.apache.org/kafka https://dlcdn.apache.org/kafka https://archive.apache.org/dist/kafka; do
+            # Each host has one bounded retry; every successful transfer must match
+            # the same admitted archive hash before extraction can occur.
+            if curl --fail --location --retry 1 --retry-delay 1 --connect-timeout 15 --max-time 180 \
+              "$kafka_base/4.3.1/kafka_2.13-4.3.1.tgz" --output "$lab/kafka.tgz"; then
+              if printf '%s  %s\n' c7d7b2318cb51aa0c61d3246a51c349210073c5c9b754947ef965a439f2f939e8600f204e134a75ac31faf3829c9370960ef7c6a9886c8a1dbf0339a21f4c54c "$lab/kafka.tgz" | sha512sum --check; then
+                kafka_verified=1
+                break
+              fi
+              echo 'Official-host Kafka archive rejected by the pinned SHA512.' >&2
+            fi
+          done
+          if [[ "$kafka_verified" != 1 ]]; then echo 'No official host supplied the exact verified Kafka 4.3.1 archive.' >&2; exit 1; fi
           tar -xzf "$lab/kafka.tgz" -C "$lab"
       - name: Prepare real human identities and TLS
         shell: pwsh
