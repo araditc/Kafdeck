@@ -542,6 +542,11 @@ body {
   background: var(--kafdeck-warning-surface);
   border-color: var(--kafdeck-warning-text);
 }
+.kafdeck-shell .alert-info {
+  color: var(--kafdeck-blue-text);
+  background: var(--kafdeck-blue-surface);
+  border-color: var(--kafdeck-blue-text);
+}
 .kafdeck-shell .btn-outline-warning {
   --tblr-btn-color: var(--kafdeck-warning-action);
   --tblr-btn-border-color: var(--kafdeck-warning-action);
