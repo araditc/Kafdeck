@@ -643,3 +643,13 @@ body {
 .kafdeck-shell .form-select:dir(rtl) {
   --tblr-control-select-bg-position: left var(--tblr-control-padding-x) center;
 }
+
+/* Keep the four-column capability/reason comparison readable inside its
+   existing keyboard-scrollable region at narrow widths in either direction. */
+.kafdeck-shell .kafdeck-fleet-capability-table {
+  min-inline-size: 48rem;
+}
+.kafdeck-shell .kafdeck-fleet-capability-table :is(th, td):last-child {
+  min-inline-size: 19rem;
+  inline-size: 40%;
+}
