@@ -34,5 +34,5 @@ test('status descriptions remain accessible plain text and overflow evidence is 
   assert.doesNotMatch(badge,/aria-label=/);assert.match(badge,/Invariant\.Denied/);assert.match(badge,/class="visually-hidden"[^>]*>: The current operator or upstream policy denied access\./);
   const operation={operationId:'11111111-1111-4111-8111-111111111111',clusterId:'alpha',operationKind:'catalogMutation',riskClass:'moderate',state:'executionUnknown',previewHash:'a'.repeat(64),previewExpiresAtUtc:'2099-11-05T01:00:00Z',requiresIndependentApproval:false,requiresExecutionMaterial:false,confirmationMode:'explicit',confirmationChallenge:null,resultCode:null,safeProviderEvidence:{}};
   const html=renderToStaticMarkup(React.createElement(GovernanceOperationReview,{operation,material:{name:'<script>unsafe</script>'},busy:false,update(){},async execute(){throw Error('must not dispatch');},async run(){}}));
-  const pre=[...html.matchAll(/<pre([^>]*)>/g)];assert.equal(pre.length,2);for(const match of pre)assert.match(match[1],/tabindex="0"/);assert.doesNotMatch(html,/<script>/);
+  const pre=[...html.matchAll(/<pre([^>]*)>/g)];assert.equal(pre.length,2);for(const match of pre)assert.match(match[1],/tabindex="0"/);assert.doesNotMatch(html,/<script\b/i);
 });
