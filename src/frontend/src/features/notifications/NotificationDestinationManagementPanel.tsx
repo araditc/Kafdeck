@@ -1,13 +1,14 @@
+import { applicationProblem, problemPresentation, type PresentationProblem } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiProblem, kafdeckApi, type NotificationManagedDestination, type NotificationManagedDestinationChange,
   type NotificationManagedAudit } from '../../shared/api.js';
 
-function failure(error: unknown): string {
-  if (error instanceof ApiProblem && error.status === 409) return t("Revision conflict. Reload current state before preparing another change.");
-  if (error instanceof ApiProblem && error.status === 401) return t("Operator session expired.");
-  if (error instanceof ApiProblem && error.status === 403) return t("Destination management is not authorized.");
-  return t("The change was not confirmed. Reload current state before retrying.");
+function failure(error: unknown): PresentationProblem {
+  if (error instanceof ApiProblem && error.status === 409) return applicationProblem("Revision conflict. Reload current state before preparing another change.");
+  if (error instanceof ApiProblem && error.status === 401) return applicationProblem("Operator session expired.");
+  if (error instanceof ApiProblem && error.status === 403) return applicationProblem("Destination management is not authorized.");
+  return applicationProblem("The change was not confirmed. Reload current state before retrying.");
 }
 
 /** Only opaque provisioned choices; no URL, secret, locator or arbitrary provider request input. */
@@ -20,7 +21,7 @@ export function NotificationDestinationManagementPanel() {
   const [prepared, setPrepared] = useState<NotificationManagedDestinationChange | null>(null);
   const [audit, setAudit] = useState<NotificationManagedAudit[]>([]);
   const [nextRevision, setNextRevision] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PresentationProblem | null>(null);
   const [receipt, setReceipt] = useState<number | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,7 +82,7 @@ export function NotificationDestinationManagementPanel() {
     <h2 id="notification-destination-management-title">{t("Notification destination and credential management")}</h2>
     <p>{t("Choose an approved profile version. Rotation advances the shared revision and fences old queued intents. Revocation stops new claims; a message already sent requires reconciliation.")}</p>
     <button type="button" disabled={busy} onClick={() => void load()}>{t("Reload authorized destinations")}</button>
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{problemPresentation(error)}</p>}
     <label htmlFor="managed-destination">{t("Destination")}</label>
     <select id="managed-destination" value={selected?.destinationId ?? ''} disabled={busy} onChange={event => select(event.target.value)}>
       <option value="">{t("Choose a destination")}</option>{items.map(item => <option key={item.destinationId} value={item.destinationId}>{item.destinationId}</option>)}

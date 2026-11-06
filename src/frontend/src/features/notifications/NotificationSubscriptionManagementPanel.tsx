@@ -1,3 +1,4 @@
+import { applicationProblem, problemPresentation, type PresentationProblem } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
@@ -20,16 +21,16 @@ export function isValidNotificationDestinationId(value: string): boolean {
   return /^[A-Za-z0-9._-]{1,128}$/.test(value);
 }
 
-function manageFailure(reason: unknown): string {
+function manageFailure(reason: unknown): PresentationProblem {
   if (reason instanceof ApiProblem && reason.status === 401)
-    return t("Operator session expired; re-authenticate before any further change.");
+    return applicationProblem("Operator session expired; re-authenticate before any further change.");
   if (reason instanceof ApiProblem && reason.status === 403)
-    return t("Subscription management is not authorized for this subscription/destination.");
+    return applicationProblem("Subscription management is not authorized for this subscription/destination.");
   if (reason instanceof ApiProblem && reason.status === 404)
-    return t("Management is disabled or this subscription is no longer accessible.");
+    return applicationProblem("Management is disabled or this subscription is no longer accessible.");
   if (reason instanceof ApiProblem && reason.status === 409)
-    return t("Subscription conflict: reload authorized current state and re-enter its CAS revision.");
-  return t("Management request was not confirmed. Inspect the current state before retrying.");
+    return applicationProblem("Subscription conflict: reload authorized current state and re-enter its CAS revision.");
+  return applicationProblem("Management request was not confirmed. Inspect the current state before retrying.");
 }
 
 export function NotificationSubscriptionManagementPanel({ referenceSubscription, onUpdated }: Props) {
@@ -44,7 +45,7 @@ export function NotificationSubscriptionManagementPanel({ referenceSubscription,
     identity: string; payload: NotificationSubscriptionWriteRequest; snapshot: string;
   } | null>(null);
   const [receipt, setReceipt] = useState<NotificationSubscriptionWriteReceipt | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PresentationProblem | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef<AbortController | null>(null);
   const submitting = useRef(false);
@@ -81,28 +82,28 @@ export function NotificationSubscriptionManagementPanel({ referenceSubscription,
     const dest = destinationId.trim();
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(identity) || identity === '.' || identity === '..' ||
         !isValidNotificationDestinationId(dest)) {
-      setError(t("Subscription/destination identities must be bounded opaque IDs, not URLs or paths."));
+      setError(applicationProblem("Subscription/destination identities must be bounded opaque IDs, not URLs or paths."));
       return;
     }
     if (!eventClasses.length || new Set(eventClasses).size !== eventClasses.length) {
-      setError(t("Select one or more distinct supported event classes."));
+      setError(applicationProblem("Select one or more distinct supported event classes."));
       return;
     }
     const types = eventTypes.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
     if (types.length > 32 || new Set(types).size !== types.length ||
         types.some(type => !/^[A-Za-z0-9._-]{1,128}$/.test(type))) {
-      setError(t("Event types must be unique, bounded identifiers (at most 32)."));
+      setError(applicationProblem("Event types must be unique, bounded identifiers (at most 32)."));
       return;
     }
     let expectedRevision: number | null = null;
     if (mode === 'replace') {
       if (!/^[1-9][0-9]*$/.test(revision) || !Number.isSafeInteger(Number(revision))) {
-        setError(t("Replace/retire requires a precise positive CAS revision from current authorized data."));
+        setError(applicationProblem("Replace/retire requires a precise positive CAS revision from current authorized data."));
         return;
       }
       expectedRevision = Number(revision);
     } else if (state === 'retired') {
-      setError(t("A new subscription cannot start in terminal Retired state."));
+      setError(applicationProblem("A new subscription cannot start in terminal Retired state."));
       return;
     }
     setPrepared({
@@ -219,7 +220,7 @@ export function NotificationSubscriptionManagementPanel({ referenceSubscription,
         {busy ? t("Submitting…") : t("Confirm subscription change")}
       </button>
     </div>}
-    {error && <p role="alert" className="alert alert-danger">{error}</p>}
+    {error && <p role="alert" className="alert alert-danger">{problemPresentation(error)}</p>}
     {receipt && <p role="status" className="alert alert-info">
       {t("Accepted subscription")}{' '}<bdi dir="ltr" lang="en">{receipt.subscriptionId}</bdi>: {receipt.state}{t(", revision")}{' '}{receipt.revision}{t(". Check current authorized state before another update.")}{' '}</p>}
   </article>;

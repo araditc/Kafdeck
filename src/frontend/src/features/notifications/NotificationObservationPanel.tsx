@@ -1,3 +1,4 @@
+import { applicationProblem, problemPresentation, type PresentationProblem } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { NotificationSubscriptionManagementPanel } from './NotificationSubscriptionManagementPanel.js';
@@ -15,12 +16,12 @@ interface Props {
   canManageSubscriptions?: boolean;
 }
 
-function observationFailure(reason: unknown): string {
-  if (reason instanceof ApiProblem && reason.status === 401) return t("Your operator session has expired.");
+function observationFailure(reason: unknown): PresentationProblem {
+  if (reason instanceof ApiProblem && reason.status === 401) return applicationProblem("Your operator session has expired.");
   if (reason instanceof ApiProblem && (reason.status === 403 || reason.status === 404)) {
-    return t("Notification evidence is unavailable or not authorized for this operator.");
+    return applicationProblem("Notification evidence is unavailable or not authorized for this operator.");
   }
-  return t("The notification observation could not be loaded.");
+  return applicationProblem("The notification observation could not be loaded.");
 }
 
 function displayTime(value: string | null): string {
@@ -38,13 +39,13 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
   const [items, setItems] = useState<NotificationSubscriptionData[]>(initialPage.items);
   const [page, setPage] = useState(initialPage);
   const [loading, setLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listError, setListError] = useState<PresentationProblem | null>(null);
   const [detail, setDetail] = useState<NotificationSubscriptionData | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<PresentationProblem | null>(null);
   const [notificationId, setNotificationId] = useState('');
   const [destinationId, setDestinationId] = useState('');
   const [delivery, setDelivery] = useState<NotificationDeliveryEvidenceData | null>(null);
-  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [deliveryError, setDeliveryError] = useState<PresentationProblem | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const listAbort = useRef<AbortController | null>(null);
   const detailAbort = useRef<AbortController | null>(null);
@@ -55,7 +56,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
   const [historyRows, setHistoryRows] = useState<NotificationDeliveryEvidenceData[]>([]);
   const [historyPage, setHistoryPage] = useState<NotificationDeliveryHistoryListData | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<PresentationProblem | null>(null);
   const historyAbort = useRef<AbortController | null>(null);
 
   useEffect(() => () => {
@@ -119,7 +120,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
     const target = destinationId.trim();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
       target.length === 0 || target.length > 128) {
-      setDeliveryError(t("Provide a valid notification UUID and destination ID."));
+      setDeliveryError(applicationProblem("Provide a valid notification UUID and destination ID."));
       return;
     }
 
@@ -188,7 +189,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
     setHistoryPage(null);
     setHistoryError(null);
     if (target.length === 0 || target.length > 128) {
-      setHistoryError(t("Provide a destination ID of 1–128 characters."));
+      setHistoryError(applicationProblem("Provide a destination ID of 1–128 characters."));
       return;
     }
     void loadHistory(target, null, false);
@@ -243,9 +244,9 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
     <p className="text-secondary">
       {t("Metadata-only observation of authorized subscriptions and delivery outcomes. No provider payload, destination credentials or transport URLs. Separately admitted subscription management uses server-side CAS, resource-scoped NotificationManage and antiforgery.")}{' '}</p>
     {page.authorizationFiltered && <div className="alert alert-warning" role="status">
-      {t("Some subscriptions are hidden by your resource permissions.")}{' '}{page.continuationRestricted && ' Further pages cannot be requested without exposing a restricted cursor.'}
+      {t("Some subscriptions are hidden by your resource permissions.")}{' '}{page.continuationRestricted && t(" Further pages cannot be requested without exposing a restricted cursor.")}
     </div>}
-    {listError && <div className="alert alert-danger" role="alert">{listError}</div>}
+    {listError && <div className="alert alert-danger" role="alert">{problemPresentation(listError)}</div>}
     <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table className="table table-vcenter card-table mb-0">
       <thead><tr><th scope="col">{t("Subscription")}</th><th scope="col">{t("Destination")}</th>
         <th scope="col">{t("State")}</th><th scope="col">{t("Revision")}</th><th scope="col">{t("Event classes")}</th><th scope="col">{t("Action")}</th></tr></thead>
@@ -260,7 +261,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
     {page.truncated && !page.authorizationFiltered && !page.continuationRestricted && page.nextSubscriptionId && <button
       type="button" className="btn btn-sm btn-outline-primary mt-3" disabled={loading}
       onClick={() => void loadMore()}>{loading ? t("Loading…") : t("Load more subscriptions")}</button>}
-    {detailError && <div className="alert alert-danger" role="alert">{detailError}</div>}
+    {detailError && <div className="alert alert-danger" role="alert">{problemPresentation(detailError)}</div>}
     {detail && <article aria-labelledby="notification-subscription-detail-title">
       <h3 className="h4" id="notification-subscription-detail-title">{t("Subscription details")}</h3>
       <dl><dt>{t("Subscription ID")}</dt><dd><bdi dir="ltr" lang="en">{detail.subscriptionId}</bdi></dd>
@@ -288,7 +289,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
         </div>
         <button className="btn btn-primary mt-3" type="submit" disabled={deliveryLoading}>{deliveryLoading ? t("Loading…") : t("Look up evidence")}</button>
       </form>
-      {deliveryError && <div className="alert alert-danger" role="alert">{deliveryError}</div>}
+      {deliveryError && <div className="alert alert-danger" role="alert">{problemPresentation(deliveryError)}</div>}
       {delivery && <dl aria-label={t("Authorized delivery evidence")}>
         <dt>{t("Notification")}</dt><dd><bdi dir="ltr" lang="en">{delivery.notificationId}</bdi></dd>
         <dt>{t("Destination")}</dt><dd><bdi dir="ltr" lang="en">{delivery.destinationId}</bdi></dd>
@@ -313,7 +314,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
         <button className="btn btn-outline-primary mt-3" type="submit"
           disabled={historyLoading}>{historyLoading ? t("Loading…") : t("Load destination history")}</button>
       </form>
-      {historyError && <div className="alert alert-danger" role="alert">{historyError}</div>}
+      {historyError && <div className="alert alert-danger" role="alert">{problemPresentation(historyError)}</div>}
       {historySelectedDestination && <p className="text-secondary" role="status">
         {t("Showing authorized delivery history for")}{' '}{historySelectedDestination}.
       </p>}

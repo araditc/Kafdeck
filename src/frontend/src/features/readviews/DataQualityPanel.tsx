@@ -1,3 +1,4 @@
+import { applicationProblem, ownedErrorPresentation, problemPresentation, type PresentationProblem } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useState } from 'react';
 import {
@@ -72,21 +73,21 @@ function formatEvidenceCount(
     : t("Unavailable");
 }
 
-function errorMessage(reason: unknown): string {
+function errorMessage(reason: unknown): PresentationProblem {
   if (reason instanceof ApiProblem) {
-    if (reason.status === 401 || reason.status === 403) return t("You are not authorized for this data-quality operation.");
-    if (reason.status === 404) return t("Data-quality management is not enabled or the policy is not visible.");
-    if (reason.status === 409) return t("The policy changed concurrently. It has been refreshed; review the new revision before retrying.");
-    return reason.message;
+    if (reason.status === 401 || reason.status === 403) return applicationProblem("You are not authorized for this data-quality operation.");
+    if (reason.status === 404) return applicationProblem("Data-quality management is not enabled or the policy is not visible.");
+    if (reason.status === 409) return applicationProblem("The policy changed concurrently. It has been refreshed; review the new revision before retrying.");
+    return ownedErrorPresentation(reason) ?? { raw: reason.message };
   }
-  return reason instanceof Error ? reason.message : t("The data-quality operation failed.");
+  return ownedErrorPresentation(reason) ?? (reason instanceof Error ? { raw: reason.message } : applicationProblem("The data-quality operation failed."));
 }
 
 export function DataQualityPanel({ clusterId }: { clusterId: string }) {
   const [page, setPage] = useState<DataQualityPolicyPage | null>(null);
   const [selected, setSelected] = useState<DataQualityPolicy | null>(null);
   const [evidence, setEvidence] = useState<DataQualityEvidencePage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PresentationProblem | null>(null);
   const [busy, setBusy] = useState(false);
   const [configured, setConfigured] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -179,7 +180,7 @@ export function DataQualityPanel({ clusterId }: { clusterId: string }) {
   const savePolicy = async () => {
     const policyId = editorPolicyId.trim();
     if (!policyId) {
-      setError(t("Policy ID is required."));
+      setError(applicationProblem("Policy ID is required."));
       return;
     }
 
@@ -187,7 +188,7 @@ export function DataQualityPanel({ clusterId }: { clusterId: string }) {
     try {
       request = JSON.parse(editorBody) as DataQualityPolicyUpsertRequest;
     } catch {
-      setError(t("Policy definition must be valid JSON."));
+      setError(applicationProblem("Policy definition must be valid JSON."));
       return;
     }
 
@@ -270,7 +271,7 @@ export function DataQualityPanel({ clusterId }: { clusterId: string }) {
       {t("Bounded policy lifecycle and aggregate evidence only. Raw Kafka keys, values, headers and payload exemplars are never exposed by this view.")}{' '}</p>
 
     {!configured && <p role="status">{t("Data-quality persistence is not configured for this deployment.")}</p>}
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{problemPresentation(error)}</p>}
     {configured && !page && !error && <p role="status">{t("Loading data-quality policies…")}</p>}
 
     {page && <>

@@ -1,3 +1,4 @@
+import { applicationProblem, ownedErrorPresentation, problemPresentation, type PresentationProblem } from '../shared/presentationProblem.js';
 import { t } from '../shared/i18n.js';
 import { useLocale } from '../shared/i18n.js';
 import { LanguageSelector } from './LanguageSelector.js';
@@ -38,12 +39,12 @@ function observationText(envelope: ApiEnvelope<unknown>) {
   return t("{0} · observed {1}", [describeObservation(envelope.observation), observed.toISOString()]);
 }
 
-function problemText(reason: unknown) {
-  if (reason instanceof ApiProblem && reason.status === 401) return t("Operator authentication is required.");
-  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return t("Access denied by Kafdeck operator authorization policy.");
-  if (reason instanceof ApiProblem && reason.status === 403) return t("Access denied by Kafka authorization policy.");
-  if (reason instanceof ApiProblem && reason.status === 501) return t("This capability is unsupported by the connected Kafka cluster.");
-  return reason instanceof Error ? reason.message : t("The requested observation could not be loaded.");
+function problemText(reason: unknown): PresentationProblem {
+  if (reason instanceof ApiProblem && reason.status === 401) return applicationProblem("Operator authentication is required.");
+  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return applicationProblem("Access denied by Kafdeck operator authorization policy.");
+  if (reason instanceof ApiProblem && reason.status === 403) return applicationProblem("Access denied by Kafka authorization policy.");
+  if (reason instanceof ApiProblem && reason.status === 501) return applicationProblem("This capability is unsupported by the connected Kafka cluster.");
+  return ownedErrorPresentation(reason) ?? (reason instanceof Error ? { raw: reason.message } : applicationProblem("The requested observation could not be loaded."));
 }
 
 function ConfigurationView({ entries }: { entries: ConfigurationEntryData[] }) {
@@ -101,20 +102,20 @@ export function AppShell() {
   const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [selected, setSelected] = useState<ApiEnvelope<ClusterData> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PresentationProblem | null>(null);
   const [brokerConfiguration, setBrokerConfiguration] = useState<{ brokerId: number; entries: ConfigurationEntryData[] } | null>(null);
-  const [brokerError, setBrokerError] = useState<string | null>(null);
+  const [brokerError, setBrokerError] = useState<PresentationProblem | null>(null);
   const [topicQuery, setTopicQuery] = useState('');
   const [topics, setTopics] = useState<TopicListItem[]>([]);
   const [topicCursor, setTopicCursor] = useState<string | null>(null);
   const [topicsLoading, setTopicsLoading] = useState(false);
-  const [topicsError, setTopicsError] = useState<string | null>(null);
+  const [topicsError, setTopicsError] = useState<PresentationProblem | null>(null);
   const [topicDetail, setTopicDetail] = useState<ApiEnvelope<TopicDetailData> | null>(null);
   const [topicConfiguration, setTopicConfiguration] = useState<ConfigurationEntryData[] | null>(null);
-  const [topicDetailError, setTopicDetailError] = useState<string | null>(null);
+  const [topicDetailError, setTopicDetailError] = useState<PresentationProblem | null>(null);
   const [topicCatalog, setTopicCatalog] = useState<ReadViewEnvelope<TopicCatalogEntry> | null>(null);
   const [fleetCapabilities, setFleetCapabilities] = useState<FleetCapabilityStatus[]>([]);
-  const [fleetError, setFleetError] = useState<string | null>(null);
+  const [fleetError, setFleetError] = useState<PresentationProblem | null>(null);
   const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
   const [notificationManagement, setNotificationManagement] = useState<{ sessionKey: string; destinationGovernanceAvailable: boolean } | null>(null);
   const sessionCheckAbort = useRef<AbortController | null>(null);
@@ -476,12 +477,12 @@ export function AppShell() {
             <RequestPanel key={`requests:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />
             <AttributionPanel key={`attribution:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />
           </>}
-          {error && <div className="alert alert-danger kafdeck-status" role="alert">{error}</div>}
+          {error && <div className="alert alert-danger kafdeck-status" role="alert">{problemPresentation(error)}</div>}
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">{t("No authorized clusters are available.")}</div>}
           <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
             <h2 id="fleet-title" className="card-title">{t("Fleet Operations")}</h2>
             <p className="text-secondary">{t("Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.")}</p>
-            {fleetError && <div className="alert alert-danger" role="alert">{fleetError}</div>}
+            {fleetError && <div className="alert alert-danger" role="alert">{problemPresentation(fleetError)}</div>}
             {!fleetError && fleetCapabilities.length === 0 && <p role="status">{t("Loading fleet capability status…")}</p>}
             {fleetCapabilities.length > 0 && <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">{t("Capability")}</th><th scope="col">{t("State")}</th><th scope="col">{t("Workstream")}</th><th scope="col">{t("Reason")}</th></tr></thead><tbody>{fleetCapabilities.map(capability => <tr key={capability.id}><th scope="row"><bdi dir="auto">{capability.displayName}</bdi></th><td><StatusBadge kind={fleetCapabilityStatusKind(capability.state)} label={capability.state} /></td><td>{capability.workstream}</td><td><bdi dir="auto">{capability.reason}</bdi></td></tr>)}</tbody></table></div>}
           </section>
@@ -508,18 +509,18 @@ export function AppShell() {
             <section className="card kafdeck-card" id="brokers" aria-labelledby="brokers-title">
               <h2 id="brokers-title" className="card-title">{t("Brokers")}</h2>
               {selected.data.brokers.length === 0 ? <p className="text-secondary">{t("No broker metadata is currently observable.")}</p> : <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">{t("ID")}</th><th scope="col">{t("Host")}</th><th scope="col">{t("Port")}</th><th scope="col">{t("Role")}</th><th scope="col">{t("Configuration")}</th></tr></thead><tbody>{selected.data.brokers.map(broker => <tr key={broker.brokerId}><th scope="row"><bdi dir="ltr" lang="en">{broker.brokerId}</bdi></th><td><bdi dir="auto">{broker.host}</bdi></td><td>{broker.port}</td><td>{broker.isController ? <span className="badge bg-orange-lt">{t("Controller")}</span> : <span className="badge bg-secondary-lt">{t("Broker")}</span>}</td><td><button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void openBroker(broker.brokerId)}>{t("View configuration")}</button></td></tr>)}</tbody></table></div>}
-              {brokerError && <div className="alert alert-danger" role="alert">{brokerError}</div>}
+              {brokerError && <div className="alert alert-danger" role="alert">{problemPresentation(brokerError)}</div>}
               {brokerConfiguration && <article aria-labelledby="broker-config-title"><h3 id="broker-config-title" className="h3">{t("Broker")}{' '}<bdi dir="ltr" lang="en">{brokerConfiguration.brokerId}</bdi> {' '}{t("configuration")}</h3><ConfigurationView entries={brokerConfiguration.entries} /></article>}
             </section>
             <section className="card kafdeck-card" id="topics" aria-labelledby="topics-title">
               <h2 id="topics-title" className="card-title">{t("Topics")}</h2>
               <div className="px-3 mb-3"><label className="form-label" htmlFor="topic-search">{t("Search topics")}</label><input dir="ltr" className="form-control" id="topic-search" type="search" value={topicQuery} onChange={event => setTopicQuery(event.target.value)} placeholder={t("Filter by topic name")} /></div>
               {topicsLoading && topics.length === 0 && <div className="alert alert-info mx-3" role="status">{t("Loading topics…")}</div>}
-              {topicsError && <div className="alert alert-danger mx-3" role="alert">{topicsError}</div>}
+              {topicsError && <div className="alert alert-danger mx-3" role="alert">{problemPresentation(topicsError)}</div>}
               {!topicsLoading && !topicsError && topics.length === 0 && <p className="text-secondary">{t("No topics match the current search.")}</p>}
               {topics.length > 0 && <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">{t("Topic")}</th><th scope="col">{t("Partitions")}</th><th scope="col">{t("Offline")}</th><th scope="col">{t("Under replicated")}</th><th scope="col">{t("State")}</th></tr></thead><tbody>{topics.map(topic => <tr key={topic.name}><th scope="row"><button className="btn btn-link kafdeck-table-button" type="button" onClick={() => void openTopic(topic.name)}><bdi dir="auto">{topic.name}</bdi></button></th><td><bdi dir="ltr" lang="en">{topic.partitionCount}</bdi></td><td>{topic.offlinePartitionCount ?? t("Unknown")}</td><td>{topic.underReplicatedPartitionCount ?? t("Unknown")}</td><td><span className="badge bg-blue-lt"><bdi dir="ltr" lang="en">{String(topic.anomalyState)}</bdi></span></td></tr>)}</tbody></table></div>}
               {topicCursor && <button className="btn btn-sm btn-outline-primary mt-3" type="button" disabled={topicsLoading} onClick={() => void loadTopics(selectedClusterId, topicQuery, topicCursor, true)}>{topicsLoading ? t("Loading…") : t("Load more topics")}</button>}
-              {topicDetailError && <div className="alert alert-danger mx-3" role="alert">{topicDetailError}</div>}
+              {topicDetailError && <div className="alert alert-danger mx-3" role="alert">{problemPresentation(topicDetailError)}</div>}
               {topicDetail && <article aria-labelledby="topic-detail-title"><h3 id="topic-detail-title" className="h3">{t("Topic:")}{' '}<bdi dir="auto">{topicDetail.data.name}</bdi></h3><p className="kafdeck-observation">{observationText(topicDetail)} · <bdi dir="ltr" lang="en">{topicDetail.data.partitions.length}</bdi> {' '}{t("partitions ·")}{' '}<bdi dir="ltr" lang="en">{topicDetail.data.offlinePartitionCount}</bdi> {' '}{t("offline ·")}{' '}<bdi dir="ltr" lang="en">{topicDetail.data.underReplicatedPartitionCount}</bdi> {' '}{t("under replicated")}</p>{topicCatalog && <aside aria-label={t("Topic catalog metadata")}><h4>{t("Catalog metadata")}</h4><dl><dt>{t("Description")}</dt><dd>{topicCatalog.data.description ?? t("Not set")}</dd><dt>{t("Owner")}</dt><dd>{topicCatalog.data.owner ?? t("Not set")}</dd><dt>{t("Domain")}</dt><dd>{topicCatalog.data.domain ?? t("Not set")}</dd><dt>{t("Classification")}</dt><dd>{topicCatalog.data.classification ?? t("Not set")}</dd><dt>{t("Tags")}</dt><dd>{topicCatalog.data.tags.join(', ') || t("None")}</dd><dt>{t("Documentation reference")}</dt><dd>{topicCatalog.data.documentationReference ?? t("Not set")}</dd></dl></aside>}<h4>{t("Partitions")}</h4>{topicDetail.data.partitions.length === 0 ? <p>{t("No partitions are observable.")}</p> : <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table className="table table-vcenter card-table mb-0"><thead><tr><th scope="col">{t("ID")}</th><th scope="col">{t("Leader")}</th><th scope="col">{t("Replicas")}</th><th scope="col">ISR</th><th scope="col">{t("Out of sync")}</th><th scope="col">{t("Health")}</th></tr></thead><tbody>{topicDetail.data.partitions.map(partition => <tr key={partition.partitionId}><th scope="row"><bdi dir="ltr" lang="en">{partition.partitionId}</bdi></th><td>{partition.leaderBrokerId ?? t("No leader")}</td><td>{partition.replicaBrokerIds.join(', ')}</td><td>{partition.inSyncReplicaBrokerIds.join(', ')}</td><td>{partition.outOfSyncReplicaBrokerIds.join(', ') || t("None")}</td><td>{partition.healthReasons.length > 0 ? partition.healthReasons.join('; ') : String(partition.health)}</td></tr>)}</tbody></table></div>}<h4>{t("Configuration")}</h4>{topicConfiguration === null ? (topicDetailError ? null : <p role="status">{t("Loading configuration…")}</p>) : <ConfigurationView entries={topicConfiguration} />}{topicDetail.data.partitions.length > 0 && <RecordExplorer key={`records:${operatorScope ?? "read-only"}:${selectedClusterId}`} clusterId={selectedClusterId} topicName={topicDetail.data.name} partitions={topicDetail.data.partitions.map(partition => partition.partitionId)} />}</article>}
             </section>
             <ReadViewsExplorer key={`read-views:${operatorScope ?? "read-only"}:${selectedClusterId}`} clusterId={selectedClusterId} />

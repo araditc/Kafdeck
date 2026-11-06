@@ -1,3 +1,4 @@
+import { ApplicationCopyError } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useRef, useState } from 'react';
 import { mutationApi, type MutationStatus } from '../mutations/mutationApi.js';
@@ -31,10 +32,10 @@ export function RequestPanel({clusterId}:{clusterId:string}) {
   async function inspect(id:string,signal:AbortSignal){setPreview(null);const value=await requestApi.operation(id,signal);assertRequestOperation(value,clusterId);if(!signal.aborted){setPreview(value);setLookup(id);}}
   async function prepare(signal:AbortSignal){const status=await requestApi.preview({clusterId,command,expectedVersion:command==='Draft'?0:selected?.version??0,
     ...(command!=='Draft'&&selected?{requestId:selected.requestId}:{}),...(command==='Draft'||command==='Revise'?{operationId,expiresAtUtc:expires}:{}),reason},stableKey,signal);if(!signal.aborted)await inspect(status.operationId,signal);}
-  function update(status:MutationStatus){if(!preview)throw new Error(t("Reload frozen request material."));const next={...preview,operation:status};assertRequestOperation(next,clusterId);setPreview(next);}
+  function update(status:MutationStatus){if(!preview)throw new ApplicationCopyError("Reload frozen request material.");const next={...preview,operation:status};assertRequestOperation(next,clusterId);setPreview(next);}
   async function readHistory(signal:AbortSignal,more=false){if(!selected)return;const page=await requestApi.history(clusterId,selected.requestId,more?historyCursor:null,signal);if(!signal.aborted){setHistory(previous=>more?[...previous,...page.items].slice(-1000):page.items);setHistoryCursor(page.nextCursor);}}
   async function inspectLinked(signal:AbortSignal){if(!selected)return;const status=await mutationApi.get(selected.operationId,signal);assertLinkedOperation(selected,status);if(!signal.aborted)setLinked(status);}
-  function updateLinked(status:MutationStatus){if(!selected)throw new Error(t("Select the immutable request first."));assertLinkedOperation(selected,status);setLinked(status);}
+  function updateLinked(status:MutationStatus){if(!selected)throw new ApplicationCopyError("Select the immutable request first.");assertLinkedOperation(selected,status);setLinked(status);}
   return <section id="service-requests" className="card kafdeck-card" aria-labelledby="service-requests-title" aria-busy={busy}>
     <h2 id="service-requests-title" className="card-title">{t("Service requests and approvals")}</h2>
     <p>{t("Scope:")}{' '}<strong><bdi dir="ltr" lang="en">{clusterId}</bdi></strong>{t(". Business approval binds one immutable operation and revision. It grants no permissions and does not replace confirmation or independent critical approval.")}</p>

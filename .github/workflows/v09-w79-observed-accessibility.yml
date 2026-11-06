@@ -1,0 +1,88 @@
+name: v09-w79-observed-accessibility
+
+on:
+  pull_request:
+    paths: ['docs/testing/evidence/v09-w79/**', '.github/workflows/v09-w79-observed-accessibility.yml']
+  push:
+    branches: [main]
+    paths: ['docs/testing/evidence/v09-w79/**', '.github/workflows/v09-w79-observed-accessibility.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v09-w79-observed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observed-record-and-current-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.x'
+      - name: Build the pinned frontend for exact asset comparison
+        working-directory: src/frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Require observed AT stages, artifact hashes and current source equivalence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const assert = require('node:assert/strict');
+          const { execFileSync } = require('node:child_process');
+          const { fingerprint, validate } = require('./src/frontend/scripts/v09-accessibility-manual-evidence.cjs');
+          const file = 'docs/testing/evidence/v09-w79/manual-evidence.json';
+          assert.ok(fs.existsSync(file), 'W79 admission remains open: the complete observed AT record has not been supplied.');
+          const record = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+          const current = fingerprint(process.cwd());
+          const checked = validate(record, current, path.dirname(file));
+          assert.equal(checked.valid, true, JSON.stringify(checked.errors));
+          assert.match(record.observedSourceSha, /^[a-f0-9]{40}$/);
+          for (const [name, expected] of Object.entries(record.artifactHashes)) {
+            assert.equal(path.isAbsolute(name), false);
+            assert.equal(name.split(/[\\/]/).includes('..'), false);
+            assert.equal(name.includes('://'), false);
+            assert.match(expected, /^[a-f0-9]{64}$/);
+            assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(path.dirname(file), name))).digest('hex'), expected);
+          }
+          for (const cell of Object.values(record.matrix)) {
+            assert.ok(cell.evidence.every(name => typeof name === 'string' && Object.hasOwn(record.artifactHashes, name)));
+          }
+          const output = 'artifacts/w79-observed-accessibility';
+          fs.mkdirSync(output, { recursive: true });
+          fs.writeFileSync(path.join(output, 'acceptance-binding.json'), JSON.stringify({
+            sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+            observedSourceSha: record.observedSourceSha,
+            exactProductionAndTestSourceEquivalent: true,
+            exactCompiledAssetsEquivalent: true,
+            sourceFingerprints: Object.fromEntries(Object.entries(current).map(([name, group]) => [name, group.sha256])),
+            observedStages: record.observations.length,
+            manualMatrixCells: Object.keys(record.matrix).length,
+            actualNativeWindowReturns: record.nativeWindowReturns.length,
+            environment: record.environment,
+            limitations: record.limitations,
+            artifactHashes: record.artifactHashes,
+            cleanup: record.cleanup
+          }, null, 2));
+          console.log('Observed W79 record and current source/assets verified; no automated AT observation inferred.');
+          NODE
+      - name: Retain source binding and reviewed observations
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: w79-observed-accessibility
+          path: |
+            artifacts/w79-observed-accessibility/acceptance-binding.json
+            docs/testing/evidence/v09-w79/
+          if-no-files-found: error

@@ -1,3 +1,4 @@
+import { ApplicationCopyError } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import { mutationApi, type MutationStatus } from '../mutations/mutationApi.js';
@@ -13,7 +14,7 @@ function blank(kind: CatalogFamily): CatalogChange {
 export function assertCatalogBinding(preview: CatalogPreview, clusterId: string) {
   scopedOperation(preview.operation, clusterId, ['catalogMutation']);
   if (preview.planId !== preview.operation.operationId || !/^[a-f0-9]{64}$/i.test(preview.contentHash) || !preview.changes.length)
-    throw new Error(t("Catalog preview material is incomplete or bound to another operation."));
+    throw new ApplicationCopyError("Catalog preview material is incomplete or bound to another operation.");
 }
 function nullable(value: string) { return value === '' ? null : value; }
 
@@ -31,7 +32,7 @@ export function CatalogPanel({clusterId}: {clusterId: string}) {
   const [preview, setPreview] = useState<CatalogPreview | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ reason: unknown } | null>(null);
   const editor = useRef<HTMLFieldSetElement>(null);
   const lifetime = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
@@ -44,14 +45,14 @@ export function CatalogPanel({clusterId}: {clusterId: string}) {
     const controller = new AbortController(); lifetime.current = controller; scopeEpoch.current += 1;
     setItems([]); setCursor(null); setLoaded(false); setPreview(null); setHistory([]); setHistoryCursor(null); setDraft(blank(family)); setTopicIdentity(null); setError(null);
     setKey(crypto.randomUUID()); inFlight.current = false; setBusy(false);
-    void load(controller.signal).catch(reason => { if (!controller.signal.aborted) setError(governanceProblem(reason)); });
+    void load(controller.signal).catch(reason => { if (!controller.signal.aborted) setError({ reason }); });
     return () => controller.abort();
   }, [clusterId, family]);
   async function run(request: (signal: AbortSignal) => Promise<void>) {
     if (!lifetime.current || inFlight.current) return;
     const epoch = scopeEpoch.current; inFlight.current = true; setBusy(true); setError(null);
     const signal = lifetime.current.signal;
-    try { await request(signal); } catch (reason) { if (!signal.aborted) setError(governanceProblem(reason)); }
+    try { await request(signal); } catch (reason) { if (!signal.aborted) setError({ reason }); }
     finally { if (scopeEpoch.current === epoch) { inFlight.current = false; if (!signal.aborted) setBusy(false); } }
   }
   function edit(change: Partial<CatalogChange>) { setDraft(previous => ({...previous, ...change})); setPreview(null); }
@@ -68,7 +69,7 @@ export function CatalogPanel({clusterId}: {clusterId: string}) {
   }
   function update(operation: MutationStatus) {
     if (!preview || operation.operationId !== preview.operation.operationId || operation.previewHash !== preview.operation.previewHash)
-      throw new Error(t("Reload the frozen catalog plan before another decision."));
+      throw new ApplicationCopyError("Reload the frozen catalog plan before another decision.");
     const next = {...preview, operation}; assertCatalogBinding(next, clusterId); setPreview(next);
   }
   async function readHistory(signal: AbortSignal, more = false) {
@@ -79,7 +80,7 @@ export function CatalogPanel({clusterId}: {clusterId: string}) {
   return <section className="card kafdeck-card" id="ownership-catalog" aria-labelledby="ownership-catalog-title" aria-busy={busy}>
     <h2 id="ownership-catalog-title" className="card-title">{t("Ownership catalog")}</h2>
     <p>{t("Scope:")}{' '}<strong><bdi dir="ltr" lang="en">{clusterId}</bdi></strong>{t(". Descriptive teams, applications and topic owners do not grant RBAC or declarative ownership. Historical references are archived, never silently reassigned.")}</p>
-    {error && <p className="alert alert-warning" role="alert">{error}</p>}
+    {error && <p className="alert alert-warning" role="alert">{governanceProblem(error.reason)}</p>}
     <label className="form-label">{t("Catalog family")}<select className="form-select" value={family} disabled={busy} onChange={event => setFamily(event.target.value as CatalogFamily)}>{families.map(value => <option value={value} key={value}>{t(value)}</option>)}</select></label>
     <button className="btn btn-outline-primary" type="button" disabled={busy} onClick={() => void run(signal => load(signal))}>{t("Reload authorized catalog")}</button>
     {loaded && items.length > 0 && <p role="status">{t("{0} authorized catalog entries loaded.", [items.length])}</p>}

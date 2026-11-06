@@ -1243,5 +1243,7 @@ export const messages: Readonly<Record<string, string>> = {
   "Authorized content is hidden until verification completes.": "محتوای دارای مجوز تا پایان بررسی پنهان است.",
   "{0}: runtime {1}": "{0}: اجرا {1}",
   "{0} Refresh the operation before taking another pre-dispatch action.": "{0} پیش از اقدام دیگری در مرحله پیش از ارسال، عملیات را تازه کنید.",
-  "server limit": "سقف سرور"
+  "server limit": "سقف سرور",
+  "{0}: the request was not confirmed. Refresh current state before another decision.": "{0}: درخواست تأیید نشد. پیش از تصمیم دیگری وضعیت جاری را تازه‌سازی کنید.",
+  " Further pages cannot be requested without exposing a restricted cursor.": " درخواست صفحه‌های بعدی بدون افشای نشانگر ادامهٔ محدودشده ممکن نیست."
 };

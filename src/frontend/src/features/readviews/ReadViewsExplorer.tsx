@@ -1,7 +1,6 @@
 import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ApiProblem,
   kafdeckApi,
   type ConnectClusterInfo,
   type ConnectConnectorDetail,
@@ -41,8 +40,6 @@ import { StatusBadge } from '../../app/StatusBadge.js';
 import {
   operationalEvidenceStatusKind,
   operationalTrendStatusKind,
-  readViewHttpStatusKind,
-  type UiStatusKind,
 } from '../../app/statusPresentation.js';
 import {
   MutationApiProblem,
@@ -51,30 +48,12 @@ import {
   type MutationStatus,
 } from '../mutations/mutationApi.js';
 
-type ReadViewProblem = {
-  kind: UiStatusKind;
-  message: string;
-};
-
-function readViewError(reason: unknown): ReadViewProblem {
-  if (reason instanceof ApiProblem) {
-    const kind = readViewHttpStatusKind(reason.status);
-    if (reason.status === 401 || reason.status === 403) return { kind, message: t("Not authorized for this read view.") };
-    if (reason.status === 404) return { kind, message: t("This read view is not configured.") };
-    if (reason.status === 501) return { kind, message: t("This read view is unsupported by the configured provider.") };
-    if (reason.status === 502 || reason.status === 503 || reason.status === 504) return { kind, message: t("The upstream read operation is currently unavailable.") };
-    return { kind, message: reason.message };
-  }
-  return {
-    kind: 'unknown',
-    message: reason instanceof Error ? reason.message : t("The read view could not be loaded."),
-  };
-}
+import { ReadViewInputError, readViewError, readViewFailure, readViewProblemText, type ReadViewProblem } from './readViewProblem.js';
 
 function ReadViewProblemNotice({ problem }: { problem: ReadViewProblem }) {
   return <p role={problem.kind === 'denied' ? 'alert' : 'status'}>
     <StatusBadge kind={problem.kind} />{' '}
-    {problem.message}
+    {readViewProblemText(problem)}
   </p>;
 }
 
@@ -84,14 +63,14 @@ function parseConfigurationLines(source: string): Record<string, string> {
     const line = rawLine.trim();
     if (!line) continue;
     const separator = line.indexOf('=');
-    if (separator <= 0) throw new Error(t("Each configuration line must use key=value."));
+    if (separator <= 0) throw new ReadViewInputError('configurationSyntax');
     const key = line.slice(0, separator).trim();
     const value = line.slice(separator + 1);
-    if (!key) throw new Error(t("Configuration keys must not be empty."));
-    if (Object.prototype.hasOwnProperty.call(result, key)) throw new Error(t("Duplicate configuration key: {0}", [key]));
+    if (!key) throw new ReadViewInputError('configurationEmptyKey');
+    if (Object.prototype.hasOwnProperty.call(result, key)) throw new ReadViewInputError('configurationDuplicate', [key]);
     result[key] = value;
   }
-  if (Object.keys(result).length === 0) throw new Error(t("At least one configuration entry is required."));
+  if (Object.keys(result).length === 0) throw new ReadViewInputError('configurationEmpty');
   return result;
 }
 
@@ -157,7 +136,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const connectLoadGeneration = useRef(0);
   const [autoRestartStatus, setAutoRestartStatus] = useState<ConnectAutoRestartPolicyStatus | null>(null);
   const [autoRestartOperation, setAutoRestartOperation] = useState<MutationStatus | null>(null);
-  const [autoRestartError, setAutoRestartError] = useState<string | null>(null);
+  const [autoRestartError, setAutoRestartError] = useState<ReadViewProblem | null>(null);
   const [autoRestartBusy, setAutoRestartBusy] = useState(false);
 
   const [ksqlInfo, setKsqlInfo] = useState<ReadViewEnvelope<KsqlServerInfo> | null>(null);
@@ -335,7 +314,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     if (!Number.isFinite(threshold) || threshold < 0 || !Number.isFinite(target) || target <= 0 || target >= 1) {
       setSloError({
         kind: 'unknown',
-        message: t("SLO threshold must be non-negative and target must be between 0 and 1."),
+        copy: 'sloInvalid',
       });
       return;
     }
@@ -508,9 +487,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       }
 
       setAutoRestartError(
-        reason instanceof Error
-          ? reason.message
-          : t("Auto-restart policy status could not be loaded."),
+        readViewFailure(reason, 'autoRestartStatus'),
       );
     }
   };
@@ -529,7 +506,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       );
       setAutoRestartOperation(operation);
     } catch (reason) {
-      setAutoRestartError(reason instanceof Error ? reason.message : t("Auto-restart policy preview failed."));
+      setAutoRestartError(readViewFailure(reason, 'autoRestartPreview'));
     } finally {
       setAutoRestartBusy(false);
     }
@@ -542,7 +519,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     try {
       setAutoRestartOperation(await mutationApi.get(autoRestartOperation.operationId));
     } catch (reason) {
-      setAutoRestartError(reason instanceof Error ? reason.message : t("Auto-restart operation refresh failed."));
+      setAutoRestartError(readViewFailure(reason, 'autoRestartRefresh'));
     } finally {
       setAutoRestartBusy(false);
     }
@@ -566,7 +543,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         connectorDetail.data.name,
       ));
     } catch (reason) {
-      setAutoRestartError(reason instanceof Error ? reason.message : t("Auto-restart policy apply failed."));
+      setAutoRestartError(readViewFailure(reason, 'autoRestartApply'));
     } finally {
       setAutoRestartBusy(false);
     }
@@ -848,7 +825,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       {connectorDetail && <article><h4><bdi dir="auto">{connectorDetail.data.name}</bdi></h4><p>{t("State:")}{' '}{connectorDetail.data.state} {' '}{t("· Worker:")}{' '}{connectorDetail.data.workerId ?? t("Unknown")} {' '}{t("· Tasks:")}{' '}<bdi dir="ltr" lang="en">{connectorDetail.data.tasks.length}</bdi></p><table><thead><tr><th scope="col">{t("Configuration key")}</th><th scope="col">{t("Safe value")}</th></tr></thead><tbody>{Object.entries(connectorDetail.data.safeConfiguration).map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value ?? t("Not set")}</td></tr>)}</tbody></table>
         <section aria-labelledby="connect-auto-restart-title">
           <h5 id="connect-auto-restart-title">{t("Bounded auto-restart")}</h5>
-          {autoRestartError && <p role="alert">{autoRestartError}</p>}
+          {autoRestartError && <p role="alert">{readViewProblemText(autoRestartError)}</p>}
           {autoRestartStatus && <>
             <p>{t("Deployment policy:")}{' '}{autoRestartStatus.deploymentEnabled ? t("enabled") : t("disabled")} {' '}{t("· Activation:")}{' '}{autoRestartStatus.active ? t("active") : t("inactive")} {' '}{t("· Circuit:")}{' '}{autoRestartStatus.circuitState ?? t("none")}</p>
             <p>{t("Attempts:")}{' '}{autoRestartStatus.attemptsUsed}/<bdi dir="ltr" lang="en">{autoRestartStatus.maxAttempts}</bdi> {' '}{t("· Next attempt:")}{' '}{autoRestartStatus.nextAttemptUtc ? autoRestartStatus.nextAttemptUtc : t("none")} {' '}{t("· Unresolved dispatch:")}{' '}{autoRestartStatus.hasUnresolvedDispatch ? t("yes") : t("no")}</p>

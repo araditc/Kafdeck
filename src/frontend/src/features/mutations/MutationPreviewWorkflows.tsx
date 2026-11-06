@@ -1,3 +1,4 @@
+import { ApplicationCopyError, ownedErrorPresentation, problemPresentation } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { FormEvent, useState } from 'react';
 import {
@@ -18,7 +19,7 @@ function newIdempotencyKey(): string {
     typeof globalThis.crypto === 'undefined' ||
     typeof globalThis.crypto.randomUUID !== 'function'
   ) {
-    throw new Error(t("Secure browser randomness is required to generate an Idempotency-Key."));
+    throw new ApplicationCopyError("Secure browser randomness is required to generate an Idempotency-Key.");
   }
 
   return globalThis.crypto.randomUUID();
@@ -30,11 +31,11 @@ function pairMap(source: string): Record<string, string> {
     const line = rawLine.trim();
     if (!line) continue;
     const separator = line.indexOf('=');
-    if (separator <= 0) throw new Error(t("Each configuration line must use key=value."));
+    if (separator <= 0) throw new ApplicationCopyError("Each configuration line must use key=value.");
     const key = line.slice(0, separator).trim();
     const value = line.slice(separator + 1);
-    if (!key) throw new Error(t("Configuration keys must not be empty."));
-    if (Object.prototype.hasOwnProperty.call(result, key)) throw new Error(t("Duplicate configuration key: {0}", [key]));
+    if (!key) throw new ApplicationCopyError("Configuration keys must not be empty.");
+    if (Object.prototype.hasOwnProperty.call(result, key)) throw new ApplicationCopyError("Duplicate configuration key: {0}", [key]);
     result[key] = value;
   }
   return result;
@@ -46,10 +47,10 @@ function nullablePairMap(source: string): Record<string, string | null> {
     const line = rawLine.trim();
     if (!line) continue;
     const separator = line.indexOf('=');
-    if (separator <= 0) throw new Error(t("Each configuration change must use key=value or key=<remove>."));
+    if (separator <= 0) throw new ApplicationCopyError("Each configuration change must use key=value or key=<remove>.");
     const key = line.slice(0, separator).trim();
     const value = line.slice(separator + 1);
-    if (Object.prototype.hasOwnProperty.call(result, key)) throw new Error(t("Duplicate configuration key: {0}", [key]));
+    if (Object.prototype.hasOwnProperty.call(result, key)) throw new ApplicationCopyError("Duplicate configuration key: {0}", [key]);
     result[key] = value === '<remove>' ? null : value;
   }
   return result;
@@ -66,6 +67,8 @@ function bytesToBase64(value: string): string {
 }
 
 function errorText(reason: unknown): string {
+  const owned = ownedErrorPresentation(reason);
+  if (owned) return problemPresentation(owned);
   if (reason instanceof MutationApiProblem) return reason.message;
   return reason instanceof Error ? reason.message : t("The mutation preview could not be created.");
 }
@@ -82,7 +85,7 @@ export function MutationPreviewWorkflows({
   const [workflow, setWorkflow] = useState<WorkflowKind>('topic');
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ reason: unknown } | null>(null);
 
   const submit = async (action: () => Promise<MutationStatus>) => {
     setBusy(true);
@@ -91,7 +94,7 @@ export function MutationPreviewWorkflows({
       const operation = await action();
       onPreview(operation);
     } catch (reason) {
-      setError(errorText(reason));
+      setError({ reason });
     } finally {
       setBusy(false);
     }
@@ -112,7 +115,7 @@ export function MutationPreviewWorkflows({
       <option value="purge">{t("Controlled purge")}</option>
     </select>
     <p><label htmlFor="mutation-idempotency-key">Idempotency-Key</label>{' '}<input dir="ltr" id="mutation-idempotency-key" value={idempotencyKey} onChange={event => setIdempotencyKey(event.target.value)} autoComplete="off" />{' '}<button type="button" onClick={() => setIdempotencyKey(newIdempotencyKey())}>{t("Generate new key")}</button></p>
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{errorText(error.reason)}</p>}
     {workflow === 'topic' && <TopicWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'record' && <RecordWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'consumer' && <ConsumerWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}

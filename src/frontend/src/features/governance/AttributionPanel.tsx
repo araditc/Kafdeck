@@ -1,3 +1,4 @@
+import { ApplicationCopyError } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useState } from 'react';
 import { mutationApi, type MutationStatus } from '../mutations/mutationApi.js';
@@ -20,7 +21,7 @@ export function AttributionPanel({clusterId}:{clusterId:string}) {
   function invalidate(){setReview(null);}
   function invalidateQuery(){setPage(null);}
   async function inspect(id:string,signal:AbortSignal){setReview(null);const value=await attributionApi.operation(id,signal);assertRateCardOperation(value,clusterId);if(!signal.aborted){setLookup(id);setReview(value);}}
-  function update(operation:MutationStatus){if(!review)throw new Error(t("Reload immutable rate-card material."));const value={...review,operation};assertRateCardOperation(value,clusterId);setReview(value);}
+  function update(operation:MutationStatus){if(!review)throw new ApplicationCopyError("Reload immutable rate-card material.");const value={...review,operation};assertRateCardOperation(value,clusterId);setReview(value);}
   function document():RateCardDocument{return {metricKind:metric,unit:metric==='trafficBytes'?'bytes':'byteSeconds',currency,amount,effectiveFromUtc:rateFrom,effectiveToUtc:rateTo,weights:parseWorkflowJson(weights) as RateCardDocument['weights']};}
   return <section id="governance-attribution" className="card kafdeck-card" aria-labelledby="governance-attribution-title" aria-busy={busy}>
     <h2 id="governance-attribution-title" className="card-title">{t("Measured attribution and estimates")}</h2>

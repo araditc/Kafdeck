@@ -1,3 +1,4 @@
+import { applicationProblem, ownedErrorPresentation, problemPresentation, type PresentationProblem } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiProblem, kafdeckApi, type ControlledSerdeFormat, type RecordAnchorProjection, type RecordQuery, type RecordSafePage, type RecordSafeProjection } from '../../shared/api.js';
@@ -27,11 +28,11 @@ export function activeRecordPageQuery(displayedQuery: RecordQuery | null, baseQu
   return displayedQuery ?? baseQuery;
 }
 
-function recordError(reason: unknown) {
-  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return t("Record access is denied by Kafdeck policy.");
-  if (reason instanceof ApiProblem && reason.status === 403) return t("Kafka denied record access for this target.");
-  if (reason instanceof ApiProblem && reason.status === 501) return t("Record browsing is unsupported for this target.");
-  return reason instanceof Error ? reason.message : t("Record data could not be loaded.");
+function recordError(reason: unknown): PresentationProblem {
+  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return applicationProblem("Record access is denied by Kafdeck policy.");
+  if (reason instanceof ApiProblem && reason.status === 403) return applicationProblem("Kafka denied record access for this target.");
+  if (reason instanceof ApiProblem && reason.status === 501) return applicationProblem("Record browsing is unsupported for this target.");
+  return ownedErrorPresentation(reason) ?? (reason instanceof Error ? { raw: reason.message } : applicationProblem("Record data could not be loaded."));
 }
 
 function isAbort(reason: unknown) {
@@ -85,7 +86,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   const [page, setPage] = useState<RecordSafePage | null>(null);
   const [displayedQuery, setDisplayedQuery] = useState<RecordQuery | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PresentationProblem | null>(null);
   const [tailing, setTailing] = useState(false);
   const browseController = useRef<AbortController | null>(null);
   const tailController = useRef<AbortController | null>(null);
@@ -161,8 +162,8 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
         if (frame.kind === 'records' && frame.page) {
           setDisplayedQuery(tailQuery);
           setPage(previous => previous ? { ...frame.page!, records: [...previous.records, ...frame.page!.records].slice(-maxRecords) } : frame.page);
-        } else if (frame.kind === 'error' && frame.failure) setError(frame.failure.message);
-        else if (frame.kind === 'admissionDenied') setError(t("Live-tail admission limit reached."));
+        } else if (frame.kind === 'error' && frame.failure) setError({ raw: frame.failure.message });
+        else if (frame.kind === 'admissionDenied') setError(applicationProblem("Live-tail admission limit reached."));
         else if (frame.kind === 'completed') setTailing(false);
       }, controller.signal);
     } catch (reason) {
@@ -222,7 +223,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
         <option value="messagePack">MessagePack</option>
       </select></label>}
     </div>
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{problemPresentation(error)}</p>}
     {page && <>
       <p role="status">{t("Offsets")}{' '}{page.lowWatermark}–{page.highWatermark} {' '}{t("· read budget:")}{' '}{page.readBudgetOutcome} {' '}{t("· filter budget:")}{' '}{page.filterBudgetOutcome} {' '}{t("· masking policy:")}{' '}<bdi dir="ltr" lang="en">{page.policyId}</bdi> v<bdi dir="ltr" lang="en">{page.policyVersion}</bdi></p>
       {page.limitations.length > 0 && <ul>{page.limitations.map((item, index) => <li key={`${item.code}-${index}`}>{item.code}: {item.count}</li>)}</ul>}

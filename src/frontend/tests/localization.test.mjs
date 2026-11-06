@@ -95,13 +95,13 @@ test('language storage persists only the preference and never acquires identity 
   } finally { if(oldWindow===undefined)delete globalThis.window;else globalThis.window=oldWindow;if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument; }
 });
 
-test('source message coverage includes dynamic application descriptors and every literal translation call',()=>{
+test('source message coverage includes descriptors, literal translation and controlled state copy calls',()=>{
   const sourceRoot=new URL('../src/',import.meta.url);
   function walk(directory){return fs.readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?walk(new URL(entry.name+'/',directory)):/\.tsx?$/.test(entry.name)&&entry.name!=='messages.ts'?[new URL(entry.name,directory)]:[]);}
   let calls=0;
   for(const file of walk(sourceRoot)){
     const source=fs.readFileSync(file,'utf8');
-    for(const match of source.matchAll(/\bt\(\s*("(?:[^"\\]|\\.)*")/g)){const key=JSON.parse(match[1]);assert.ok(Object.hasOwn(messages,key),file.pathname+': '+key);calls++;}
+    for(const match of source.matchAll(/\b(?:t|applicationProblem|ApplicationCopyError)\(\s*("(?:[^"\\]|\\.)*")/g)){const key=JSON.parse(match[1]);assert.ok(Object.hasOwn(messages,key),file.pathname+': '+key);calls++;}
   }
   assert.ok(calls>1400);
   // These descriptors are allocated outside React; translated rendering/search

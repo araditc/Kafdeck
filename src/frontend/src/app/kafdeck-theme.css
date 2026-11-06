@@ -638,3 +638,8 @@ body {
 [data-bs-theme="dark"] .kafdeck-shell .form-select:not(:disabled) {
   --tblr-control-select-bg: var(--tblr-control-select-bg-dark);
 }
+
+/* Tabler positions its custom arrow physically; reserve the same inline end in RTL. */
+.kafdeck-shell .form-select:dir(rtl) {
+  --tblr-control-select-bg-position: left var(--tblr-control-padding-x) center;
+}

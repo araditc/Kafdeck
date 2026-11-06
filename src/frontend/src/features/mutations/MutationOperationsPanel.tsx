@@ -1,3 +1,4 @@
+import { ApplicationCopyError, ownedErrorPresentation, problemPresentation } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import {
@@ -22,11 +23,13 @@ const preDispatchStates = new Set([
 ]);
 
 function describeProblem(reason: unknown): string {
+  const owned = ownedErrorPresentation(reason);
+  if (owned && !(reason instanceof MutationApiProblem)) return problemPresentation(owned);
   if (reason instanceof MutationApiProblem) {
     if (reason.status === 401) return t("Operator authentication is required.");
     if (reason.status === 403) return t("The current operator is not authorized for this mutation action.");
-    if (reason.status === 409) return t("{0} Refresh the operation before taking another pre-dispatch action.", [reason.message]);
-    return reason.message;
+    if (reason.status === 409) return t("{0} Refresh the operation before taking another pre-dispatch action.", [owned ? problemPresentation(owned) : reason.message]);
+    return owned ? problemPresentation(owned) : reason.message;
   }
 
   return reason instanceof Error
@@ -102,10 +105,10 @@ function pairMap(source: string): Record<string, string> {
     const line = rawLine.trim();
     if (!line) continue;
     const separator = line.indexOf('=');
-    if (separator <= 0) throw new Error(t("Each execution-material line must use key=value."));
+    if (separator <= 0) throw new ApplicationCopyError("Each execution-material line must use key=value.");
     const key = line.slice(0, separator).trim();
     const value = line.slice(separator + 1);
-    if (Object.prototype.hasOwnProperty.call(result, key)) throw new Error(t("Duplicate key: {0}", [key]));
+    if (Object.prototype.hasOwnProperty.call(result, key)) throw new ApplicationCopyError("Duplicate key: {0}", [key]);
     result[key] = value;
   }
   return result;
@@ -142,7 +145,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
   const [workerFenceReference, setWorkerFenceReference] = useState('');
   const [reconciliationReview, setReconciliationReview] = useState<ReconciliationReview | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ reason: unknown } | null>(null);
 
   const clearExecutionMaterial = () => {
     setRecordKey('');
@@ -180,7 +183,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       }
 
       setMutationAvailable(true);
-      setError(describeProblem(reason));
+      setError({ reason });
     }
   }, []);
 
@@ -203,7 +206,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     try {
       setSelected(await mutationApi.get(selected.operationId));
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -219,7 +222,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     try {
       selectOperation(await mutationApi.get(operationId));
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -235,7 +238,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       if (clearMaterialAfter) clearExecutionMaterial();
       await loadApprovals();
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -251,7 +254,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setDataGeneratorStatus(status);
       setDataGeneratorReconcileBatchId(status.pendingBatch?.batchId ?? '');
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -267,7 +270,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setDataGeneratorStatus(await mutationApi.getDataGeneratorStatus(operation.operationId));
       await loadApprovals();
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -280,7 +283,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     try {
       setDataGeneratorStatus(await mutationApi.cancelDataGenerator(selected.operationId));
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -292,15 +295,15 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     try {
       const status = generator ? dataGeneratorStatus : dataJobStatus;
       const batchId = (generator ? dataGeneratorReconcileBatchId : dataJobReconcileBatchId).trim();
-      if (!status?.pendingBatch || batchId !== status.pendingBatch.batchId) throw new Error(t("Reload the exact unresolved batch before review."));
-      if (typeof globalThis.crypto?.randomUUID !== 'function') throw new Error(t("Secure randomness is required for the reconciliation Idempotency-Key."));
-      if (status.progressVersion === null || status.progressVersion === undefined) throw new Error(t("Reload durable progress before preparing a reconciliation."));
+      if (!status?.pendingBatch || batchId !== status.pendingBatch.batchId) throw new ApplicationCopyError("Reload the exact unresolved batch before review.");
+      if (typeof globalThis.crypto?.randomUUID !== 'function') throw new ApplicationCopyError("Secure randomness is required for the reconciliation Idempotency-Key.");
+      if (status.progressVersion === null || status.progressVersion === undefined) throw new ApplicationCopyError("Reload durable progress before preparing a reconciliation.");
       const request: DataReconciliationPreviewInput = { batchId, expectedProgressVersion: status.progressVersion,
         proofReferenceSha256: proofReference.trim().toLowerCase(), fencedWorkerEvidenceSha256: workerFenceReference.trim().toLowerCase() };
       const idempotencyKey = globalThis.crypto.randomUUID();
       validateDataReconciliationPreview(selected.operationId, request, idempotencyKey);
       setReconciliationReview({ ...request, parentOperationId: selected.operationId, generator, idempotencyKey });
-    } catch (reason) { setError(describeProblem(reason)); }
+    } catch (reason) { setError({ reason }); }
   };
 
   const createReconciliationPreview = async () => {
@@ -312,11 +315,11 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       const operation = await (generator ? mutationApi.previewDataGeneratorReconciliation(parentOperationId, request, idempotencyKey)
         : mutationApi.previewDataJobReconciliation(parentOperationId, request, idempotencyKey));
       if (operation.operationKind !== 'fleetUncertaintyDisposition' || operation.riskClass !== 'critical' || !operation.requiresIndependentApproval)
-        throw new Error(t("The server did not return the required independently approved CRITICAL reconciliation plan."));
+        throw new ApplicationCopyError("The server did not return the required independently approved CRITICAL reconciliation plan.");
       selectOperation(operation);
       await loadApprovals();
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -354,7 +357,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setDataJobStatus(status);
       setDataJobReconcileBatchId(status.pendingBatch?.batchId ?? '');
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -370,7 +373,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setDataJobStatus(await mutationApi.getDataJobStatus(operation.operationId));
       await loadApprovals();
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -383,7 +386,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     try {
       setDataJobStatus(await mutationApi.cancelDataJob(selected.operationId));
     } catch (reason) {
-      setError(describeProblem(reason));
+      setError({ reason });
     } finally {
       setLoading(false);
     }
@@ -415,7 +418,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
         : <table><thead><tr><th scope="col">{t("Kind")}</th><th scope="col">{t("Cluster")}</th><th scope="col">{t("Risk")}</th><th scope="col">{t("Expires")}</th><th scope="col">{t("Review")}</th></tr></thead><tbody>{approvals.map(operation => <tr key={operation.operationId}><th scope="row"><bdi dir="ltr" lang="en">{operation.operationKind}</bdi></th><td><bdi dir="ltr" lang="en">{operation.clusterId}</bdi></td><td>{operation.riskClass}</td><td>{operation.previewExpiresAtUtc}</td><td><button type="button" onClick={() => selectOperation(operation)}>{t("Review")}</button></td></tr>)}</tbody></table>}
     </article>
 
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{describeProblem(error.reason)}</p>}
     {selected && <article aria-labelledby="selected-mutation-title">
       <h3 id="selected-mutation-title">{t("Selected operation")}</h3>
       <MutationSummary operation={selected} />

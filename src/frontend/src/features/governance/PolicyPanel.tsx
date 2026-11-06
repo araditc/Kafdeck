@@ -1,3 +1,4 @@
+import { ApplicationCopyError } from '../../shared/presentationProblem.js';
 import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import { mutationApi, type MutationStatus } from '../mutations/mutationApi.js';
@@ -8,7 +9,7 @@ const operationKinds = ['policyVersion', 'policyActivation', 'governancePolicyVe
 export function assertPolicyBinding(operation: MutationStatus, material: PolicyOperationMaterial, clusterId: string) {
   scopedOperation(operation, clusterId, operationKinds);
   if (material.operationId !== operation.operationId || material.previewHash !== operation.previewHash || material.clusterId !== clusterId || !material.document || !material.contentHash)
-    throw new Error(t("Immutable policy material does not match this exact scoped operation."));
+    throw new ApplicationCopyError("Immutable policy material does not match this exact scoped operation.");
 }
 
 export function PolicyPanel({clusterId}: {clusterId: string}) {
@@ -30,7 +31,7 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
   const [dryRun, setDryRun] = useState<PolicyDecision[] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ reason: unknown } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
@@ -40,14 +41,14 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
   }
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller; setKey(crypto.randomUUID());
-    void load(controller.signal).catch(reason => { if (!controller.signal.aborted) setError(governanceProblem(reason)); });
+    void load(controller.signal).catch(reason => { if (!controller.signal.aborted) setError({ reason }); });
     return () => controller.abort();
   }, [clusterId]);
   async function run(request: (signal: AbortSignal) => Promise<void>) {
     if (!lifetime.current || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(null);
     const signal = lifetime.current.signal;
-    try { await request(signal); } catch (reason) { if (!signal.aborted) setError(governanceProblem(reason)); }
+    try { await request(signal); } catch (reason) { if (!signal.aborted) setError({ reason }); }
     finally { inFlight.current = false; if (!signal.aborted) setBusy(false); }
   }
   async function inspect(id: string, signal: AbortSignal) {
@@ -58,7 +59,7 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
     if (!signal.aborted) { setLookup(id); setMaterial(frozen); setOperation(status); }
   }
   function update(status: MutationStatus) {
-    if (!material) throw new Error(t("Reload frozen policy material before continuing."));
+    if (!material) throw new ApplicationCopyError("Reload frozen policy material before continuing.");
     assertPolicyBinding(status, material, clusterId); setOperation(status);
   }
   function invalidatePreview() { setOperation(null); setMaterial(null); }
@@ -67,7 +68,7 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
     <h2 id="governance-policy-title" className="card-title">{t("Governance policy")}</h2>
     <p>{t("Scope:")}{' '}<strong><bdi dir="ltr" lang="en">{clusterId}</bdi></strong>{t(". Closed, versioned policies narrow current permissions. No policy file, catalog assignment or approval grants missing rights.")}</p>
     <p>{t("Activation and deactivation are critical governed operations. Changed policy can stale an existing preview; unavailable active authority blocks execution.")}</p>
-    {error && <p role="alert" className="alert alert-warning">{error}</p>}
+    {error && <p role="alert" className="alert alert-warning">{governanceProblem(error.reason)}</p>}
     <button type="button" className="btn btn-outline-primary" disabled={busy} onClick={() => void run(signal => load(signal))}>{t("Reload authorized policy state")}</button>
     {active && <dl><dt>{t("Active revision")}</dt><dd>{active.revision}</dd><dt>{t("Enabled")}</dt><dd>{active.enabled ? t("Yes") : t("No")}</dd><dt>{t("Active version")}</dt><dd>{active.versionId ?? t("None")}</dd><dt>{t("Authority digest")}</dt><dd><code dir="ltr" lang="en">{active.digest}</code></dd></dl>}
     <fieldset disabled={busy || !loaded} className="mt-3"><legend>{t("Validate and prepare a policy version")}</legend>

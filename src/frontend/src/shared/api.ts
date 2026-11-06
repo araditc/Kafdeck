@@ -1,3 +1,4 @@
+import { ApplicationCopyError, markApplicationError } from './presentationProblem.js';
 import { t } from './i18n.js';
 import { clearDeploymentAccessToken, withDeploymentAccessToken } from './deploymentAccess.js';
 import { notifySessionLossIfUnauthorized } from './operatorSessionSecurity.js';
@@ -674,7 +675,9 @@ async function parseProblem(response: Response): Promise<ApiProblem> {
   notifySessionLossIfUnauthorized(response.status);
   let problem: { detail?: string; title?: string; code?: string; type?: string } = {};
   try { problem = (await response.json()) as typeof problem; } catch { /* safe generic fallback */ }
-  return new ApiProblem(response.status, problem.detail ?? problem.title ?? t("Kafdeck request failed."), problem.code ?? problem.type ?? null);
+  const detail = problem.detail ?? problem.title;
+  const error = new ApiProblem(response.status, detail ?? t("Kafdeck request failed."), problem.code ?? problem.type ?? null);
+  return detail == null ? markApplicationError(error, "Kafdeck request failed.") : error;
 }
 
 async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -1217,7 +1220,7 @@ export const kafdeckApi = {
     if (signal !== undefined) init.signal = signal;
     const response = await fetch(`${recordPath(clusterId, topicName, query.partition)}/tail?${params}`, init);
     if (!response.ok) throw await parseProblem(response);
-    if (!response.body) throw new Error(t("Live tail response body is unavailable."));
+    if (!response.body) throw new ApplicationCopyError("Live tail response body is unavailable.");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let pending = '';
