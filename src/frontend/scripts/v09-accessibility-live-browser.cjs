@@ -210,6 +210,15 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await probe.text(page,label(requests,'Business reason'),'W79 typed field survives real window return','window-return-populated-reason');
     const selectedForm=async()=>({requestId:await selectedRevision.locator('code').first().textContent(),material:await selectedRevision.locator('code,pre,bdi[dir="ltr"]').allTextContents(),reason:await label(requests,'Business reason').inputValue(),key:await label(requests,'Stable request change idempotency key').inputValue(),command:await label(requests,'Business command').inputValue()});
     const populatedBefore=await selectedForm(),reasonHandle=await label(requests,'Business reason').elementHandle();
+    if(scenario.manualHandoffDirectory&&!launch.headless){
+      // Keyboard dispatch can refocus a renderer independently of its native
+      // window. Configure real native focus after the final keyboard action;
+      // configuration events precede and cannot count as the proof below.
+      const before=await inspectNativeActors();
+      for(const session of manualFocusSessions.slice(-2))await session.send('Emulation.setFocusEmulationEnabled',{enabled:false});
+      result.manualNativeWindowFocusBoundaries??=[];
+      result.manualNativeWindowFocusBoundaries.push({locale,before,after:await inspectNativeActors(),beforeNativeEventRecorder:true,syntheticFocusEvents:false});
+    }
     const windowEvents=await page.evaluateHandle(()=>{
       const events=[],record=event=>{events.push({event,elapsedMs:performance.now(),documentHasFocus:document.hasFocus(),visibility:document.visibilityState});if(events.length>20)events.shift();};
       const focus=()=>record('focus'),blur=()=>record('blur'),visibility=()=>record('visibilitychange');window.addEventListener('focus',focus);window.addEventListener('blur',blur);document.addEventListener('visibilitychange',visibility);record('initial');
