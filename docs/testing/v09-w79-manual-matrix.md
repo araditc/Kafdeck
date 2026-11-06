@@ -1,6 +1,8 @@
 # W79 actual keyboard and assistive-technology issue log
 
-Status: not executed. No cell below is a manual pass. Fill only from observed product behavior; preserve failures and retest links.
+Status: acceptance open; zero complete AT journeys and zero Persian AT stages accepted. A private NVDA 2026.3/eSpeak NG 1.52.0 vendor-log pilot observed English page/status speech only. It did not establish the required workflow stages. No cell below is a manual pass. Automated browser evidence is recorded separately in [the evidence ledger](v09-w79-accessibility-evidence.md); preserve failed/incomplete attempts and retest links.
+
+The latest fresh-source Release pilot (`ca9ead9e06d6388d98a0b7e7833af69d34ef7c62`) reached ten catalog keyboard controls but observed zero new catalog speech: the browser focus acknowledgment did not correspond to the Windows foreground window. Interactive Chromium foreground assistance is required. This environment/foreground blocker is not a product semantic failure; all manual cells remain open. Assembly hash and privacy cleanup are recorded in [the evidence ledger](v09-w79-accessibility-evidence.md#latest-native-attempt-and-remaining-blocker).
 
 | Cell | English expected evidence | Persian RTL expected evidence | Result / artifact / issue |
 |---|---|---|---|
