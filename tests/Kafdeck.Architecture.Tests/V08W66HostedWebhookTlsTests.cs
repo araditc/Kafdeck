@@ -373,6 +373,10 @@ public sealed class V08W66HostedWebhookTlsTests(ITestOutputHelper output)
                 }
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+            // Listener.Stop can win the accept/cancellation race on Windows. Only
+            // intentional fixture shutdown may suppress the resulting socket disposal.
+            catch (ObjectDisposedException) when (_stop.IsCancellationRequested) { }
+            catch (SocketException) when (_stop.IsCancellationRequested) { }
         }
 
         public async ValueTask DisposeAsync()

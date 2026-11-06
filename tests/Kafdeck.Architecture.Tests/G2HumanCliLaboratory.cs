@@ -216,6 +216,24 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
     }
     internal async Task RestartAsync(CancellationToken token)
     { await StopAsync(token);await StartAsync(token); }
+    // Observation and abrupt stop apply only to the child created by this fixture.
+    internal int OwnedProcessId => _process?.Id ?? throw new InvalidOperationException("Start the owned API first.");
+    internal DateTimeOffset HumanHttpTokenExpiresAtUtc { get; private set; }
+    internal async Task<HttpClient> AuthenticateHumanHttpAsync(CancellationToken token)
+    {
+        using var session = await CliOidcPkceAuthenticator.AcquireAsync(new CliOidcProfile(
+            Field("issuer"), Field("audience"), Field("cliClientId"), Field("caPemFile")), OpenBrowserAsync, token);
+        var client = new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 8 })
+            { BaseAddress = Api, Timeout = TimeSpan.FromSeconds(15) };
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+        HumanHttpTokenExpiresAtUtc = session.ExpiresAtUtc;
+        return client;
+    }
+    internal async Task RefreshHumanHttpAsync(HttpClient client, CancellationToken token)
+    {
+        using var renewed = await AuthenticateHumanHttpAsync(token);
+        client.DefaultRequestHeaders.Authorization = renewed.DefaultRequestHeaders.Authorization;
+    }
     internal async Task StopAsync(CancellationToken token)
     {
         if(_process is not null)

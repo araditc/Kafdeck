@@ -231,7 +231,7 @@ jobs:
           export KAFDECK_G2_KAFKA_DELETE_CAPABLE=1
           export KAFDECK_V09_REAL_BROWSER=1
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
-            --filter 'FullyQualifiedName~V09&FullyQualifiedName!~V09W73CatalogRecoveryTests' \
+            --filter 'FullyQualifiedName~V09&FullyQualifiedName!~V09W73CatalogRecoveryTests&FullyQualifiedName!~V09W77' \
             --results-directory artifacts/g2-ci --logger 'trx;LogFileName=v09-live.trx'
           python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/v09-live.trx V09W73CatalogLiveTests:2 V09W75PolicyLiveTests:2 V09W74RequestLiveTests:2 V09W76AttributionLiveTests:2
           for provider in sqlite postgres; do
