@@ -646,6 +646,11 @@ body {
 
 /* Keep the four-column capability/reason comparison readable inside its
    existing keyboard-scrollable region at narrow widths in either direction. */
+.kafdeck-shell #fleet > .table-responsive {
+  /* Anchor absolute, visually hidden status descriptions inside the scroll
+     region so their RTL positions cannot enlarge the document's scroll area. */
+  position: relative;
+}
 .kafdeck-shell .kafdeck-fleet-capability-table {
   min-inline-size: 48rem;
 }
