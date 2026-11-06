@@ -23,7 +23,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       browserProfile:launch.headless?'headless':'headed',nativeWindowProofRequiredInManual:true,
       fixturePreparation:'Underlying immutable topic effect preview and exact kernel confirmation through authenticated cookie API; all product workflow controls use keyboard',
       loopbackFixtureBrowserCertificateErrorsIgnored:true,tlsConformanceClaimed:false,manualScreenReader:{status:'not-observed',producer:'separate actual AT issue log required'},mandatoryMissing:[]};
-    probe=require('./v09-accessibility-probe.cjs')(root,result);
+    probe=require('./v09-accessibility-probe.cjs')(root,result,{manualActionDelayMs:scenario.manualHandoffDirectory?1500:0});
     // Selectors use the same literal catalog as the product without loading or
     // changing application state.
     const messages=JSON.parse(fs.readFileSync(path.join(root,'src/frontend/src/shared/locales/fa.json'),'utf8'));
@@ -53,6 +53,12 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       while(!fs.existsSync(ready)){if(Date.now()>deadline)throw Error('fixture handshake timeout');await new Promise(resolve=>setTimeout(resolve,250));}
       return read(ready);
     }
+    async function manualNativeWindowCheckpoint(direction){
+      const directory=path.resolve(scenario.manualHandoffDirectory),suffix='window-'+direction+'-'+locale;
+      const resume=path.join(directory,'resume-'+suffix+'.json');if(fs.existsSync(resume))throw Error('stale native window handoff');
+      fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,direction,actor:direction==='away'?'reviewer':'requester',sourceSha:result.sourceSha,authenticatedApplication:true,requiredInput:'actual native window activation; no synthetic focus event'}));
+      const deadline=Date.now()+120000;while(!fs.existsSync(resume)){if(Date.now()>deadline)throw Error('native window handoff timeout');await new Promise(resolve=>setTimeout(resolve,250));}
+    }
     let manualActionCursor=0;
     async function manualPause(actorPage,stage,metadata={}){
       if(!scenario.manualHandoffDirectory)return;
@@ -62,7 +68,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const suffix=locale+'-'+stage,resume=path.join(directory,'resume-'+suffix+'.json');if(fs.existsSync(resume))throw Error('stale AT handoff');
       const keyboardActionRange={from:manualActionCursor,to:result.keyboard.actions.length};
       const keyboardActionsSincePrevious=result.keyboard.actions.slice(manualActionCursor).filter(action=>typeof action.label==='string').map(({label,tabs,reverseSequenceVerified,firstDocumentEntry})=>({label,tabs,reverseSequenceVerified,firstDocumentEntry}));manualActionCursor=result.keyboard.actions.length;
-      fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,stage,...metadata,sourceSha:result.sourceSha,browserVersion:result.browserVersion,authenticatedApplication:true,inputSource:'Playwright Chromium keyboard',keyboardInputMethod:result.keyboard.inputMethod,keyboardActionRange,keyboardActionsSincePrevious}));
+      fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,stage,...metadata,sourceSha:result.sourceSha,browserVersion:result.browserVersion,authenticatedApplication:true,inputSource:'Playwright Chromium keyboard',keyboardInputMethod:result.keyboard.inputMethod,manualActionDelayMs:result.keyboard.manualActionDelayMs,keyboardActionRange,keyboardActionsSincePrevious}));
       const focusRequest=path.join(directory,'focus-'+suffix+'.json'),focusReady=path.join(directory,'focus-'+suffix+'-ready.json');
       const deadline=Date.now()+1800000;while(!fs.existsSync(resume)){
         if(Date.now()>deadline)throw Error('AT handoff timeout');
@@ -177,10 +183,10 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       actualWindowEvents:await windowEvents.evaluate(state=>state.events),
     });
     phase='window-return-switch-away-'+locale;
-    await approver.bringToFront();
+    if(scenario.manualHandoffDirectory&&!launch.headless)await manualNativeWindowCheckpoint('away');else await approver.bringToFront();
     if(!launch.headless){
-      const returningSession=page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/auth/session'&&response.request().method()==='GET';});returningSession.catch(()=>{});
-      phase='window-return-session-response-'+locale;await page.bringToFront();const revalidated=await returningSession;lastStatus=revalidated.status();result.windowReturnCurrent.sessionGetStatus=lastStatus;assert.equal(lastStatus,200);result.windowReturnCurrent.opaqueScopeMatched=(await revalidated.json()).sessionScope===requesterSession.sessionScope;assert.equal(result.windowReturnCurrent.opaqueScopeMatched,true);
+      const returningSession=page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/auth/session'&&response.request().method()==='GET';},{timeout:scenario.manualHandoffDirectory?120000:30000});returningSession.catch(()=>{});
+      phase='window-return-session-response-'+locale;if(scenario.manualHandoffDirectory)await manualNativeWindowCheckpoint('return');else await page.bringToFront();const revalidated=await returningSession;lastStatus=revalidated.status();result.windowReturnCurrent.sessionGetStatus=lastStatus;assert.equal(lastStatus,200);result.windowReturnCurrent.opaqueScopeMatched=(await revalidated.json()).sessionScope===requesterSession.sessionScope;assert.equal(result.windowReturnCurrent.opaqueScopeMatched,true);
       const events=await windowEvents.evaluate(state=>state.events);assert.ok(events.some(event=>event.event==='blur')&&events.some(event=>event.event==='focus'),'headed native window events missing');result.windowReturnCurrent.nativeWindowProofClaimed=true;
     }else{
       await page.bringToFront();result.windowReturnCurrent.capability='native-window-focus-unsupported-not-claimed';result.mandatoryMissing.push('headed actual native window focus and session revalidation proof: '+locale);

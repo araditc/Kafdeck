@@ -3,8 +3,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 
 // All application inputs use the browser keyboard. Locators identify the intended
 // target and observe focus; they never focus, click, fill or select a control.
-module.exports=function accessibilityProbe(root,result){
-  result.keyboard={inputMethod:'Playwright keyboard: Tab/Shift+Tab, Alt+ArrowDown, Enter, Space, Home, ArrowDown and typed text',actions:[]};
+module.exports=function accessibilityProbe(root,result,options={}){
+  const manualActionDelayMs=options.manualActionDelayMs??0;
+  assert.ok(manualActionDelayMs===0||manualActionDelayMs===1500,'unsupported manual target dwell');
+  result.keyboard={inputMethod:'Playwright keyboard: Tab/Shift+Tab, Alt+ArrowDown, Enter, Space, Home, ArrowDown and typed text',manualActionDelayMs,actions:[]};
   result.automatedAccessibility={engine:'axe-core',runs:[]};
   let currentPage;
   async function safeFocus(page){return page.evaluate(()=>{
@@ -65,6 +67,7 @@ module.exports=function accessibilityProbe(root,result){
     result.keyboard.current.stage='keyboard-focus-stable';assert.ok(stableSamples>=2,'keyboard focus geometry or style did not settle');
     result.keyboard.actions.push({label,tabs:count,reverseSequenceVerified:!documentEntry,firstDocumentEntry:documentEntry,focus});
     result.keyboard.current.stage='keyboard-action-ready';
+    if(manualActionDelayMs)await new Promise(resolve=>setTimeout(resolve,manualActionDelayMs));
   }
   async function activate(page,target,label){await tabTo(page,target,label);await page.keyboard.press('Enter');}
   async function text(page,target,value,label){await tabTo(page,target,label);await page.keyboard.press('ControlOrMeta+A');await page.keyboard.type(value);assert.equal(await target.inputValue(),value);}
