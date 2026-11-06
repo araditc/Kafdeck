@@ -580,3 +580,7 @@ body {
 .kafdeck-shell .badge.bg-red-lt { color: var(--kafdeck-red-text) !important; background: var(--kafdeck-red-surface) !important; }
 .kafdeck-shell .badge.bg-yellow-lt { color: var(--kafdeck-yellow-text) !important; background: var(--kafdeck-yellow-surface) !important; }
 .kafdeck-shell .badge.bg-green-lt { color: var(--kafdeck-green-text) !important; background: var(--kafdeck-green-surface) !important; }
+
+/* Keyboard Tab and guarded heading/focus restoration must reveal their target
+   immediately, without competing with Tabler's global smooth scroll. */
+:root { scroll-behavior: auto; }

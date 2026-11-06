@@ -10,7 +10,7 @@ test('AppShell exposes product identity and accessible operator landmarks', () =
 
   assert.match(markup, /<main[^>]+class="page-wrapper"[^>]+aria-labelledby="kafdeck-title"/);
   assert.match(markup, /class="navbar[^"]*kafdeck-topbar/);
-  assert.match(markup, /class="kafdeck-brand-logo" src="\/kafdeck-logo\.webp" alt="Kafdeck" width="42" height="42"/);
+  assert.match(markup, /class="kafdeck-brand-logo" src="\/kafdeck-logo\.webp" alt="" width="42" height="42"/);
   assert.match(markup, /Open Source Kafka Control Plane/);
   assert.match(markup, /class="form-label" for="cluster-selector">Cluster<\/label>/);
   assert.match(markup, /aria-label="Kafdeck sections"/);

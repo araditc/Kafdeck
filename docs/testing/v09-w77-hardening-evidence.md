@@ -16,6 +16,8 @@ Emergency fixture ceilings are 2 GiB RSS per measured process, 10,000 handles, 1
 
 `V09W77FaultLiveTests` executes each persistence provider with a six-minute outer deadline. It creates a fresh broker through the existing verified `prepare-kafka-g2.ps1`; its ports, PID, configuration, logs and storage are privately owned. It never stops the shared G2 broker or changes host firewall/storage permissions.
 
+An initial Linux CI trial failed all four cases before scenario execution with the closed formatter code `storage_classpath_invalid`, after Java/JAR preflight and configuration creation succeeded. The formatter now passes its unchanged JVM arguments through `ProcessStartInfo.ArgumentList`, preserving `libs/*` as one literal argument for Java, with concurrent output draining and a bounded owned-child timeout. PowerShell documents [native wildcard expansion on Unix](https://learn.microsoft.com/en-us/powershell/scripting/whats-new/unix-support?view=powershell-7.5); its project also records [computed/splatted wildcard expansion](https://github.com/PowerShell/PowerShell/issues/24178). Wildcard expansion is the diagnosis inferred from the closed failure and documented behavior; successful formatter/scenario reruns are required before calling the fix verified.
+
 | Physical fault | Required observation/recovery |
 |---|---|
 | Kill the owned native broker process | Fresh real adapter observes a bounded failure, then a restarted broker answers actual metadata; persisted governance remains intact. |

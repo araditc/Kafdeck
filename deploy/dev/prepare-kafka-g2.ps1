@@ -46,8 +46,40 @@ log.segment.bytes=16777216
 $id = [Convert]::ToBase64String([Guid]::NewGuid().ToByteArray()).TrimEnd('=').Replace('+','-').Replace('/','_')
 # A valid random Kafka ID can begin with '-'; bind it to the long option so
 # argparse cannot interpret that value as a separate command-line switch.
-& $java -Xms64m -Xmx256m ("-Dlog4j2.configurationFile=" + (Join-Path $runtime 'config/tools-log4j2.yaml')) -cp (Join-Path $runtime 'libs/*') kafka.tools.StorageTool format --standalone ("--cluster-id=" + $id) -c (Join-Path $instance 'server.properties')
-if ($LASTEXITCODE -ne 0) { throw 'Kafka storage format failed; preserve this directory for diagnosis and choose a fresh directory for a retry.' }
+# ProcessStartInfo preserves the one literal JVM classpath argument on Unix,
+# where PowerShell native-command globbing can expand a computed libs/* value.
+$formatStart = [Diagnostics.ProcessStartInfo]::new($java)
+$formatStart.UseShellExecute = $false
+$formatStart.CreateNoWindow = $true
+$formatStart.RedirectStandardOutput = $true
+$formatStart.RedirectStandardError = $true
+foreach ($argument in @('-Xms64m','-Xmx256m',("-Dlog4j2.configurationFile=" + (Join-Path $runtime 'config/tools-log4j2.yaml')),
+    '-cp',(Join-Path $runtime 'libs/*'),'kafka.tools.StorageTool','format','--standalone',("--cluster-id=" + $id),'-c',(Join-Path $instance 'server.properties'))) {
+    $formatStart.ArgumentList.Add($argument)
+}
+$formatProcess = [Diagnostics.Process]::Start($formatStart)
+if ($null -eq $formatProcess) { throw 'Owned Kafka storage formatter did not start.' }
+try {
+    $formatOutput = $formatProcess.StandardOutput.ReadToEndAsync()
+    $formatError = $formatProcess.StandardError.ReadToEndAsync()
+    # 35 seconds for formatting plus at most five seconds to stop only this child.
+    $formatTimedOut = !$formatProcess.WaitForExit(35000)
+    if ($formatTimedOut) {
+        $formatProcess.Kill($true)
+        if (!$formatProcess.WaitForExit(5000)) { throw 'Owned Kafka storage formatter did not stop after its deadline.' }
+    }
+    [Console]::Out.Write($formatOutput.GetAwaiter().GetResult())
+    [Console]::Error.Write($formatError.GetAwaiter().GetResult())
+    if ($formatTimedOut) { throw 'Owned Kafka storage formatter exceeded its bounded deadline; preserve the private fixture for diagnosis.' }
+    if ($formatProcess.ExitCode -ne 0) { throw 'Kafka storage format failed; preserve this directory for diagnosis and choose a fresh directory for a retry.' }
+}
+finally {
+    if (!$formatProcess.HasExited) {
+        $formatProcess.Kill($true)
+        $null = $formatProcess.WaitForExit(5000)
+    }
+    $formatProcess.Dispose()
+}
 @{
     kafkaVersion='4.3.1'; bootstrapServers="127.0.0.1:$BrokerPort"
     kafkaHome=$runtime; configFile=(Join-Path $instance 'server.properties'); javaExecutable=$java
