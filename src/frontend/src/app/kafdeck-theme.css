@@ -584,3 +584,17 @@ body {
 /* Keyboard Tab and guarded heading/focus restoration must reveal their target
    immediately, without competing with Tabler's global smooth scroll. */
 :root { scroll-behavior: auto; }
+
+/* Populated broker-backed topic lists expose Tabler's lightened btn-link color.
+   Preserve a readable action label on normal and hovered table surfaces. */
+:root { --kafdeck-table-link: #13508b; --kafdeck-table-link-hover: #0a3968; }
+[data-bs-theme="dark"] { --kafdeck-table-link: #c5e0ff; --kafdeck-table-link-hover: #e0efff; }
+.kafdeck-shell .btn-link.kafdeck-table-button {
+  --tblr-btn-color: var(--kafdeck-table-link);
+  --tblr-btn-hover-color: var(--kafdeck-table-link-hover);
+  --tblr-btn-active-color: var(--kafdeck-table-link-hover);
+  color: var(--kafdeck-table-link);
+}
+.kafdeck-shell .btn-link.kafdeck-table-button:is(:hover, :focus-visible, :active) {
+  color: var(--kafdeck-table-link-hover);
+}
