@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import { mutationApi, type MutationStatus } from '../mutations/mutationApi.js';
 import { automationApi, automationOutcome, type AutomationCapabilities, type CompensationEligibility, type DeclarativeInput, type DeclarativeObservation, type SealedPlan, type SourceRevision } from './automationApi.js';
 
+const automationErrorMessages = {
+  capabilitiesUnavailable: "Automation capabilities are unavailable or denied. No effect is enabled.",
+  requestUnconfirmed: "Request denied, stale, invalid or unavailable. No successful effect is inferred; retain the same operation/key and refresh status before deciding another action.",
+} as const;
+type AutomationError = keyof typeof automationErrorMessages;
+
 export function AutomationPanel({ notificationsAvailable = false }: { notificationsAvailable?: boolean }) {
   const [capabilities,setCapabilities]=useState<AutomationCapabilities|null>(null);
   const [manifest,setManifest]=useState(''); const [format,setFormat]=useState<'json'|'yaml'>('json');
@@ -12,17 +18,17 @@ export function AutomationPanel({ notificationsAvailable = false }: { notificati
   const [plan,setPlan]=useState<SealedPlan|null>(null); const [operation,setOperation]=useState<MutationStatus|null>(null);
   const [approvals,setApprovals]=useState<MutationStatus[]>([]); const [compensation,setCompensation]=useState<CompensationEligibility|null>(null);
   const [reviewed,setReviewed]=useState(false); const [challenge,setChallenge]=useState('');
-  const [busy,setBusy]=useState(false); const [error,setError]=useState<string|null>(null);
+  const [busy,setBusy]=useState(false); const [error,setError]=useState<AutomationError|null>(null);
   const lifetime=useRef<AbortController|null>(null); const active=useRef(false);
   useEffect(()=>{const controller=new AbortController();lifetime.current=controller;setIdempotency(crypto.randomUUID());
-    void automationApi.capabilities(controller.signal).then(value=>{if(!controller.signal.aborted)setCapabilities(value);}).catch(()=>{if(!controller.signal.aborted)setError(t("Automation capabilities are unavailable or denied. No effect is enabled."));});
+    void automationApi.capabilities(controller.signal).then(value=>{if(!controller.signal.aborted)setCapabilities(value);}).catch(()=>{if(!controller.signal.aborted)setError('capabilitiesUnavailable');});
     return()=>controller.abort();},[]);
   const enabled=capabilities?.enabled===true && capabilities.families.some(family=>family.kind==='NotificationSubscription' && family.apply);
   const input=():DeclarativeInput=>({manifest,format,sourceRef,sourceRevision,expectedOwnershipRevision:Number(revision)});
   async function run(action:(signal:AbortSignal)=>Promise<void>) {
     if(active.current || !lifetime.current)return;active.current=true;setBusy(true);setError(null);
     const signal=lifetime.current.signal;
-    try{await action(signal);}catch{if(!signal.aborted)setError(t("Request denied, stale, invalid or unavailable. No successful effect is inferred; retain the same operation/key and refresh status before deciding another action."));}
+    try{await action(signal);}catch{if(!signal.aborted)setError('requestUnconfirmed');}
     finally{active.current=false;if(!signal.aborted)setBusy(false);}
   }
   async function load(id:string,signal:AbortSignal) {
@@ -41,9 +47,9 @@ export function AutomationPanel({ notificationsAvailable = false }: { notificati
     <h2 id="automation-title" className="card-title">{t("Governed automation")}</h2>
     <p>{t("Observe current state, inspect immutable plans and complete explicitly authorized changes. Every client uses the same backend policy, ownership and approval boundary.")}</p>
     <nav aria-label={t("Automation workflow connections")}><a href="#fleet">{t("Telemetry and runtime capabilities")}</a>{' · '}{notificationsAvailable&&<><a href="#notifications">{t("Alerts and delivery evidence")}</a>{' · '}</>}<a href="#mutations">{t("Operations and independent approval")}</a></nav>
-    <p role="status">{capabilities ? t("{0}: runtime {1}", [capabilities.apiVersion, enabled?t("enabled"):t("disabled")]):t("Loading authorized automation capabilities…")}</p>
+    {(capabilities || !error) && <p role="status">{capabilities ? t("{0}: runtime {1}", [capabilities.apiVersion, enabled?t("enabled"):t("disabled")]):t("Loading authorized automation capabilities…")}</p>}
     {capabilities&&<ul>{capabilities.families.map(family=><li key={family.kind}>{family.kind}: {enabled&&family.apply?t("governed apply admitted"):family.ownership??t("effect unavailable")}{t("; destroy")}{' '}{enabled&&family.delete?t("admitted"):t("unsupported")}</li>)}</ul>}
-    {error&&<p role="alert" className="alert alert-warning">{error}</p>}
+    {error&&<p role="alert" className="alert alert-warning">{t(automationErrorMessages[error])}</p>}
     <fieldset disabled={busy||!enabled}><legend>{t("Registered source and desired state")}</legend>
       <div className="row g-3">
         <label className="col-md-6 form-label">{t("Source reference")}<input dir="ltr" className="form-control" value={sourceRef} onChange={e=>{setSourceRef(e.target.value);setSource(null);}} maxLength={128}/></label>

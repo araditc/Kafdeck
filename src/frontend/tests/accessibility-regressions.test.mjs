@@ -17,7 +17,10 @@ test('small semantic text and action states meet 4.5 contrast in both declared p
   for(const [theme,tokens] of Object.entries({light,dark})){
     for(const family of ['warning','kbd','orange','secondary','blue','red','yellow','green'])assert.ok(contrast(tokens[family+'-text'],tokens[family+'-surface'])>=4.5,theme+': '+family);
     for(const family of ['primary-action','warning-action','danger-action','danger-solid'])assert.ok(contrast(tokens[family],tokens[family+'-on'])>=4.5,theme+': '+family);
-    for(const surface of theme==='light'?['#ffffff','#fafafa']:['#1d273b','#242d3e'])for(const family of ['primary-action','warning-action','danger-action','table-link','table-link-hover'])assert.ok(contrast(tokens[family],surface)>=4.5,theme+': '+family+'/'+surface);
+    for(const surface of theme==='light'?['#ffffff','#fafafa']:['#1d273b','#242d3e']){
+      for(const family of ['primary-action','warning-action','danger-action','table-link','table-link-hover'])assert.ok(contrast(tokens[family],surface)>=4.5,theme+': '+family+'/'+surface);
+      assert.ok(contrast(tokens['control-edge'],surface)>=3,theme+': enabled entry/select boundary and indicator/'+surface);
+    }
   }
 });
 

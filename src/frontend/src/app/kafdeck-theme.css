@@ -617,3 +617,24 @@ body {
   --tblr-btn-disabled-color: var(--kafdeck-primary-action);
   --tblr-btn-disabled-border-color: var(--kafdeck-primary-action);
 }
+
+/* W79 offline review measured the active white-on-white entry boundary at
+   1.26:1 and the author-supplied select indicator at 2.52:1. Strengthen these
+   affordances without changing focus, validation, inactive or check states. */
+:root { --kafdeck-control-edge: #66768a; }
+[data-bs-theme="dark"] { --kafdeck-control-edge: #9fadc0; }
+.kafdeck-shell :is(.kafdeck-card, .kafdeck-toolbar) :is(
+  input:not([type]), input[type="text"], input[type="search"], input[type="number"],
+  input[type="email"], input[type="password"], input[type="url"], input[type="tel"],
+  input[type="date"], input[type="time"], input[type="datetime-local"],
+  input[type="month"], input[type="week"], textarea, select
+):not(:disabled):not(:focus):not([aria-invalid="true"]):not(.is-invalid):not(.is-valid) {
+  border-color: var(--kafdeck-control-edge);
+}
+.kafdeck-shell .form-select:not(:disabled) {
+  --tblr-control-select-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2366768a' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  --tblr-control-select-bg-dark: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%239fadc0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+[data-bs-theme="dark"] .kafdeck-shell .form-select:not(:disabled) {
+  --tblr-control-select-bg: var(--tblr-control-select-bg-dark);
+}

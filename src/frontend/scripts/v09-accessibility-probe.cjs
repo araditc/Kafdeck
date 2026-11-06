@@ -83,7 +83,34 @@ module.exports=function accessibilityProbe(root,result){
     const scan=await page.evaluate(async()=>{
       const output=await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa']}});
       const safeRule=rule=>({id:rule.id,impact:rule.impact,helpUrl:rule.helpUrl,nodes:rule.nodes.map(node=>({target:node.target,failureSummary:node.failureSummary}))});
-      return {version:output.testEngine.version,violations:output.violations.map(safeRule),incomplete:output.incomplete.map(safeRule),passes:output.passes.length,inapplicable:output.inapplicable.length};
+      // Read only actual incomplete-node style bindings after axe completes.
+      // Never collect text, values, attributes, image URLs or API material.
+      const canvas=document.createElement('canvas');canvas.width=1;canvas.height=1;
+      const context=canvas.getContext('2d',{willReadFrequently:true,colorSpace:'srgb'});
+      const color=value=>{
+        let rgba=null;
+        if(context&&CSS.supports('color',value)){
+          context.clearRect(0,0,1,1);context.fillStyle=value;context.fillRect(0,0,1,1);
+          const pixel=context.getImageData(0,0,1,1).data;rgba=[pixel[0],pixel[1],pixel[2],pixel[3]/255];
+        }
+        return {computed:value,rgba};
+      };
+      const incompleteColorBindings=output.incomplete.filter(rule=>rule.id==='color-contrast').flatMap(rule=>rule.nodes.map(node=>{
+        let element=null,scope=document;
+        try{for(const selector of node.target){if(typeof selector!=='string'){element=null;break;}element=scope.querySelector(selector);if(!element)break;scope=element.shadowRoot||element;}}catch{element=null;}
+        if(!element)return {ruleId:rule.id,target:node.target,resolved:false,measuredAfterAxeRun:true};
+        const style=getComputedStyle(element),backgroundChain=[];
+        for(let ancestor=element;ancestor&&backgroundChain.length<16;ancestor=ancestor.parentElement){
+          const binding=getComputedStyle(ancestor);
+          backgroundChain.push({tag:ancestor.tagName,background:color(binding.backgroundColor),backgroundImagePresent:binding.backgroundImage!=='none',opacity:binding.opacity});
+        }
+        return {ruleId:rule.id,target:node.target,resolved:true,measuredAfterAxeRun:true,rgbaConversion:'unattached 1px sRGB canvas',
+          tag:element.tagName,disabled:element.matches(':disabled'),foreground:color(style.color),background:color(style.backgroundColor),opacity:style.opacity,
+          borderColors:{blockStart:color(style.borderBlockStartColor),blockEnd:color(style.borderBlockEndColor),inlineStart:color(style.borderInlineStartColor),inlineEnd:color(style.borderInlineEndColor)},
+          backgroundImagePresent:style.backgroundImage!=='none',backgroundPosition:style.backgroundPosition,backgroundSize:style.backgroundSize,
+          padding:{blockStart:style.paddingBlockStart,blockEnd:style.paddingBlockEnd,inlineStart:style.paddingInlineStart,inlineEnd:style.paddingInlineEnd},backgroundChain};
+      }));
+      return {version:output.testEngine.version,violations:output.violations.map(safeRule),incomplete:output.incomplete.map(safeRule),incompleteColorBindings,passes:output.passes.length,inapplicable:output.inapplicable.length};
     });
     const layout=await page.evaluate(()=>({language:document.documentElement.lang,direction:document.documentElement.dir,viewport:innerWidth,documentWidth:document.documentElement.scrollWidth}));
     const screenshot=path.basename(evidencePath).replace(/\.json$/,'')+'-'+label+'.png';

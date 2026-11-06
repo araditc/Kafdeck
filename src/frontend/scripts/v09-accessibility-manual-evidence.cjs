@@ -30,6 +30,7 @@ function fingerprint(root){
 }
 function validate(record,current,artifactDirectory){
   const errors=[],require=(condition,code)=>{if(!condition)errors.push(code);},hex=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+  const safeRelative=value=>typeof value==='string'&&!path.isAbsolute(value)&&!value.split(/[\\/]/).includes('..')&&!value.includes('://');
   require(record?.schemaVersion===1,'schema-version');require(record?.status==='complete','manual-status-not-complete');
   for(const group of ['production','tests','assets']){
     require(hex(record?.sourceFingerprints?.[group]?.sha256),'source-'+group+'-missing');
@@ -56,10 +57,22 @@ function validate(record,current,artifactDirectory){
     const key=locale+'-'+stage,matches=observations.filter(row=>row.locale===locale&&row.stage===stage);require(matches.length===1,'stage-count-'+key);const row=matches[0];if(!row)continue;
     require(row.outcome==='pass','stage-not-passed-'+key);require(Number.isFinite(Date.parse(row.observedAtUtc)),'stage-time-'+key);
     require(row.actor===(stage==='reviewer-before-approval'?'reviewer':'requester'),'stage-actor-'+key);
-    require(row.readSource==='NVDA Speech Viewer'&&row.actualReaderRunning===true,'actual-at-output-'+key);
+    const viewer=row.readSource==='NVDA Speech Viewer',vendor=row.readSource==='NVDA vendor speech I/O log';
+    require((viewer||vendor)&&row.actualReaderRunning===true,'actual-at-output-'+key);
     require(row.voiceLanguage===locale,'stage-voice-'+key);require(typeof row.expected==='string'&&row.expected.trim().length>0&&typeof row.observed==='string'&&row.observed.trim().length>0,'stage-observation-'+key);
     require(Array.isArray(row.utterances)&&row.utterances.length>0&&row.utterances.every(value=>typeof value==='string'&&value.length>0&&value.length<=1024),'stage-utterances-'+key);
-    require(Array.isArray(row.nativeKeys)&&row.nativeKeys.length>0,'native-readback-keys-'+key);require(row.authenticatedApplication===true,'authenticated-application-'+key);
+    if(viewer)require(Array.isArray(row.nativeKeys)&&row.nativeKeys.length>0,'native-readback-keys-'+key);
+    if(vendor){
+      const trace=row.vendorTrace;
+      require(row.inputSource==='Playwright Chromium keyboard'&&row.nativeWindowsGestureClaimed===false&&(!row.nativeKeys||row.nativeKeys.length===0),'vendor-keyboard-provenance-'+key);
+      require(Array.isArray(row.actualDriverKeyboardActions)&&row.actualDriverKeyboardActions.length>0&&row.actualDriverKeyboardActions.every(action=>typeof action.label==='string'&&Number.isInteger(action.tabs)&&action.tabs>=0&&!('value'in action)&&!('text'in action)),'vendor-driver-keyboard-actions-'+key);
+      require(Number.isInteger(trace?.processId)&&trace.processId>0&&trace.readerVersion===environment?.at?.version,'vendor-reader-process-'+key);
+      require(trace?.synthesizer==='eSpeak NG'&&typeof trace.synthesizerVersion==='string'&&trace.synthesizerVersion.length>0,'vendor-synthesizer-'+key);
+      require(Number.isInteger(trace?.startByte)&&trace.startByte>=0&&Number.isInteger(trace?.endByte)&&trace.endByte>trace.startByte&&hex(trace.rawLogSha256),'vendor-source-offsets-hash-'+key);
+      for(const file of [trace?.file,row.keyboardEvidenceFile])require(safeRelative(file)&&row.artifacts?.includes(file)&&hex(record?.artifactHashes?.[file]),'vendor-hashed-evidence-'+key);
+      if(artifactDirectory&&safeRelative(row.keyboardEvidenceFile)){try{const keyboard=JSON.parse(fs.readFileSync(path.join(artifactDirectory,row.keyboardEvidenceFile),'utf8').replace(/^\uFEFF/,''));require(keyboard.locale===locale&&keyboard.stage===stage&&keyboard.sourceSha===record.observedSourceSha&&keyboard.inputSource===row.inputSource&&JSON.stringify(keyboard.keyboardActionsSincePrevious)===JSON.stringify(row.actualDriverKeyboardActions),'vendor-keyboard-artifact-binding-'+key);}catch{require(false,'vendor-keyboard-artifact-invalid-'+key);}}
+    }
+    require(row.authenticatedApplication===true,'authenticated-application-'+key);
     require(Array.isArray(row.artifacts)&&row.artifacts.length>0&&row.artifacts.every(value=>typeof value==='string'&&!path.isAbsolute(value)&&!value.split(/[\\/]/).includes('..')&&!value.includes('://')),'safe-artifact-reference-'+key);
     for(const artifact of row.artifacts??[]){
       const safe=typeof artifact==='string'&&!path.isAbsolute(artifact)&&!artifact.split(/[\\/]/).includes('..')&&!artifact.includes('://');require(safe&&hex(record?.artifactHashes?.[artifact]),'artifact-hash-'+key);

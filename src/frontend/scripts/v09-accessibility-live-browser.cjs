@@ -52,12 +52,37 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       while(!fs.existsSync(ready)){if(Date.now()>deadline)throw Error('fixture handshake timeout');await new Promise(resolve=>setTimeout(resolve,250));}
       return read(ready);
     }
-    async function manualPause(stage,metadata={}){
+    let manualActionCursor=0;
+    async function manualPause(actorPage,stage,metadata={}){
       if(!scenario.manualHandoffDirectory)return;
+      const focusActor=async()=>{await actorPage.bringToFront();await actorPage.locator('#service-requests').waitFor({state:'visible'});await actorPage.waitForFunction(()=>document.hasFocus());};
+      await focusActor();
       const directory=path.resolve(scenario.manualHandoffDirectory);fs.mkdirSync(directory,{recursive:true});
       const suffix=locale+'-'+stage,resume=path.join(directory,'resume-'+suffix+'.json');if(fs.existsSync(resume))throw Error('stale AT handoff');
-      fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,stage,...metadata,sourceSha:result.sourceSha,browserVersion:result.browserVersion,authenticatedApplication:true}));
-      const deadline=Date.now()+1800000;while(!fs.existsSync(resume)){if(Date.now()>deadline)throw Error('AT handoff timeout');await new Promise(resolve=>setTimeout(resolve,250));}
+      const keyboardActionRange={from:manualActionCursor,to:result.keyboard.actions.length};
+      const keyboardActionsSincePrevious=result.keyboard.actions.slice(manualActionCursor).filter(action=>typeof action.label==='string').map(({label,tabs,reverseSequenceVerified,firstDocumentEntry})=>({label,tabs,reverseSequenceVerified,firstDocumentEntry}));manualActionCursor=result.keyboard.actions.length;
+      fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,stage,...metadata,sourceSha:result.sourceSha,browserVersion:result.browserVersion,authenticatedApplication:true,inputSource:'Playwright Chromium keyboard',keyboardInputMethod:result.keyboard.inputMethod,keyboardActionRange,keyboardActionsSincePrevious}));
+      const focusRequest=path.join(directory,'focus-'+suffix+'.json'),focusReady=path.join(directory,'focus-'+suffix+'-ready.json');
+      const deadline=Date.now()+1800000;while(!fs.existsSync(resume)){
+        if(Date.now()>deadline)throw Error('AT handoff timeout');
+        if(fs.existsSync(focusRequest)&&!fs.existsSync(focusReady)){await focusActor();fs.writeFileSync(focusReady,JSON.stringify({locale,stage,actor:metadata.actor??'requester',sourceSha:result.sourceSha,actualActorFocused:true,authenticatedApplication:true,workflowResumed:false}));}
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }
+      await focusActor();
+    }
+    async function assertControlledAutomationCopy(target,language,stage){
+      // These are the panel's two closed application-owned errors, never
+      // arbitrary backend prose. Observe them without changing browser state.
+      const keys=[
+        'Automation capabilities are unavailable or denied. No effect is enabled.',
+        'Request denied, stale, invalid or unavailable. No successful effect is inferred; retain the same operation/key and refresh status before deciding another action.',
+      ];
+      const panel=target.locator('#automation'),actual=(await panel.getByRole('alert').allTextContents()).map(text=>text.trim());
+      if(!actual.length)return;
+      const expected=keys.map(key=>language==='fa'?messages[key]:key);
+      assert.ok(actual.every(text=>expected.includes(text)),'closed automation error did not follow current locale');
+      for(const loading of ['Loading authorized automation capabilities…',messages['Loading authorized automation capabilities…']])assert.equal(await panel.getByText(loading,{exact:true}).count(),0,'automation failure still announced loading');
+      result.controlledAutomationCopyChecks??=[];result.controlledAutomationCopyChecks.push({language,stage,errorCount:actual.length,closedApplicationCopy:true,loadingCleared:true});
     }
     async function preserveLocaleAcrossRoundTrip(target,panel,stage,scanBoth=false){
       const snapshot=()=>panel.evaluate(element=>({material:[...element.querySelectorAll('code,pre,bdi[dir="ltr"]')].map(node=>node.textContent),states:[...element.querySelectorAll('article dl')].map(dl=>dl.querySelectorAll('dd')[3]?.textContent),controls:[...element.querySelectorAll('input,textarea,select')].map(node=>({tag:node.tagName,type:node.getAttribute('type'),value:node.value,checked:node.checked,disabled:node.disabled}))}));
@@ -66,6 +91,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
         for(const next of [locale==='en'?'fa':'en',locale]){
           await probe.select(target,target.locator('#kafdeck-language'),next,stage+'-switch-'+next);await target.waitForFunction(next=>document.documentElement.lang===next&&document.documentElement.dir===(next==='fa'?'rtl':'ltr'),next);
           assert.deepEqual(await snapshot(),before,'locale changed frozen material or form/review state');assert.equal(await target.locator('#kafdeck-language').evaluate(element=>element===document.activeElement),true,'locale switch moved focus');assert.equal(mutationRequests,0,'locale emitted a mutation');
+          await assertControlledAutomationCopy(target,next,stage);
           if(scanBoth)await probe.scan(target,locale+'-'+stage+'-switch-'+next,output);
         }
       }finally{target.off('request',listener);}
@@ -100,7 +126,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const catalogForm=document.querySelector('#ownership-catalog fieldset'),requestForm=document.querySelector('#service-requests fieldset');
       return !!catalogForm&&!!requestForm&&!catalogForm.disabled&&!requestForm.disabled;
     });
-    await manualPause('before-actions');
+    await manualPause(page,'before-actions');
     phase='keyboard-skip-main-'+locale;await probe.activate(page,page.getByRole('link',{name:local('Skip to main content'),exact:true}),'skip-to-main');assert.equal(await page.locator('#kafdeck-main').evaluate(element=>element===document.activeElement),true);result.keyboardSkipToMain??=[];result.keyboardSkipToMain.push({locale,method:'Tab then Enter',activeId:'kafdeck-main'});
     phase='keyboard-catalog-escaped-input';const escapedName='w79-'+crypto.randomUUID().slice(0,8)+' <w79-escaped>& " فارسی';
     await probe.text(page,label(catalog,'Name'),escapedName,'catalog-name');await probe.text(page,label(catalog,'Description'),'Keyboard catalog; no markup interpretation','catalog-description');
@@ -109,7 +135,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     assert.equal(await label(catalog,'Name').inputValue(),escapedName);assert.equal(await page.locator('w79-escaped').count(),0);
     await probe.activate(page,button(catalog,'Read immutable record history'),'catalog-history');await catalog.getByRole('table',{name:local('Immutable revisions; latest 1000 loaded history entries retained')}).waitFor();
     result.catalogKeyboardAppliedAndHistory=true;result.escapedCatalogInterpolation=true;
-    await manualPause('catalog');
+    await manualPause(page,'catalog');
     if(scenario.handshakeDirectory){
       phase='fixture-catalog-ack-loss';const operationId=catalogPreview.operationId??catalogPreview.operation?.operationId;
       assert.match(operationId,/^[a-f0-9-]{36}$/i);const currentPlan=await get(context,'/api/v1/governance/catalog/operations/'+operationId);
@@ -154,20 +180,20 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     result.windowReturnCurrent=await diagnoseWindowReturn();await windowEvents.evaluate(state=>state.stop());diagnoseWindowReturn=null;
     await probe.select(page,label(requests,'Business command'),'Submit','submit-command');await requestAction(page,button(requests,'Preview governed request change'),'/requests/changes/preview');await applied(page,review);
     await probe.activate(page,button(requests,'Refresh selected request'),'refresh-submitted-request');
-    await manualPause('submitted',{requestId,operationId:target.operationId});
+    await manualPause(page,'submitted',{requestId,operationId:target.operationId});
     phase='keyboard-self-approval-denied';await probe.select(page,label(requests,'Business command'),'Approve','self-approve-command');await requestAction(page,button(requests,'Preview governed request change'),'/requests/decisions/preview',403);await requests.getByRole('alert').waitFor();result.requesterSelfDecisionDenied=true;
     phase='keyboard-independent-human-approval';await approver.bringToFront();
     const decisions=approver.locator('#service-requests');
     const reviewerReload=approver.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/governance/requests'&&response.request().method()==='GET';});reviewerReload.catch(()=>{});
     await probe.activate(approver,button(decisions,'Reload authorized requests'),'independent-request-reload');lastStatus=(await reviewerReload).status();assert.equal(lastStatus,200);
     await probe.activate(approver,dynamicButton(decisions,'Inspect request',requestId),'independent-inspect');await probe.select(approver,label(decisions,'Business command'),'Approve','independent-approve-command');
-    await probe.text(approver,label(decisions,'Business reason'),'W79 distinct current human exact revision','approval-reason');await requestAction(approver,button(decisions,'Preview governed request change'),'/requests/decisions/preview');await article(decisions).waitFor();await manualPause('reviewer-before-approval',{requestId,actor:'reviewer'});
+    await probe.text(approver,label(decisions,'Business reason'),'W79 distinct current human exact revision','approval-reason');await requestAction(approver,button(decisions,'Preview governed request change'),'/requests/decisions/preview');await article(decisions).waitFor();await manualPause(approver,'reviewer-before-approval',{requestId,actor:'reviewer'});
     await applied(approver,article(decisions));await second.close();await page.bringToFront();
     await probe.activate(page,button(requests,'Refresh selected request'),'refresh-approved');const current=await get(context,`/api/v1/governance/requests/${requestId}?`+new URLSearchParams({clusterId:scenario.clusterId}));assert.equal(current.businessState.toLowerCase(),'approved');assert.equal(current.decisions.length,1);assert.equal(current.operationId,target.operationId);result.keyboardDraftSubmitDistinctHumanApprove=true;
     await probe.activate(page,button(requests,'Inspect linked effect operation'),'approved-linked-effect');const approvedEffect=article(requests).first();await probe.check(page,label(approvedEffect,'I inspected this immutable operation, scope, material and fingerprint.'),'approved-reviewed-kernel-ready');assert.equal(await button(approvedEffect,'Execute reviewed operation').isEnabled(),true);result.approvedBusinessAndKernelGatesAllowExplicitDispatch=true;
     const typedChallenge=approvedEffect.locator('label').filter({hasText:local('Exact confirmation challenge:')});if(await typedChallenge.count())await probe.text(page,typedChallenge.locator('input'),(await typedChallenge.locator('code').textContent()).trim(),'preserved-exact-typed-challenge');
     await preserveLocaleAcrossRoundTrip(page,requests,'approved-selected-request');
-    await manualPause('approved',{requestId,operationId:target.operationId});
+    await manualPause(page,'approved',{requestId,operationId:target.operationId});
     phase='desktop-scan-'+locale;await probe.scan(page,locale+'-desktop',output);
     phase='rtl-material-invariance';const materialBefore=await requests.locator('article').first().locator('code,pre').allTextContents();let localeWrites=0;const onRequest=request=>{if(new URL(request.url()).origin===api.origin&&!['GET','HEAD','OPTIONS'].includes(request.method()))localeWrites++;};page.on('request',onRequest);
     await probe.select(page,page.locator('#kafdeck-language'),locale==='en'?'fa':'en','switch-locale');assert.deepEqual(await requests.locator('article').first().locator('code,pre').allTextContents(),materialBefore);assert.equal(await catalog.locator('input').first().inputValue(),escapedName);assert.equal(localeWrites,0);
@@ -177,13 +203,13 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       phase='actual-request-expiry-'+locale;const ready=await handshake('request-submitted-'+locale,{requestId,operationId:target.operationId,expiresAtUtc:expiry});assert.equal(ready.requestId,requestId);
       await probe.activate(page,button(requests,'Refresh selected request'),'expired-revision-refresh');const expired=await get(context,`/api/v1/governance/requests/${requestId}?`+new URLSearchParams({clusterId:scenario.clusterId}));assert.equal(expired.businessState.toLowerCase(),'expired');result.actualExpiryObservedBeforeReplan=true;
       await probe.activate(page,button(requests,'Inspect linked effect operation'),'expired-linked-effect');const blocked=article(requests).first();await probe.check(page,label(blocked,'I inspected this immutable operation, scope, material and fingerprint.'),'expired-reviewed-kernel-ready');assert.equal(await button(blocked,'Execute reviewed operation').isDisabled(),true);
-      await manualPause('expired',{requestId});
+      await manualPause(page,'expired',{requestId});
     }
     phase='keyboard-explicit-replan';const revised=await boundEffect();await probe.activate(page,button(requests,'Refresh selected request'),'refresh-before-revision');await probe.select(page,label(requests,'Business command'),'Revise','revise-command');
     await probe.text(page,label(requests,'Existing immutable effect operation ID'),revised.operationId,'replan-new-operation');await probe.text(page,label(requests,'Request expiry UTC (ISO8601 ending in Z)'),new Date(Date.parse(revised.previewExpiresAtUtc)-1000).toISOString(),'replan-expiry');
     await probe.activate(page,button(requests,'Create key for an intentionally new request change'),'replan-new-change-key');await requestAction(page,button(requests,'Preview governed request change'),'/requests/changes/preview');await applied(page,review);
     const after=await get(context,`/api/v1/governance/requests/${requestId}?`+new URLSearchParams({clusterId:scenario.clusterId}));assert.equal(after.revision,current.revision+1);assert.equal(after.operationId,revised.operationId);assert.equal(after.decisions.length,0);result.keyboardExplicitRevisionInvalidatesOldDecision=true;
-    await manualPause('replanned',{requestId,operationId:revised.operationId});
+    await manualPause(page,'replanned',{requestId,operationId:revised.operationId});
     // A real producer must supply a fault-created durable unknown operation.
     // Reading it is safe; we do not manufacture state or infer unknown from timeouts.
     phase='durable-unknown-read';if(scenario.unknownCatalogOperationId){
@@ -193,11 +219,11 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       await probe.scan(page,locale+'-durable-unknown',output);
       await probe.check(page,label(unknownReview,'I inspected this immutable operation, scope, material and fingerprint.'),'unknown-preserved-review-acknowledgment');
       await preserveLocaleAcrossRoundTrip(page,catalog,'unknown-frozen-operation',true);
-      await manualPause('unknown',{operationId:scenario.unknownCatalogOperationId});
+      await manualPause(page,'unknown',{operationId:scenario.unknownCatalogOperationId});
       const historyPath='/api/v1/governance/catalog/teams/'+encodeURIComponent(unknown.changes[0].id)+'/history?'+new URLSearchParams({clusterId:scenario.clusterId,pageSize:'200'});const beforeRecovery=await get(context,historyPath);assert.equal(beforeRecovery.items.length,1);assert.equal(beforeRecovery.items[0].operationId,scenario.unknownCatalogOperationId);
       await probe.check(page,label(unknownReview,'I inspected this immutable operation, scope, material and fingerprint.'),'unknown-review-positive-evidence');await requestAction(page,button(unknownReview,'Verify positive receipt; never redispatch'),'/recover');await unknownReview.getByText('appliedVerified',{exact:false}).waitFor();assert.equal(await button(unknownReview,'Verify positive receipt; never redispatch').isDisabled(),true);result.keyboardActualUnknownPositiveReceiptRecovery=true;
       const csrf=await get(context,'/api/v1/auth/csrf');const repeated=await context.request.post(new URL('/api/v1/governance/catalog/operations/'+encodeURIComponent(scenario.unknownCatalogOperationId)+'/recover',api).href,{headers:{[csrf.headerName]:csrf.requestToken},data:{previewHash:unknown.operation.previewHash}});lastStatus=repeated.status();assert.equal(lastStatus,200);const repeatedState=await repeated.json();assert.equal(repeatedState.operationId,scenario.unknownCatalogOperationId);assert.equal(repeatedState.state,'appliedVerified');const afterRecovery=await get(context,historyPath);assert.deepEqual(afterRecovery,beforeRecovery);result.actualAuthenticatedRecoveryRepeatedWithoutDuplicateHistory=true;
-      await manualPause('recovered',{operationId:scenario.unknownCatalogOperationId});
+      await manualPause(page,'recovered',{operationId:scenario.unknownCatalogOperationId});
     }else result.mandatoryMissing.push('actual fault-created durable unknown operation keyboard journey');
     phase='browser-emulated-preferences-'+locale;await probe.preferences(page,locale,output);
     result.localeJourneys.push({locale,catalog:true,submit:true,approveDistinctHuman:true,explicitReplan:true,unknown:!!scenario.unknownCatalogOperationId});await context.close();
