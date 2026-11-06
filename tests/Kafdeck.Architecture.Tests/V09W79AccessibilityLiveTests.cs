@@ -101,6 +101,13 @@ public sealed class V09W79AccessibilityLiveTests
         {
             while (!process.HasExited)
             {
+                if (manual && File.Exists(Path.Combine(manualDirectory!, "owned-reader-stop-request.json")) &&
+                    !File.Exists(Path.Combine(manualDirectory!, "owned-reader-stop-ready.json")))
+                {
+                    if (!await StopOwnedReader(manualDirectory))
+                        throw new InvalidOperationException("W79 owned reader shutdown could not be verified; browser fixture retained.");
+                    await Ready(Path.Combine(manualDirectory!, "owned-reader-stop-ready.json"), new { ownedReaderStopped = true }, CancellationToken.None);
+                }
                 foreach (var locale in new[] { "en", "fa" })
                 {
                     var committedFile = Path.Combine(handshake, "catalog-applied-" + locale + ".json");
@@ -151,7 +158,45 @@ public sealed class V09W79AccessibilityLiveTests
                 deniedLinkedEffectAbsentFromBroker = true, manualAtEvidenceSeparate = true, completedPkceLogins = lab.CompletedLogins }), token);
             ownedBroker?.MarkSuccessful();
         }
-        finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(CancellationToken.None); } }
+        finally
+        {
+            // Stop only the observer-declared, still-identical test reader before
+            // closing its Chrome fixture, including cancellation/failure exits.
+            if (!await StopOwnedReader(manualDirectory))
+                throw new InvalidOperationException("W79 owned reader shutdown could not be verified; browser fixture retained.");
+            if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(CancellationToken.None); }
+        }
+    }
+
+    private static async Task<bool> StopOwnedReader(string? manualDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(manualDirectory)) return true;
+        var ownerFile = Path.Combine(manualDirectory, "owned-reader.json");
+        if (!File.Exists(ownerFile)) return true;
+        try
+        {
+            using var owner = JsonDocument.Parse(await File.ReadAllBytesAsync(ownerFile, CancellationToken.None));
+            var pid = owner.RootElement.GetProperty("pid").GetInt32();
+            var recordedPath = owner.RootElement.GetProperty("exePath").GetString();
+            var recordedStart = owner.RootElement.GetProperty("processStartUtc").GetDateTimeOffset();
+            if (pid <= 0 || string.IsNullOrWhiteSpace(recordedPath) || !Path.IsPathFullyQualified(recordedPath)) return false;
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            var expectedPath = Path.GetFullPath(recordedPath);
+            var allowedRoot = Path.GetFullPath(Path.Combine(Root(), "deploy/dev/.generated/w79-nvda")) + Path.DirectorySeparatorChar;
+            if (!expectedPath.StartsWith(allowedRoot, comparison)) return false;
+            Process process;
+            try { process = Process.GetProcessById(pid); } catch (ArgumentException) { return true; }
+            using var reader = process;
+            if (reader.HasExited) return true;
+            if (reader.MainModule?.FileName is not { } actualPath ||
+                !string.Equals(Path.GetFullPath(actualPath), expectedPath, comparison) ||
+                Math.Abs((new DateTimeOffset(reader.StartTime.ToUniversalTime()) - recordedStart).TotalSeconds) > 1) return false;
+            reader.Kill();
+            await reader.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            return true;
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException or JsonException or KeyNotFoundException or FormatException or UnauthorizedAccessException or TimeoutException)
+        { return false; /* Unverifiable ownership never authorizes a kill or a safe-close acknowledgment. */ }
     }
 
     private static async Task<JsonDocument?> ReadHandshake(string path, CancellationToken token)

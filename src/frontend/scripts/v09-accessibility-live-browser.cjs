@@ -6,12 +6,13 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const root=path.resolve(__dirname,'../../..'),sourceIdentity=require('./governance-browser-source.cjs');
 const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/playwright'));
 (async()=>{
-  let browser,probe,phase='input',lastStatus=0,result,evidencePath,applicationOrigin,signOutNames=[],diagnoseWindowReturn;
+  let browser,probe,phase='input',lastStatus=0,result,evidencePath,applicationOrigin,signOutNames=[],diagnoseWindowReturn,manualStopDirectory;
   try{
     const [apiUrl,identityPath,scenarioPath,output]=process.argv.slice(2);evidencePath=output;
     if(!apiUrl||!identityPath||!scenarioPath||!output)throw Error('input');
     const read=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));
     const api=new URL(apiUrl),identity=read(identityPath),scenario=read(scenarioPath),issuer=new URL(identity.issuer);
+    if(scenario.manualHandoffDirectory)manualStopDirectory=path.resolve(scenario.manualHandoffDirectory);
     applicationOrigin=api.origin;
     for(const endpoint of [api,issuer])if(!['localhost','127.0.0.1','[::1]'].includes(endpoint.hostname))throw Error('loopback fixture only');
     if(!scenario.clusterId||!scenario.topicName||!identity.humanUsername||!identity.humanPasswordFile||!identity.approverUsername||!identity.approverPasswordFile)throw Error('scenario');
@@ -84,6 +85,17 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       for(const loading of ['Loading authorized automation capabilities…',messages['Loading authorized automation capabilities…']])assert.equal(await panel.getByText(loading,{exact:true}).count(),0,'automation failure still announced loading');
       result.controlledAutomationCopyChecks??=[];result.controlledAutomationCopyChecks.push({language,stage,errorCount:actual.length,closedApplicationCopy:true,loadingCleared:true});
     }
+    async function assertControlledReadViewCopy(target,language,stage){
+      const key='Not authorized for this read view.',expected=language==='fa'?messages[key]:key;
+      for(const headingId of ['streams-title','lineage-title']){
+        // Isolate the adjacent closed denial text from its status badge. Other
+        // backend/technical Error prose is deliberately outside this assertion.
+        const notice=target.locator('#'+headingId).locator('xpath=following-sibling::p[1][@role="alert"]');await notice.waitFor({state:'visible'});
+        const actual=await notice.evaluate(element=>[...element.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE).map(node=>node.textContent).join('').trim());
+        assert.equal(actual,expected,'closed read-view denial did not follow current locale');
+        result.controlledReadViewCopyChecks??=[];result.controlledReadViewCopyChecks.push({language,stage,headingId,closedDenialLocalized:true});
+      }
+    }
     async function preserveLocaleAcrossRoundTrip(target,panel,stage,scanBoth=false){
       const snapshot=()=>panel.evaluate(element=>({material:[...element.querySelectorAll('code,pre,bdi[dir="ltr"]')].map(node=>node.textContent),states:[...element.querySelectorAll('article dl')].map(dl=>dl.querySelectorAll('dd')[3]?.textContent),controls:[...element.querySelectorAll('input,textarea,select')].map(node=>({tag:node.tagName,type:node.getAttribute('type'),value:node.value,checked:node.checked,disabled:node.disabled}))}));
       const before=await snapshot();let mutationRequests=0;const listener=request=>{if(new URL(request.url()).origin===api.origin&&!['GET','HEAD','OPTIONS'].includes(request.method()))mutationRequests++;};target.on('request',listener);
@@ -92,6 +104,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
           await probe.select(target,target.locator('#kafdeck-language'),next,stage+'-switch-'+next);await target.waitForFunction(next=>document.documentElement.lang===next&&document.documentElement.dir===(next==='fa'?'rtl':'ltr'),next);
           assert.deepEqual(await snapshot(),before,'locale changed frozen material or form/review state');assert.equal(await target.locator('#kafdeck-language').evaluate(element=>element===document.activeElement),true,'locale switch moved focus');assert.equal(mutationRequests,0,'locale emitted a mutation');
           await assertControlledAutomationCopy(target,next,stage);
+          await assertControlledReadViewCopy(target,next,stage);
           if(scanBoth)await probe.scan(target,locale+'-'+stage+'-switch-'+next,output);
         }
       }finally{target.off('request',listener);}
@@ -242,5 +255,18 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       fs.writeFileSync(evidencePath,JSON.stringify(result,null,2));
     }
     console.error('V09_W79_ACCESSIBILITY_FAILED phase='+phase+' status='+lastStatus);process.exitCode=3;
-  }finally{if(browser)await browser.close();}
+  }finally{
+    let safeToClose=true;
+    if(browser&&manualStopDirectory){
+      safeToClose=false;
+      try{
+        const request=path.join(manualStopDirectory,'owned-reader-stop-request.json'),ready=path.join(manualStopDirectory,'owned-reader-stop-ready.json');
+        fs.writeFileSync(request,JSON.stringify({readerStopRequiredBeforeBrowserClose:true}));
+        const deadline=Date.now()+10000;while(!fs.existsSync(ready)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,100));
+        if(fs.existsSync(ready))safeToClose=JSON.parse(fs.readFileSync(ready,'utf8').replace(/^\uFEFF/,'')).ownedReaderStopped===true;
+      }catch{}
+      if(!safeToClose){console.error('V09_W79_READER_STOP_UNVERIFIED_BROWSER_RETAINED');process.exitCode=3;}
+    }
+    if(browser&&safeToClose)await browser.close();
+  }
 })();
