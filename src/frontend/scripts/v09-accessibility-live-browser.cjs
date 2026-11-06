@@ -60,6 +60,21 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const deadline=Date.now()+120000;while(!fs.existsSync(resume)){if(Date.now()>deadline)throw Error('native window handoff timeout');await new Promise(resolve=>setTimeout(resolve,250));}
     }
     const manualFocusSessions=[];
+    const manualNativeActors=[];
+    async function inspectNativeActors(){
+      return Promise.all(manualNativeActors.map(async({actor,page,session,events})=>{
+        const snapshot={actor,closed:page.isClosed()};if(snapshot.closed)return snapshot;
+        try{Object.assign(snapshot,await page.evaluate(()=>({documentHasFocus:document.hasFocus(),visibility:document.visibilityState,activeTag:document.activeElement?.tagName??null})));snapshot.events=await events.jsonValue();}
+        catch{snapshot.documentUnavailable=true;}
+        try{const {frameTree}=await session.send('Page.getFrameTree');snapshot.rootFrameId=frameTree.frame.id;snapshot.loaderId=frameTree.frame.loaderId;}
+        catch{snapshot.frameUnavailable=true;}
+        try{const {targetInfo}=await session.send('Target.getTargetInfo');snapshot.targetId=targetInfo.targetId;}
+        catch{snapshot.targetUnavailable=true;}
+        try{const window=await session.send('Browser.getWindowForTarget',snapshot.targetId?{targetId:snapshot.targetId}:{});snapshot.browserWindowId=window.windowId;const {left,top,width,height,windowState}=window.bounds;snapshot.bounds={left,top,width,height,windowState};}
+        catch{snapshot.windowUnavailable=true;}
+        return snapshot;
+      }));
+    }
     let manualActionCursor=0;
     async function manualPause(actorPage,stage,metadata={}){
       if(!scenario.manualHandoffDirectory)return;
@@ -70,10 +85,17 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const suffix=locale+'-'+stage,resume=path.join(directory,'resume-'+suffix+'.json');if(fs.existsSync(resume))throw Error('stale AT handoff');
       const keyboardActionRange={from:manualActionCursor,to:result.keyboard.actions.length};
       const keyboardActionsSincePrevious=result.keyboard.actions.slice(manualActionCursor).filter(action=>typeof action.label==='string').map(({label,tabs,reverseSequenceVerified,firstDocumentEntry})=>({label,tabs,reverseSequenceVerified,firstDocumentEntry}));manualActionCursor=result.keyboard.actions.length;
+      const pauseStartedAt=Date.now();
       fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,stage,...metadata,sourceSha:result.sourceSha,browserVersion:result.browserVersion,authenticatedApplication:true,inputSource:'Playwright Chromium keyboard',keyboardInputMethod:result.keyboard.inputMethod,manualActionDelayMs:result.keyboard.manualActionDelayMs,keyboardActionRange,keyboardActionsSincePrevious}));
       const focusRequest=path.join(directory,'focus-'+suffix+'.json'),focusReady=path.join(directory,'focus-'+suffix+'-ready.json');
       const deadline=Date.now()+1800000;while(!fs.existsSync(resume)){
         if(Date.now()>deadline)throw Error('AT handoff timeout');
+        // Diagnostic snapshots are read-only and never enter native/AT acceptance.
+        const prefix='inspect-native-'+suffix+'-';
+        for(const name of fs.readdirSync(directory).filter(name=>name.startsWith(prefix)&&/^[A-Za-z0-9-]{8,64}\.json$/.test(name.slice(prefix.length))&&!name.endsWith('-ready.json')&&!fs.existsSync(path.join(directory,name.slice(0,-5)+'-ready.json'))).slice(0,8)){
+          const request=path.join(directory,name),ready=path.join(directory,name.slice(0,-5)+'-ready.json');
+          if(!fs.existsSync(ready)&&fs.statSync(request).mtimeMs>=pauseStartedAt)fs.writeFileSync(ready,JSON.stringify({locale,stage,sourceSha:result.sourceSha,observedAtUtc:new Date().toISOString(),diagnosticOnly:true,nativeAcceptanceClaimed:false,syntheticFocusEvents:false,workflowResumed:false,actors:await inspectNativeActors()}));
+        }
         if(fs.existsSync(focusRequest)&&!fs.existsSync(focusReady)){await focusActor();fs.writeFileSync(focusReady,JSON.stringify({locale,stage,actor:metadata.actor??'requester',sourceSha:result.sourceSha,actualActorFocused:true,authenticatedApplication:true,workflowResumed:false}));}
         await new Promise(resolve=>setTimeout(resolve,250));
       }
@@ -148,11 +170,17 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       return !!catalogForm&&!!requestForm&&!catalogForm.disabled&&!requestForm.disabled;
     });
     if(scenario.manualHandoffDirectory&&!launch.headless){
+      manualNativeActors.length=0;
       for(const [actor,actorContext,actorPage] of [['requester',context,page],['reviewer',second,approver]]){
         const session=await actorContext.newCDPSession(actorPage);manualFocusSessions.push(session);
         // Remove Playwright's default simulated focus for the entire manual
         // journey. Native activation must produce the real browser events.
         await session.send('Emulation.setFocusEmulationEnabled',{enabled:false});
+        const events=await actorPage.evaluateHandle(()=>{
+          const events=[],record=event=>{events.push({event,elapsedMs:performance.now(),documentHasFocus:document.hasFocus(),visibility:document.visibilityState});if(events.length>40)events.shift();};
+          window.addEventListener('focus',()=>record('focus'));window.addEventListener('blur',()=>record('blur'));document.addEventListener('visibilitychange',()=>record('visibilitychange'));record('initial');return events;
+        });
+        manualNativeActors.push({actor,page:actorPage,session,events});
         result.manualNativeFocusConfiguration??=[];result.manualNativeFocusConfiguration.push({locale,actor,method:'Emulation.setFocusEmulationEnabled',enabled:false,scope:'entire authenticated manual journey',syntheticFocusEvents:false});
       }
     }
