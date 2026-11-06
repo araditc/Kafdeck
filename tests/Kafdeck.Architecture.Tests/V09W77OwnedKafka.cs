@@ -28,12 +28,19 @@ internal sealed class W77OwnedKafka : IAsyncDisposable
     {
         var home = Environment.GetEnvironmentVariable("KAFDECK_W77_KAFKA_HOME") ?? throw new InvalidOperationException("Explicit verified W77 Kafka home is required.");
         var javaHome = Environment.GetEnvironmentVariable("KAFDECK_W77_JAVA_HOME") ?? throw new InvalidOperationException("Explicit W77 Java 21 home is required.");
+        Assert.False(string.IsNullOrWhiteSpace(home), "phase=owned-kafka-preflight; code=kafka_home_empty");
+        Assert.False(string.IsNullOrWhiteSpace(javaHome), "phase=owned-kafka-preflight; code=java_home_empty");
+        home = Path.GetFullPath(home); javaHome = Path.GetFullPath(javaHome);
+        var java = Path.Combine(javaHome, "bin", OperatingSystem.IsWindows() ? "java.exe" : "java");
+        Assert.True(File.Exists(java), "phase=owned-kafka-preflight; code=java_executable_missing");
+        Assert.True(File.Exists(Path.Combine(home, "libs/kafka_2.13-4.3.1.jar")), "phase=owned-kafka-preflight; code=kafka_jar_missing");
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (!File.Exists(Path.Combine(root.FullName, "Kafdeck.slnx"))) root = root.Parent!;
         var ownedRoot = Path.GetFullPath(Path.Combine(root.FullName, "deploy/dev/.generated/w77"));
         var directory = Path.Combine(ownedRoot, Guid.NewGuid().ToString("N"));
         var port = FreePort(); var controller = FreePort(); while (controller == port) controller = FreePort();
-        var prepare = new ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        var prepare = new ProcessStartInfo("pwsh") { WorkingDirectory = root.FullName, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        prepare.Environment["JAVA_HOME"] = javaHome;
         foreach (var argument in new[] { "-NoProfile", "-File", Path.Combine(root.FullName, "deploy/dev/prepare-kafka-g2.ps1"), "-KafkaHome", home,
             "-JavaHome", javaHome, "-OutputDirectory", directory, "-BrokerPort", port.ToString(System.Globalization.CultureInfo.InvariantCulture), "-ControllerPort", controller.ToString(System.Globalization.CultureInfo.InvariantCulture) }) prepare.ArgumentList.Add(argument);
         using (var formatter = Process.Start(prepare) ?? throw new InvalidOperationException("Owned formatter did not start."))
@@ -42,9 +49,14 @@ internal sealed class W77OwnedKafka : IAsyncDisposable
             try { await formatter.WaitForExitAsync(token).WaitAsync(TimeSpan.FromSeconds(45), token); }
             finally { if (!formatter.HasExited) { formatter.Kill(true); await formatter.WaitForExitAsync(CancellationToken.None); } }
             await Task.WhenAll(stdout, stderr);
-            if (formatter.ExitCode != 0 && Directory.Exists(directory))
-                await File.WriteAllTextAsync(Path.Combine(directory, "formatter-private.log"), (await stdout) + (await stderr), token);
-            Assert.True(formatter.ExitCode == 0, "phase=owned-kafka-format; exit=" + formatter.ExitCode);
+            var privateOutput = (await stdout) + (await stderr);
+            if (formatter.ExitCode != 0)
+            {
+                Directory.CreateDirectory(directory);
+                await File.WriteAllTextAsync(Path.Combine(directory, "formatter-private.log"), privateOutput, token);
+            }
+            Assert.True(formatter.ExitCode == 0, "phase=owned-kafka-format; exit=" + formatter.ExitCode + "; code=" + FormatterFailureCode(privateOutput) +
+                "; configCreated=" + File.Exists(Path.Combine(directory, "server.properties")));
         }
         using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(directory, "lab.json"), token));
         var start = new ProcessStartInfo(Path.GetFullPath(manifest.RootElement.GetProperty("javaExecutable").GetString()!))
@@ -56,6 +68,24 @@ internal sealed class W77OwnedKafka : IAsyncDisposable
         catch { await result.DisposeAsync(); throw; }
     }
     private static int FreePort() { using var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); return ((IPEndPoint)listener.LocalEndpoint).Port; }
+    private static string FormatterFailureCode(string privateOutput)
+    {
+        // Only fixed allowlisted classifications leave the private, credential-free broker log.
+        (string Match, string Code)[] known = [
+            ("Require Java 21 and", "runtime_files_missing"), ("Select a fresh ignored", "instance_not_fresh"),
+            ("UnsupportedClassVersionError", "java_version_incompatible"), ("OutOfMemoryError", "java_memory_exhausted"),
+            ("Could not reserve enough space", "java_memory_reservation_failed"), ("Could not find or load main class", "storage_classpath_invalid"),
+            ("ClassNotFoundException", "storage_classpath_invalid"), ("unrecognized arguments", "storage_arguments_rejected"),
+            ("argument --cluster-id", "storage_cluster_id_rejected"), ("ConfigException", "storage_configuration_rejected"),
+            ("Address already in use", "port_unavailable"), ("SocketException", "port_unavailable"),
+            ("Permission denied", "filesystem_denied"), ("UnauthorizedAccessException", "filesystem_denied"),
+            ("PositionalParameterNotFound", "powershell_arguments_rejected"), ("ParameterBindingException", "powershell_arguments_rejected"),
+            ("cannot be found that accepts argument", "powershell_arguments_rejected"),
+            ("does not exist", "required_path_missing"), ("Kafka storage format failed", "storage_tool_failed") ];
+        foreach (var entry in known)
+            if (privateOutput.Contains(entry.Match, StringComparison.OrdinalIgnoreCase)) return entry.Code;
+        return "unclassified_private_diagnostic_retained";
+    }
     internal async Task StartAsync(CancellationToken token)
     {
         Assert.Null(_process);

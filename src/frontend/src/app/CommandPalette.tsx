@@ -148,7 +148,7 @@ export function CommandPalette() {
       }}
       aria-haspopup="dialog"
       aria-expanded={open}
-      aria-controls="kafdeck-command-palette"
+      aria-controls={open ? "kafdeck-command-palette" : undefined}
     >
       {t("Commands")}{' '}<kbd>Ctrl K</kbd>
     </button>

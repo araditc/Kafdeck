@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 // All application inputs use the browser keyboard. Locators identify the intended
 // target and observe focus; they never focus, click, fill or select a control.
 module.exports=function accessibilityProbe(root,result){
-  result.keyboard={inputMethod:'Playwright keyboard: Tab/Shift+Tab, Enter, Space, Home, ArrowDown and typed text',actions:[]};
+  result.keyboard={inputMethod:'Playwright keyboard: Tab/Shift+Tab, Alt+ArrowDown, Enter, Space, Home, ArrowDown and typed text',actions:[]};
   result.automatedAccessibility={engine:'axe-core',runs:[]};
   let currentPage;
   async function safeFocus(page){return page.evaluate(()=>{
@@ -71,7 +71,9 @@ module.exports=function accessibilityProbe(root,result){
   async function select(page,target,value,label){
     await tabTo(page,target,label);
     const index=await target.locator('option').evaluateAll((options,value)=>options.findIndex(option=>option.value===value),value);
-    assert.ok(index>=0);await page.keyboard.press('Home');for(let i=0;i<index;i++)await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');assert.equal(await target.inputValue(),value);
+    // Explicitly open first: Enter on a collapsed Chromium select opens a popup
+    // even after Home/ArrowDown already changed its value, consuming later Tab.
+    assert.ok(index>=0);await page.keyboard.press('Alt+ArrowDown');await page.keyboard.press('Home');for(let i=0;i<index;i++)await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');assert.equal(await target.inputValue(),value);
   }
   async function check(page,target,label){await tabTo(page,target,label);if(!await target.isChecked())await page.keyboard.press('Space');assert.equal(await target.isChecked(),true);}
   async function scan(page,label,evidencePath){

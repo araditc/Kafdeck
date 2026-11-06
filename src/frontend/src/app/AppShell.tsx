@@ -419,12 +419,12 @@ export function AppShell() {
     <header className="navbar navbar-expand-md bg-surface d-print-none kafdeck-topbar">
       <div className="container-xl">
         <h1 id="kafdeck-title" className="navbar-brand navbar-brand-autodark m-0">
-          <a className="kafdeck-brand" href="#overview" aria-label={t("{0} home", [productName])}>
+          <a className="kafdeck-brand" href="#overview" aria-labelledby="kafdeck-brand-name kafdeck-brand-subtitle">
             <img className="kafdeck-brand-logo" src="/kafdeck-logo.webp" alt={productName} width={42} height={42} />
             <span className="kafdeck-accent" aria-hidden="true" />
             <span className="kafdeck-brand-copy">
-              <span className="kafdeck-brand-name">{productName}</span>
-              <span className="kafdeck-brand-subtitle">{t(productDescription)}</span>
+              <span id="kafdeck-brand-name" className="kafdeck-brand-name">{productName}</span>
+              <span id="kafdeck-brand-subtitle" className="kafdeck-brand-subtitle">{t(productDescription)}</span>
             </span>
           </a>
         </h1>

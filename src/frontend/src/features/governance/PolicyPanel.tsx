@@ -79,12 +79,12 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
         <button className="btn btn-outline-primary" type="button" onClick={() => void run(async signal => { const value = await policyApi.validate(clusterId, document, signal); if (!signal.aborted) setValidation(value); })}>{t("Validate closed policy")}</button>
         <button className="btn btn-outline-warning" type="button" onClick={() => void run(async signal => { const status = await policyApi.previewVersion(clusterId, document, key, signal); if (!signal.aborted) await inspect(status.operationId, signal); })}>{t("Preview governed version write")}</button>
       </div>
-      {validation && <section aria-label={t("Policy validation result")}><p role="status">{t("Valid:")}{' '}{String(validation.valid)}{t("; canonical hash")}{' '}<code dir="ltr" lang="en">{validation.contentHash}</code>.</p><pre dir="ltr" lang="en" className="automation-proof">{typeof validation.document === 'string' ? validation.document : JSON.stringify(validation.document, null, 2)}</pre></section>}
+      {validation && <section aria-label={t("Policy validation result")}><p role="status">{t("Valid:")}{' '}{String(validation.valid)}{t("; canonical hash")}{' '}<code dir="ltr" lang="en">{validation.contentHash}</code>.</p><pre tabIndex={0} dir="ltr" lang="en" className="automation-proof">{typeof validation.document === 'string' ? validation.document : JSON.stringify(validation.document, null, 2)}</pre></section>}
     </fieldset>
     <fieldset disabled={busy || !loaded} className="mt-3"><legend>{t("Review versions and governed activation (latest 1000 loaded versions retained)")}</legend>
       <label className="form-label">{t("Immutable policy version")}<select className="form-select" value={versionId} onChange={event => { setVersionId(event.target.value); invalidatePreview(); }}>
         <option value="">{t("Select a version")}</option>{versions.map(version => <option key={version.versionId} value={version.versionId}>{version.versionId} / {version.contentHash}</option>)}</select></label>
-      {versions.find(version => version.versionId === versionId) && <details><summary>{t("Selected immutable version")}</summary><pre dir="ltr" lang="en" className="automation-proof">{versions.find(version => version.versionId === versionId)?.document}</pre></details>}
+      {versions.find(version => version.versionId === versionId) && <details><summary>{t("Selected immutable version")}</summary><pre tabIndex={0} dir="ltr" lang="en" className="automation-proof">{versions.find(version => version.versionId === versionId)?.document}</pre></details>}
       <label className="form-check"><input dir="auto" className="form-check-input" type="checkbox" checked={enable} onChange={event => { setEnable(event.target.checked); invalidatePreview(); }} /><span className="form-check-label">{t("Enable selected policy (uncheck for governed deactivation)")}</span></label>
       <button className="btn btn-outline-warning" type="button" disabled={!versionId || active === null} onClick={() => void run(async signal => { if (!active) return; const status = await policyApi.previewActivation(clusterId, versionId, active.revision, enable, key, signal); if (!signal.aborted) await inspect(status.operationId, signal); })}>{t("Preview critical activation change")}</button>
       {cursor && <button className="btn btn-outline-primary" type="button" onClick={() => void run(signal => load(signal, true))}>{t("Read next policy version page")}</button>}
@@ -99,8 +99,8 @@ export function PolicyPanel({clusterId}: {clusterId: string}) {
       </div>
       <div className="d-flex flex-wrap gap-2"><button className="btn btn-outline-primary" type="button" onClick={() => void run(async signal => { const result = await policyApi.explain(fixture(), signal); if (!signal.aborted) setDecision(result); })}>{t("Explain current decision")}</button>
         <button className="btn btn-outline-primary" type="button" onClick={() => void run(async signal => { const result = await policyApi.dryRun([fixture()], signal); if (!signal.aborted) setDryRun(result.items); })}>{t("Dry-run this fixture")}</button></div>
-      {decision && <pre dir="ltr" lang="en" aria-label={t("Current policy explanation")} className="automation-proof">{JSON.stringify(decision, null, 2)}</pre>}
-      {dryRun && <pre dir="ltr" lang="en" aria-label={t("Read-only dry-run results")} className="automation-proof">{JSON.stringify(dryRun, null, 2)}</pre>}
+      {decision && <pre tabIndex={0} dir="ltr" lang="en" aria-label={t("Current policy explanation")} className="automation-proof">{JSON.stringify(decision, null, 2)}</pre>}
+      {dryRun && <pre tabIndex={0} dir="ltr" lang="en" aria-label={t("Read-only dry-run results")} className="automation-proof">{JSON.stringify(dryRun, null, 2)}</pre>}
     </fieldset>
     <form className="mt-3" onSubmit={event => { event.preventDefault(); void run(signal => inspect(lookup, signal)); }}>
       <label className="form-label">{t("Existing policy operation ID")}<input dir="auto" className="form-control" value={lookup} onChange={event => setLookup(event.target.value)} autoComplete="off" /></label>

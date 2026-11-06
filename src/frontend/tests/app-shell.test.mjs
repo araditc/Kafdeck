@@ -21,7 +21,8 @@ test('AppShell exposes product identity and accessible operator landmarks', () =
   assert.match(markup, /href="#fleet"/);
   assert.match(markup, /Fleet Operations/);
   assert.match(markup, /Loading fleet capability status/);
-  assert.match(markup, /aria-controls="kafdeck-command-palette"/);
+  assert.match(markup, /aria-haspopup="dialog"/);
+  assert.doesNotMatch(markup, /aria-controls="kafdeck-command-palette"/);
   assert.match(markup, /Commands/);
 });
 

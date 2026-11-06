@@ -82,8 +82,8 @@ export function GovernanceOperationReview({ operation, material, busy, update, e
     {operation.riskClass === 'critical' && <p role="alert">{['governancepolicyactivation','policyactivation'].includes(operation.operationKind.toLowerCase())
       ? t("Critical policy activation requires confirmation and independent human approval for this exact material.")
       : t("This critical operation requires confirmation and independent human approval for this exact material.")}</p>}
-    <details open><summary>{t("Frozen reviewed material")}</summary><pre dir="ltr" lang="en" className="automation-proof">{JSON.stringify(material, null, 2)}</pre></details>
-    <details><summary>{t("Safe backend evidence")}</summary><pre dir="ltr" lang="en" className="automation-proof">{JSON.stringify(operation.safeProviderEvidence, null, 2)}</pre></details>
+    <details open><summary>{t("Frozen reviewed material")}</summary><pre tabIndex={0} dir="ltr" lang="en" className="automation-proof">{JSON.stringify(material, null, 2)}</pre></details>
+    <details><summary>{t("Safe backend evidence")}</summary><pre tabIndex={0} dir="ltr" lang="en" className="automation-proof">{JSON.stringify(operation.safeProviderEvidence, null, 2)}</pre></details>
     <fieldset disabled={busy}><legend className="h4">{t("Mutation actions")}</legend>
       <label className="form-check"><input dir="auto" className="form-check-input" type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} />
         <span className="form-check-label">{t("I inspected this immutable operation, scope, material and fingerprint.")}</span></label>

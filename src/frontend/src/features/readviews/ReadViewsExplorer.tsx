@@ -777,7 +777,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         {schemaMock && <div>
           <h4>{t("Generated examples")}</h4>
           <p>{t("Format:")}{' '}{schemaMock.data.format} {' '}{t("· Seed:")}{' '}{schemaMock.data.seed} {' '}{t("· Total bytes:")}{' '}<bdi dir="ltr" lang="en">{schemaMock.data.totalBytes}</bdi></p>
-          {schemaMock.data.examples.map(example => <pre dir="ltr" lang="en" key={example.index} aria-label={t("Generated schema example {0}", [example.index + 1])}><code dir="ltr" lang="en">{example.json}</code></pre>)}
+          {schemaMock.data.examples.map(example => <pre tabIndex={0} dir="ltr" lang="en" key={example.index} aria-label={t("Generated schema example {0}", [example.index + 1])}><code dir="ltr" lang="en">{example.json}</code></pre>)}
         </div>}
       </article>}
     </section>
@@ -820,8 +820,8 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
           <button type="button" disabled={serdeBusy || serdeStructuredJson.trim().length === 0} onClick={() => void encodeSerde()}>{t("Encode locally")}</button>
         </div>
       </>}
-      {serdeDecoded && <article aria-labelledby="serde-decoded-title"><h3 id="serde-decoded-title">{t("Decoded value")}</h3><pre dir="ltr" lang="en"><code dir="ltr" lang="en">{JSON.stringify(serdeDecoded.structuredValue, null, 2)}</code></pre></article>}
-      {serdeEncoded && <article aria-labelledby="serde-encoded-title"><h3 id="serde-encoded-title">{t("Encoded payload")}</h3><p><bdi dir="ltr" lang="en">{serdeEncoded.byteCount}</bdi> {' '}{t("bytes")}</p><pre dir="ltr" lang="en"><code dir="ltr" lang="en">{serdeEncoded.payloadBase64}</code></pre></article>}
+      {serdeDecoded && <article aria-labelledby="serde-decoded-title"><h3 id="serde-decoded-title">{t("Decoded value")}</h3><pre tabIndex={0} dir="ltr" lang="en"><code dir="ltr" lang="en">{JSON.stringify(serdeDecoded.structuredValue, null, 2)}</code></pre></article>}
+      {serdeEncoded && <article aria-labelledby="serde-encoded-title"><h3 id="serde-encoded-title">{t("Encoded payload")}</h3><p><bdi dir="ltr" lang="en">{serdeEncoded.byteCount}</bdi> {' '}{t("bytes")}</p><pre tabIndex={0} dir="ltr" lang="en"><code dir="ltr" lang="en">{serdeEncoded.payloadBase64}</code></pre></article>}
     </section>
 
     <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">

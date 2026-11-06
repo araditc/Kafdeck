@@ -65,11 +65,11 @@ function anchorQuery(anchor: RecordAnchorProjection | null): Partial<RecordQuery
 function RecordValue({ record, mode }: { record: RecordSafeProjection; mode: ViewMode }) {
   if (record.valueKind === 'fullyRedacted') return <em>{t("Payload fully redacted by policy.")}</em>;
   if (mode === 'structured') {
-    if (record.structuredValue !== null) return <pre dir="ltr" lang="en">{JSON.stringify(record.structuredValue, null, 2)}</pre>;
+    if (record.structuredValue !== null) return <pre tabIndex={0} dir="ltr" lang="en">{JSON.stringify(record.structuredValue, null, 2)}</pre>;
     return <em>{t("Structured decoding unavailable for this record.")}</em>;
   }
   if (!record.rawValue) return <em>{t("Raw representation withheld by masking policy.")}</em>;
-  return <pre dir="ltr" lang="en">{mode === 'hex' ? rawHex(record.rawValue) : rawText(record.rawValue)}</pre>;
+  return <pre tabIndex={0} dir="ltr" lang="en">{mode === 'hex' ? rawHex(record.rawValue) : rawText(record.rawValue)}</pre>;
 }
 
 export function RecordExplorer({ clusterId, topicName, partitions }: Props) {

@@ -14,14 +14,36 @@ public sealed class V09W77HardeningLiveTests
 
     private static async Task SoakAsync(bool postgres)
     {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(15));
+        var progress = new SoakProgress();
+        try { await SoakCoreAsync(postgres, progress, timeout.Token); }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            Assert.Fail("phase=" + progress.Phase + "; tick=" + progress.Tick +
+                "; setupElapsedSeconds=" + Math.Round(progress.SetupSeconds ?? progress.Total.Elapsed.TotalSeconds, 1) +
+                "; profileElapsedSeconds=" + Math.Round(progress.Profile?.Elapsed.TotalSeconds ?? 0, 1));
+        }
+    }
+
+    private sealed class SoakProgress
+    {
+        internal Stopwatch Total { get; } = Stopwatch.StartNew();
+        internal Stopwatch? Profile { get; set; }
+        internal double? SetupSeconds { get; set; }
+        internal string Phase { get; set; } = "setup";
+        internal int Tick { get; set; } = -1;
+    }
+
+    private static async Task SoakCoreAsync(bool postgres, SoakProgress progress, CancellationToken token)
+    {
         // Finite reproducibility fixture, not the W82 2h reference soak or a production SLA.
         const int warmSamples = 10, loadSamples = 300, coolSamples = 10, concurrency = 4;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(12)); var token = timeout.Token;
         await using var broker = await W77OwnedKafka.CreateAsync(token);
         await using var lab = await W77Laboratory.CreateAsync(postgres, token, broker.Bootstrap);
         var dataset = await W77GovernanceDataset.CreateAsync(lab, token);
         var databaseVersion = await lab.DatabaseVersionAsync(token);
         var pid = lab.Api.OwnedProcessId; var clock = Stopwatch.StartNew();
+        progress.Profile = clock; progress.SetupSeconds = progress.Total.Elapsed.TotalSeconds;
         var samples = new List<object>(); var apiSamples = new List<W77ProcessSample>(); var latency = new List<double>(); var requests = 0; var metadataRequests = 0;
         using var http = await lab.Api.AuthenticateHumanHttpAsync(token);
         var from = Uri.EscapeDataString(dataset.FromUtc); var to = Uri.EscapeDataString(dataset.ToUtc);
@@ -50,8 +72,10 @@ public sealed class V09W77HardeningLiveTests
         {
             foreach (var phase in new[] { (Name: "warm", Count: warmSamples), (Name: "load", Count: loadSamples), (Name: "cool", Count: coolSamples) })
             {
+                progress.Phase = phase.Name;
                 for (var tick = 0; tick < phase.Count; tick++)
                 {
+                    progress.Tick = tick;
                     var begin = Stopwatch.StartNew();
                     if (phase.Name == "load")
                     {
@@ -74,6 +98,7 @@ public sealed class V09W77HardeningLiveTests
                     if (remaining > TimeSpan.Zero) await Task.Delay(remaining, token);
                 }
             }
+            progress.Phase = "postload-durability"; progress.Tick = -1;
             Assert.Equal(loadSamples * concurrency + warmSamples + 10, requests);
             using (var denied = await http.GetAsync("/api/v1/governance/catalog/teams?clusterId=hidden", token)) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             // Actual CLI after sustained HTTP load and real abrupt API restart.
@@ -90,6 +115,7 @@ public sealed class V09W77HardeningLiveTests
         var meanTime = load.Average(sample => sample.ElapsedSeconds); var meanRss = load.Average(sample => sample.RssBytes);
         var slope = load.Sum(sample => (sample.ElapsedSeconds - meanTime) * (sample.RssBytes - meanRss)) /
             load.Sum(sample => Math.Pow(sample.ElapsedSeconds - meanTime, 2));
+        progress.Phase = "evidence";
         await W77Laboratory.EvidenceAsync((postgres ? "postgres" : "sqlite") + "-w77-h1", new
         {
             acceptance = "H1", sourceSha = Environment.GetEnvironmentVariable("KAFDECK_SOURCE_SHA") ?? Environment.GetEnvironmentVariable("GITHUB_SHA"), runtime = Environment.Version.ToString(),
