@@ -42,6 +42,14 @@ function validate(record,current,artifactDirectory){
   require(environment?.synthesizer?.name==='eSpeak NG','actual-synthesizer-missing');
   require(environment?.synthesizer?.speechMode==='talk'&&environment?.synthesizer?.volume>0,'actual-speech-output-not-enabled');
   for(const locale of ['en','fa'])require(environment?.synthesizer?.observedVoices?.[locale]?.available===true&&environment?.synthesizer?.observedVoices?.[locale]?.selected===true,'actual-voice-not-observed-'+locale);
+  for(const locale of ['en','fa']){
+    const rows=(record?.nativeWindowReturns??[]).filter(row=>row.locale===locale),row=rows[0];require(rows.length===1,'native-window-count-'+locale);
+    require(row?.profile==='headed'&&row.actualWindowSwitch===true&&row.nativeEventsVerified===true,'native-window-not-headed-'+locale);
+    require(row?.sessionHttpStatus===200&&row.opaqueScopeStable===true&&row.originalInputNodeAndFocusPreserved===true&&row.selectedMaterialAndInputsPreserved===true,'native-window-state-'+locale);
+    require(Array.isArray(row?.actualWindowEvents)&&row.actualWindowEvents.some(event=>event.event==='blur')&&row.actualWindowEvents.some(event=>event.event==='focus'),'native-window-events-'+locale);
+    require(Array.isArray(row?.artifacts)&&row.artifacts.length>0,'native-window-evidence-'+locale);
+    for(const artifact of row?.artifacts??[]){const safe=typeof artifact==='string'&&!path.isAbsolute(artifact)&&!artifact.split(/[\\/]/).includes('..')&&!artifact.includes('://');require(safe&&hex(record?.artifactHashes?.[artifact]),'native-window-artifact-hash-'+locale);if(artifactDirectory&&safe){try{require(digest(fs.readFileSync(path.join(artifactDirectory,artifact)))===record?.artifactHashes?.[artifact],'native-window-artifact-content-'+locale);}catch{require(false,'native-window-artifact-missing-'+locale);}}}
+  }
   const observations=Array.isArray(record?.observations)?record.observations:[];
   require(observations.length===stages.length*2,'unexpected-stage-count');
   for(const locale of ['en','fa'])for(const stage of stages){

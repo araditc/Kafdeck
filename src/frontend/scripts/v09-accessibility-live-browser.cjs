@@ -19,6 +19,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     const launch={headless:process.env.KAFDECK_W79_HEADED!=='1',channel:'chromium'};if(process.env.KAFDECK_G2_BROWSER_EXECUTABLE)launch.executablePath=process.env.KAFDECK_G2_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
     result={...sourceIdentity(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:false,tokenInjection:false,genuineKeycloakBrowserSession:true,
+      browserProfile:launch.headless?'headless':'headed',nativeWindowProofRequiredInManual:true,
       fixturePreparation:'Underlying immutable topic effect preview and exact kernel confirmation through authenticated cookie API; all product workflow controls use keyboard',
       loopbackFixtureBrowserCertificateErrorsIgnored:true,tlsConformanceClaimed:false,manualScreenReader:{status:'not-observed',producer:'separate actual AT issue log required'},mandatoryMissing:[]};
     probe=require('./v09-accessibility-probe.cjs')(root,result);
@@ -130,7 +131,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const focus=()=>record('focus'),blur=()=>record('blur'),visibility=()=>record('visibilitychange');window.addEventListener('focus',focus);window.addEventListener('blur',blur);document.addEventListener('visibilitychange',visibility);record('initial');
       return {events,stop:()=>{window.removeEventListener('focus',focus);window.removeEventListener('blur',blur);document.removeEventListener('visibilitychange',visibility);}};
     });
-    result.windowReturnCurrent={locale,sessionGetStatus:null,opaqueScopeMatched:null};
+    result.windowReturnCurrent={locale,profile:launch.headless?'headless':'headed',nativeWindowProofClaimed:false,sessionGetStatus:null,opaqueScopeMatched:null};
     diagnoseWindowReturn=async()=>({
       ...result.windowReturnCurrent,selectedMatchCount:await selectedRevision.count(),selectedVisible:await selectedRevision.isVisible(),
       original:await reasonHandle.evaluate(element=>({connected:element.isConnected,currentActiveEqualsOriginal:element===document.activeElement,documentHasFocus:document.hasFocus(),visibility:document.visibilityState,inertAncestor:!!element.closest('[inert]'),hiddenAncestor:!!element.closest('[hidden]'),activeTag:document.activeElement?.tagName??null,activeType:document.activeElement?.getAttribute('type')??null})),
@@ -138,20 +139,30 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     });
     phase='window-return-switch-away-'+locale;
     await approver.bringToFront();
-    const returningSession=page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/auth/session'&&response.request().method()==='GET';});returningSession.catch(()=>{});
-    phase='window-return-session-response-'+locale;await page.bringToFront();const revalidated=await returningSession;lastStatus=revalidated.status();result.windowReturnCurrent.sessionGetStatus=lastStatus;assert.equal(lastStatus,200);result.windowReturnCurrent.opaqueScopeMatched=(await revalidated.json()).sessionScope===requesterSession.sessionScope;assert.equal(result.windowReturnCurrent.opaqueScopeMatched,true);
+    if(!launch.headless){
+      const returningSession=page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/auth/session'&&response.request().method()==='GET';});returningSession.catch(()=>{});
+      phase='window-return-session-response-'+locale;await page.bringToFront();const revalidated=await returningSession;lastStatus=revalidated.status();result.windowReturnCurrent.sessionGetStatus=lastStatus;assert.equal(lastStatus,200);result.windowReturnCurrent.opaqueScopeMatched=(await revalidated.json()).sessionScope===requesterSession.sessionScope;assert.equal(result.windowReturnCurrent.opaqueScopeMatched,true);
+      const events=await windowEvents.evaluate(state=>state.events);assert.ok(events.some(event=>event.event==='blur')&&events.some(event=>event.event==='focus'),'headed native window events missing');result.windowReturnCurrent.nativeWindowProofClaimed=true;
+    }else{
+      await page.bringToFront();result.windowReturnCurrent.capability='native-window-focus-unsupported-not-claimed';result.mandatoryMissing.push('headed actual native window focus and session revalidation proof: '+locale);
+    }
     phase='window-return-selected-visible-'+locale;await selectedRevision.waitFor({state:'visible'});
     phase='window-return-original-focus-'+locale;await page.waitForFunction(element=>element?.isConnected&&element===document.activeElement,reasonHandle);
     phase='window-return-preserved-values-'+locale;
-    assert.deepEqual(await selectedForm(),populatedBefore);result.actualWindowReturnPreservesSelectedRequestAndTypedFields??=[];result.actualWindowReturnPreservesSelectedRequestAndTypedFields.push({locale,actualWindowSwitch:true,sessionHttpStatus:200,opaqueScopeStable:true,selectedMaterialAndInputsPreserved:true,originalInputNodeAndFocusPreserved:true});
+    assert.deepEqual(await selectedForm(),populatedBefore);result.windowReturnChecks??=[];const windowCheck={locale,profile:launch.headless?'headless':'headed',actualWindowSwitch:!launch.headless,nativeEventsVerified:!launch.headless,sessionHttpStatus:result.windowReturnCurrent.sessionGetStatus,opaqueScopeStable:result.windowReturnCurrent.opaqueScopeMatched,selectedMaterialAndInputsPreserved:true,originalInputNodeAndFocusPreserved:true,actualWindowEvents:await windowEvents.evaluate(state=>state.events)};result.windowReturnChecks.push(windowCheck);
+    if(!launch.headless){result.actualWindowReturnPreservesSelectedRequestAndTypedFields??=[];result.actualWindowReturnPreservesSelectedRequestAndTypedFields.push(windowCheck);}
     result.windowReturnCurrent=await diagnoseWindowReturn();await windowEvents.evaluate(state=>state.stop());diagnoseWindowReturn=null;
     await probe.select(page,label(requests,'Business command'),'Submit','submit-command');await requestAction(page,button(requests,'Preview governed request change'),'/requests/changes/preview');await applied(page,review);
     await probe.activate(page,button(requests,'Refresh selected request'),'refresh-submitted-request');
     await manualPause('submitted',{requestId,operationId:target.operationId});
     phase='keyboard-self-approval-denied';await probe.select(page,label(requests,'Business command'),'Approve','self-approve-command');await requestAction(page,button(requests,'Preview governed request change'),'/requests/decisions/preview',403);await requests.getByRole('alert').waitFor();result.requesterSelfDecisionDenied=true;
-    phase='keyboard-independent-human-approval';await approver.bringToFront();await manualPause('reviewer-before-approval',{requestId,actor:'reviewer'});
-    const decisions=approver.locator('#service-requests');await probe.activate(approver,dynamicButton(decisions,'Inspect request',requestId),'independent-inspect');await probe.select(approver,label(decisions,'Business command'),'Approve','independent-approve-command');
-    await probe.text(approver,label(decisions,'Business reason'),'W79 distinct current human exact revision','approval-reason');await requestAction(approver,button(decisions,'Preview governed request change'),'/requests/decisions/preview');await applied(approver,article(decisions));await second.close();await page.bringToFront();
+    phase='keyboard-independent-human-approval';await approver.bringToFront();
+    const decisions=approver.locator('#service-requests');
+    const reviewerReload=approver.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/governance/requests'&&response.request().method()==='GET';});reviewerReload.catch(()=>{});
+    await probe.activate(approver,button(decisions,'Reload authorized requests'),'independent-request-reload');lastStatus=(await reviewerReload).status();assert.equal(lastStatus,200);
+    await probe.activate(approver,dynamicButton(decisions,'Inspect request',requestId),'independent-inspect');await probe.select(approver,label(decisions,'Business command'),'Approve','independent-approve-command');
+    await probe.text(approver,label(decisions,'Business reason'),'W79 distinct current human exact revision','approval-reason');await requestAction(approver,button(decisions,'Preview governed request change'),'/requests/decisions/preview');await article(decisions).waitFor();await manualPause('reviewer-before-approval',{requestId,actor:'reviewer'});
+    await applied(approver,article(decisions));await second.close();await page.bringToFront();
     await probe.activate(page,button(requests,'Refresh selected request'),'refresh-approved');const current=await get(context,`/api/v1/governance/requests/${requestId}?`+new URLSearchParams({clusterId:scenario.clusterId}));assert.equal(current.businessState.toLowerCase(),'approved');assert.equal(current.decisions.length,1);assert.equal(current.operationId,target.operationId);result.keyboardDraftSubmitDistinctHumanApprove=true;
     await probe.activate(page,button(requests,'Inspect linked effect operation'),'approved-linked-effect');const approvedEffect=article(requests).first();await probe.check(page,label(approvedEffect,'I inspected this immutable operation, scope, material and fingerprint.'),'approved-reviewed-kernel-ready');assert.equal(await button(approvedEffect,'Execute reviewed operation').isEnabled(),true);result.approvedBusinessAndKernelGatesAllowExplicitDispatch=true;
     const typedChallenge=approvedEffect.locator('label').filter({hasText:local('Exact confirmation challenge:')});if(await typedChallenge.count())await probe.text(page,typedChallenge.locator('input'),(await typedChallenge.locator('code').textContent()).trim(),'preserved-exact-typed-challenge');
