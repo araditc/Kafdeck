@@ -186,6 +186,19 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     }
     await manualPause(page,'before-actions');
     phase='keyboard-skip-main-'+locale;await probe.activate(page,page.getByRole('link',{name:local('Skip to main content'),exact:true}),'skip-to-main');assert.equal(await page.locator('#kafdeck-main').evaluate(element=>element===document.activeElement),true);result.keyboardSkipToMain??=[];result.keyboardSkipToMain.push({locale,method:'Tab then Enter',activeId:'kafdeck-main'});
+    if(scenario.manualHandoffDirectory){
+      // Native AT can finish its main-landmark announcement asynchronously.
+      // Observe stable focus before starting the next keyboard interaction.
+      const deadline=Date.now()+10000;let stableSince=null;
+      for(;;){
+        const mainFocused=await page.locator('#kafdeck-main').evaluate(element=>element===document.activeElement);
+        stableSince=mainFocused?(stableSince??Date.now()):null;
+        if(stableSince!==null&&Date.now()-stableSince>=3000)break;
+        assert.ok(Date.now()<deadline,'main landmark focus did not settle after skip');
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      result.manualSkipFocusSettled??=[];result.manualSkipFocusSettled.push({locale,stableMs:3000});
+    }
     phase='keyboard-catalog-escaped-input';const escapedName='w79-'+crypto.randomUUID().slice(0,8)+' <w79-escaped>& " فارسی';
     await probe.text(page,label(catalog,'Name'),escapedName,'catalog-name');await probe.text(page,label(catalog,'Description'),'Keyboard catalog; no markup interpretation','catalog-description');
     const catalogPreview=await requestAction(page,button(catalog,'Preview exact metadata change'),'/teams/preview',201);let review=article(catalog);await applied(page,review);

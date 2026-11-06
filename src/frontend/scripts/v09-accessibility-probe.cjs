@@ -68,6 +68,7 @@ module.exports=function accessibilityProbe(root,result,options={}){
     result.keyboard.actions.push({label,tabs:count,reverseSequenceVerified:!documentEntry,firstDocumentEntry:documentEntry,focus});
     result.keyboard.current.stage='keyboard-action-ready';
     if(manualActionDelayMs)await new Promise(resolve=>setTimeout(resolve,manualActionDelayMs));
+    assert.equal(await target.evaluate(element=>element===document.activeElement),true,'keyboard target lost focus before action');
   }
   async function activate(page,target,label){await tabTo(page,target,label);await page.keyboard.press('Enter');}
   async function text(page,target,value,label){await tabTo(page,target,label);await page.keyboard.press('ControlOrMeta+A');await page.keyboard.type(value);assert.equal(await target.inputValue(),value);}
