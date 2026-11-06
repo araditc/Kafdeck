@@ -598,3 +598,22 @@ body {
 .kafdeck-shell .btn-link.kafdeck-table-button:is(:hover, :focus-visible, :active) {
   color: var(--kafdeck-table-link-hover);
 }
+
+/* Actual unknown-operation scans caught low-contrast intermediate frames when
+   Tabler crossfades foreground and background in opposite directions. Keep
+   control colors/borders immediate; a shadow may still indicate interaction. */
+.kafdeck-shell .btn { transition-property: box-shadow; }
+:root { --kafdeck-primary-action: #13508b; --kafdeck-primary-action-on: #ffffff; }
+[data-bs-theme="dark"] { --kafdeck-primary-action: #c5e0ff; --kafdeck-primary-action-on: #142a42; }
+.kafdeck-shell .btn-outline-primary {
+  --tblr-btn-color: var(--kafdeck-primary-action);
+  --tblr-btn-border-color: var(--kafdeck-primary-action);
+  --tblr-btn-hover-color: var(--kafdeck-primary-action-on);
+  --tblr-btn-hover-bg: var(--kafdeck-primary-action);
+  --tblr-btn-hover-border-color: var(--kafdeck-primary-action);
+  --tblr-btn-active-color: var(--kafdeck-primary-action-on);
+  --tblr-btn-active-bg: var(--kafdeck-primary-action);
+  --tblr-btn-active-border-color: var(--kafdeck-primary-action);
+  --tblr-btn-disabled-color: var(--kafdeck-primary-action);
+  --tblr-btn-disabled-border-color: var(--kafdeck-primary-action);
+}
