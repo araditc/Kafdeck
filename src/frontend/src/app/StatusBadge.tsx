@@ -11,8 +11,8 @@ export function StatusBadge({
   return <span
     className={`badge ${presentation.badgeClass}`}
     title={presentation.description}
-    aria-label={`${label ?? presentation.label}: ${presentation.description}`}
   >
-    {label ?? presentation.label}
+    <bdi dir="auto">{label ?? presentation.label}</bdi>
+    <span className="visually-hidden">: {presentation.description}</span>
   </span>;
 }

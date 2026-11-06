@@ -170,7 +170,8 @@ test('v0.8 W64 consumer analytics UI is bounded, truth-preserving and operator-t
   assert.match(source, /getConsumerOperationalSlo/);
   assert.match(source, /Evaluate bounded SLO/);
   assert.match(source, /Missing provider evidence remains unavailable/);
-  assert.match(source, /item\.value \?\? 'Unavailable'/);
+  assert.match(source, /item\.value \?\? t\("Unavailable"\)/);
+  assert.doesNotMatch(source, /item\.value \|\|/); // Observed zero remains zero in every locale.
   assert.doesNotMatch(source, /setInterval\(/);
   assert.doesNotMatch(source, /WebSocket/);
   assert.doesNotMatch(source, /mutate Kafka/i);
@@ -292,7 +293,8 @@ test('v0.8 W64 SLO busy state is isolated from analytics loading', () => {
   assert.match(source, /setActiveSloRequests\(count => count \+ 1\)/);
   assert.match(source, /setActiveSloRequests\(count =>/);
   assert.match(source, /disabled=\{operationalBusy \|\| sloBusy\}/);
-  assert.match(source, /\{sloBusy \? 'Evaluating…' : 'Evaluate bounded SLO'\}/);
+  assert.match(source, /\{sloBusy \? t\("Evaluating…"\) : t\("Evaluate bounded SLO"\)\}/);
+  assert.match(source, /onClick=\{\(\) => void evaluateConsumerSlo\(\)\}/);
 
   const thresholdHandler = source.match(/id="consumer-slo-threshold"[^\n]+onChange=\{event => \{([^}]+)\}\}/)?.[1] ?? '';
   const targetHandler = source.match(/id="consumer-slo-target"[^\n]+onChange=\{event => \{([^}]+)\}\}/)?.[1] ?? '';
@@ -361,7 +363,8 @@ test('v0.8 W65 data-quality UI is bounded, truth-preserving and payload-free', (
   assert.match(panel, /upsertDataQualityPolicy/);
   assert.match(panel, /setDataQualityPolicyState/);
   assert.match(panel, /formatEvidenceCount/);
-  assert.match(panel, /'Unavailable'/);
+  assert.match(panel, /state === 'available' \|\| state === 'partial'[\s\S]*?\? String\(value\)[\s\S]*?: t\("Unavailable"\)/);
+  assert.doesNotMatch(panel, /formatEvidenceCount[\s\S]{0,180}\?\? 0/);
   assert.match(panel, /status === 409/);
   assert.match(panel, /never retries an overwrite implicitly/i);
   assert.doesNotMatch(panel, /setInterval\(/);

@@ -20,8 +20,23 @@ async function sourceFiles(directory) {
 test('frontend source does not persist secrets or payloads in browser storage', async () => {
   for (const file of await sourceFiles(sourceRoot)) {
     const source = await readFile(file, 'utf8');
+    let guarded = source;
+    if (file === path.join(sourceRoot, 'shared', 'i18n.ts')) {
+      // This is a call-level exception, not an exemption for the module: any
+      // alias, extra operation, alternate key or unnormalized value still fails.
+      assert.match(source, /export const localePreferenceKey = 'kafdeck\.locale\.v1';/);
+      assert.match(source, /const next = normalizeLocale\(value\);/);
+      const permitted = [
+        'window.localStorage.getItem(localePreferenceKey)',
+        'window.localStorage.setItem(localePreferenceKey, next)',
+      ];
+      for (const call of permitted) {
+        assert.equal(source.split(call).length - 1, 1, `Expected exactly one ${call}`);
+        guarded = guarded.replace(call, '/* closed language preference operation */');
+      }
+    }
     assert.doesNotMatch(
-      source,
+      guarded,
       /\b(?:localStorage|sessionStorage)\b/,
       `${path.relative(frontendRoot, file)} must not use persistent browser storage`,
     );

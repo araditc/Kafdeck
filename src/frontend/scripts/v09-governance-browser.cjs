@@ -131,7 +131,26 @@ const server=createServer((req,res)=>{
     await policy.getByLabel('Exact resource ID',{exact:true}).fill('orders');await policy.getByLabel('Registered action',{exact:true}).fill('TopicCreate');
     await policy.getByRole('button',{name:'Explain current decision',exact:true}).click();await policy.getByLabel('Current policy explanation').getByText(/GovernanceDenied/).waitFor();
     await policy.getByRole('button',{name:'Dry-run this fixture',exact:true}).click();await policy.getByLabel('Read-only dry-run results').getByText(/GovernanceDenied/).waitFor();
-    await page.setViewportSize({width:390,height:844});await policy.scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true);
+    await page.setViewportSize({width:390,height:844});await policy.scrollIntoViewIfNeeded();
+    const reflow = await page.evaluate(() => ({
+      viewport: innerWidth, documentWidth: document.documentElement.scrollWidth,
+      // Explicit API fixtures only. Keep diagnostics to layout metadata: no
+      // values, provider responses, operator identities or record payloads.
+      offenders: [...document.querySelectorAll('body *')].flatMap(element => {
+        const rect=element.getBoundingClientRect(), style=getComputedStyle(element);
+        if (style.display==='none'||rect.width===0||rect.right<=innerWidth+2&&rect.left>=-2) return [];
+        const clippedByScroller=element.closest('.table-responsive, .kafdeck-section-nav .nav');
+        if(clippedByScroller&&clippedByScroller!==element)return [];
+        return [{tag:element.tagName,classes:element.className,left:Math.round(rect.left),right:Math.round(rect.right),width:Math.round(rect.width),scrollWidth:element.scrollWidth,whiteSpace:style.whiteSpace,overflowX:style.overflowX}];
+      }).slice(0,30),
+    }));
+    if(reflow.documentWidth>reflow.viewport+2){
+      fs.mkdirSync(path.dirname(evidence),{recursive:true});
+      fs.writeFileSync(evidence.replace(/\.json$/,'.reflow.json'),JSON.stringify(reflow,null,2));
+      await page.screenshot({path:evidence.replace(/\.json$/,'.reflow.png'),fullPage:true});
+      console.log('Governance mobile reflow diagnostics:',JSON.stringify(reflow));
+    }
+    assert.equal(reflow.documentWidth<=reflow.viewport+2,true);
     authenticated=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await catalog.waitFor({state:'hidden'});await policy.waitFor({state:'hidden'});
     authenticated=true;denied=true;await page.reload();await page.locator('#ownership-catalog').getByText(/not authorized for this scope/).waitFor();assert.equal(await page.getByRole('button',{name:'Preview exact metadata change',exact:true}).isDisabled(),true);
     assert.deepEqual(outside,[]);assert.ok(csrf>=5);fs.mkdirSync(path.dirname(evidence),{recursive:true});

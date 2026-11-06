@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n.js';
 export type CommandAvailability = 'available' | 'unavailable';
 
 export type ProductCommand = {
@@ -12,22 +13,26 @@ export type ProductCommand = {
 };
 
 export const productCommands: readonly ProductCommand[] = [
-  { id: 'automation', label: 'Governed automation', description: 'Inspect ownership, drift, immutable plans and safe compensation.', keywords: ['automation', 'gitops', 'declarative', 'terraform', 'mcp', 'compensation'], targetId: 'automation', availability: 'available' },
-  { id: 'cluster', label: 'Select cluster', description: 'Focus the active cluster selector.', keywords: ['cluster', 'environment', 'profile'], targetId: 'kafdeck-title', focusId: 'cluster-selector', availability: 'available' },
-  { id: 'overview', label: 'Cluster overview', description: 'Open the current cluster overview.', keywords: ['overview', 'health', 'controller'], targetId: 'overview', availability: 'available' },
-  { id: 'brokers', label: 'Brokers', description: 'Navigate to broker metadata and configuration.', keywords: ['broker', 'controller', 'configuration'], targetId: 'brokers', availability: 'available' },
-  { id: 'topics', label: 'Topics', description: 'Navigate to the topic catalog and focus topic search.', keywords: ['topic', 'catalog', 'documentation', 'partition'], targetId: 'topics', focusId: 'topic-search', availability: 'available' },
-  { id: 'consumers', label: 'Consumer groups', description: 'Navigate to consumer groups, offsets and lag.', keywords: ['consumer', 'group', 'lag', 'offset'], targetId: 'consumers', availability: 'available' },
-  { id: 'schemas', label: 'Schema Registry', description: 'Navigate to schemas, references, diff and compatibility tooling.', keywords: ['schema', 'registry', 'avro', 'protobuf', 'json schema', 'compatibility'], targetId: 'schemas', availability: 'available' },
-  { id: 'serde', label: 'Controlled SerDe', description: 'Navigate to bounded CBOR, XML and MessagePack tooling.', keywords: ['serde', 'cbor', 'xml', 'messagepack'], targetId: 'serde', focusId: 'serde-format', availability: 'available' },
-  { id: 'connect', label: 'Kafka Connect', description: 'Navigate to configured Connect profiles, plugins and connectors.', keywords: ['connect', 'connector', 'plugin', 'task'], targetId: 'connect-title', focusId: 'connect-profile-selector', availability: 'available' },
-  { id: 'ksql', label: 'ksqlDB', description: 'Navigate to bounded read-only ksqlDB query tooling.', keywords: ['ksql', 'sql', 'query', 'streaming'], targetId: 'ksql-title', focusId: 'ksql-query-editor', availability: 'available' },
-  { id: 'streams', label: 'Kafka Streams evidence', description: 'Navigate to registered topology and state-store evidence.', keywords: ['streams', 'topology', 'state store', 'rocksdb'], targetId: 'streams-title', availability: 'available' },
-  { id: 'lineage', label: 'Data lineage', description: 'Navigate to provenance-labelled observed and inferred lineage.', keywords: ['lineage', 'provenance', 'graph'], targetId: 'lineage-title', availability: 'available' },
-  { id: 'mutations', label: 'Governed mutations', description: 'Navigate to authorization, preview, approval and execution workflows.', keywords: ['mutation', 'approval', 'operation'], targetId: 'mutations', focusId: 'mutation-workflow', availability: 'available' },
-  { id: 'data-jobs', label: 'Replay / forward data jobs', description: 'Navigate to governed finite replay and forwarding jobs.', keywords: ['replay', 'forward', 'dlq', 'reprocess', 'job'], targetId: 'mutations', focusId: 'mutation-workflow', availability: 'available' },
-  { id: 'generator', label: 'Data Generator', description: 'Navigate to bounded governed Smart Mock and Data Generator workflows.', keywords: ['generator', 'mock', 'data', 'records'], targetId: 'mutations', focusId: 'mutation-workflow', availability: 'available' },
-  { id: 'fleet', label: 'Fleet Operations', description: 'Navigate to runtime capability status.', keywords: ['fleet', 'acl', 'scram', 'quota', 'maintenance'], targetId: 'fleet', availability: 'available' },
+  { id: 'automation', label: "Governed automation", description: "Inspect ownership, drift, immutable plans and safe compensation.", keywords: ['automation', 'gitops', 'declarative', 'terraform', 'mcp', 'compensation'], targetId: 'automation', availability: 'available' },
+  { id: 'catalog', label: 'Ownership catalog', description: 'Review exact operation', keywords: ['catalog', 'owner', 'team', 'application'], targetId: 'ownership-catalog', availability: 'available' },
+  { id: 'policy', label: 'Governance policy', description: 'Explain and dry-run current policy', keywords: ['policy', 'governance'], targetId: 'governance-policy', availability: 'available' },
+  { id: 'requests', label: 'Requests', description: 'Service requests and approvals', keywords: ['request', 'approval', 'replan'], targetId: 'service-requests', availability: 'available' },
+  { id: 'attribution', label: 'Measured attribution', description: 'Measured attribution and estimates', keywords: ['attribution', 'rate', 'cost'], targetId: 'governance-attribution', availability: 'available' },
+  { id: 'cluster', label: "Select cluster", description: "Focus the active cluster selector.", keywords: ['cluster', 'environment', 'profile'], targetId: 'kafdeck-title', focusId: 'cluster-selector', availability: 'available' },
+  { id: 'overview', label: "Cluster overview", description: "Open the current cluster overview.", keywords: ['overview', 'health', 'controller'], targetId: 'overview', availability: 'available' },
+  { id: 'brokers', label: 'Brokers', description: "Navigate to broker metadata and configuration.", keywords: ['broker', 'controller', 'configuration'], targetId: 'brokers', availability: 'available' },
+  { id: 'topics', label: 'Topics', description: "Navigate to the topic catalog and focus topic search.", keywords: ['topic', 'catalog', 'documentation', 'partition'], targetId: 'topics', focusId: 'topic-search', availability: 'available' },
+  { id: 'consumers', label: "Consumer groups", description: "Navigate to consumer groups, offsets and lag.", keywords: ['consumer', 'group', 'lag', 'offset'], targetId: 'consumers', availability: 'available' },
+  { id: 'schemas', label: 'Schema Registry', description: "Navigate to schemas, references, diff and compatibility tooling.", keywords: ['schema', 'registry', 'avro', 'protobuf', 'json schema', 'compatibility'], targetId: 'schemas', availability: 'available' },
+  { id: 'serde', label: "Controlled SerDe", description: "Navigate to bounded CBOR, XML and MessagePack tooling.", keywords: ['serde', 'cbor', 'xml', 'messagepack'], targetId: 'serde', focusId: 'serde-format', availability: 'available' },
+  { id: 'connect', label: 'Kafka Connect', description: "Navigate to configured Connect profiles, plugins and connectors.", keywords: ['connect', 'connector', 'plugin', 'task'], targetId: 'connect-title', focusId: 'connect-profile-selector', availability: 'available' },
+  { id: 'ksql', label: 'ksqlDB', description: "Navigate to bounded read-only ksqlDB query tooling.", keywords: ['ksql', 'sql', 'query', 'streaming'], targetId: 'ksql-title', focusId: 'ksql-query-editor', availability: 'available' },
+  { id: 'streams', label: "Kafka Streams evidence", description: "Navigate to registered topology and state-store evidence.", keywords: ['streams', 'topology', 'state store', 'rocksdb'], targetId: 'streams-title', availability: 'available' },
+  { id: 'lineage', label: "Data lineage", description: "Navigate to provenance-labelled observed and inferred lineage.", keywords: ['lineage', 'provenance', 'graph'], targetId: 'lineage-title', availability: 'available' },
+  { id: 'mutations', label: "Governed mutations", description: "Navigate to authorization, preview, approval and execution workflows.", keywords: ['mutation', 'approval', 'operation'], targetId: 'mutations', focusId: 'mutation-workflow', availability: 'available' },
+  { id: 'data-jobs', label: "Replay / forward data jobs", description: "Navigate to governed finite replay and forwarding jobs.", keywords: ['replay', 'forward', 'dlq', 'reprocess', 'job'], targetId: 'mutations', focusId: 'mutation-workflow', availability: 'available' },
+  { id: 'generator', label: "Data Generator", description: "Navigate to bounded governed Smart Mock and Data Generator workflows.", keywords: ['generator', 'mock', 'data', 'records'], targetId: 'mutations', focusId: 'mutation-workflow', availability: 'available' },
+  { id: 'fleet', label: "Fleet Operations", description: "Navigate to runtime capability status.", keywords: ['fleet', 'acl', 'scram', 'quota', 'maintenance'], targetId: 'fleet', availability: 'available' },
 ] as const;
 
 export function filterProductCommands(query: string): ProductCommand[] {
@@ -38,6 +43,8 @@ export function filterProductCommands(query: string): ProductCommand[] {
     const haystack = [
       command.label,
       command.description,
+      t(command.label),
+      t(command.description),
       ...command.keywords,
     ].join(' ').toLocaleLowerCase();
     return haystack.includes(normalized);

@@ -21,9 +21,9 @@ body {
 
 .kafdeck-topbar {
   position: sticky;
-  top: 0;
+  inset-block-start: 0;
   z-index: 1020;
-  border-bottom: 1px solid var(--tblr-border-color);
+  border-block-end: 1px solid var(--tblr-border-color);
   backdrop-filter: blur(10px);
 }
 
@@ -58,7 +58,7 @@ body {
 }
 
 .kafdeck-brand-subtitle {
-  margin-top: 0.2rem;
+  margin-block-start: 0.2rem;
   color: var(--tblr-secondary-color);
   font-size: 0.75rem;
   font-weight: 500;
@@ -83,12 +83,12 @@ body {
 }
 
 .kafdeck-toolbar .form-label {
-  margin-bottom: 0.25rem;
+  margin-block-end: 0.25rem;
   font-size: 0.75rem;
 }
 
 .kafdeck-section-nav {
-  border-bottom: 1px solid var(--tblr-border-color);
+  border-block-end: 1px solid var(--tblr-border-color);
   background: var(--tblr-bg-surface);
 }
 
@@ -109,15 +109,15 @@ body {
 }
 
 .kafdeck-page-header {
-  margin-bottom: 1rem;
+  margin-block-end: 1rem;
 }
 
 .kafdeck-status {
-  margin-bottom: 1rem;
+  margin-block-end: 1rem;
 }
 
 .kafdeck-card {
-  margin-bottom: 1.25rem;
+  margin-block-end: 1.25rem;
   overflow: hidden;
 }
 
@@ -132,25 +132,25 @@ body {
 .kafdeck-card > aside,
 .kafdeck-card > article,
 .kafdeck-card > .kafdeck-card-body {
-  margin-left: 1.25rem;
-  margin-right: 1.25rem;
+  margin-inline-start: 1.25rem;
+  margin-inline-end: 1.25rem;
 }
 
 .kafdeck-card > h2:first-child,
 .kafdeck-card > h3:first-child {
-  margin-top: 1.25rem;
+  margin-block-start: 1.25rem;
 }
 
 .kafdeck-card > :last-child {
-  margin-bottom: 1.25rem;
+  margin-block-end: 1.25rem;
 }
 
 .kafdeck-card table {
-  margin-bottom: 0;
+  margin-block-end: 0;
 }
 
 .kafdeck-card article {
-  margin-top: 1rem;
+  margin-block-start: 1rem;
   padding: 1rem;
   border: 1px solid var(--tblr-border-color);
   border-radius: var(--tblr-border-radius);
@@ -182,7 +182,7 @@ body {
 }
 
 .kafdeck-card .table-responsive {
-  margin-top: 0.75rem;
+  margin-block-start: 0.75rem;
 }
 
 .kafdeck-table-button {
@@ -206,8 +206,8 @@ body {
 
 .kafdeck-logo-watermark {
   position: fixed;
-  right: 1rem;
-  bottom: 1rem;
+  inset-inline-end: 1rem;
+  inset-block-end: 1rem;
   width: 40px;
   height: 40px;
   object-fit: contain;
@@ -239,7 +239,7 @@ body {
   }
 
   .kafdeck-card dt {
-    margin-top: 0.5rem;
+    margin-block-start: 0.5rem;
   }
 }
 
@@ -270,7 +270,7 @@ body {
 .kafdeck-data-explorer table:not(.table) th,
 .kafdeck-data-explorer table:not(.table) td {
   padding: 0.65rem 0.75rem;
-  border-top: 1px solid var(--tblr-border-color);
+  border-block-start: 1px solid var(--tblr-border-color);
   text-align: start;
 }
 
@@ -343,9 +343,9 @@ body {
 }
 
 .kafdeck-data-explorer {
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--tblr-border-color);
+  margin-block-start: 1.25rem;
+  padding-block-start: 1.25rem;
+  border-block-start: 1px solid var(--tblr-border-color);
 }
 
 .kafdeck-data-explorer > div {
@@ -431,7 +431,7 @@ body {
   }
 
   .kafdeck-command-backdrop {
-    padding-top: 1rem;
+    padding-block-start: 1rem;
   }
 
   .kafdeck-command-palette {
@@ -443,3 +443,223 @@ body {
 #automation fieldset { margin-block: 1.25rem; min-width: 0; }
 #automation input, #automation textarea { min-width: 0; }
 #automation dd { overflow-wrap: anywhere; }
+
+/* W79: keyboard focus is visible in both themes and is not clipped by cards. */
+:root { --kafdeck-focus: #104d94; --tblr-secondary-color: #536171; }
+[data-bs-theme="dark"] { --kafdeck-focus: #8bc4ff; --tblr-secondary-color: #b2c0d0; }
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--kafdeck-focus) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--tblr-body-bg);
+}
+:where(section, article, h2, h3, main, input, select, button) { scroll-margin-block-start: 10rem; }
+.kafdeck-card { overflow: visible; min-inline-size: 0; }
+.kafdeck-card :where(fieldset, label, .row, .col, .col-md-6) { min-inline-size: 0; }
+.kafdeck-card :where(input, select, textarea) { max-inline-size: 100%; }
+:where(button, .btn, summary, .nav-link, select) { min-block-size: 2rem; }
+:where(input[type="checkbox"], input[type="radio"]) { min-inline-size: 1.25rem; min-block-size: 1.25rem; }
+:where(code, pre, .kafdeck-invariant) { direction: ltr; unicode-bidi: isolate; text-align: start; }
+:where(bdi) { unicode-bidi: isolate; }
+.kafdeck-skip-link { position: fixed; inset-block-start: .5rem; inset-inline-start: .5rem; transform: translateY(-200%); z-index: 2000; padding: .75rem; background: var(--tblr-body-bg); color: var(--tblr-body-color); }
+.kafdeck-skip-link:focus { transform: translateY(0); }
+@media (max-width: 767.98px) {
+  /* A wrapping toolbar must not obscure a focused field when zoomed. */
+  .kafdeck-topbar { position: static; }
+  .kafdeck-card > :where(fieldset, form) { margin-inline: .5rem; }
+  .kafdeck-card { overflow-wrap: anywhere; }
+  .kafdeck-main .container-xl { max-inline-size: 100%; }
+}
+@media (forced-colors: active) {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline-color: Highlight !important; }
+}
+
+@media (max-width: 767.98px) { :where(section, article, h2, h3, main, input, select, button) { scroll-margin-block-start: 1rem; } }
+
+/* Tabler action labels default to nowrap. Long governance labels must reflow
+   inside their own container rather than widening the document at 320px. */
+.kafdeck-card :where(button, .btn),
+.kafdeck-toolbar :where(button, .btn) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.kafdeck-topbar :where(.container-xl, .navbar-brand, .kafdeck-brand, .kafdeck-brand-copy, .kafdeck-toolbar),
+.kafdeck-toolbar > * {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.kafdeck-brand-logo, .kafdeck-accent { flex-shrink: 0; }
+.kafdeck-brand-subtitle { white-space: normal; overflow-wrap: anywhere; }
+.kafdeck-command-palette .ms-auto { margin-inline-start: auto !important; margin-inline-end: 0 !important; }
+@media (max-width: 767.98px) {
+  .kafdeck-topbar .container-xl { flex-direction: column; align-items: stretch; }
+  .kafdeck-topbar .navbar-brand { white-space: normal; }
+  .kafdeck-toolbar > div { flex-basis: min(12rem, 100%); }
+}
+
+/* Real W79 scans exposed low-contrast Tabler semantic colors. Each pair below
+   is explicit in both themes, including small status text and hover states. */
+:root {
+  --kafdeck-warning-text: #815000;
+  --kafdeck-warning-surface: #fff8f0;
+  --kafdeck-warning-action: #815000;
+  --kafdeck-warning-action-on: #ffffff;
+  --kafdeck-danger-action: #b02222;
+  --kafdeck-danger-action-on: #ffffff;
+  --kafdeck-danger-solid: #b02222;
+  --kafdeck-danger-solid-on: #ffffff;
+  --kafdeck-kbd-text: #414c5b;
+  --kafdeck-kbd-surface: #eef1f4;
+  --kafdeck-orange-text: #8b3c00; --kafdeck-orange-surface: #fff1e8;
+  --kafdeck-secondary-text: #4d5968; --kafdeck-secondary-surface: #edf0f4;
+  --kafdeck-blue-text: #13508b; --kafdeck-blue-surface: #e7f1ff;
+  --kafdeck-red-text: #a32020; --kafdeck-red-surface: #fff0f0;
+  --kafdeck-yellow-text: #725000; --kafdeck-yellow-surface: #fff6d9;
+  --kafdeck-green-text: #1e613b; --kafdeck-green-surface: #e7f7ed;
+}
+[data-bs-theme="dark"] {
+  --kafdeck-warning-text: #ffe0a6;
+  --kafdeck-warning-surface: #3a2b16;
+  --kafdeck-warning-action: #ffd68a;
+  --kafdeck-warning-action-on: #262016;
+  --kafdeck-danger-action: #ffb5b5;
+  --kafdeck-danger-action-on: #321313;
+  --kafdeck-danger-solid: #a62929;
+  --kafdeck-danger-solid-on: #ffffff;
+  --kafdeck-kbd-text: #e4edf7;
+  --kafdeck-kbd-surface: #354255;
+  --kafdeck-orange-text: #ffd3a6; --kafdeck-orange-surface: #402810;
+  --kafdeck-secondary-text: #e0e8f2; --kafdeck-secondary-surface: #303b49;
+  --kafdeck-blue-text: #c5e0ff; --kafdeck-blue-surface: #163b60;
+  --kafdeck-red-text: #ffd0d0; --kafdeck-red-surface: #4d2020;
+  --kafdeck-yellow-text: #ffebb1; --kafdeck-yellow-surface: #3e3415;
+  --kafdeck-green-text: #bdedd0; --kafdeck-green-surface: #143c28;
+}
+.kafdeck-shell kbd { color: var(--kafdeck-kbd-text); background-color: var(--kafdeck-kbd-surface); }
+.kafdeck-shell .alert-warning {
+  color: var(--kafdeck-warning-text);
+  background: var(--kafdeck-warning-surface);
+  border-color: var(--kafdeck-warning-text);
+}
+.kafdeck-shell .alert-info {
+  color: var(--kafdeck-blue-text);
+  background: var(--kafdeck-blue-surface);
+  border-color: var(--kafdeck-blue-text);
+}
+.kafdeck-shell .btn-outline-warning {
+  --tblr-btn-color: var(--kafdeck-warning-action);
+  --tblr-btn-border-color: var(--kafdeck-warning-action);
+  --tblr-btn-hover-color: var(--kafdeck-warning-action-on);
+  --tblr-btn-hover-bg: var(--kafdeck-warning-action);
+  --tblr-btn-hover-border-color: var(--kafdeck-warning-action);
+  --tblr-btn-active-color: var(--kafdeck-warning-action-on);
+  --tblr-btn-active-bg: var(--kafdeck-warning-action);
+  --tblr-btn-active-border-color: var(--kafdeck-warning-action);
+}
+.kafdeck-shell .btn-outline-danger {
+  --tblr-btn-color: var(--kafdeck-danger-action);
+  --tblr-btn-border-color: var(--kafdeck-danger-action);
+  --tblr-btn-hover-color: var(--kafdeck-danger-action-on);
+  --tblr-btn-hover-bg: var(--kafdeck-danger-action);
+  --tblr-btn-hover-border-color: var(--kafdeck-danger-action);
+  --tblr-btn-active-color: var(--kafdeck-danger-action-on);
+  --tblr-btn-active-bg: var(--kafdeck-danger-action);
+  --tblr-btn-active-border-color: var(--kafdeck-danger-action);
+}
+.kafdeck-shell .btn-danger {
+  --tblr-btn-color: var(--kafdeck-danger-solid-on);
+  --tblr-btn-bg: var(--kafdeck-danger-solid);
+  --tblr-btn-border-color: var(--kafdeck-danger-action);
+  --tblr-btn-hover-color: var(--kafdeck-danger-solid-on);
+  --tblr-btn-hover-bg: var(--kafdeck-danger-solid);
+  --tblr-btn-hover-border-color: var(--kafdeck-danger-action);
+  --tblr-btn-active-color: var(--kafdeck-danger-solid-on);
+  --tblr-btn-active-bg: var(--kafdeck-danger-solid);
+  --tblr-btn-active-border-color: var(--kafdeck-danger-action);
+  background-image: none;
+}
+.kafdeck-shell .badge.bg-orange-lt { color: var(--kafdeck-orange-text) !important; background: var(--kafdeck-orange-surface) !important; }
+.kafdeck-shell .badge.bg-secondary-lt { color: var(--kafdeck-secondary-text) !important; background: var(--kafdeck-secondary-surface) !important; }
+.kafdeck-shell .badge.bg-blue-lt { color: var(--kafdeck-blue-text) !important; background: var(--kafdeck-blue-surface) !important; }
+.kafdeck-shell .badge.bg-red-lt { color: var(--kafdeck-red-text) !important; background: var(--kafdeck-red-surface) !important; }
+.kafdeck-shell .badge.bg-yellow-lt { color: var(--kafdeck-yellow-text) !important; background: var(--kafdeck-yellow-surface) !important; }
+.kafdeck-shell .badge.bg-green-lt { color: var(--kafdeck-green-text) !important; background: var(--kafdeck-green-surface) !important; }
+
+/* Keyboard Tab and guarded heading/focus restoration must reveal their target
+   immediately, without competing with Tabler's global smooth scroll. */
+:root { scroll-behavior: auto; }
+
+/* Populated broker-backed topic lists expose Tabler's lightened btn-link color.
+   Preserve a readable action label on normal and hovered table surfaces. */
+:root { --kafdeck-table-link: #13508b; --kafdeck-table-link-hover: #0a3968; }
+[data-bs-theme="dark"] { --kafdeck-table-link: #c5e0ff; --kafdeck-table-link-hover: #e0efff; }
+.kafdeck-shell .btn-link.kafdeck-table-button {
+  --tblr-btn-color: var(--kafdeck-table-link);
+  --tblr-btn-hover-color: var(--kafdeck-table-link-hover);
+  --tblr-btn-active-color: var(--kafdeck-table-link-hover);
+  color: var(--kafdeck-table-link);
+}
+.kafdeck-shell .btn-link.kafdeck-table-button:is(:hover, :focus-visible, :active) {
+  color: var(--kafdeck-table-link-hover);
+}
+
+/* Actual unknown-operation scans caught low-contrast intermediate frames when
+   Tabler crossfades foreground and background in opposite directions. Keep
+   control colors/borders immediate; a shadow may still indicate interaction. */
+.kafdeck-shell .btn { transition-property: box-shadow; }
+:root { --kafdeck-primary-action: #13508b; --kafdeck-primary-action-on: #ffffff; }
+[data-bs-theme="dark"] { --kafdeck-primary-action: #c5e0ff; --kafdeck-primary-action-on: #142a42; }
+.kafdeck-shell .btn-outline-primary {
+  --tblr-btn-color: var(--kafdeck-primary-action);
+  --tblr-btn-border-color: var(--kafdeck-primary-action);
+  --tblr-btn-hover-color: var(--kafdeck-primary-action-on);
+  --tblr-btn-hover-bg: var(--kafdeck-primary-action);
+  --tblr-btn-hover-border-color: var(--kafdeck-primary-action);
+  --tblr-btn-active-color: var(--kafdeck-primary-action-on);
+  --tblr-btn-active-bg: var(--kafdeck-primary-action);
+  --tblr-btn-active-border-color: var(--kafdeck-primary-action);
+  --tblr-btn-disabled-color: var(--kafdeck-primary-action);
+  --tblr-btn-disabled-border-color: var(--kafdeck-primary-action);
+}
+
+/* W79 offline review measured the active white-on-white entry boundary at
+   1.26:1 and the author-supplied select indicator at 2.52:1. Strengthen these
+   affordances without changing focus, validation, inactive or check states. */
+:root { --kafdeck-control-edge: #66768a; }
+[data-bs-theme="dark"] { --kafdeck-control-edge: #9fadc0; }
+.kafdeck-shell :is(.kafdeck-card, .kafdeck-toolbar) :is(
+  input:not([type]), input[type="text"], input[type="search"], input[type="number"],
+  input[type="email"], input[type="password"], input[type="url"], input[type="tel"],
+  input[type="date"], input[type="time"], input[type="datetime-local"],
+  input[type="month"], input[type="week"], textarea, select
+):not(:disabled):not(:focus):not([aria-invalid="true"]):not(.is-invalid):not(.is-valid) {
+  border-color: var(--kafdeck-control-edge);
+}
+.kafdeck-shell .form-select:not(:disabled) {
+  --tblr-control-select-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2366768a' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  --tblr-control-select-bg-dark: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%239fadc0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+[data-bs-theme="dark"] .kafdeck-shell .form-select:not(:disabled) {
+  --tblr-control-select-bg: var(--tblr-control-select-bg-dark);
+}
+
+/* Tabler positions its custom arrow physically; reserve the same inline end in RTL. */
+.kafdeck-shell .form-select:dir(rtl) {
+  --tblr-control-select-bg-position: left var(--tblr-control-padding-x) center;
+}
+
+/* Keep the four-column capability/reason comparison readable inside its
+   existing keyboard-scrollable region at narrow widths in either direction. */
+.kafdeck-shell #fleet > .table-responsive {
+  /* Anchor absolute, visually hidden status descriptions inside the scroll
+     region so their RTL positions cannot enlarge the document's scroll area. */
+  position: relative;
+}
+.kafdeck-shell .kafdeck-fleet-capability-table {
+  min-inline-size: 48rem;
+}
+.kafdeck-shell .kafdeck-fleet-capability-table :is(th, td):last-child {
+  min-inline-size: 19rem;
+  inline-size: 40%;
+}
