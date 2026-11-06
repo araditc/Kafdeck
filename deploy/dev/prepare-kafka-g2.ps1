@@ -44,7 +44,9 @@ log.retention.hours=1
 log.segment.bytes=16777216
 "@ | Set-Content -LiteralPath (Join-Path $instance 'server.properties') -Encoding ascii
 $id = [Convert]::ToBase64String([Guid]::NewGuid().ToByteArray()).TrimEnd('=').Replace('+','-').Replace('/','_')
-& $java -Xms64m -Xmx256m ("-Dlog4j2.configurationFile=" + (Join-Path $runtime 'config/tools-log4j2.yaml')) -cp (Join-Path $runtime 'libs/*') kafka.tools.StorageTool format --standalone -t $id -c (Join-Path $instance 'server.properties')
+# A valid random Kafka ID can begin with '-'; bind it to the long option so
+# argparse cannot interpret that value as a separate command-line switch.
+& $java -Xms64m -Xmx256m ("-Dlog4j2.configurationFile=" + (Join-Path $runtime 'config/tools-log4j2.yaml')) -cp (Join-Path $runtime 'libs/*') kafka.tools.StorageTool format --standalone ("--cluster-id=" + $id) -c (Join-Path $instance 'server.properties')
 if ($LASTEXITCODE -ne 0) { throw 'Kafka storage format failed; preserve this directory for diagnosis and choose a fresh directory for a retry.' }
 @{
     kafkaVersion='4.3.1'; bootstrapServers="127.0.0.1:$BrokerPort"

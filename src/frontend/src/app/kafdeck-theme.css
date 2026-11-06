@@ -21,9 +21,9 @@ body {
 
 .kafdeck-topbar {
   position: sticky;
-  top: 0;
+  inset-block-start: 0;
   z-index: 1020;
-  border-bottom: 1px solid var(--tblr-border-color);
+  border-block-end: 1px solid var(--tblr-border-color);
   backdrop-filter: blur(10px);
 }
 
@@ -58,7 +58,7 @@ body {
 }
 
 .kafdeck-brand-subtitle {
-  margin-top: 0.2rem;
+  margin-block-start: 0.2rem;
   color: var(--tblr-secondary-color);
   font-size: 0.75rem;
   font-weight: 500;
@@ -83,12 +83,12 @@ body {
 }
 
 .kafdeck-toolbar .form-label {
-  margin-bottom: 0.25rem;
+  margin-block-end: 0.25rem;
   font-size: 0.75rem;
 }
 
 .kafdeck-section-nav {
-  border-bottom: 1px solid var(--tblr-border-color);
+  border-block-end: 1px solid var(--tblr-border-color);
   background: var(--tblr-bg-surface);
 }
 
@@ -109,15 +109,15 @@ body {
 }
 
 .kafdeck-page-header {
-  margin-bottom: 1rem;
+  margin-block-end: 1rem;
 }
 
 .kafdeck-status {
-  margin-bottom: 1rem;
+  margin-block-end: 1rem;
 }
 
 .kafdeck-card {
-  margin-bottom: 1.25rem;
+  margin-block-end: 1.25rem;
   overflow: hidden;
 }
 
@@ -132,25 +132,25 @@ body {
 .kafdeck-card > aside,
 .kafdeck-card > article,
 .kafdeck-card > .kafdeck-card-body {
-  margin-left: 1.25rem;
-  margin-right: 1.25rem;
+  margin-inline-start: 1.25rem;
+  margin-inline-end: 1.25rem;
 }
 
 .kafdeck-card > h2:first-child,
 .kafdeck-card > h3:first-child {
-  margin-top: 1.25rem;
+  margin-block-start: 1.25rem;
 }
 
 .kafdeck-card > :last-child {
-  margin-bottom: 1.25rem;
+  margin-block-end: 1.25rem;
 }
 
 .kafdeck-card table {
-  margin-bottom: 0;
+  margin-block-end: 0;
 }
 
 .kafdeck-card article {
-  margin-top: 1rem;
+  margin-block-start: 1rem;
   padding: 1rem;
   border: 1px solid var(--tblr-border-color);
   border-radius: var(--tblr-border-radius);
@@ -182,7 +182,7 @@ body {
 }
 
 .kafdeck-card .table-responsive {
-  margin-top: 0.75rem;
+  margin-block-start: 0.75rem;
 }
 
 .kafdeck-table-button {
@@ -206,8 +206,8 @@ body {
 
 .kafdeck-logo-watermark {
   position: fixed;
-  right: 1rem;
-  bottom: 1rem;
+  inset-inline-end: 1rem;
+  inset-block-end: 1rem;
   width: 40px;
   height: 40px;
   object-fit: contain;
@@ -239,7 +239,7 @@ body {
   }
 
   .kafdeck-card dt {
-    margin-top: 0.5rem;
+    margin-block-start: 0.5rem;
   }
 }
 
@@ -270,7 +270,7 @@ body {
 .kafdeck-data-explorer table:not(.table) th,
 .kafdeck-data-explorer table:not(.table) td {
   padding: 0.65rem 0.75rem;
-  border-top: 1px solid var(--tblr-border-color);
+  border-block-start: 1px solid var(--tblr-border-color);
   text-align: start;
 }
 
@@ -343,9 +343,9 @@ body {
 }
 
 .kafdeck-data-explorer {
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--tblr-border-color);
+  margin-block-start: 1.25rem;
+  padding-block-start: 1.25rem;
+  border-block-start: 1px solid var(--tblr-border-color);
 }
 
 .kafdeck-data-explorer > div {
@@ -431,7 +431,7 @@ body {
   }
 
   .kafdeck-command-backdrop {
-    padding-top: 1rem;
+    padding-block-start: 1rem;
   }
 
   .kafdeck-command-palette {
@@ -443,3 +443,57 @@ body {
 #automation fieldset { margin-block: 1.25rem; min-width: 0; }
 #automation input, #automation textarea { min-width: 0; }
 #automation dd { overflow-wrap: anywhere; }
+
+/* W79: keyboard focus is visible in both themes and is not clipped by cards. */
+:root { --kafdeck-focus: #104d94; --tblr-secondary-color: #536171; }
+[data-bs-theme="dark"] { --kafdeck-focus: #8bc4ff; --tblr-secondary-color: #b2c0d0; }
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--kafdeck-focus) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--tblr-body-bg);
+}
+:where(section, article, h2, h3, main, input, select, button) { scroll-margin-block-start: 10rem; }
+.kafdeck-card { overflow: visible; min-inline-size: 0; }
+.kafdeck-card :where(fieldset, label, .row, .col, .col-md-6) { min-inline-size: 0; }
+.kafdeck-card :where(input, select, textarea) { max-inline-size: 100%; }
+:where(button, .btn, summary, .nav-link, select) { min-block-size: 2rem; }
+:where(input[type="checkbox"], input[type="radio"]) { min-inline-size: 1.25rem; min-block-size: 1.25rem; }
+:where(code, pre, .kafdeck-invariant) { direction: ltr; unicode-bidi: isolate; text-align: start; }
+:where(bdi) { unicode-bidi: isolate; }
+.kafdeck-skip-link { position: fixed; inset-block-start: .5rem; inset-inline-start: .5rem; transform: translateY(-200%); z-index: 2000; padding: .75rem; background: var(--tblr-body-bg); color: var(--tblr-body-color); }
+.kafdeck-skip-link:focus { transform: translateY(0); }
+@media (max-width: 767.98px) {
+  /* A wrapping toolbar must not obscure a focused field when zoomed. */
+  .kafdeck-topbar { position: static; }
+  .kafdeck-card > :where(fieldset, form) { margin-inline: .5rem; }
+  .kafdeck-card { overflow-wrap: anywhere; }
+  .kafdeck-main .container-xl { max-inline-size: 100%; }
+}
+@media (forced-colors: active) {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline-color: Highlight !important; }
+}
+
+@media (max-width: 767.98px) { :where(section, article, h2, h3, main, input, select, button) { scroll-margin-block-start: 1rem; } }
+
+/* Tabler action labels default to nowrap. Long governance labels must reflow
+   inside their own container rather than widening the document at 320px. */
+.kafdeck-card :where(button, .btn),
+.kafdeck-toolbar :where(button, .btn) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.kafdeck-topbar :where(.container-xl, .navbar-brand, .kafdeck-brand, .kafdeck-brand-copy, .kafdeck-toolbar),
+.kafdeck-toolbar > * {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.kafdeck-brand-logo, .kafdeck-accent { flex-shrink: 0; }
+.kafdeck-brand-subtitle { white-space: normal; overflow-wrap: anywhere; }
+.kafdeck-command-palette .ms-auto { margin-inline-start: auto !important; margin-inline-end: 0 !important; }
+@media (max-width: 767.98px) {
+  .kafdeck-topbar .container-xl { flex-direction: column; align-items: stretch; }
+  .kafdeck-topbar .navbar-brand { white-space: normal; }
+  .kafdeck-toolbar > div { flex-basis: min(12rem, 100%); }
+}

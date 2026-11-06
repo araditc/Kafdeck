@@ -1,3 +1,4 @@
+import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { NotificationSubscriptionManagementPanel } from './NotificationSubscriptionManagementPanel.js';
 import {
@@ -15,17 +16,17 @@ interface Props {
 }
 
 function observationFailure(reason: unknown): string {
-  if (reason instanceof ApiProblem && reason.status === 401) return 'Your operator session has expired.';
+  if (reason instanceof ApiProblem && reason.status === 401) return t("Your operator session has expired.");
   if (reason instanceof ApiProblem && (reason.status === 403 || reason.status === 404)) {
-    return 'Notification evidence is unavailable or not authorized for this operator.';
+    return t("Notification evidence is unavailable or not authorized for this operator.");
   }
-  return 'The notification observation could not be loaded.';
+  return t("The notification observation could not be loaded.");
 }
 
 function displayTime(value: string | null): string {
-  if (!value) return 'Not scheduled';
+  if (!value) return t("Not scheduled");
   const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime()) ? 'Unavailable' : timestamp.toLocaleString();
+  return Number.isNaN(timestamp.getTime()) ? t("Unavailable") : timestamp.toISOString();
 }
 
 /**
@@ -118,7 +119,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
     const target = destinationId.trim();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
       target.length === 0 || target.length > 128) {
-      setDeliveryError('Provide a valid notification UUID and destination ID.');
+      setDeliveryError(t("Provide a valid notification UUID and destination ID."));
       return;
     }
 
@@ -187,7 +188,7 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
     setHistoryPage(null);
     setHistoryError(null);
     if (target.length === 0 || target.length > 128) {
-      setHistoryError('Provide a destination ID of 1–128 characters.');
+      setHistoryError(t("Provide a destination ID of 1–128 characters."));
       return;
     }
     void loadHistory(target, null, false);
@@ -238,109 +239,105 @@ export function NotificationObservationPanel({ initialPage, canManageSubscriptio
   }
 
   return <section className="card kafdeck-card" id="notifications" aria-labelledby="notifications-title">
-    <h2 className="card-title" id="notifications-title">Notification observation — v0.8</h2>
+    <h2 className="card-title" id="notifications-title">{t("Notification observation — v0.8")}</h2>
     <p className="text-secondary">
-      Metadata-only observation of authorized subscriptions and delivery outcomes. No provider payload,
-      destination credentials or transport URLs. Separately admitted subscription management uses
-      server-side CAS, resource-scoped NotificationManage and antiforgery.
-    </p>
+      {t("Metadata-only observation of authorized subscriptions and delivery outcomes. No provider payload, destination credentials or transport URLs. Separately admitted subscription management uses server-side CAS, resource-scoped NotificationManage and antiforgery.")}{' '}</p>
     {page.authorizationFiltered && <div className="alert alert-warning" role="status">
-      Some subscriptions are hidden by your resource permissions.
-      {page.continuationRestricted && ' Further pages cannot be requested without exposing a restricted cursor.'}
+      {t("Some subscriptions are hidden by your resource permissions.")}{' '}{page.continuationRestricted && ' Further pages cannot be requested without exposing a restricted cursor.'}
     </div>}
     {listError && <div className="alert alert-danger" role="alert">{listError}</div>}
-    <div className="table-responsive"><table className="table table-vcenter card-table mb-0">
-      <thead><tr><th scope="col">Subscription</th><th scope="col">Destination</th>
-        <th scope="col">State</th><th scope="col">Revision</th><th scope="col">Event classes</th><th scope="col">Action</th></tr></thead>
+    <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table className="table table-vcenter card-table mb-0">
+      <thead><tr><th scope="col">{t("Subscription")}</th><th scope="col">{t("Destination")}</th>
+        <th scope="col">{t("State")}</th><th scope="col">{t("Revision")}</th><th scope="col">{t("Event classes")}</th><th scope="col">{t("Action")}</th></tr></thead>
       <tbody>{items.map(item => <tr key={item.subscriptionId}>
-        <th scope="row">{item.subscriptionId}</th>
-        <td>{item.destinationId}</td><td>{item.state}</td><td>{item.revision}</td>
-        <td>{item.eventClasses.join(', ') || 'None'}</td>
-        <td><button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void openSubscription(item.subscriptionId)}>View details</button></td>
+        <th scope="row"><bdi dir="ltr" lang="en">{item.subscriptionId}</bdi></th>
+        <td><bdi dir="ltr" lang="en">{item.destinationId}</bdi></td><td>{item.state}</td><td>{item.revision}</td>
+        <td>{item.eventClasses.join(', ') || t("None")}</td>
+        <td><button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void openSubscription(item.subscriptionId)}>{t("View details")}</button></td>
       </tr>)}</tbody>
     </table></div>
-    {items.length === 0 && <p className="text-secondary" role="status">No authorized subscriptions on this page.</p>}
+    {items.length === 0 && <p className="text-secondary" role="status">{t("No authorized subscriptions on this page.")}</p>}
     {page.truncated && !page.authorizationFiltered && !page.continuationRestricted && page.nextSubscriptionId && <button
       type="button" className="btn btn-sm btn-outline-primary mt-3" disabled={loading}
-      onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more subscriptions'}</button>}
+      onClick={() => void loadMore()}>{loading ? t("Loading…") : t("Load more subscriptions")}</button>}
     {detailError && <div className="alert alert-danger" role="alert">{detailError}</div>}
     {detail && <article aria-labelledby="notification-subscription-detail-title">
-      <h3 className="h4" id="notification-subscription-detail-title">Subscription details</h3>
-      <dl><dt>Subscription ID</dt><dd>{detail.subscriptionId}</dd>
-        <dt>Destination ID</dt><dd>{detail.destinationId}</dd>
-        <dt>State</dt><dd>{detail.state}</dd>
-        <dt>Revision</dt><dd>{detail.revision}</dd>
-        <dt>Updated</dt><dd>{displayTime(detail.updatedAtUtc)}</dd>
-        <dt>Event classes</dt><dd>{detail.eventClasses.join(', ') || 'None'}</dd>
-        <dt>Exact event types</dt><dd>{detail.eventTypes.join(', ') || 'All admitted types in selected classes'}</dd></dl>
+      <h3 className="h4" id="notification-subscription-detail-title">{t("Subscription details")}</h3>
+      <dl><dt>{t("Subscription ID")}</dt><dd><bdi dir="ltr" lang="en">{detail.subscriptionId}</bdi></dd>
+        <dt>{t("Destination ID")}</dt><dd><bdi dir="ltr" lang="en">{detail.destinationId}</bdi></dd>
+        <dt>{t("State")}</dt><dd>{detail.state}</dd>
+        <dt>{t("Revision")}</dt><dd>{detail.revision}</dd>
+        <dt>{t("Updated")}</dt><dd>{displayTime(detail.updatedAtUtc)}</dd>
+        <dt>{t("Event classes")}</dt><dd>{detail.eventClasses.join(', ') || t("None")}</dd>
+        <dt>{t("Exact event types")}</dt><dd>{detail.eventTypes.join(', ') || t("All admitted types in selected classes")}</dd></dl>
     </article>}
     {canManageSubscriptions && <NotificationSubscriptionManagementPanel
       referenceSubscription={detail}
       onUpdated={() => { void refreshAfterWrite(); }}
     />}
     <article aria-labelledby="notification-delivery-title">
-      <h3 className="h4" id="notification-delivery-title">Delivery evidence lookup</h3>
+      <h3 className="h4" id="notification-delivery-title">{t("Delivery evidence lookup")}</h3>
       <form onSubmit={event => void lookupDelivery(event)}>
         <div className="row g-2">
-          <div className="col-md-6"><label htmlFor="notification-evidence-id" className="form-label">Notification UUID</label>
-            <input id="notification-evidence-id" className="form-control" value={notificationId}
+          <div className="col-md-6"><label htmlFor="notification-evidence-id" className="form-label">{t("Notification UUID")}</label>
+            <input dir="ltr" id="notification-evidence-id" className="form-control" value={notificationId}
               onChange={event => setNotificationId(event.target.value)} maxLength={36} required /></div>
-          <div className="col-md-6"><label htmlFor="notification-evidence-destination" className="form-label">Destination ID</label>
-            <input id="notification-evidence-destination" className="form-control" value={destinationId}
+          <div className="col-md-6"><label htmlFor="notification-evidence-destination" className="form-label">{t("Destination ID")}</label>
+            <input dir="ltr" id="notification-evidence-destination" className="form-control" value={destinationId}
               onChange={event => setDestinationId(event.target.value)} maxLength={128} required /></div>
         </div>
-        <button className="btn btn-primary mt-3" type="submit" disabled={deliveryLoading}>{deliveryLoading ? 'Loading…' : 'Look up evidence'}</button>
+        <button className="btn btn-primary mt-3" type="submit" disabled={deliveryLoading}>{deliveryLoading ? t("Loading…") : t("Look up evidence")}</button>
       </form>
       {deliveryError && <div className="alert alert-danger" role="alert">{deliveryError}</div>}
-      {delivery && <dl aria-label="Authorized delivery evidence">
-        <dt>Notification</dt><dd>{delivery.notificationId}</dd>
-        <dt>Destination</dt><dd>{delivery.destinationId}</dd>
-        <dt>State</dt><dd>{delivery.state}</dd>
-        <dt>Attempts</dt><dd>{delivery.attemptCount}</dd>
-        <dt>Revision</dt><dd>{delivery.revision}</dd>
-        <dt>Created</dt><dd>{displayTime(delivery.createdAtUtc)}</dd>
-        <dt>Updated</dt><dd>{displayTime(delivery.updatedAtUtc)}</dd>
-        <dt>Next attempt</dt><dd>{displayTime(delivery.nextAttemptAtUtc)}</dd>
-        <dt>Outcome</dt><dd>{delivery.outcomeCode ?? 'Not available'}</dd>
-        <dt>Destination revision bound</dt><dd>{delivery.profileRevisionBound ? 'Yes' : 'No'}</dd>
+      {delivery && <dl aria-label={t("Authorized delivery evidence")}>
+        <dt>{t("Notification")}</dt><dd><bdi dir="ltr" lang="en">{delivery.notificationId}</bdi></dd>
+        <dt>{t("Destination")}</dt><dd><bdi dir="ltr" lang="en">{delivery.destinationId}</bdi></dd>
+        <dt>{t("State")}</dt><dd>{delivery.state}</dd>
+        <dt>{t("Attempts")}</dt><dd><bdi dir="ltr" lang="en">{delivery.attemptCount}</bdi></dd>
+        <dt>{t("Revision")}</dt><dd>{delivery.revision}</dd>
+        <dt>{t("Created")}</dt><dd>{displayTime(delivery.createdAtUtc)}</dd>
+        <dt>{t("Updated")}</dt><dd>{displayTime(delivery.updatedAtUtc)}</dd>
+        <dt>{t("Next attempt")}</dt><dd>{displayTime(delivery.nextAttemptAtUtc)}</dd>
+        <dt>{t("Outcome")}</dt><dd>{delivery.outcomeCode ?? t("Not available")}</dd>
+        <dt>{t("Destination revision bound")}</dt><dd>{delivery.profileRevisionBound ? t("Yes") : t("No")}</dd>
       </dl>}
     </article>
     <article aria-labelledby="notification-delivery-history-title">
-      <h3 className="h4" id="notification-delivery-history-title">Delivery history by destination</h3>
-      <p className="text-secondary">Bounded, read-only metadata for a destination you are authorized to observe.</p>
+      <h3 className="h4" id="notification-delivery-history-title">{t("Delivery history by destination")}</h3>
+      <p className="text-secondary">{t("Bounded, read-only metadata for a destination you are authorized to observe.")}</p>
       <form onSubmit={startHistory}>
-        <label htmlFor="notification-history-destination" className="form-label">Destination ID</label>
-        <input id="notification-history-destination" className="form-control"
+        <label htmlFor="notification-history-destination" className="form-label">{t("Destination ID")}</label>
+        <input dir="auto" id="notification-history-destination" className="form-control"
           value={historyDestination} onChange={event => changeHistoryDestination(event.target.value)}
           maxLength={128} required />
         <button className="btn btn-outline-primary mt-3" type="submit"
-          disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Load destination history'}</button>
+          disabled={historyLoading}>{historyLoading ? t("Loading…") : t("Load destination history")}</button>
       </form>
       {historyError && <div className="alert alert-danger" role="alert">{historyError}</div>}
       {historySelectedDestination && <p className="text-secondary" role="status">
-        Showing authorized delivery history for {historySelectedDestination}.
+        {t("Showing authorized delivery history for")}{' '}{historySelectedDestination}.
       </p>}
-      {historyRows.length > 0 && <div className="table-responsive"><table
+      {historyRows.length > 0 && <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table
         className="table table-vcenter card-table mb-0"
-        aria-label="Authorized destination delivery history">
-        <thead><tr><th scope="col">Notification UUID</th><th scope="col">State</th>
-          <th scope="col">Attempts</th><th scope="col">Outcome</th>
-          <th scope="col">Created</th><th scope="col">Revision</th></tr></thead>
+        aria-label={t("Authorized destination delivery history")}>
+        <thead><tr><th scope="col">{t("Notification UUID")}</th><th scope="col">{t("State")}</th>
+          <th scope="col">{t("Attempts")}</th><th scope="col">{t("Outcome")}</th>
+          <th scope="col">{t("Created")}</th><th scope="col">{t("Revision")}</th></tr></thead>
         <tbody>{historyRows.map(row => <tr key={row.notificationId}>
-          <th scope="row">{row.notificationId}</th><td>{row.state}</td>
-          <td>{row.attemptCount}</td><td>{row.outcomeCode ?? 'Not available'}</td>
+          <th scope="row"><bdi dir="ltr" lang="en">{row.notificationId}</bdi></th><td>{row.state}</td>
+          <td><bdi dir="ltr" lang="en">{row.attemptCount}</bdi></td><td>{row.outcomeCode ?? t("Not available")}</td>
           <td>{displayTime(row.createdAtUtc)}</td><td>{row.revision}</td>
         </tr>)}</tbody>
       </table></div>}
       {historySelectedDestination && !historyLoading && !historyError && historyRows.length === 0 &&
-        <p role="status">No delivery evidence is available for this destination.</p>}
+        <p role="status">{t("No delivery evidence is available for this destination.")}</p>}
       {historyPage?.truncated && historyPage.nextCreatedAtUtc && historyPage.nextNotificationId &&
         <button type="button" className="btn btn-sm btn-outline-primary mt-3"
           disabled={historyLoading} onClick={loadHistoryContinuation}>
-          {historyLoading ? 'Loading…' : 'Load more delivery history'}
+          {historyLoading ? t("Loading…") : t("Load more delivery history")}
         </button>}
       {historyPage?.truncated && (!historyPage.nextCreatedAtUtc || !historyPage.nextNotificationId) &&
-        <p className="text-secondary" role="status">No safe continuation is available.</p>}
+        <p className="text-secondary" role="status">{t("No safe continuation is available.")}</p>}
     </article>
   </section>;
 }

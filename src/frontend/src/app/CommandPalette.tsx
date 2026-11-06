@@ -1,3 +1,4 @@
+import { t, useLocale } from '../shared/i18n.js';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { filterProductCommands, type ProductCommand } from './commandPaletteModel.js';
 
@@ -5,6 +6,7 @@ function focusElement(id: string | undefined) {
   if (!id) return;
   const element = document.getElementById(id);
   if (element instanceof HTMLElement) {
+    if (!element.matches('a,button,input,select,textarea,[tabindex]')) element.tabIndex = -1;
     element.focus({ preventScroll: true });
   }
 }
@@ -14,29 +16,30 @@ function runCommand(command: ProductCommand) {
   const target = document.getElementById(command.targetId);
   target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   window.history.replaceState(null, '', `#${command.targetId}`);
-  window.setTimeout(() => focusElement(command.focusId), 0);
+  window.setTimeout(() => focusElement(command.focusId ?? command.targetId), 0);
 }
 
 export function CommandPalette() {
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const commands = useMemo(() => filterProductCommands(query), [query]);
+  const commands = useMemo(() => filterProductCommands(query), [query, locale]);
 
-  const close = () => {
+  const close = (restoreFocus = true) => {
     setOpen(false);
     setQuery('');
     setActiveIndex(0);
-    window.setTimeout(() => previousFocusRef.current?.focus({ preventScroll: true }), 0);
+    if (restoreFocus) window.setTimeout(() => previousFocusRef.current?.focus({ preventScroll: true }), 0);
   };
 
   const activate = (command: ProductCommand) => {
     if (command.availability !== 'available') return;
+    close(false);
     runCommand(command);
-    close();
   };
 
   useEffect(() => {
@@ -62,6 +65,23 @@ export function CommandPalette() {
 
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !paletteRef.current) return;
+    // Inert all sibling branches, including toolbar controls, without hiding
+    // the dialog's ancestors from assistive technology.
+    const previous: {element: HTMLElement; inert: boolean}[] = [];
+    let branch: HTMLElement = paletteRef.current;
+    while (branch.parentElement && branch.parentElement !== document.body) {
+      for (const sibling of Array.from(branch.parentElement.children)) {
+        if (sibling !== branch && sibling instanceof HTMLElement) { previous.push({element: sibling, inert: sibling.inert}); sibling.inert = true; }
+      }
+      branch = branch.parentElement;
+    }
+    const onFocus = (event: FocusEvent) => { if (event.target instanceof Node && !paletteRef.current?.contains(event.target)) inputRef.current?.focus(); };
+    document.addEventListener('focusin', onFocus);
+    return () => { previous.forEach(item => { item.element.inert = item.inert; }); document.removeEventListener('focusin', onFocus); };
   }, [open]);
 
   useEffect(() => {
@@ -130,7 +150,7 @@ export function CommandPalette() {
       aria-expanded={open}
       aria-controls="kafdeck-command-palette"
     >
-      Commands <kbd>Ctrl K</kbd>
+      {t("Commands")}{' '}<kbd>Ctrl K</kbd>
     </button>
     {open && <div className="kafdeck-command-backdrop" role="presentation" onMouseDown={event => {
       if (event.currentTarget === event.target) close();
@@ -146,14 +166,14 @@ export function CommandPalette() {
       >
         <div className="card-header">
           <div>
-            <h2 id="kafdeck-command-title" className="card-title">Command palette</h2>
-            <div className="text-secondary">Keyboard-first navigation over registered Kafdeck product surfaces.</div>
+            <h2 id="kafdeck-command-title" className="card-title">{t("Command palette")}</h2>
+            <div className="text-secondary">{t("Keyboard-first navigation over registered Kafdeck product surfaces.")}</div>
           </div>
-          <button className="btn-close ms-auto" type="button" aria-label="Close command palette" onClick={close} />
+          <button className="btn-close ms-auto" type="button" aria-label={t("Close command palette")} onClick={() => close()} />
         </div>
         <div className="card-body">
-          <label className="form-label" htmlFor="kafdeck-command-query">Find a resource or tool</label>
-          <input
+          <label className="form-label" htmlFor="kafdeck-command-query">{t("Find a resource or tool")}</label>
+          <input dir="ltr"
             ref={inputRef}
             id="kafdeck-command-query"
             className="form-control"
@@ -167,11 +187,11 @@ export function CommandPalette() {
             value={query}
             onChange={event => setQuery(event.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="Topics, schemas, Connect, ksqlDB, data jobs…"
+            placeholder={t("Topics, schemas, Connect, ksqlDB, data jobs…")}
           />
         </div>
-        <div id="kafdeck-command-results" className="list-group list-group-flush" role="listbox" aria-label="Kafdeck commands">
-          {commands.length === 0 && <div className="list-group-item text-secondary" role="status">No registered command matches this search.</div>}
+        <div id="kafdeck-command-results" className="list-group list-group-flush" role="listbox" aria-label={t("Kafdeck commands")}>
+          {commands.length === 0 && <div className="list-group-item text-secondary" role="status">{t("No registered command matches this search.")}</div>}
           {commands.map((command, index) => {
             const unavailable = command.availability !== 'available';
             return <button
@@ -187,16 +207,15 @@ export function CommandPalette() {
               onClick={() => activate(command)}
             >
               <span>
-                <strong>{command.label}</strong>
-                <small>{command.description}</small>
+                <strong>{t(command.label)}</strong>
+                <small>{t(command.description)}</small>
               </span>
-              {unavailable && <span className="badge bg-yellow-lt text-yellow">Unavailable</span>}
+              {unavailable && <span className="badge bg-yellow-lt text-yellow">{t("Unavailable")}</span>}
             </button>;
           })}
         </div>
         <div className="card-footer text-secondary">
-          ↑/↓ move · Enter open · Esc close. Unavailable commands stay visible instead of falling through to an untyped shortcut.
-        </div>
+          {t("↑/↓ move · Enter open · Esc close. Unavailable commands stay visible instead of falling through to an untyped shortcut.")}{' '}</div>
       </section>
     </div>}
   </>;

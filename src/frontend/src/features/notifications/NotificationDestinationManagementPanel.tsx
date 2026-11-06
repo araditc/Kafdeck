@@ -1,12 +1,13 @@
+import { t } from '../../shared/i18n.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiProblem, kafdeckApi, type NotificationManagedDestination, type NotificationManagedDestinationChange,
   type NotificationManagedAudit } from '../../shared/api.js';
 
 function failure(error: unknown): string {
-  if (error instanceof ApiProblem && error.status === 409) return 'Revision conflict. Reload current state before preparing another change.';
-  if (error instanceof ApiProblem && error.status === 401) return 'Operator session expired.';
-  if (error instanceof ApiProblem && error.status === 403) return 'Destination management is not authorized.';
-  return 'The change was not confirmed. Reload current state before retrying.';
+  if (error instanceof ApiProblem && error.status === 409) return t("Revision conflict. Reload current state before preparing another change.");
+  if (error instanceof ApiProblem && error.status === 401) return t("Operator session expired.");
+  if (error instanceof ApiProblem && error.status === 403) return t("Destination management is not authorized.");
+  return t("The change was not confirmed. Reload current state before retrying.");
 }
 
 /** Only opaque provisioned choices; no URL, secret, locator or arbitrary provider request input. */
@@ -77,36 +78,33 @@ export function NotificationDestinationManagementPanel() {
   }
   if (unavailable) return null;
   return <section className="card kafdeck-card" aria-labelledby="notification-destination-management-title">
-    <h2 id="notification-destination-management-title">Notification destination and credential management</h2>
-    <p>Choose an approved profile version. Rotation advances the shared revision and fences old queued intents.
-      Revocation stops new claims; a message already sent requires reconciliation.</p>
-    <button type="button" disabled={busy} onClick={() => void load()}>Reload authorized destinations</button>
+    <h2 id="notification-destination-management-title">{t("Notification destination and credential management")}</h2>
+    <p>{t("Choose an approved profile version. Rotation advances the shared revision and fences old queued intents. Revocation stops new claims; a message already sent requires reconciliation.")}</p>
+    <button type="button" disabled={busy} onClick={() => void load()}>{t("Reload authorized destinations")}</button>
     {error && <p role="alert">{error}</p>}
-    <label htmlFor="managed-destination">Destination</label>
+    <label htmlFor="managed-destination">{t("Destination")}</label>
     <select id="managed-destination" value={selected?.destinationId ?? ''} disabled={busy} onChange={event => select(event.target.value)}>
-      <option value="">Choose a destination</option>{items.map(item => <option key={item.destinationId} value={item.destinationId}>{item.destinationId}</option>)}
+      <option value="">{t("Choose a destination")}</option>{items.map(item => <option key={item.destinationId} value={item.destinationId}>{item.destinationId}</option>)}
     </select>
     {selected && <>
-      <p>Current shared revision: {selected.revision}. {selected.configurationMismatch && 'Provisioned configuration differs; select the reviewed replacement version.'}</p>
+      <p>{t("Current shared revision:")}{' '}{selected.revision}. {selected.configurationMismatch && t("Provisioned configuration differs; select the reviewed replacement version.")}</p>
       <form onSubmit={prepare} onChange={() => setPrepared(null)}>
-        <label htmlFor="managed-candidate">Approved profile version</label>
+        <label htmlFor="managed-candidate">{t("Approved profile version")}</label>
         <select id="managed-candidate" value={candidate} disabled={busy} onChange={event => setCandidate(event.target.value)}>
           {selected.candidates.map(row => <option key={row.candidateId} value={row.candidateId}>{row.candidateId} — {row.provider}</option>)}
         </select>
-        <label><input type="checkbox" checked={enabled} disabled={busy} onChange={event => setEnabled(event.target.checked)} />Destination enabled</label>
-        <label><input type="checkbox" checked={credential} disabled={busy} onChange={event => setCredential(event.target.checked)} />Credential enabled</label>
-        <button type="submit" disabled={busy}>Review change</button>
+        <label><input dir="auto" type="checkbox" checked={enabled} disabled={busy} onChange={event => setEnabled(event.target.checked)} />{t("Destination enabled")}</label>
+        <label><input dir="auto" type="checkbox" checked={credential} disabled={busy} onChange={event => setCredential(event.target.checked)} />{t("Credential enabled")}</label>
+        <button type="submit" disabled={busy}>{t("Review change")}</button>
       </form>
-      {prepared && <aside aria-label="Reviewed destination change"><p>Revision {prepared.expectedRevision} → {prepared.expectedRevision + 1};
-        version {prepared.candidateId}; destination {prepared.profileEnabled ? 'enabled' : 'disabled'};
-        credential {prepared.credentialEnabled ? 'enabled' : 'revoked'}.</p>
-        <button type="button" disabled={busy} onClick={() => void confirm()}>Confirm reviewed change</button></aside>}
-      <button type="button" disabled={busy} onClick={() => void readAudit(false)}>Read destination audit</button>
-      {audit.length > 0 && <table><caption>Durable destination changes (latest 1000 retained)</caption><thead><tr><th>Revision</th><th>Version</th><th>Destination</th><th>Credential</th><th>Actor fingerprint</th><th>Time</th></tr></thead>
-        <tbody>{audit.map(row => <tr key={row.revision}><td>{row.revision}</td><td>{row.candidateId}</td><td>{row.profileEnabled ? 'Enabled' : 'Disabled'}</td>
-          <td>{row.credentialEnabled ? 'Enabled' : 'Revoked'}</td><td>{row.actorFingerprint}</td><td>{row.updatedAtUtc}</td></tr>)}</tbody></table>}
-      {nextRevision !== null && <button type="button" disabled={busy} onClick={() => void readAudit(true)}>Read next audit page</button>}
+      {prepared && <aside aria-label={t("Reviewed destination change")}><p>{t("Revision")}{' '}<bdi dir="ltr" lang="en">{prepared.expectedRevision}</bdi> → {prepared.expectedRevision + 1}{t("; version")}{' '}<bdi dir="ltr" lang="en">{prepared.candidateId}</bdi>{t("; destination")}{' '}{prepared.profileEnabled ? t("enabled") : t("disabled")}{t("; credential")}{' '}{prepared.credentialEnabled ? t("enabled") : t("revoked")}.</p>
+        <button type="button" disabled={busy} onClick={() => void confirm()}>{t("Confirm reviewed change")}</button></aside>}
+      <button type="button" disabled={busy} onClick={() => void readAudit(false)}>{t("Read destination audit")}</button>
+      {audit.length > 0 && <table><caption>{t("Durable destination changes (latest 1000 retained)")}</caption><thead><tr><th scope="col">{t("Revision")}</th><th scope="col">{t("Version")}</th><th scope="col">{t("Destination")}</th><th scope="col">{t("Credential")}</th><th scope="col">{t("Actor fingerprint")}</th><th scope="col">{t("Time")}</th></tr></thead>
+        <tbody>{audit.map(row => <tr key={row.revision}><td>{row.revision}</td><td><bdi dir="ltr" lang="en">{row.candidateId}</bdi></td><td>{row.profileEnabled ? t("Enabled") : t("Disabled")}</td>
+          <td>{row.credentialEnabled ? t("Enabled") : t("Revoked")}</td><td><bdi dir="ltr" lang="en">{row.actorFingerprint}</bdi></td><td><bdi dir="ltr" lang="en">{row.updatedAtUtc}</bdi></td></tr>)}</tbody></table>}
+      {nextRevision !== null && <button type="button" disabled={busy} onClick={() => void readAudit(true)}>{t("Read next audit page")}</button>}
     </>}
-    {receipt !== null && <p role="status">Change recorded at shared revision {receipt}. No provider message was sent by this management request.</p>}
+    {receipt !== null && <p role="status">{t("Change recorded at shared revision")}{' '}{receipt}{t(". No provider message was sent by this management request.")}</p>}
   </section>;
 }

@@ -13,6 +13,6 @@ export function StatusBadge({
     title={presentation.description}
     aria-label={`${label ?? presentation.label}: ${presentation.description}`}
   >
-    {label ?? presentation.label}
+    <bdi dir="auto">{label ?? presentation.label}</bdi>
   </span>;
 }

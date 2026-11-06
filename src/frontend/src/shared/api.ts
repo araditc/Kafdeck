@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { clearDeploymentAccessToken, withDeploymentAccessToken } from './deploymentAccess.js';
 import { notifySessionLossIfUnauthorized } from './operatorSessionSecurity.js';
 export { operatorSessionLostEvent } from './operatorSessionSecurity.js';
@@ -13,7 +14,7 @@ export interface TopicPageData { items: TopicListItem[]; nextCursor: string | nu
 export interface PartitionProjection { partitionId: number; leaderBrokerId: number | null; replicaBrokerIds: number[]; inSyncReplicaBrokerIds: number[]; outOfSyncReplicaBrokerIds: number[]; health: string | number; healthReasons: string[]; }
 export interface TopicDetailData { name: string; isInternal: boolean; partitions: PartitionProjection[]; offlinePartitionCount: number; underReplicatedPartitionCount: number; anomalyState: string | number; }
 export interface ConfigurationEntryData { name: string; value: string | null; isSensitive: boolean; isReadOnly: boolean; source: string | null; }
-export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; }
+export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; sessionScope?: string | null; }
 
 /** Server-authorized metadata only. Not a provider payload or a secret-bearing destination profile. */
 export interface NotificationSubscriptionData {
@@ -673,7 +674,7 @@ async function parseProblem(response: Response): Promise<ApiProblem> {
   notifySessionLossIfUnauthorized(response.status);
   let problem: { detail?: string; title?: string; code?: string; type?: string } = {};
   try { problem = (await response.json()) as typeof problem; } catch { /* safe generic fallback */ }
-  return new ApiProblem(response.status, problem.detail ?? problem.title ?? 'Kafdeck request failed.', problem.code ?? problem.type ?? null);
+  return new ApiProblem(response.status, problem.detail ?? problem.title ?? t("Kafdeck request failed."), problem.code ?? problem.type ?? null);
 }
 
 async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -712,7 +713,7 @@ async function toolingCsrf(signal?: AbortSignal): Promise<ToolingCsrfToken | nul
   if (!token.requestToken || !token.headerName) {
     throw new ApiProblem(
       500,
-      'The antiforgery token response was incomplete.',
+      t("The antiforgery token response was incomplete."),
       'urn:kafdeck:problem:antiforgery-token-invalid',
     );
   }
@@ -816,7 +817,7 @@ export const kafdeckApi = {
     if (!token.requestToken || !token.formFieldName) {
       throw new ApiProblem(
         500,
-        'The antiforgery token response was incomplete.',
+        t("The antiforgery token response was incomplete."),
         'urn:kafdeck:problem:antiforgery-token-invalid',
       );
     }
@@ -847,14 +848,14 @@ export const kafdeckApi = {
   },
   changeNotificationManagedDestination(destinationId: string, request: NotificationManagedDestinationChange, signal?: AbortSignal) {
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(destinationId) || destinationId === '.' || destinationId === '..')
-      throw new TypeError('Invalid managed destination identity');
+      throw new TypeError(t("Invalid managed destination identity"));
     return putJson<{ destinationId: string; revision: number; profileEnabled: boolean; credentialEnabled: boolean }>(
       '/api/v1/notifications/management/destinations/' + encodeURIComponent(destinationId), request, signal,
     );
   },
   readNotificationManagedAudit(destinationId: string, afterRevision = 0, signal?: AbortSignal) {
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(destinationId) || destinationId === '.' || destinationId === '..' ||
-        !Number.isSafeInteger(afterRevision) || afterRevision < 0) throw new TypeError('Invalid audit cursor');
+        !Number.isSafeInteger(afterRevision) || afterRevision < 0) throw new TypeError(t("Invalid audit cursor"));
     return readJson<{ items: NotificationManagedAudit[]; nextRevision: number | null }>(
       '/api/v1/notifications/management/destinations/' + encodeURIComponent(destinationId) +
       '/audit?maxResults=50&afterRevision=' + afterRevision, signal,
@@ -867,7 +868,7 @@ export const kafdeckApi = {
   ) {
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(subscriptionId) ||
       subscriptionId === '.' || subscriptionId === '..') {
-      throw new ApiProblem(400, 'Invalid bounded subscription identity.', null);
+      throw new ApiProblem(400, t("Invalid bounded subscription identity."), null);
     }
     return putJson<NotificationSubscriptionWriteReceipt>(
       '/api/v1/notifications/subscriptions/' + encodeURIComponent(subscriptionId),
@@ -1216,7 +1217,7 @@ export const kafdeckApi = {
     if (signal !== undefined) init.signal = signal;
     const response = await fetch(`${recordPath(clusterId, topicName, query.partition)}/tail?${params}`, init);
     if (!response.ok) throw await parseProblem(response);
-    if (!response.body) throw new Error('Live tail response body is unavailable.');
+    if (!response.body) throw new Error(t("Live tail response body is unavailable."));
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let pending = '';

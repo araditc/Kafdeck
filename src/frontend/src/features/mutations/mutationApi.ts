@@ -1,3 +1,4 @@
+import { t } from '../../shared/i18n.js';
 import { withDeploymentAccessToken } from '../../shared/deploymentAccess.js';
 import { notifySessionLossIfUnauthorized } from '../../shared/operatorSessionSecurity.js';
 export type MutationRiskClass = 'low' | 'moderate' | 'high' | 'critical';
@@ -327,7 +328,7 @@ export function validateDataReconciliationPreview(operationId: string, request: 
       !Number.isSafeInteger(request.expectedProgressVersion) || request.expectedProgressVersion < 0 ||
       !/^[a-f0-9]{64}$/.test(request.proofReferenceSha256) || !/^[a-f0-9]{64}$/.test(request.fencedWorkerEvidenceSha256) ||
       typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 256 || /[\u0000-\u001f\u007f]/.test(idempotencyKey))
-    throw new Error('Reconciliation requires an exact operation, batch, current progress version, SHA256 proof/fence references and Idempotency-Key.');
+    throw new Error(t("Reconciliation requires an exact operation, batch, current progress version, SHA256 proof/fence references and Idempotency-Key."));
 }
 
 export type RecordsPurgeSelectorKind = 'absolute' | 'timestamp';
@@ -373,7 +374,7 @@ async function parseProblem(response: Response): Promise<MutationApiProblem> {
 
   return new MutationApiProblem(
     response.status,
-    problem.detail ?? problem.title ?? 'The governed mutation request failed.',
+    problem.detail ?? problem.title ?? t("The governed mutation request failed."),
     problem.code ?? problem.type ?? null,
   );
 }
@@ -398,7 +399,7 @@ async function csrf(signal?: AbortSignal): Promise<CsrfToken> {
   if (!token.requestToken || !token.headerName) {
     throw new MutationApiProblem(
       500,
-      'The antiforgery token response was incomplete.',
+      t("The antiforgery token response was incomplete."),
       'urn:kafdeck:problem:antiforgery-token-invalid',
     );
   }

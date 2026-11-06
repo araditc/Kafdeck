@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AppShell } from '../dist/test-source/app/AppShell.js';
+import { AppShell, authoritativeSessionScope, canPreserveOperatorSession, verificationFocusDecision } from '../dist/test-source/app/AppShell.js';
 import { describeObservation, selectCluster, shouldAutoRefresh, visibleRefreshIntervalMs } from '../dist/test-source/app/operatorState.js';
 
 test('AppShell exposes product identity and accessible operator landmarks', () => {
@@ -51,4 +51,44 @@ test('automatic refresh is bounded and pauses while the page is hidden', () => {
   assert.equal(visibleRefreshIntervalMs, 10_000);
   assert.equal(shouldAutoRefresh('visible'), true);
   assert.equal(shouldAutoRefresh('hidden'), false);
+});
+
+
+test('only a valid opaque server session scope preserves mounted operator state', () => {
+  const scope='a'.repeat(64), other='b'.repeat(64);
+  const identity={authenticated:true,authenticationMode:'oidc',email:'same@example.test',authenticatedAt:'2026-11-06T00:00:00Z'};
+  assert.equal(authoritativeSessionScope({...identity,sessionScope:scope}),scope);
+  assert.equal(canPreserveOperatorSession(scope,{...identity,sessionScope:scope,displayName:'Cosmetic change'}),true);
+  assert.equal(canPreserveOperatorSession(scope,{...identity,sessionScope:other}),false);
+  for(const value of [undefined,null,'',scope+'x','x'.repeat(64),12,{scope},'../'+scope]) {
+    assert.equal(authoritativeSessionScope({...identity,sessionScope:value}),null);
+    assert.equal(canPreserveOperatorSession(scope,{...identity,sessionScope:value}),false);
+  }
+  // Equal email/authentication time is never an authority discriminator for a
+  // legacy host or a server that cannot supply its current policy binding.
+  assert.equal(canPreserveOperatorSession(scope,identity),false);
+  assert.equal(canPreserveOperatorSession(null,identity),false);
+  assert.equal(canPreserveOperatorSession(null,{...identity,sessionScope:scope}),false);
+  assert.equal(authoritativeSessionScope(Object.create({sessionScope:scope})),null);
+});
+
+test('initial operator verification hides and inerts the entire private shell with status outside', () => {
+  const html=renderToStaticMarkup(React.createElement(AppShell));
+  assert.match(html, /class="page kafdeck-shell" hidden="" inert="" aria-hidden="true" style="display:none"/);
+  const status=html.indexOf('Checking operator session');
+  assert.ok(status>=0 && status<html.indexOf('class="page kafdeck-shell"'));
+  assert.match(html,/Authorized content is hidden until verification completes/);
+  assert.doesNotMatch(html,/Signed in as/);
+});
+
+
+test('visibility verification defers original focus until actual window return without stealing user focus', () => {
+  const candidate={candidateEpoch:4,currentEpoch:4,candidateScope:'server:'+'a'.repeat(64),currentScope:'server:'+'a'.repeat(64),connected:true,documentFocused:false,bodyActive:true};
+  // The first 200 response can arrive while visible but still unfocused.
+  assert.equal(verificationFocusDecision(candidate),'defer');
+  // The next guarded same-scope verification after actual focus can recover
+  // that original connected node rather than restarting the tab sequence.
+  assert.equal(verificationFocusDecision({...candidate,documentFocused:true}),'restore');
+  assert.equal(verificationFocusDecision({...candidate,documentFocused:true,bodyActive:false}),'discard');
+  for(const change of [{currentEpoch:5},{currentScope:null},{currentScope:'server:'+'b'.repeat(64)},{connected:false}])assert.equal(verificationFocusDecision({...candidate,...change}),'discard');
 });

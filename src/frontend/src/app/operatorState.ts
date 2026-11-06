@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n.js';
 import type { ApiEnvelope, ClusterData } from '../shared/api.js';
 
 export interface ClusterViewState {
@@ -26,10 +27,10 @@ export function selectCluster(state: ClusterViewState, clusterId: string): Clust
 }
 
 export function describeObservation(observation: { freshness: string; partial: boolean }): string {
-  if (observation.partial && observation.freshness === 'stale') return 'Partial · stale';
-  if (observation.partial) return 'Partial';
-  if (observation.freshness === 'stale') return 'Stale';
-  return 'Current';
+  if (observation.partial && observation.freshness === 'stale') return t("Partial · stale");
+  if (observation.partial) return t("Partial");
+  if (observation.freshness === 'stale') return t("Stale");
+  return t("Current");
 }
 
 export const visibleRefreshIntervalMs = 10_000;

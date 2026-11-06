@@ -1,0 +1,116 @@
+name: v09-w77-hardening
+
+on:
+  pull_request:
+    paths: ['tests/Kafdeck.Architecture.Tests/**', 'src/backend/**', 'deploy/dev/**', 'scripts/ci/require-w77-evidence.py', '.github/workflows/v09-w77-hardening.yml']
+  push:
+    branches: [main]
+    paths: ['tests/Kafdeck.Architecture.Tests/**', 'src/backend/**', 'deploy/dev/**', 'scripts/ci/require-w77-evidence.py', '.github/workflows/v09-w77-hardening.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v09-w77-hardening-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  populated-soak-and-isolated-faults:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: kafdeck
+          POSTGRES_PASSWORD: kafdeck-w77-ci-only
+          POSTGRES_DB: kafdeck
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kafdeck -d kafdeck"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download and verify private laboratory runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening"
+          mkdir -p "$lab"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip --output "$lab/keycloak.zip"
+          printf '%s  %s\n' 4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4 "$lab/keycloak.zip" | sha256sum --check
+          unzip -q "$lab/keycloak.zip" -d "$lab"
+          chmod +x "$lab/keycloak-26.8.1/bin/kc.sh"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 https://archive.apache.org/dist/kafka/4.3.1/kafka_2.13-4.3.1.tgz --output "$lab/kafka.tgz"
+          printf '%s  %s\n' c7d7b2318cb51aa0c61d3246a51c349210073c5c9b754947ef965a439f2f939e8600f204e134a75ac31faf3829c9370960ef7c6a9886c8a1dbf0339a21f4c54c "$lab/kafka.tgz" | sha512sum --check
+          tar -xzf "$lab/kafka.tgz" -C "$lab"
+      - name: Prepare real human identities and TLS
+        shell: pwsh
+        run: |
+          $env:JAVA_HOME = $env:JAVA_HOME_21_X64
+          $version = (& "$env:JAVA_HOME/bin/java" -version 2>&1 | Select-Object -First 1).ToString()
+          ./deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening/keycloak-26.8.1" -OutputDirectory "$env:GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening/identity" -JavaVersion $version
+      - name: Start owned identity service and prove verified discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          export KC_HTTPS_KEY_STORE_PASSWORD="$(cat "$lab/identity/https-password.txt")"
+          export KC_DB_URL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["databaseUrl"])' "$lab/identity/lab.json")"
+          nohup "$lab/keycloak-26.8.1/bin/kc.sh" start --http-host=127.0.0.1 --http-enabled=false --db=dev-file --https-port=18444 --hostname=https://localhost:18444 --https-key-store-file="$lab/identity/https.p12" --cache=local --import-realm > "$lab/identity/private-server.log" 2>&1 &
+          printf '%s' "$!" > "$lab/identity/owned.pid"
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent --cacert "$lab/identity/ca.pem" --connect-timeout 1 --max-time 2 https://localhost:18444/realms/kafdeck-g2/.well-known/openid-configuration > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo 'Private identity fixture did not become ready.' >&2
+          exit 1
+      - name: Compile and run both-provider populated soak and bounded real faults
+        shell: bash
+        env:
+          KAFDECK_TEST_POSTGRES: 'Host=127.0.0.1;Port=5432;Username=kafdeck;Password=kafdeck-w77-ci-only;Database=kafdeck;Pooling=false'
+        run: |
+          set -euo pipefail
+          export KAFDECK_RUN_W77=1
+          export KAFDECK_SOURCE_SHA="$(git rev-parse HEAD)"
+          export KAFDECK_KEYCLOAK_G2_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening/identity/lab.json"
+          export KAFDECK_W77_KAFKA_HOME="$GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening/kafka_2.13-4.3.1"
+          export KAFDECK_W77_JAVA_HOME="$JAVA_HOME_21_X64"
+          # Every test replaces this readiness declaration with its own fresh, private broker.
+          export KAFDECK_G2_KAFKA_BOOTSTRAP=127.0.0.1:19092
+          export KAFDECK_G2_KAFKA_DELETE_CAPABLE=1
+          export KAFDECK_G2_EVIDENCE_DIRECTORY="$GITHUB_WORKSPACE/artifacts/w77-hardening"
+          mkdir -p "$KAFDECK_G2_EVIDENCE_DIRECTORY"
+          dotnet restore Kafdeck.slnx --locked-mode
+          dotnet build tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-restore -warnaserror
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore --filter 'FullyQualifiedName~V09W77HardeningLiveTests|FullyQualifiedName~V09W77FaultLiveTests' --results-directory artifacts/w77-hardening --logger 'trx;LogFileName=w77-hardening.trx'
+          python3 scripts/ci/require-complete-trx.py artifacts/w77-hardening/w77-hardening.trx V09W77HardeningLiveTests:2 V09W77FaultLiveTests:2
+          python3 scripts/ci/require-w77-evidence.py --source-sha "$(git rev-parse HEAD)" --hardening-dir artifacts/w77-hardening --manifest artifacts/w77-hardening/manifest.json
+      - name: Stop only owned identity fixture
+        if: always()
+        shell: bash
+        run: |
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/w77-hardening"
+          if test -s "$lab/identity/owned.pid"; then
+            pid="$(cat "$lab/identity/owned.pid")"
+            if test -r "/proc/$pid/cmdline" && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq "$lab/keycloak-26.8.1"; then kill "$pid"; fi
+          fi
+      - name: Retain sanitized exact-source samples and cleanup proof
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: w77-hardening
+          path: |
+            artifacts/w77-hardening/*-evidence.json
+            artifacts/w77-hardening/manifest.json
+            artifacts/w77-hardening/*.trx
+          if-no-files-found: error

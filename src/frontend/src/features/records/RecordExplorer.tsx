@@ -1,3 +1,4 @@
+import { t } from '../../shared/i18n.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiProblem, kafdeckApi, type ControlledSerdeFormat, type RecordAnchorProjection, type RecordQuery, type RecordSafePage, type RecordSafeProjection } from '../../shared/api.js';
 
@@ -27,10 +28,10 @@ export function activeRecordPageQuery(displayedQuery: RecordQuery | null, baseQu
 }
 
 function recordError(reason: unknown) {
-  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return 'Record access is denied by Kafdeck policy.';
-  if (reason instanceof ApiProblem && reason.status === 403) return 'Kafka denied record access for this target.';
-  if (reason instanceof ApiProblem && reason.status === 501) return 'Record browsing is unsupported for this target.';
-  return reason instanceof Error ? reason.message : 'Record data could not be loaded.';
+  if (reason instanceof ApiProblem && reason.status === 403 && reason.code === 'urn:kafdeck:problem:operator-authorization-denied') return t("Record access is denied by Kafdeck policy.");
+  if (reason instanceof ApiProblem && reason.status === 403) return t("Kafka denied record access for this target.");
+  if (reason instanceof ApiProblem && reason.status === 501) return t("Record browsing is unsupported for this target.");
+  return reason instanceof Error ? reason.message : t("Record data could not be loaded.");
 }
 
 function isAbort(reason: unknown) {
@@ -45,12 +46,12 @@ function fromBase64(value: string): Uint8Array {
 
 function rawText(value: string | null) {
   if (!value) return '';
-  try { return new TextDecoder('utf-8', { fatal: false }).decode(fromBase64(value)); } catch { return '[binary data]'; }
+  try { return new TextDecoder('utf-8', { fatal: false }).decode(fromBase64(value)); } catch { return t("[binary data]"); }
 }
 
 function rawHex(value: string | null) {
   if (!value) return '';
-  try { return Array.from(fromBase64(value)).map(byte => byte.toString(16).padStart(2, '0')).join(' '); } catch { return '[binary data]'; }
+  try { return Array.from(fromBase64(value)).map(byte => byte.toString(16).padStart(2, '0')).join(' '); } catch { return t("[binary data]"); }
 }
 
 function anchorQuery(anchor: RecordAnchorProjection | null): Partial<RecordQuery> {
@@ -62,13 +63,13 @@ function anchorQuery(anchor: RecordAnchorProjection | null): Partial<RecordQuery
 }
 
 function RecordValue({ record, mode }: { record: RecordSafeProjection; mode: ViewMode }) {
-  if (record.valueKind === 'fullyRedacted') return <em>Payload fully redacted by policy.</em>;
+  if (record.valueKind === 'fullyRedacted') return <em>{t("Payload fully redacted by policy.")}</em>;
   if (mode === 'structured') {
-    if (record.structuredValue !== null) return <pre>{JSON.stringify(record.structuredValue, null, 2)}</pre>;
-    return <em>Structured decoding unavailable for this record.</em>;
+    if (record.structuredValue !== null) return <pre dir="ltr" lang="en">{JSON.stringify(record.structuredValue, null, 2)}</pre>;
+    return <em>{t("Structured decoding unavailable for this record.")}</em>;
   }
-  if (!record.rawValue) return <em>Raw representation withheld by masking policy.</em>;
-  return <pre>{mode === 'hex' ? rawHex(record.rawValue) : rawText(record.rawValue)}</pre>;
+  if (!record.rawValue) return <em>{t("Raw representation withheld by masking policy.")}</em>;
+  return <pre dir="ltr" lang="en">{mode === 'hex' ? rawHex(record.rawValue) : rawText(record.rawValue)}</pre>;
 }
 
 export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
@@ -161,7 +162,7 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
           setDisplayedQuery(tailQuery);
           setPage(previous => previous ? { ...frame.page!, records: [...previous.records, ...frame.page!.records].slice(-maxRecords) } : frame.page);
         } else if (frame.kind === 'error' && frame.failure) setError(frame.failure.message);
-        else if (frame.kind === 'admissionDenied') setError('Live-tail admission limit reached.');
+        else if (frame.kind === 'admissionDenied') setError(t("Live-tail admission limit reached."));
         else if (frame.kind === 'completed') setTailing(false);
       }, controller.signal);
     } catch (reason) {
@@ -190,31 +191,31 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
   const nextQuery = page?.nextAnchor ? { ...pageQuery, ...anchorQuery(page.nextAnchor), direction: 'forward' as const } : null;
 
   return <section className="kafdeck-data-explorer" aria-labelledby="record-explorer-title">
-    <h4 id="record-explorer-title">Safe Data Explorer</h4>
-    <p>Payload access is separately authorized, bounded and server-side masked before it reaches this browser.</p>
+    <h4 id="record-explorer-title">{t("Safe Data Explorer")}</h4>
+    <p>{t("Payload access is separately authorized, bounded and server-side masked before it reaches this browser.")}</p>
     <div>
-      <label>Partition <select value={partition} onChange={event => { stopBrowse(); stopTail(); setPage(null); setDisplayedQuery(null); setError(null); setPartition(Number(event.target.value)); }}>{partitions.map(value => <option key={value} value={value}>{value}</option>)}</select></label>{' '}
-      <label>Start <select value={anchorKind} onChange={event => setAnchorKind(event.target.value as typeof anchorKind)}><option value="latest">Latest</option><option value="earliest">Earliest</option><option value="offset">Offset</option><option value="timestamp">Timestamp</option></select></label>{' '}
-      {anchorKind === 'offset' && <label>Offset <input type="number" min="0" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}
-      {anchorKind === 'timestamp' && <label>Timestamp <input type="datetime-local" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}{' '}
-      <label>Max records <input type="number" min="1" max="1000" value={maxRecords} onChange={event => setMaxRecords(Math.max(1, Math.min(1000, Number(event.target.value) || 1)))} /></label>
+      <label>{t("Partition")}{' '}<select value={partition} onChange={event => { stopBrowse(); stopTail(); setPage(null); setDisplayedQuery(null); setError(null); setPartition(Number(event.target.value)); }}>{partitions.map(value => <option key={value} value={value}>{value}</option>)}</select></label>{' '}
+      <label>{t("Start")}{' '}<select value={anchorKind} onChange={event => setAnchorKind(event.target.value as typeof anchorKind)}><option value="latest">{t("Latest")}</option><option value="earliest">{t("Earliest")}</option><option value="offset">{t("Offset")}</option><option value="timestamp">{t("Timestamp")}</option></select></label>{' '}
+      {anchorKind === 'offset' && <label>{t("Offset")}{' '}<input dir="auto" type="number" min="0" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}
+      {anchorKind === 'timestamp' && <label>{t("Timestamp")}{' '}<input dir="auto" type="datetime-local" value={anchorValue} onChange={event => setAnchorValue(event.target.value)} /></label>}{' '}
+      <label>{t("Max records")}{' '}<input dir="auto" type="number" min="1" max="1000" value={maxRecords} onChange={event => setMaxRecords(Math.max(1, Math.min(1000, Number(event.target.value) || 1)))} /></label>
     </div>
     <div>
-      <label>Key prefix <input value={keyPrefix} onChange={event => setKeyPrefix(event.target.value)} /></label>{' '}
-      <label>Expression <select value={filterLanguage} onChange={event => setFilterLanguage(event.target.value as 'cel' | 'jq')}><option value="cel">CEL</option><option value="jq">jq-style</option></select>{' '}<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="bounded deterministic filter" /></label>
+      <label>{t("Key prefix")}{' '}<input dir="ltr" value={keyPrefix} onChange={event => setKeyPrefix(event.target.value)} /></label>{' '}
+      <label>{t("Expression")}{' '}<select aria-label={t("Filter language")} value={filterLanguage} onChange={event => setFilterLanguage(event.target.value as 'cel' | 'jq')}><option value="cel">CEL</option><option value="jq">{t("jq-style")}</option></select>{' '}<input aria-label={t("Filter expression")} dir="ltr" value={filter} onChange={event => setFilter(event.target.value)} placeholder={t("bounded deterministic filter")} /></label>
     </div>
     <div>
-      <button type="button" disabled={loading || tailing} onClick={() => void load(baseQuery)}>{loading ? 'Loading…' : 'Browse'}</button>{' '}
-      <button type="button" disabled={!previousQuery || loading || tailing} onClick={() => previousQuery && void load(previousQuery)}>Previous page</button>{' '}
-      <button type="button" disabled={!nextQuery || loading || tailing} onClick={() => nextQuery && void load(nextQuery)}>Next page</button>{' '}
-      {!tailing ? <button type="button" onClick={() => void startTail()}>Start bounded live tail</button> : <button type="button" onClick={stopTail}>Stop live tail</button>}{' '}
-      <button type="button" onClick={() => void exportPage('json')}>Export JSON</button>{' '}
-      <button type="button" onClick={() => void exportPage('ndjson')}>Export NDJSON</button>{' '}
-      <button type="button" onClick={() => void exportPage('csv')}>Export CSV</button>
+      <button type="button" disabled={loading || tailing} onClick={() => void load(baseQuery)}>{loading ? t("Loading…") : t("Browse")}</button>{' '}
+      <button type="button" disabled={!previousQuery || loading || tailing} onClick={() => previousQuery && void load(previousQuery)}>{t("Previous page")}</button>{' '}
+      <button type="button" disabled={!nextQuery || loading || tailing} onClick={() => nextQuery && void load(nextQuery)}>{t("Next page")}</button>{' '}
+      {!tailing ? <button type="button" onClick={() => void startTail()}>{t("Start bounded live tail")}</button> : <button type="button" onClick={stopTail}>{t("Stop live tail")}</button>}{' '}
+      <button type="button" onClick={() => void exportPage('json')}>{t("Export JSON")}</button>{' '}
+      <button type="button" onClick={() => void exportPage('ndjson')}>{t("Export NDJSON")}</button>{' '}
+      <button type="button" onClick={() => void exportPage('csv')}>{t("Export CSV")}</button>
     </div>
     <div>
-      <label>View <select value={viewMode} onChange={event => setViewMode(event.target.value as ViewMode)}><option value="structured">Structured</option><option value="text">Text</option><option value="hex">Hex</option></select></label>{' '}
-      {viewMode === 'structured' && <label>Decoder <select value={structuredDecoder} onChange={event => setStructuredDecoder(event.target.value as 'schema' | ControlledSerdeFormat)}>
+      <label>{t("View")}{' '}<select value={viewMode} onChange={event => setViewMode(event.target.value as ViewMode)}><option value="structured">{t("Structured")}</option><option value="text">{t("Text")}</option><option value="hex">{t("Hex")}</option></select></label>{' '}
+      {viewMode === 'structured' && <label>{t("Decoder")}{' '}<select value={structuredDecoder} onChange={event => setStructuredDecoder(event.target.value as 'schema' | ControlledSerdeFormat)}>
         <option value="schema">Schema Registry</option>
         <option value="cbor">CBOR</option>
         <option value="xml">XML</option>
@@ -223,9 +224,9 @@ export function RecordExplorer({ clusterId, topicName, partitions }: Props) {
     </div>
     {error && <p role="alert">{error}</p>}
     {page && <>
-      <p role="status">Offsets {page.lowWatermark}–{page.highWatermark} · read budget: {page.readBudgetOutcome} · filter budget: {page.filterBudgetOutcome} · masking policy: {page.policyId} v{page.policyVersion}</p>
+      <p role="status">{t("Offsets")}{' '}{page.lowWatermark}–{page.highWatermark} {' '}{t("· read budget:")}{' '}{page.readBudgetOutcome} {' '}{t("· filter budget:")}{' '}{page.filterBudgetOutcome} {' '}{t("· masking policy:")}{' '}<bdi dir="ltr" lang="en">{page.policyId}</bdi> v<bdi dir="ltr" lang="en">{page.policyVersion}</bdi></p>
       {page.limitations.length > 0 && <ul>{page.limitations.map((item, index) => <li key={`${item.code}-${index}`}>{item.code}: {item.count}</li>)}</ul>}
-      {page.records.length === 0 ? <p>No records matched within the bounded scan.</p> : page.records.map(record => <article key={`${record.partition}-${record.offset}`}><h5>Offset {record.offset}</h5><p>{record.timestampUtc ?? 'No timestamp'} · key {record.keyRedacted ? 'redacted' : (record.key ?? 'none')} · {record.valueKind}</p><RecordValue record={record} mode={viewMode} />{record.redactedPaths.length > 0 && <p>Redacted: {record.redactedPaths.join(', ')}</p>}{record.headers.length > 0 && <details><summary>Headers</summary><ul>{record.headers.map((header, index) => <li key={`${header.name}-${index}`}>{header.name}: {header.isRedacted ? '[REDACTED]' : header.value}</li>)}</ul></details>}</article>)}
+      {page.records.length === 0 ? <p>{t("No records matched within the bounded scan.")}</p> : page.records.map(record => <article key={`${record.partition}-${record.offset}`}><h5>{t("Offset")}{' '}{record.offset}</h5><p>{record.timestampUtc ?? t("No timestamp")} {' '}{t("· key")}{' '}{record.keyRedacted ? t("redacted") : (record.key ?? 'none')} · <bdi dir="ltr" lang="en">{record.valueKind}</bdi></p><RecordValue record={record} mode={viewMode} />{record.redactedPaths.length > 0 && <p>{t("Redacted:")}{' '}{record.redactedPaths.join(', ')}</p>}{record.headers.length > 0 && <details><summary>{t("Headers")}</summary><ul>{record.headers.map((header, index) => <li key={`${header.name}-${index}`}><bdi dir="auto">{header.name}</bdi>: {header.isRedacted ? '[REDACTED]' : header.value}</li>)}</ul></details>}</article>)}
     </>}
   </section>;
 }
