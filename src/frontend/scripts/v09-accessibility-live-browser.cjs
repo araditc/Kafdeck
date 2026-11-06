@@ -178,6 +178,19 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     let listing=await get(context,'/api/v1/governance/requests?'+new URLSearchParams({clusterId:scenario.clusterId,pageSize:'200'}));const matching=listing.items.filter(item=>item.operationId===target.operationId);assert.equal(matching.length,1);const requestId=matching[0].requestId;result.requestId=requestId;
     await probe.activate(page,button(requests,'Reload authorized requests'),'request-reload');await probe.activate(page,dynamicButton(requests,'Inspect request',requestId),'inspect-request');
     phase='window-return-selected-before-'+locale;
+    if(scenario.manualHandoffDirectory&&!launch.headless){
+      // Chromium can restore the original DevTools session's focus override
+      // after the initial manual setup. Remove it again before preparing the
+      // populated form and recording any native-window evidence. Configuration
+      // transitions must never count as the real away/return proof below.
+      const nativeFocus=()=>Promise.all([page,approver].map(actorPage=>actorPage.evaluate(()=>({documentHasFocus:document.hasFocus(),visibility:document.visibilityState}))));
+      const before=await nativeFocus();
+      for(const [index,session] of manualFocusSessions.slice(-2).entries()){
+        await session.send('Emulation.setFocusEmulationEnabled',{enabled:false});
+        result.manualNativeFocusConfiguration.push({locale,actor:index===0?'requester':'reviewer',method:'Emulation.setFocusEmulationEnabled',enabled:false,scope:'before native-window proof setup',syntheticFocusEvents:false});
+      }
+      result.manualNativeFocusBoundaries??=[];result.manualNativeFocusBoundaries.push({locale,before,after:await nativeFocus(),beforeNativeEventRecorder:true,syntheticFocusEvents:false});
+    }
     const selectedRevision=requests.getByRole('article',{name:local('Selected immutable request revision'),exact:true});await selectedRevision.waitFor();assert.equal(await selectedRevision.locator('code').first().textContent(),requestId);
     await probe.text(page,label(requests,'Business reason'),'W79 typed field survives real window return','window-return-populated-reason');
     const selectedForm=async()=>({requestId:await selectedRevision.locator('code').first().textContent(),material:await selectedRevision.locator('code,pre,bdi[dir="ltr"]').allTextContents(),reason:await label(requests,'Business reason').inputValue(),key:await label(requests,'Stable request change idempotency key').inputValue(),command:await label(requests,'Business command').inputValue()});
