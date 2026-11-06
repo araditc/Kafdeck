@@ -59,12 +59,14 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       fs.writeFileSync(path.join(directory,'ready-'+suffix+'.json'),JSON.stringify({locale,direction,actor:direction==='away'?'reviewer':'requester',sourceSha:result.sourceSha,authenticatedApplication:true,requiredInput:'actual native window activation; no synthetic focus event'}));
       const deadline=Date.now()+120000;while(!fs.existsSync(resume)){if(Date.now()>deadline)throw Error('native window handoff timeout');await new Promise(resolve=>setTimeout(resolve,250));}
     }
+    const manualFocusSessions=[];
     let manualActionCursor=0;
     async function manualPause(actorPage,stage,metadata={}){
       if(!scenario.manualHandoffDirectory)return;
-      const focusActor=async()=>{await actorPage.bringToFront();await actorPage.locator('#service-requests').waitFor({state:'visible'});await actorPage.waitForFunction(()=>document.hasFocus());};
-      await focusActor();
       const directory=path.resolve(scenario.manualHandoffDirectory);fs.mkdirSync(directory,{recursive:true});
+      fs.writeFileSync(path.join(directory,'safe-authenticated-actors-'+locale+'.json'),JSON.stringify({locale,stage,actor:metadata.actor??'requester',sourceSha:result.sourceSha,authenticatedApplication:true,nativeFocusEmulationDisabled:!launch.headless,workflowResumed:false}));
+      const focusActor=async()=>{await actorPage.bringToFront();await actorPage.locator('#service-requests').waitFor({state:'visible',timeout:120000});await actorPage.waitForFunction(()=>document.hasFocus(),undefined,{timeout:120000});};
+      await focusActor();
       const suffix=locale+'-'+stage,resume=path.join(directory,'resume-'+suffix+'.json');if(fs.existsSync(resume))throw Error('stale AT handoff');
       const keyboardActionRange={from:manualActionCursor,to:result.keyboard.actions.length};
       const keyboardActionsSincePrevious=result.keyboard.actions.slice(manualActionCursor).filter(action=>typeof action.label==='string').map(({label,tabs,reverseSequenceVerified,firstDocumentEntry})=>({label,tabs,reverseSequenceVerified,firstDocumentEntry}));manualActionCursor=result.keyboard.actions.length;
@@ -145,6 +147,15 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const catalogForm=document.querySelector('#ownership-catalog fieldset'),requestForm=document.querySelector('#service-requests fieldset');
       return !!catalogForm&&!!requestForm&&!catalogForm.disabled&&!requestForm.disabled;
     });
+    if(scenario.manualHandoffDirectory&&!launch.headless){
+      for(const [actor,actorContext,actorPage] of [['requester',context,page],['reviewer',second,approver]]){
+        const session=await actorContext.newCDPSession(actorPage);manualFocusSessions.push(session);
+        // Remove Playwright's default simulated focus for the entire manual
+        // journey. Native activation must produce the real browser events.
+        await session.send('Emulation.setFocusEmulationEnabled',{enabled:false});
+        result.manualNativeFocusConfiguration??=[];result.manualNativeFocusConfiguration.push({locale,actor,method:'Emulation.setFocusEmulationEnabled',enabled:false,scope:'entire authenticated manual journey',syntheticFocusEvents:false});
+      }
+    }
     await manualPause(page,'before-actions');
     phase='keyboard-skip-main-'+locale;await probe.activate(page,page.getByRole('link',{name:local('Skip to main content'),exact:true}),'skip-to-main');assert.equal(await page.locator('#kafdeck-main').evaluate(element=>element===document.activeElement),true);result.keyboardSkipToMain??=[];result.keyboardSkipToMain.push({locale,method:'Tab then Enter',activeId:'kafdeck-main'});
     phase='keyboard-catalog-escaped-input';const escapedName='w79-'+crypto.randomUUID().slice(0,8)+' <w79-escaped>& " فارسی';
