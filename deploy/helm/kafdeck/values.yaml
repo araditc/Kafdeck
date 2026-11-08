@@ -1,0 +1,30 @@
+# Required installation-specific settings have no usable default.
+image:
+  repository: ghcr.io/araditc/kafdeck
+  digest: ""
+  pullSecret: ""
+publicHost: ""
+operatorConfigMap: ""
+credentialsSecret: ""
+tlsSecret: ""
+oidc:
+  issuer: ""
+  clientId: ""
+kafka:
+  clusterId: ""
+  bootstrapServers: []
+  protocol: Ssl
+persistence:
+  provider: Sqlite
+  existingClaim: ""
+replicas: 1
+network:
+  ingressNamespaces: []
+  egress: []
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi

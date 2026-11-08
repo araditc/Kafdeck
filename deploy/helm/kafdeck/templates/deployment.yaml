@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kafdeck.metadata" . | nindent 2 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  # Never run old and new SQLite writers during a rollout. Schema migration
+  # and generation admission remain separate operator actions for both stores.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kafdeck.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kafdeck.selector" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ printf "%s-kafdeck" .Release.Name }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret | quote }}
+      {{- end }}
+      containers:
+        - name: kafdeck
+          image: {{ printf "%s@%s" .Values.image.repository .Values.image.digest | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /var/lib/kafdeck
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: AllowedHosts
+              value: {{ .Values.publicHost | quote }}
+            - name: Kafdeck__Deployment__ListenUrls__0
+              value: https://0.0.0.0:8443
+            - name: Kafdeck__Deployment__AccessMode
+              value: Oidc
+            - name: Kafdeck__Deployment__Oidc__Issuer
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: Kafdeck__Deployment__Oidc__ClientId
+              value: {{ .Values.oidc.clientId | quote }}
+            - name: ASPNETCORE_Kestrel__Certificates__Default__Path
+              value: /run/kafdeck-tls/tls.pfx
+            - name: ASPNETCORE_Kestrel__Certificates__Default__Password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.tlsSecret | quote }}
+                  key: tls-password
+            - name: Kafdeck__Clusters__0__Id
+              value: {{ .Values.kafka.clusterId | quote }}
+            - name: Kafdeck__Clusters__0__SecurityProtocol
+              value: {{ .Values.kafka.protocol | quote }}
+            - name: Kafdeck__Clusters__0__Tls__VerifyServerCertificate
+              value: "true"
+            {{- range $index, $address := .Values.kafka.bootstrapServers }}
+            {{- $port := int (last (splitList ":" $address)) }}
+            {{- if gt $port 65535 }}
+            {{- fail "Kafka bootstrap server port exceeds 65535" }}
+            {{- end }}
+            - name: Kafdeck__Clusters__0__BootstrapServers__{{ $index }}
+              value: {{ $address | quote }}
+            {{- end }}
+            - name: Kafdeck__Administration__Mutations__Persistence__Provider
+              value: {{ .Values.persistence.provider | quote }}
+            - name: Kafdeck__Administration__Mutations__Persistence__ExecutionMode
+              value: Standalone
+            {{- if eq .Values.persistence.provider "Sqlite" }}
+            - name: Kafdeck__Administration__Mutations__Persistence__SqliteDatabasePath
+              value: /var/lib/kafdeck/mutations.sqlite3
+            {{- else }}
+            - name: Kafdeck__Administration__Mutations__Persistence__ConnectionString
+              value: file:/run/kafdeck-credentials/postgres-connection
+            {{- end }}
+          startupProbe:
+            httpGet: &health
+              scheme: HTTPS
+              path: /healthz
+              port: https
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.publicHost | quote }}
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: *health
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: *health
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: settings
+              mountPath: /app/appsettings.Production.json
+              subPath: appsettings.Production.json
+              readOnly: true
+            - name: credentials
+              mountPath: /run/kafdeck-credentials
+              readOnly: true
+            - name: tls
+              mountPath: /run/kafdeck-tls
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/kafdeck
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: settings
+          configMap:
+            name: {{ .Values.operatorConfigMap | quote }}
+            items:
+              - key: appsettings.Production.json
+                path: appsettings.Production.json
+        - name: credentials
+          secret:
+            secretName: {{ .Values.credentialsSecret | quote }}
+            defaultMode: 0440
+        - name: tls
+          secret:
+            secretName: {{ .Values.tlsSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: tls.pfx
+                path: tls.pfx
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | quote }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
