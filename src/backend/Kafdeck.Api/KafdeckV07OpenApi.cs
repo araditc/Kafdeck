@@ -4115,6 +4115,11 @@ public static class KafdeckV07OpenApi
           },
           "limits": {
             "$ref": "#/components/schemas/KsqlQueryLimitRequest"
+          },
+          "offsetReset": {
+            "type": "string",
+            "enum": ["latest", "earliest"],
+            "description": "Starting offset for this query. Omit to use the ksqlDB server default."
           }
         }
       },

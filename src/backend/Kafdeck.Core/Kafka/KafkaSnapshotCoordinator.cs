@@ -10,6 +10,7 @@ public sealed class KafkaSnapshotCoordinator
     private const int SnapshotSweepInterval = 256;
     private readonly KafkaSnapshotPolicy _policy;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, string?>? _snapshotScope;
     private readonly SemaphoreSlim _globalBulkhead;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _clusterBulkheads = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<SnapshotKey, SnapshotEntry> _snapshots = new();
@@ -18,10 +19,12 @@ public sealed class KafkaSnapshotCoordinator
 
     public KafkaSnapshotCoordinator(
         KafkaSnapshotPolicy? policy = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, string?>? snapshotScope = null)
     {
         _policy = policy ?? new KafkaSnapshotPolicy();
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _snapshotScope = snapshotScope;
         _globalBulkhead = new SemaphoreSlim(_policy.GlobalConcurrency, _policy.GlobalConcurrency);
     }
 
@@ -39,7 +42,7 @@ public sealed class KafkaSnapshotCoordinator
 
         var now = _timeProvider.GetUtcNow();
         SweepExpiredSnapshotsIfDue(now);
-        var key = new SnapshotKey(clusterId, resourceKey, typeof(T));
+        var key = new SnapshotKey(clusterId, resourceKey, typeof(T), _snapshotScope?.Invoke(clusterId));
         if (TryGetFresh(key, now, out KafkaResult<T> fresh)) return fresh;
 
         var refresh = _refreshes.GetOrAdd(key, _ => new Lazy<Task<object>>(
@@ -50,10 +53,24 @@ public sealed class KafkaSnapshotCoordinator
         {
             return (KafkaResult<T>)await refresh.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Another caller can cancel the shared observation, or its internal
+            // Kafka deadline can expire. Neither is an HTTP 500 for this caller.
+            var observed = _timeProvider.GetUtcNow();
+            if (TryGetStale(key, observed, out KafkaResult<T> stale)) return stale;
+            return KafkaResult<T>.Failed(
+                new KafkaFailure(KafkaFailureCategory.Timeout, "deadline_exceeded", "The Kafka observation timed out.", true),
+                new ObservationMetadata(observed, observed, observed, ObservationSource.Live));
+        }
         finally
         {
             if (refresh.IsValueCreated && refresh.Value.IsCompleted)
                 _refreshes.TryRemove(new KeyValuePair<SnapshotKey, Lazy<Task<object>>>(key, refresh));
+            else if (refresh.IsValueCreated)
+                _ = refresh.Value.ContinueWith(
+                    _ => _refreshes.TryRemove(new KeyValuePair<SnapshotKey, Lazy<Task<object>>>(key, refresh)),
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 
@@ -163,6 +180,6 @@ public sealed class KafkaSnapshotCoordinator
         return false;
     }
 
-    private readonly record struct SnapshotKey(string ClusterId, string ResourceKey, Type ValueType);
+    private readonly record struct SnapshotKey(string ClusterId, string ResourceKey, Type ValueType, string? Scope);
     private sealed record SnapshotEntry(object Value, DateTimeOffset ObservedAtUtc, DateTimeOffset FreshUntilUtc, DateTimeOffset StaleAfterUtc);
 }

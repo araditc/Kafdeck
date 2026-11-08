@@ -18,11 +18,13 @@ public sealed class ConfluentKafkaConsumerMutationAdapter :
     public ConfluentKafkaConsumerMutationAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeSpan? requestTimeout = null)
+        TimeSpan? requestTimeout = null,
+        Func<string, IAdminClient?>? registeredClient = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
-            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)));
+            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)),
+            registeredClient);
 
         _requestTimeout = ValidateTimeout(
             requestTimeout ?? TimeSpan.FromSeconds(15),

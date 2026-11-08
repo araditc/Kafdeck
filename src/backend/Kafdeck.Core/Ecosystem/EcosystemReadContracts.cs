@@ -174,6 +174,12 @@ public interface IKsqlMetadataReadPort
         CancellationToken cancellationToken);
 }
 
+public enum KsqlQueryOffsetReset
+{
+    Latest,
+    Earliest,
+}
+
 public sealed record KsqlQueryLimits(
     int MaxRows,
     long MaxBytes,
@@ -182,6 +188,8 @@ public sealed record KsqlQueryLimits(
     public const int HardMaxRows = 10_000;
     public const long HardMaxBytes = 16 * 1024 * 1024;
     public static readonly TimeSpan HardMaxDuration = TimeSpan.FromMinutes(2);
+
+    public KsqlQueryOffsetReset? OffsetReset { get; init; }
 
     public static KsqlQueryLimits Default { get; } =
         new(

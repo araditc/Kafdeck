@@ -1,6 +1,8 @@
+import { KsqlQueryConsole } from './KsqlQueryConsole.js';
 import { t } from '../../shared/i18n.js';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ApiProblem,
   kafdeckApi,
   type ConnectClusterInfo,
   type ConnectConnectorDetail,
@@ -16,7 +18,7 @@ import {
   type ConsumerGroupDetail,
   type ConsumerGroupSummary,
   type ConsumerLag,
-  type KsqlQueryResult,
+  type ConsumerOffset,
   type OperationalAnalyticsResult,
   type OperationalSloResult,
   type OperationalTrendResult,
@@ -29,14 +31,19 @@ import {
   type SchemaCompatibility,
   type SchemaCompatibilityExplanation,
   type SchemaDiff,
+  type SchemaDocument,
   type SchemaMockResult,
   type SchemaReferenceGraph,
   type SchemaSubjectSummary,
   type SchemaVersionSummary,
+  type SchemaVersionDetail,
 } from '../../shared/api.js';
+import { SchemaVersionRegistrar } from './SchemaVersionRegistrar.js';
+import { RegisteredServiceSettings } from './RegisteredServiceSettings.js';
 import { MutationOperationsPanel } from '../mutations/MutationOperationsPanel.js';
 import { DataQualityPanel } from './DataQualityPanel.js';
 import { StatusBadge } from '../../app/StatusBadge.js';
+import { shouldAutoRefresh, visibleRefreshIntervalMs } from '../../app/operatorState.js';
 import {
   operationalEvidenceStatusKind,
   operationalTrendStatusKind,
@@ -79,9 +86,26 @@ function Limitations({ envelope }: { envelope: ReadViewEnvelope<unknown> }) {
   return <aside aria-label={t("Read-view limitations")}><strong><StatusBadge kind="partial" /> {' '}{t("Partial observation")}</strong><ul>{envelope.limitations.map(item => <li key={item.code}>{item.code}: {item.message}</li>)}</ul></aside>;
 }
 
-export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
+export function ReadViewsExplorer({
+  clusterId, page = 'all', canManageConsumers = false, consumerRefresh = 0,
+  canRegisterSchemas = false, canConfigureRegistry = false,
+}: {
+  clusterId: string;
+  page?: 'all' | 'consumers' | 'schemas' | 'ecosystem';
+  canManageConsumers?: boolean;
+  consumerRefresh?: number;
+  canRegisterSchemas?: boolean;
+  canConfigureRegistry?: boolean;
+}) {
+  const consumers = page === 'all' || page === 'consumers';
+  const schemas = page === 'all' || page === 'schemas';
+  const ecosystem = page === 'all' || page === 'ecosystem';
   const [consumerGroups, setConsumerGroups] = useState<ReadViewEnvelope<ConsumerGroupSummary[]> | null>(null);
   const [consumerError, setConsumerError] = useState<ReadViewProblem | null>(null);
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [resetPartition, setResetPartition] = useState<ConsumerOffset | null>(null);
+  const [showConsumerManagement, setShowConsumerManagement] = useState(false);
+  const [detailProblems, setDetailProblems] = useState<Partial<Record<'members' | 'offsets' | 'diagnostics', ReadViewProblem>>>({});
   const [groupDetail, setGroupDetail] = useState<ReadViewEnvelope<ConsumerGroupDetail> | null>(null);
   const [groupLag, setGroupLag] = useState<ReadViewEnvelope<ConsumerLag> | null>(null);
   const [groupDiagnostics, setGroupDiagnostics] = useState<ReadViewEnvelope<ConsumerDiagnostics> | null>(null);
@@ -97,12 +121,32 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [sloThreshold, setSloThreshold] = useState(100);
   const [sloTarget, setSloTarget] = useState(0.99);
   const consumerLoadGeneration = useRef(0);
+  const activeGroupRef = useRef<string | null>(null);
+  const consumerRequest = useRef<AbortController | null>(null);
+  const consumerListRequest = useRef<AbortController | null>(null);
+  const groupHeading = useRef<HTMLHeadingElement>(null);
+  const openedGroupButton = useRef<string | null>(null);
+  const consumerManagementHeading = useRef<HTMLHeadingElement>(null);
+  const lastConsumerRefresh = useRef(consumerRefresh);
   const sloEvaluationGeneration = useRef(0);
 
   const [subjects, setSubjects] = useState<ReadViewEnvelope<SchemaSubjectSummary[]> | null>(null);
   const [schemaError, setSchemaError] = useState<ReadViewProblem | null>(null);
+  const [schemaRegistryMissing, setSchemaRegistryMissing] = useState(false);
+  const [registrySettingsOpen, setRegistrySettingsOpen] = useState(false);
+  const [schemaCatalogRefresh, setSchemaCatalogRefresh] = useState(0);
+  const registrySettingsButton = useRef<HTMLButtonElement>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const selectedSubjectRef = useRef<string | null>(null);
+  const subjectRequest = useRef<AbortController | null>(null);
+  const subjectHeading = useRef<HTMLHeadingElement>(null);
+  const openedSubjectButton = useRef<string | null>(null);
   const [versions, setVersions] = useState<ReadViewEnvelope<SchemaVersionSummary[]> | null>(null);
+  const [viewedVersion, setViewedVersion] = useState<number | null>(null);
+  const [schemaContentRefresh, setSchemaContentRefresh] = useState(0);
+  const [schemaContent, setSchemaContent] = useState<ReadViewEnvelope<SchemaVersionDetail> | null>(null);
+  const [schemaContentError, setSchemaContentError] = useState<ReadViewProblem | null>(null);
+  const [registrationSource, setRegistrationSource] = useState<SchemaDocument | null>(null);
   const [compatibility, setCompatibility] = useState<ReadViewEnvelope<SchemaCompatibility> | null>(null);
   const [leftVersion, setLeftVersion] = useState<number | null>(null);
   const [rightVersion, setRightVersion] = useState<number | null>(null);
@@ -140,9 +184,6 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
   const [autoRestartBusy, setAutoRestartBusy] = useState(false);
 
   const [ksqlInfo, setKsqlInfo] = useState<ReadViewEnvelope<KsqlServerInfo> | null>(null);
-  const [ksqlStatement, setKsqlStatement] = useState('');
-  const [ksqlResult, setKsqlResult] = useState<ReadViewEnvelope<KsqlQueryResult> | null>(null);
-  const [ksqlBusy, setKsqlBusy] = useState(false);
   const [ksqlError, setKsqlError] = useState<ReadViewProblem | null>(null);
 
   const [streamsApplications, setStreamsApplications] = useState<ReadViewEnvelope<StreamsApplicationSummary[]> | null>(null);
@@ -157,28 +198,23 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     const initialConnectGeneration = ++connectLoadGeneration.current;
     ++consumerLoadGeneration.current;
     ++sloEvaluationGeneration.current;
-    setConsumerGroups(null); setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
+    setActiveGroup(null); setResetPartition(null); setShowConsumerManagement(false); setDetailProblems({});
+    setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
     setOperationalAnalytics(null); setOperationalTrend(null); setOperationalSlo(null); setOperationalError(null); setSloError(null); setOperationalBusy(false); setSloThreshold(100); setSloTarget(0.99);
-    setSubjects(null); setSchemaError(null); setSelectedSubject(null); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
+    setSubjects(null); setSchemaError(null); setSchemaRegistryMissing(false); setSelectedSubject(null); setVersions(null); setViewedVersion(null);
+    setRegistrationSource(null); setCompatibility(null); setLeftVersion(null); setRightVersion(null); setSchemaDiff(null);
+    setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
     setSerdeCapabilities(null); setSerdeFormat('cbor'); setSerdePayloadBase64(''); setSerdeStructuredJson(''); setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null); setSerdeBusy(false);
     setConnectProfiles(null); setSelectedConnectProfileId(null); setConnectInfo(null); setConnectors(null); setConnectorDetail(null); setConnectPlugins(null); setSelectedPluginClass(null); setPluginConfiguration(''); setPluginFieldValues({}); setPluginValidation(null); setConnectError(null); setAutoRestartStatus(null); setAutoRestartOperation(null); setAutoRestartError(null); setAutoRestartBusy(false);
-    setKsqlInfo(null); setKsqlStatement(''); setKsqlResult(null); setKsqlBusy(false); setKsqlError(null);
+    setKsqlInfo(null); setKsqlError(null);
     setStreamsApplications(null); setStreamsTopology(null); setStreamsStores(null); setStreamsError(null);
     setLineage(null); setLineageError(null);
 
-    void kafdeckApi.listConsumerGroups(clusterId, controller.signal)
-      .then(setConsumerGroups)
-      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setConsumerError(readViewError(reason)); });
-
-    void kafdeckApi.listSchemaSubjects(clusterId, controller.signal)
-      .then(setSubjects)
-      .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setSchemaError(readViewError(reason)); });
-
-    void kafdeckApi.getControlledSerdeCapabilities(controller.signal)
+    if (schemas) void kafdeckApi.getControlledSerdeCapabilities(controller.signal)
       .then(setSerdeCapabilities)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setSerdeError(readViewError(reason)); });
 
-    void kafdeckApi.listConnectProfiles(clusterId, controller.signal)
+    if (ecosystem) void kafdeckApi.listConnectProfiles(clusterId, controller.signal)
       .then(async profileResult => {
         if (initialConnectGeneration !== connectLoadGeneration.current) return;
         setConnectProfiles(profileResult);
@@ -208,44 +244,40 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         }
       });
 
-    void kafdeckApi.getKsqlInfo(clusterId, controller.signal)
+    if (ecosystem) void kafdeckApi.getKsqlInfo(clusterId, controller.signal)
       .then(setKsqlInfo)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setKsqlError(readViewError(reason)); });
 
-    void kafdeckApi.listStreamsApplications(clusterId, controller.signal)
+    if (ecosystem) void kafdeckApi.listStreamsApplications(clusterId, controller.signal)
       .then(setStreamsApplications)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setStreamsError(readViewError(reason)); });
 
-    void kafdeckApi.getLineage(clusterId, controller.signal)
+    if (ecosystem) void kafdeckApi.getLineage(clusterId, controller.signal)
       .then(setLineage)
       .catch(reason => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setLineageError(readViewError(reason)); });
 
+    return () => {
+      controller.abort();
+      subjectRequest.current?.abort();
+      selectedSubjectRef.current = null;
+    };
+  }, [clusterId, consumers, schemas, ecosystem]);
+
+  useEffect(() => {
+    if (!schemas) return;
+    const controller = new AbortController();
+    setSubjects(null);
+    setSchemaRegistryMissing(false);
+    setSchemaError(null);
+    void kafdeckApi.listSchemaSubjects(clusterId, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setSubjects(result); })
+      .catch(reason => {
+        if (controller.signal.aborted) return;
+        if (reason instanceof ApiProblem && reason.code === 'schema_registry_not_configured') setSchemaRegistryMissing(true);
+        else setSchemaError(readViewError(reason));
+      });
     return () => controller.abort();
-  }, [clusterId]);
-
-  const runKsqlQuery = async () => {
-    const statement = ksqlStatement.trim();
-    if (!statement) return;
-
-    setKsqlBusy(true);
-    setKsqlError(null);
-    setKsqlResult(null);
-    try {
-      setKsqlResult(await kafdeckApi.executeKsqlQuery(
-        clusterId,
-        statement,
-        {
-          maxRows: 1000,
-          maxBytes: 2 * 1024 * 1024,
-          maxDurationSeconds: 30,
-        },
-      ));
-    } catch (reason) {
-      setKsqlError(readViewError(reason));
-    } finally {
-      setKsqlBusy(false);
-    }
-  };
+  }, [clusterId, schemas, schemaCatalogRefresh]);
 
   const openStreamsApplication = async (applicationId: string) => {
     setStreamsError(null);
@@ -263,44 +295,133 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     }
   };
 
-  const openConsumer = async (groupId: string) => {
-    const generation = ++consumerLoadGeneration.current;
-    setConsumerError(null); setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
-    ++sloEvaluationGeneration.current;
-    setOperationalAnalytics(null); setOperationalTrend(null); setOperationalSlo(null); setOperationalError(null); setSloError(null); setOperationalBusy(false);
+  const loadConsumerGroups = useCallback(async () => {
+    if (consumerListRequest.current) return;
+    const controller = new AbortController();
+    consumerListRequest.current = controller;
     try {
-      const [detail, lag, diagnostics] = await Promise.all([
-        kafdeckApi.getConsumerGroup(clusterId, groupId),
-        kafdeckApi.getConsumerLag(clusterId, groupId),
-        kafdeckApi.getConsumerDiagnostics(clusterId, groupId),
-      ]);
-      if (generation !== consumerLoadGeneration.current) return;
-      setGroupDetail(detail); setGroupLag(lag); setGroupDiagnostics(diagnostics);
+      const groups = await kafdeckApi.listConsumerGroups(clusterId, controller.signal);
+      if (controller.signal.aborted) return;
+      setConsumerGroups(groups);
+      setConsumerError(null);
     } catch (reason) {
-      if (generation === consumerLoadGeneration.current) {
-        setConsumerError(readViewError(reason));
-      }
-      return;
+      if (!controller.signal.aborted) setConsumerError(readViewError(reason));
+    } finally {
+      if (consumerListRequest.current === controller) consumerListRequest.current = null;
+    }
+  }, [clusterId]);
+
+  useEffect(() => {
+    if (!consumers) return;
+    setConsumerGroups(null);
+    setConsumerError(null);
+    void loadConsumerGroups();
+    return () => {
+      activeGroupRef.current = null;
+      consumerListRequest.current?.abort();
+      consumerListRequest.current = null;
+      consumerRequest.current?.abort();
+      consumerRequest.current = null;
+    };
+  }, [consumers, loadConsumerGroups]);
+
+  const openConsumer = useCallback(async (groupId: string, mode: 'open' | 'refresh' | 'background' = 'open') => {
+    if (mode !== 'open' && activeGroupRef.current !== groupId) return;
+    if (mode === 'background' && consumerRequest.current) return;
+    consumerRequest.current?.abort();
+    const controller = new AbortController();
+    consumerRequest.current = controller;
+    if (mode === 'open') ++consumerLoadGeneration.current;
+    const generation = consumerLoadGeneration.current;
+    const current = () => !controller.signal.aborted && generation === consumerLoadGeneration.current;
+    if (mode === 'open') {
+      activeGroupRef.current = groupId;
+      setActiveGroup(groupId);
+      setResetPartition(null); setShowConsumerManagement(false); setDetailProblems({});
+      setGroupDetail(null); setGroupLag(null); setGroupDiagnostics(null);
+      ++sloEvaluationGeneration.current;
+      setOperationalAnalytics(null); setOperationalTrend(null); setOperationalSlo(null);
+      setOperationalError(null); setSloError(null); setOperationalBusy(true);
     }
 
-    setOperationalBusy(true);
-    try {
-      const [live, trend] = await Promise.all([
-        kafdeckApi.getConsumerOperationalAnalytics(clusterId, groupId),
-        kafdeckApi.getConsumerOperationalTrend(clusterId, groupId),
-      ]);
-      if (generation !== consumerLoadGeneration.current) return;
-      setOperationalAnalytics(live);
-      setOperationalTrend(trend);
-    } catch (reason) {
-      if (generation === consumerLoadGeneration.current) {
-        setOperationalError(readViewError(reason));
-      }
-    } finally {
-      if (generation === consumerLoadGeneration.current) {
-        setOperationalBusy(false);
-      }
+    function observe<T>(section: 'members' | 'offsets' | 'diagnostics', request: Promise<T>, update: (value: T) => void) {
+      return request.then(value => {
+        if (!current()) return;
+        update(value);
+        setDetailProblems(previous => {
+          if (!previous[section]) return previous;
+          const next = { ...previous };
+          delete next[section];
+          return next;
+        });
+      }).catch(reason => {
+        if (current() && mode !== 'background')
+          setDetailProblems(previous => ({ ...previous, [section]: readViewError(reason) }));
+      });
     }
+
+    const requests = [
+      observe('members', kafdeckApi.getConsumerGroup(clusterId, groupId, controller.signal), setGroupDetail),
+      observe('offsets', kafdeckApi.getConsumerLag(clusterId, groupId, controller.signal), setGroupLag),
+    ];
+    if (mode !== 'background')
+      requests.push(observe('diagnostics', kafdeckApi.getConsumerDiagnostics(clusterId, groupId, controller.signal), setGroupDiagnostics));
+    if (mode !== 'background') {
+      setOperationalBusy(true);
+      requests.push(Promise.all([
+        kafdeckApi.getConsumerOperationalAnalytics(clusterId, groupId, controller.signal),
+        kafdeckApi.getConsumerOperationalTrend(clusterId, groupId, undefined, controller.signal),
+      ]).then(([live, trend]) => {
+        if (!current()) return;
+        setOperationalAnalytics(live);
+        setOperationalTrend(trend);
+        setOperationalError(null);
+      }).catch(reason => {
+        if (current()) setOperationalError(readViewError(reason));
+      }).finally(() => {
+        if (current()) setOperationalBusy(false);
+      }));
+    }
+    await Promise.all(requests);
+    if (consumerRequest.current === controller) consumerRequest.current = null;
+  }, [clusterId]);
+
+  useEffect(() => {
+    if (lastConsumerRefresh.current === consumerRefresh) return;
+    lastConsumerRefresh.current = consumerRefresh;
+    if (!consumers) return;
+    if (activeGroup) void openConsumer(activeGroup, 'refresh');
+    else void loadConsumerGroups();
+  }, [activeGroup, consumerRefresh, consumers, loadConsumerGroups, openConsumer]);
+
+  useEffect(() => {
+    if (!activeGroup) return;
+    window.scrollTo(0, 0);
+    groupHeading.current?.focus({ preventScroll: true });
+    const timer = window.setInterval(() => {
+      if (shouldAutoRefresh(document.visibilityState))
+        void openConsumer(activeGroup, 'background');
+    }, visibleRefreshIntervalMs);
+    return () => window.clearInterval(timer);
+  }, [activeGroup, openConsumer]);
+
+  useEffect(() => {
+    if (showConsumerManagement) consumerManagementHeading.current?.focus();
+  }, [showConsumerManagement, resetPartition]);
+
+  const closeConsumer = () => {
+    activeGroupRef.current = null;
+    consumerRequest.current?.abort();
+    consumerRequest.current = null;
+    ++consumerLoadGeneration.current;
+    ++sloEvaluationGeneration.current;
+    setActiveGroup(null);
+    setShowConsumerManagement(false);
+    setResetPartition(null);
+    window.requestAnimationFrame(() => {
+      const previous = openedGroupButton.current;
+      if (previous) document.getElementById(previous)?.focus();
+    });
   };
 
   const evaluateConsumerSlo = async () => {
@@ -347,54 +468,108 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     }
   };
 
-  const openSubject = async (subject: string) => {
-    setSchemaError(null); setSelectedSubject(subject); setVersions(null); setCompatibility(null); setSchemaDiff(null); setReferenceGraph(null); setCompatibilityExplanation(null); setSchemaMock(null);
-    try {
-      const [versionResult, compatibilityResult, explanationResult] = await Promise.all([
-        kafdeckApi.listSchemaVersions(clusterId, subject),
-        kafdeckApi.getSchemaCompatibility(clusterId, subject),
-        kafdeckApi.getSchemaCompatibilityExplanation(clusterId, subject),
-      ]);
-      setVersions(versionResult);
-      setCompatibility(compatibilityResult);
-      setCompatibilityExplanation(explanationResult);
-      const values = versionResult.data.map(item => item.version);
-      setRightVersion(values.at(-1) ?? null);
-      setLeftVersion(values.length > 1 ? values.at(-2) ?? null : values[0] ?? null);
-    } catch (reason) {
-      setSchemaError(readViewError(reason));
+  const openSubject = async (subject: string, refresh = false, preferredVersion: number | null = null) => {
+    if (refresh && selectedSubjectRef.current !== subject) return;
+    subjectRequest.current?.abort();
+    const controller = new AbortController();
+    const { signal } = controller;
+    subjectRequest.current = controller;
+    setSchemaError(null);
+    if (!refresh) {
+      selectedSubjectRef.current = subject;
+      setSelectedSubject(subject);
+      setVersions(null);
+      setViewedVersion(null);
+      setRegistrationSource(null);
+      setCompatibility(null);
+      setCompatibilityExplanation(null);
+      setSchemaDiff(null);
+      setReferenceGraph(null);
+      setSchemaMock(null);
     }
+    await Promise.allSettled([
+      kafdeckApi.listSchemaVersions(clusterId, subject, signal).then(result => {
+        if (signal.aborted) return;
+        const sorted = [...result.data].sort((left, right) => right.version - left.version);
+        const latest = sorted[0]?.version ?? null;
+        setVersions({ ...result, data: sorted });
+        setViewedVersion(preferredVersion !== null && sorted.some(item => item.version === preferredVersion) ? preferredVersion : latest);
+        if (refresh) setSchemaContentRefresh(value => value + 1);
+        setRightVersion(latest);
+        setLeftVersion(sorted[1]?.version ?? latest);
+      }).catch(reason => { if (!signal.aborted) setSchemaError(readViewError(reason)); }),
+      kafdeckApi.getSchemaCompatibility(clusterId, subject, signal).then(result => {
+        if (!signal.aborted) setCompatibility(result);
+      }),
+      kafdeckApi.getSchemaCompatibilityExplanation(clusterId, subject, signal).then(result => {
+        if (!signal.aborted) setCompatibilityExplanation(result);
+      }),
+    ]);
+  };
+
+  useEffect(() => {
+    if (!selectedSubject) return;
+    window.scrollTo(0, 0);
+    subjectHeading.current?.focus({ preventScroll: true });
+  }, [selectedSubject]);
+
+  useEffect(() => {
+    setSchemaContent(null);
+    setSchemaContentError(null);
+    if (!selectedSubject || viewedVersion === null) return;
+    const controller = new AbortController();
+    void kafdeckApi.getSchemaVersion(clusterId, selectedSubject, viewedVersion, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setSchemaContent(result); })
+      .catch(reason => { if (!controller.signal.aborted) setSchemaContentError(readViewError(reason)); });
+    return () => controller.abort();
+  }, [clusterId, selectedSubject, viewedVersion, schemaContentRefresh]);
+
+  const closeSubject = () => {
+    subjectRequest.current?.abort();
+    selectedSubjectRef.current = null;
+    setSelectedSubject(null);
+    setRegistrationSource(null);
+    setSchemaError(null);
+    window.requestAnimationFrame(() => {
+      if (openedSubjectButton.current) document.getElementById(openedSubjectButton.current)?.focus();
+    });
   };
 
   const compareSchemas = async () => {
     if (!selectedSubject || leftVersion === null || rightVersion === null) return;
     setSchemaError(null); setSchemaDiff(null);
+    const signal = subjectRequest.current?.signal;
     try {
-      setSchemaDiff(await kafdeckApi.diffSchemaVersions(clusterId, selectedSubject, leftVersion, rightVersion));
+      const result = await kafdeckApi.diffSchemaVersions(clusterId, selectedSubject, leftVersion, rightVersion, signal);
+      if (!signal?.aborted) setSchemaDiff(result);
     } catch (reason) {
-      setSchemaError(readViewError(reason));
+      if (!signal?.aborted) setSchemaError(readViewError(reason));
     }
   };
 
   const inspectSchemaReferences = async () => {
     if (!selectedSubject || rightVersion === null) return;
     setSchemaError(null); setReferenceGraph(null);
+    const signal = subjectRequest.current?.signal;
     try {
-      setReferenceGraph(await kafdeckApi.getSchemaReferenceGraph(clusterId, selectedSubject, rightVersion));
+      const result = await kafdeckApi.getSchemaReferenceGraph(clusterId, selectedSubject, rightVersion, signal);
+      if (!signal?.aborted) setReferenceGraph(result);
     } catch (reason) {
-      setSchemaError(readViewError(reason));
+      if (!signal?.aborted) setSchemaError(readViewError(reason));
     }
   };
 
   const generateSchemaMock = async () => {
     if (!selectedSubject || rightVersion === null) return;
     setSchemaError(null); setSchemaMock(null);
+    const signal = subjectRequest.current?.signal;
     try {
       const count = Math.max(1, Math.min(10, Math.trunc(mockCount)));
       const seed = Math.trunc(mockSeed);
-      setSchemaMock(await kafdeckApi.generateSchemaMock(clusterId, selectedSubject, rightVersion, count, seed));
+      const result = await kafdeckApi.generateSchemaMock(clusterId, selectedSubject, rightVersion, count, seed, signal);
+      if (!signal?.aborted) setSchemaMock(result);
     } catch (reason) {
-      setSchemaError(readViewError(reason));
+      if (!signal?.aborted) setSchemaError(readViewError(reason));
     }
   };
 
@@ -610,27 +785,109 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
     }
   };
 
+  const displayedSchema = schemaContent && schemaContent.data.subject === selectedSubject && schemaContent.data.version === viewedVersion
+    ? schemaContent : null;
+
   return <>
-    <section className="card kafdeck-card" id="consumers" aria-labelledby="consumers-title">
+    {consumers && <section className="card kafdeck-card" id="consumers" aria-labelledby="consumers-title">
       <h2 id="consumers-title">{t("Consumer groups")}</h2>
+      {!activeGroup && <>
       {consumerError && <ReadViewProblemNotice problem={consumerError} />}
       {!consumerGroups && !consumerError && <p role="status">{t("Loading authorized consumer groups…")}</p>}
       {consumerGroups && <>
         <Limitations envelope={consumerGroups} />
         {consumerGroups.data.length === 0 ? <p>{t("No authorized consumer groups are observable.")}</p> :
-          <table><thead><tr><th scope="col">{t("Group")}</th><th scope="col">{t("State")}</th><th scope="col">{t("Members")}</th></tr></thead>
+          <div className="table-responsive"><table className="table table-vcenter"><thead><tr><th scope="col">{t("Group")}</th><th scope="col">{t("State")}</th><th scope="col">{t("Members")}</th></tr></thead>
             <tbody>{consumerGroups.data.map(group => <tr key={group.groupId}>
-              <th scope="row"><button type="button" onClick={() => void openConsumer(group.groupId)}><bdi dir="ltr" lang="en">{group.groupId}</bdi></button></th>
+              <th scope="row"><button id={`consumer-open-${group.groupId}`} className="btn btn-link kafdeck-table-button" type="button"
+                onClick={event => {
+                  openedGroupButton.current = event.currentTarget.id;
+                  void openConsumer(group.groupId);
+                }}><bdi dir="ltr" lang="en">{group.groupId}</bdi></button></th>
               <td>{group.state}</td><td>{group.memberCount ?? t("Detail required")}</td>
-            </tr>)}</tbody></table>}
+            </tr>)}</tbody></table></div>}
       </>}
-      {groupDetail && groupLag && groupDiagnostics && <article aria-labelledby="consumer-detail-title">
-        <h3 id="consumer-detail-title"><bdi dir="ltr" lang="en">{groupDetail.data.groupId}</bdi></h3>
-        <p>{t("Kafka state:")}{' '}{groupDetail.data.state} {' '}{t("· Diagnostic:")}{' '}{groupDiagnostics.data.state} {' '}{t("· Total lag:")}{' '}{groupLag.data.totalLag ?? t("Unknown")}</p>
-        <p>{t("Members:")}{' '}<bdi dir="ltr" lang="en">{groupDetail.data.members.length}</bdi> {' '}{t("· Metrics:")}{' '}{groupDiagnostics.data.metricsAvailable ? t("available") : t("unavailable")} {' '}{t("· History:")}{' '}{groupDiagnostics.data.historyAvailable ? t("available") : t("unavailable")}</p>
-        <Limitations envelope={groupLag} /><Limitations envelope={groupDiagnostics} />
-        {groupDiagnostics.data.evidence.length > 0 && <><h4>{t("Evidence")}</h4><ul>{groupDiagnostics.data.evidence.map(item => <li key={item.code}>{item.safeMessage}</li>)}</ul></>}
-        {groupLag.data.partitions.length > 0 && <><h4>{t("Offsets and lag")}</h4><table><thead><tr><th scope="col">{t("Topic")}</th><th scope="col">{t("Partition")}</th><th scope="col">{t("Committed")}</th><th scope="col">{t("End")}</th><th scope="col">{t("Lag")}</th><th scope="col">{t("State")}</th></tr></thead><tbody>{groupLag.data.partitions.map(item => <tr key={`${item.topic}-${item.partition}`}><td>{item.topic}</td><td>{item.partition}</td><td>{item.committedOffset ?? t("Unknown")}</td><td>{item.endOffset ?? t("Unknown")}</td><td>{item.lag ?? t("Unknown")}</td><td>{item.state}</td></tr>)}</tbody></table></>}
+      </>}
+      {activeGroup && <article aria-labelledby="consumer-detail-title">
+        <div className="d-flex flex-wrap gap-2 mb-3">
+          <button type="button" className="btn btn-sm btn-outline-primary" onClick={closeConsumer}>{t("Back to consumer groups")}</button>
+          {canManageConsumers && <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => {
+            setResetPartition(null);
+            setShowConsumerManagement(true);
+          }}>{t("Manage consumer group")}</button>}
+        </div>
+        <h3 id="consumer-detail-title" ref={groupHeading} tabIndex={-1}><bdi dir="ltr" lang="en">{activeGroup}</bdi></h3>
+        {groupDetail && <p>{t("Kafka state:")}{' '}{groupDetail.data.state}</p>}
+
+        <section aria-labelledby="consumer-offsets-title" className="mb-4">
+          <h4 id="consumer-offsets-title">{t("Offsets and lag")}</h4>
+          {detailProblems.offsets && <ReadViewProblemNotice problem={detailProblems.offsets} />}
+          {!groupLag && !detailProblems.offsets && <p role="status">{t("Loading consumer offsets…")}</p>}
+          {groupLag && <>
+            <p>{t("Total lag")}{' '}<bdi>{groupLag.data.totalLag ?? t("Unknown")}</bdi>{groupLag.data.isPartial && <> · <StatusBadge kind="partial" /></>}</p>
+            <Limitations envelope={groupLag} />
+            {groupLag.data.partitions.length === 0 ? <p>{t("No assigned partitions or committed offsets were found.")}</p> :
+              <div className="table-responsive"><table className="table table-vcenter">
+                <thead><tr><th scope="col">{t("Topic")}</th><th scope="col">{t("Partition")}</th><th scope="col">{t("Committed")}</th><th scope="col">{t("End")}</th><th scope="col">{t("Lag")}</th><th scope="col">{t("State")}</th>{canManageConsumers && <th scope="col">{t("Action")}</th>}</tr></thead>
+                <tbody>{groupLag.data.partitions.map(item => <tr key={`${item.topic}:${item.partition}`}>
+                  <th scope="row"><bdi dir="ltr">{item.topic}</bdi></th>
+                  <td>{item.partition}</td><td>{item.committedOffset ?? t("Unknown")}</td>
+                  <td>{item.endOffset ?? t("Unknown")}</td><td>{item.lag ?? t("Unknown")}</td><td>{item.state}</td>
+                  {canManageConsumers && <td><button className="btn btn-sm btn-outline-primary" type="button"
+                    aria-label={t("Reset offset for {0}, partition {1}", [item.topic, item.partition])}
+                    onClick={() => { setResetPartition(item); setShowConsumerManagement(true); }}>{t("Reset offset")}</button></td>}
+                </tr>)}</tbody>
+              </table></div>}
+          </>}
+        </section>
+
+        {showConsumerManagement && canManageConsumers && <section className="mb-4" aria-labelledby="consumer-management-title">
+          <div className="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <h4 className="mb-0" id="consumer-management-title" ref={consumerManagementHeading} tabIndex={-1}>
+              {resetPartition ? t("Reset offset") : t("Manage consumer group")}
+            </h4>
+            <button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => {
+              setShowConsumerManagement(false);
+              groupHeading.current?.focus();
+            }}>{t("Close")}</button>
+          </div>
+          <p>{t("Stop the group’s consumers before applying an offset reset. Kafka offsets change only after the preview is confirmed and executed.")}</p>
+          <MutationOperationsPanel key={JSON.stringify([activeGroup, resetPartition?.topic, resetPartition?.partition])}
+            clusterId={clusterId} family="consumer"
+            consumerTarget={resetPartition ? { groupId: activeGroup, partition: {
+              topicName: resetPartition.topic, partition: resetPartition.partition,
+              committedOffset: groupLag?.data.partitions.find(item => item.topic === resetPartition.topic && item.partition === resetPartition.partition)?.committedOffset ?? null,
+            } } : { groupId: activeGroup }}
+            onApplied={() => void openConsumer(activeGroup, 'refresh')} />
+        </section>}
+
+        <section aria-labelledby="consumer-members-title" className="mb-4">
+          <h4 id="consumer-members-title">{t("Members")}</h4>
+          {detailProblems.members && <ReadViewProblemNotice problem={detailProblems.members} />}
+          {!groupDetail && !detailProblems.members && <p role="status">{t("Loading consumer members…")}</p>}
+          {groupDetail && <>
+            <Limitations envelope={groupDetail} />
+            {groupDetail.data.members.length === 0 ? <p>{t("This consumer group has no active members.")}</p> :
+              <div className="table-responsive"><table className="table table-vcenter">
+                <thead><tr><th scope="col">{t("Member ID")}</th><th scope="col">{t("Client ID")}</th><th scope="col">{t("Client host")}</th><th scope="col">{t("Group instance ID")}</th><th scope="col">{t("Assigned partitions")}</th></tr></thead>
+                <tbody>{groupDetail.data.members.map(member => <tr key={member.memberId}>
+                  <th scope="row"><bdi dir="ltr">{member.memberId}</bdi></th>
+                  <td><bdi dir="ltr">{member.clientId ?? t("Unknown")}</bdi></td>
+                  <td><bdi dir="ltr">{member.clientHost ?? t("Unknown")}</bdi></td>
+                  <td><bdi dir="ltr">{member.groupInstanceId ?? t("None")}</bdi></td>
+                  <td>{member.assignments.length === 0 ? t("None") : <ul className="mb-0">{member.assignments.map(assignment =>
+                    <li key={`${assignment.topic}:${assignment.partition}`}><bdi dir="ltr">{assignment.topic} [{assignment.partition}]</bdi></li>)}</ul>}</td>
+                </tr>)}</tbody>
+              </table></div>}
+          </>}
+        </section>
+
+        {detailProblems.diagnostics && <ReadViewProblemNotice problem={detailProblems.diagnostics} />}
+        {groupDiagnostics && <>
+          <p>{t("· Diagnostic:")}{' '}{groupDiagnostics.data.state} {' '}{t("· Metrics:")}{' '}{groupDiagnostics.data.metricsAvailable ? t("available") : t("unavailable")} {' '}{t("· History:")}{' '}{groupDiagnostics.data.historyAvailable ? t("available") : t("unavailable")}</p>
+          <Limitations envelope={groupDiagnostics} />
+          {groupDiagnostics.data.evidence.length > 0 && <><h4>{t("Evidence")}</h4><ul>{groupDiagnostics.data.evidence.map(item => <li key={item.code}>{item.safeMessage}</li>)}</ul></>}
+        </>}
 
         <section aria-labelledby="consumer-operational-analytics-title">
           <h4 id="consumer-operational-analytics-title">{t("Operational analytics")}</h4>
@@ -706,28 +963,87 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
           </div>}
         </section>
       </article>}
-    </section>
+    </section>}
 
-    <section className="card kafdeck-card" id="schemas" aria-labelledby="schemas-title">
-      <h2 id="schemas-title">Schema Registry</h2>
+    {schemas && <><section className="card kafdeck-card kafdeck-ecosystem-card" id="schemas" aria-labelledby="schemas-title">
+      <div className="card-body kafdeck-ecosystem-body">
+      <header className="kafdeck-ecosystem-header">
+        <h2 id="schemas-title">Schema Registry</h2>
+        {canConfigureRegistry && !selectedSubject && !registrySettingsOpen &&
+          <button ref={registrySettingsButton} type="button" className="btn btn-outline-primary"
+            onClick={() => setRegistrySettingsOpen(true)}>{t("Configure Schema Registry")}</button>}
+      </header>
+      {canConfigureRegistry && registrySettingsOpen && !selectedSubject && <RegisteredServiceSettings
+        clusterId={clusterId} service="schema-registry" onSaved={() => setSchemaCatalogRefresh(value => value + 1)}
+        onClose={() => {
+          setRegistrySettingsOpen(false);
+          window.requestAnimationFrame(() => registrySettingsButton.current?.focus());
+        }} />}
       {schemaError && <ReadViewProblemNotice problem={schemaError} />}
-      {!subjects && !schemaError && <p role="status">{t("Loading authorized schema subjects…")}</p>}
-      {subjects && <>
+      {schemaRegistryMissing && <p role="status">{t("This cluster has no Schema Registry configured.")}</p>}
+      {!subjects && !schemaError && !schemaRegistryMissing && <p role="status">{t("Loading authorized schema subjects…")}</p>}
+      {!selectedSubject && subjects && <>
         <Limitations envelope={subjects} />
         {subjects.data.length === 0 ? <p>{t("No authorized schema subjects are observable.")}</p> :
-          <ul>{subjects.data.map(item => <li key={item.subject}><button type="button" onClick={() => void openSubject(item.subject)}>{item.subject}</button></li>)}</ul>}
+          <ul className="list-group list-group-flush">{subjects.data.map(item =>
+            <li key={item.subject} className="list-group-item">
+              <button id={`schema-subject-${encodeURIComponent(item.subject)}`} className="btn btn-link kafdeck-table-button" type="button"
+                onClick={event => {
+                  openedSubjectButton.current = event.currentTarget.id;
+                  void openSubject(item.subject);
+                }}><bdi dir="auto">{item.subject}</bdi></button>
+            </li>)}</ul>}
       </>}
-      {selectedSubject && versions && <article aria-labelledby="schema-detail-title">
-        <h3 id="schema-detail-title">{selectedSubject}</h3>
+      {selectedSubject && <article aria-labelledby="schema-detail-title">
+        <div className="d-flex flex-wrap gap-2 mb-3">
+          <button type="button" className="btn btn-sm btn-outline-primary" onClick={closeSubject}>{t("Back to subjects")}</button>
+          <button type="button" className="btn btn-sm btn-outline-secondary"
+            onClick={() => void openSubject(selectedSubject, true, viewedVersion)}>{t("Refresh versions")}</button>
+        </div>
+        <h3 id="schema-detail-title" ref={subjectHeading} tabIndex={-1}><bdi dir="auto">{selectedSubject}</bdi></h3>
         <p>{t("Compatibility:")}{' '}{compatibility?.data.mode ?? t("Unknown")}{compatibility?.data.isInherited ? ' (inherited)' : ''}</p>
+        {!versions && !schemaError && <p role="status">{t("Loading schema versions…")}</p>}
+        {versions && <>
+          <Limitations envelope={versions} />
+          {versions.data.length === 0 ? <p>{t("No schema versions are available.")}</p> :
+            <div className="table-responsive"><table className="table table-vcenter">
+              <thead><tr><th scope="col">{t("Version")}</th><th scope="col">{t("Schema ID")}</th><th scope="col">{t("Format")}</th><th scope="col">{t("References")}</th></tr></thead>
+              <tbody>{versions.data.map(item => <tr key={item.version}>
+                <th scope="row"><button className="btn btn-sm btn-outline-primary" type="button"
+                  aria-pressed={viewedVersion === item.version} onClick={() => setViewedVersion(item.version)}>
+                  {t("View version {0}", [item.version])}
+                </button></th>
+                <td>{item.schemaId}</td><td>{item.format}</td><td>{item.references.length}</td>
+              </tr>)}</tbody>
+            </table></div>}
+        </>}
+        {viewedVersion !== null && <section aria-labelledby="schema-content-title" className="mb-4">
+          <h4 id="schema-content-title">{t("Schema source for version {0}", [viewedVersion])}</h4>
+          {schemaContentError && <ReadViewProblemNotice problem={schemaContentError} />}
+          {!displayedSchema && !schemaContentError && <p role="status">{t("Loading schema source…")}</p>}
+          {displayedSchema && <>
+            <Limitations envelope={displayedSchema} />
+            <pre tabIndex={0} className="border rounded p-3" dir="ltr"><code>{displayedSchema.data.schema.schemaText}</code></pre>
+            {displayedSchema.data.schema.references.length > 0 && <>
+              <h5>{t("References")}</h5>
+              <ul>{displayedSchema.data.schema.references.map(reference =>
+                <li key={reference.name}><bdi dir="auto">{reference.name} → {reference.subject} v{reference.version}</bdi></li>)}</ul>
+            </>}
+            {canRegisterSchemas && !registrationSource && <button className="btn btn-primary" type="button"
+              onClick={() => setRegistrationSource(displayedSchema.data.schema)}>{t("New schema version")}</button>}
+          </>}
+        </section>}
+        {canRegisterSchemas && registrationSource && <SchemaVersionRegistrar
+          clusterId={clusterId} subject={selectedSubject} source={registrationSource}
+          onClose={() => setRegistrationSource(null)}
+          onRegistered={version => void openSubject(selectedSubject, true, version)} />}
         {compatibilityExplanation && <aside aria-labelledby="schema-compatibility-explanation-title">
           <h4 id="schema-compatibility-explanation-title">{t("Compatibility explanation")}</h4>
           <p>{compatibilityExplanation.data.summary}</p>
           <p>{t("Scope:")}{' '}{compatibilityExplanation.data.scope}</p>
           <ul>{compatibilityExplanation.data.rules.map(rule => <li key={rule}>{rule}</li>)}</ul>
         </aside>}
-        <table><thead><tr><th scope="col">{t("Version")}</th><th scope="col">{t("Schema ID")}</th><th scope="col">{t("Format")}</th><th scope="col">{t("References")}</th></tr></thead><tbody>{versions.data.map(item => <tr key={item.version}><td>{item.version}</td><td><bdi dir="ltr" lang="en">{item.schemaId}</bdi></td><td>{item.format}</td><td><bdi dir="ltr" lang="en">{item.references.length}</bdi></td></tr>)}</tbody></table>
-        {versions.data.length > 0 && <div>
+        {versions && versions.data.length > 0 && <div>
           <label htmlFor="schema-left-version">{t("Left version")}</label>{' '}
           <select id="schema-left-version" value={leftVersion ?? ''} onChange={event => setLeftVersion(Number(event.target.value))}>{versions.data.map(item => <option key={item.version} value={item.version}>{item.version}</option>)}</select>{' '}
           <label htmlFor="schema-right-version">{t("Right/tooling version")}</label>{' '}
@@ -757,16 +1073,21 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
           {schemaMock.data.examples.map(example => <pre tabIndex={0} dir="ltr" lang="en" key={example.index} aria-label={t("Generated schema example {0}", [example.index + 1])}><code dir="ltr" lang="en">{example.json}</code></pre>)}
         </div>}
       </article>}
+      </div>
     </section>
 
-    <section className="card kafdeck-card" id="serde" aria-labelledby="serde-title">
-      <h2 id="serde-title">{t("Controlled SerDe tooling")}</h2>
-      <p>{t("Local bounded tooling for CBOR, XML and MessagePack. No provider proxy, runtime plugin loading, file/network resolution or durable payload storage is used.")}</p>
+    {!selectedSubject && <section className="card kafdeck-card" id="serde" aria-labelledby="serde-title">
+      <div className="card-body kafdeck-ecosystem-body">
+      <header className="kafdeck-ecosystem-header"><div>
+        <h2 id="serde-title">{t("Controlled SerDe tooling")}</h2>
+        <p>{t("Local bounded tooling for CBOR, XML and MessagePack. No provider proxy, runtime plugin loading, file/network resolution or durable payload storage is used.")}</p>
+      </div></header>
       {serdeError && <ReadViewProblemNotice problem={serdeError} />}
       {!serdeCapabilities && !serdeError && <p role="status">{t("Loading controlled SerDe capabilities…")}</p>}
       {serdeCapabilities && <>
         <p>{t("Server bounds: input")}{' '}<bdi dir="ltr" lang="en">{serdeCapabilities.limits.maxInputBytes}</bdi> {' '}{t("bytes · output")}{' '}<bdi dir="ltr" lang="en">{serdeCapabilities.limits.maxOutputBytes}</bdi> {' '}{t("bytes · depth")}{' '}{serdeCapabilities.limits.maxDepth} {' '}{t("· nodes")}{' '}{serdeCapabilities.limits.maxNodes}.</p>
-        <table><thead><tr><th scope="col">{t("Format")}</th><th scope="col">{t("Decode")}</th><th scope="col">{t("Encode")}</th><th scope="col">{t("Limitations")}</th></tr></thead><tbody>
+        <div className="table-responsive kafdeck-serde-capabilities" tabIndex={0} role="region" aria-label={t("Scrollable data table")}>
+        <table className="table table-vcenter mb-0"><thead><tr><th scope="col">{t("Format")}</th><th scope="col">{t("Decode")}</th><th scope="col">{t("Encode")}</th><th scope="col">{t("Limitations")}</th></tr></thead><tbody>
           {serdeCapabilities.formats.map(capability => <tr key={capability.format}>
             <th scope="row">{capability.format}</th>
             <td>{capability.decodeSupported ? t("Supported") : t("Unsupported")}</td>
@@ -774,34 +1095,43 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
             <td>{capability.limitations.join('; ')}</td>
           </tr>)}
         </tbody></table>
-        <label htmlFor="serde-format">{t("Format")}</label>{' '}
-        <select id="serde-format" value={serdeFormat} onChange={event => {
+        </div>
+        <div className="kafdeck-serde-format">
+        <label className="form-label" htmlFor="serde-format">{t("Format")}</label>
+        <select className="form-select" id="serde-format" value={serdeFormat} onChange={event => {
           setSerdeFormat(event.target.value as ControlledSerdeFormat);
           setSerdeDecoded(null); setSerdeEncoded(null); setSerdeError(null);
           setSerdePayloadBase64(''); setSerdeStructuredJson('');
         }}>
           {serdeCapabilities.formats.map(capability => <option key={capability.format} value={capability.format}>{capability.format}</option>)}
         </select>
-
-        <div>
-          <h3>{t("Decode")}</h3>
-          <label htmlFor="serde-payload-base64">{t("Base64 payload")}</label>
-          <textarea dir="auto" id="serde-payload-base64" rows={4} value={serdePayloadBase64} onChange={event => setSerdePayloadBase64(event.target.value)} autoComplete="off" />
-          <button type="button" disabled={serdeBusy || serdePayloadBase64.trim().length === 0} onClick={() => void decodeSerde()}>{t("Decode locally")}</button>
         </div>
 
-        <div>
-          <h3>{t("Encode")}</h3>
-          <label htmlFor="serde-structured-json">{t("Structured JSON")}</label>
-          <textarea dir="ltr" id="serde-structured-json" rows={6} value={serdeStructuredJson} onChange={event => setSerdeStructuredJson(event.target.value)} autoComplete="off" />
-          <button type="button" disabled={serdeBusy || serdeStructuredJson.trim().length === 0} onClick={() => void encodeSerde()}>{t("Encode locally")}</button>
+        <div className="kafdeck-serde-editors">
+          <form className="kafdeck-serde-editor" aria-labelledby="serde-decode-title" onSubmit={event => { event.preventDefault(); void decodeSerde(); }}>
+            <h3 id="serde-decode-title">{t("Decode")}</h3>
+            <div>
+              <label className="form-label" htmlFor="serde-payload-base64">{t("Base64 payload")}</label>
+              <textarea className="form-control" dir="ltr" id="serde-payload-base64" rows={6} value={serdePayloadBase64} onChange={event => setSerdePayloadBase64(event.target.value)} autoComplete="off" spellCheck={false} />
+            </div>
+            <button className="btn btn-outline-primary" type="submit" disabled={serdeBusy || serdePayloadBase64.trim().length === 0}>{t("Decode locally")}</button>
+          </form>
+          <form className="kafdeck-serde-editor" aria-labelledby="serde-encode-title" onSubmit={event => { event.preventDefault(); void encodeSerde(); }}>
+            <h3 id="serde-encode-title">{t("Encode")}</h3>
+            <div>
+              <label className="form-label" htmlFor="serde-structured-json">{t("Structured JSON")}</label>
+              <textarea className="form-control" dir="ltr" id="serde-structured-json" rows={6} value={serdeStructuredJson} onChange={event => setSerdeStructuredJson(event.target.value)} autoComplete="off" spellCheck={false} />
+            </div>
+            <button className="btn btn-outline-primary" type="submit" disabled={serdeBusy || serdeStructuredJson.trim().length === 0}>{t("Encode locally")}</button>
+          </form>
         </div>
       </>}
       {serdeDecoded && <article aria-labelledby="serde-decoded-title"><h3 id="serde-decoded-title">{t("Decoded value")}</h3><pre tabIndex={0} dir="ltr" lang="en"><code dir="ltr" lang="en">{JSON.stringify(serdeDecoded.structuredValue, null, 2)}</code></pre></article>}
       {serdeEncoded && <article aria-labelledby="serde-encoded-title"><h3 id="serde-encoded-title">{t("Encoded payload")}</h3><p><bdi dir="ltr" lang="en">{serdeEncoded.byteCount}</bdi> {' '}{t("bytes")}</p><pre tabIndex={0} dir="ltr" lang="en"><code dir="ltr" lang="en">{serdeEncoded.payloadBase64}</code></pre></article>}
-    </section>
+      </div>
+    </section>}</>}
 
-    <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">
+    {ecosystem && <section className="card kafdeck-card" id="ecosystem" aria-labelledby="ecosystem-title">
       <h2 id="ecosystem-title">{t("Ecosystem read views")}</h2>
       <h3 id="connect-title">Kafka Connect</h3>
       {connectError && <ReadViewProblemNotice problem={connectError} />}
@@ -902,25 +1232,7 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
       {ksqlError && <ReadViewProblemNotice problem={ksqlError} />}
       {ksqlInfo && <p>{t("Version:")}{' '}{ksqlInfo.data.version ?? t("Unknown")} {' '}{t("· Kafka cluster:")}{' '}{ksqlInfo.data.kafkaClusterId ?? t("Unknown")} {' '}{t("· Health:")}{' '}{ksqlInfo.data.state ?? t("Unknown")}</p>}
       <p>{t("v0.7 admits bounded single-statement SELECT queries only. DDL, DML, persistent-query creation, session substitution and generic provider forwarding are blocked before provider I/O.")}</p>
-      <label htmlFor="ksql-query-editor">{t("Read-only SELECT")}</label>
-      <textarea dir="auto"
-        id="ksql-query-editor"
-        rows={6}
-        value={ksqlStatement}
-        onChange={event => setKsqlStatement(event.target.value)}
-        placeholder="SELECT * FROM ORDERS LIMIT 100;"
-        autoComplete="off"
-      />
-      <button type="button" disabled={ksqlBusy || ksqlStatement.trim().length === 0} onClick={() => void runKsqlQuery()}>
-        {ksqlBusy ? t("Running…") : t("Run bounded query")}
-      </button>
-      {ksqlResult && <article aria-labelledby="ksql-query-result-title">
-        <h4 id="ksql-query-result-title">{t("Query result")}</h4>
-        <p>{t("Rows:")}{' '}<bdi dir="ltr" lang="en">{ksqlResult.data.rows.length}</bdi> {' '}{t("· Bytes observed:")}{' '}<bdi dir="ltr" lang="en">{ksqlResult.data.responseBytes}</bdi> · {ksqlResult.data.truncated ? t("Limited: {0}", [ksqlResult.data.limitReason ?? t("server limit")]) : t("Complete within configured bounds")}</p>
-        <div className="table-responsive" tabIndex={0} role="region" aria-label={t("Scrollable data table")}><table><thead><tr>{ksqlResult.data.header.columnNames.map((name, index) => <th key={`${name}-${index}`} scope="col">{name}<br /><small>{ksqlResult.data.header.columnTypes[index] ?? t("Unknown")}</small></th>)}</tr></thead>
-          <tbody>{ksqlResult.data.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.columns.map((value, columnIndex) => <td key={columnIndex}><code dir="ltr" lang="en">{JSON.stringify(value)}</code></td>)}</tr>)}</tbody>
-        </table></div>
-      </article>}
+      <KsqlQueryConsole clusterId={clusterId} />
 
       <h3 id="streams-title">{t("Kafka Streams evidence")}</h3>
       {streamsError && <ReadViewProblemNotice problem={streamsError} />}
@@ -945,10 +1257,13 @@ export function ReadViewsExplorer({ clusterId }: { clusterId: string }) {
         {lineage.data.partial && <p role="status"><StatusBadge kind="partial" /> {' '}{t("Lineage is partial:")}{' '}{lineage.data.limitations.map(item => item.message).join('; ')}</p>}
         {lineage.data.edges.length === 0 ? <p>{t("No lineage edges are available from registered evidence.")}</p> : <table><thead><tr><th scope="col">{t("Source")}</th><th scope="col">{t("Destination")}</th><th scope="col">{t("Evidence")}</th><th scope="col">{t("Provenance")}</th><th scope="col">{t("Confidence")}</th><th scope="col">{t("State")}</th></tr></thead><tbody>{lineage.data.edges.map((edge, index) => <tr key={`${edge.source.kind}:${edge.source.id}->${edge.destination.kind}:${edge.destination.id}:${index}`}><td>{edge.source.kind}:{edge.source.id}</td><td>{edge.destination.kind}:{edge.destination.id}</td><td><bdi dir="ltr" lang="en">{edge.evidenceKind}</bdi></td><td>{edge.provenance}</td><td>{edge.confidence.toFixed(2)}</td><td>{edge.stale ? t("Stale") : t("Current")}</td></tr>)}</tbody></table>}
       </>}
-    </section>
+    </section>}
 
-    <DataQualityPanel clusterId={clusterId} />
+    {ecosystem && <DataQualityPanel clusterId={clusterId} />}
 
-    <MutationOperationsPanel clusterId={clusterId} connectProfileId={selectedConnectProfileId} />
+    {ecosystem && <MutationOperationsPanel clusterId={clusterId} connectProfileId={selectedConnectProfileId}
+      {...(page === 'ecosystem' ? { family: 'connect' as const } : {})} />}
+    {page === 'schemas' && !selectedSubject && subjects && canRegisterSchemas &&
+      <MutationOperationsPanel clusterId={clusterId} family="schema" />}
   </>;
 }

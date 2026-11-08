@@ -67,7 +67,10 @@ public sealed record ConnectMutationObservation(
     string State,
     IReadOnlyList<ConnectMutationTaskObservation> Tasks,
     IReadOnlyList<ConnectConfigurationObservationItem> Configuration,
-    string ConfigurationFingerprint);
+    string ConfigurationFingerprint)
+{
+    public string? EndpointRevision { get; init; }
+}
 
 public enum ConnectMutationObservationFailureCategory
 {

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Kafdeck.Core.Ecosystem;
 using Kafdeck.Core.ReadViews;
 using Kafdeck.Infrastructure.Configuration;
@@ -103,6 +104,40 @@ public sealed class V07W59KsqlQueryTests
             "streamsProperties",
             Assert.Single(handler.RequestBodies),
             StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(KsqlQueryOffsetReset.Latest, "latest")]
+    [InlineData(KsqlQueryOffsetReset.Earliest, "earliest")]
+    public async Task Query_forwards_only_the_selected_starting_offset(
+        KsqlQueryOffsetReset? offsetReset, string? expected)
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK,
+            """
+            {"columnNames":["MESSAGE"],"columnTypes":["STRING"]}
+            ["test message"]
+            """));
+        using var adapter = CreateAdapter(handler);
+        const string sql = "SELECT MESSAGE FROM ORDERS EMIT CHANGES LIMIT 1;";
+
+        var result = await adapter.ExecuteQueryAsync(
+            "prod", sql, KsqlQueryLimits.Default with { OffsetReset = offsetReset }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Failure?.SafeMessage);
+        using var request = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.Equal(sql, request.RootElement.GetProperty("sql").GetString());
+        var properties = request.RootElement.GetProperty("properties").EnumerateObject();
+        if (expected is null)
+        {
+            Assert.Empty(properties);
+        }
+        else
+        {
+            var property = Assert.Single(properties);
+            Assert.Equal("auto.offset.reset", property.Name);
+            Assert.Equal(expected, property.Value.GetString());
+        }
     }
 
     [Fact]

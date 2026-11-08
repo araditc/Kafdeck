@@ -9,7 +9,8 @@ namespace Kafdeck.Infrastructure.Ecosystem;
 
 internal sealed record HttpReadRuntime(
     HttpClient Client,
-    AuthenticationHeaderValue? Authorization);
+    AuthenticationHeaderValue? Authorization,
+    bool IsRegistered = false);
 
 internal sealed class ReadViewHttpException : Exception
 {
@@ -73,6 +74,15 @@ internal static class ReadOnlyHttpSupport
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, relativePath);
         request.Headers.Accept.ParseAdd("application/json");
+        return await SendJsonAsync(runtime, request, maxBytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task<JsonElement> SendJsonAsync(
+        HttpReadRuntime runtime,
+        HttpRequestMessage request,
+        long maxBytes,
+        CancellationToken cancellationToken)
+    {
         if (runtime.Authorization is not null)
         {
             request.Headers.Authorization = runtime.Authorization;

@@ -1,4 +1,5 @@
 using Kafdeck.Core.Security;
+using Kafdeck.Infrastructure.Ecosystem;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Connect;
 
@@ -74,6 +75,7 @@ public static class KafdeckConnectMutationEndpoints
                     HttpContext context,
                     MutationRequestAuthorizationService authorization,
                     ConnectMutationPlanner planner,
+                    KafkaConnectMutationAdapter provider,
                     MutationAdmissionService admission,
                     CancellationToken cancellationToken) =>
                 {
@@ -88,19 +90,27 @@ public static class KafdeckConnectMutationEndpoints
                         return denied;
                     }
 
-                    if (request.Configuration is null)
+                    if ((request.Configuration is null) == (request.Changes is null))
                     {
-                        return InvalidRequest("A bounded connector configuration is required.");
+                        return InvalidRequest("Supply either a bounded connector configuration or its changed settings.");
                     }
 
-                    var planning = await planner
-                        .PlanUpdateAsync(
-                            new ConnectUpdateRequest(
-                                clusterId,
-                                connectorName,
-                                request.Configuration),
-                            cancellationToken)
-                        .ConfigureAwait(false);
+                    ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent> planning;
+                    if (request.Changes is { } changes)
+                    {
+                        var current = await provider.ReadRegisteredConfigurationAsync(clusterId, connectorName, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (current is null)
+                            return PlanningProblem(new(ConnectMutationPlanningFailureCode.ObservationFailed,
+                                "Kafka Connect could not read the existing configuration. No settings were changed."));
+                        planning = await planner.PlanRegisteredUpdateAsync(clusterId, connectorName, current, changes, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        planning = await planner.PlanUpdateAsync(new(clusterId, connectorName, request.Configuration!), cancellationToken)
+                            .ConfigureAwait(false);
+                    }
                     using var material = planning.ExecutionMaterial;
 
                     return planning.IsSuccess && planning.Plan is not null
@@ -413,6 +423,7 @@ public static class KafdeckConnectMutationEndpoints
                     ConnectConfigurationExecuteRequest request,
                     HttpContext context,
                     MutationDispatchService dispatch,
+                    KafkaConnectMutationAdapter provider,
                     CancellationToken cancellationToken) =>
                 {
                     var result = await dispatch
@@ -420,7 +431,9 @@ public static class KafdeckConnectMutationEndpoints
                             context.User,
                             operationId,
                             request.Configuration,
-                            cancellationToken)
+                            cancellationToken,
+                            request.Changes,
+                            provider.ReadRegisteredConfigurationAsync)
                         .ConfigureAwait(false);
                     return MapDispatchResult(result);
                 })
@@ -626,11 +639,13 @@ public static class KafdeckConnectMutationEndpoints
 }
 
 public sealed record ConnectConfigurationPreviewRequest(
-    IReadOnlyDictionary<string, string>? Configuration);
+    IReadOnlyDictionary<string, string>? Configuration,
+    IReadOnlyDictionary<string, string?>? Changes = null);
 
 public sealed record ConnectControlPreviewRequest(
     ConnectControlAction Action,
     int? TaskId = null);
 
 public sealed record ConnectConfigurationExecuteRequest(
-    IReadOnlyDictionary<string, string>? Configuration);
+    IReadOnlyDictionary<string, string>? Configuration,
+    IReadOnlyDictionary<string, string?>? Changes = null);

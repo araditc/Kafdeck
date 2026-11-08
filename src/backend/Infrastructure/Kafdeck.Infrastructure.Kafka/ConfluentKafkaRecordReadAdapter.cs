@@ -44,21 +44,25 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
 
     private readonly IReadOnlyDictionary<string, ClusterProfile> _profiles;
     private readonly IKafkaRecordConsumerFactory _consumerFactory;
+    private readonly Func<string, ConsumerConfig?>? _registeredConsumerConfig;
     private readonly SemaphoreSlim _globalGate;
-    private readonly IReadOnlyDictionary<string, SemaphoreSlim> _clusterGates;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _clusterGates = new(StringComparer.Ordinal);
+    private readonly int _perClusterLimit;
     private readonly TimeProvider _timeProvider;
 
     public ConfluentKafkaRecordReadAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
         KafkaRecordReadConcurrencyOptions? concurrencyOptions = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, ConsumerConfig?>? registeredConsumerConfig = null)
         : this(
             clusterProfiles,
             new ConfluentKafkaRecordConsumerFactory(
                 secretResolver ?? throw new ArgumentNullException(nameof(secretResolver))),
             concurrencyOptions,
-            timeProvider)
+            timeProvider,
+            registeredConsumerConfig)
     {
     }
 
@@ -66,20 +70,19 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         IReadOnlyList<ClusterProfile> clusterProfiles,
         IKafkaRecordConsumerFactory consumerFactory,
         KafkaRecordReadConcurrencyOptions? concurrencyOptions = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, ConsumerConfig?>? registeredConsumerConfig = null)
     {
         ArgumentNullException.ThrowIfNull(clusterProfiles);
 
         _profiles = clusterProfiles.ToDictionary(profile => profile.Id, StringComparer.Ordinal);
         _consumerFactory = consumerFactory ?? throw new ArgumentNullException(nameof(consumerFactory));
+        _registeredConsumerConfig = registeredConsumerConfig;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         var options = concurrencyOptions ?? new KafkaRecordReadConcurrencyOptions();
         _globalGate = new SemaphoreSlim(options.GlobalLimit, options.GlobalLimit);
-        _clusterGates = _profiles.Keys.ToDictionary(
-            clusterId => clusterId,
-            _ => new SemaphoreSlim(options.PerClusterLimit, options.PerClusterLimit),
-            StringComparer.Ordinal);
+        _perClusterLimit = options.PerClusterLimit;
     }
 
     public async Task<KafkaResult<RecordReadBatch>> ReadPageAsync(
@@ -100,17 +103,22 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             return Failed(KafkaFailureMapper.DeadlineExceeded());
         }
 
-        if (!_profiles.TryGetValue(request.ClusterId, out var profile) ||
-            !_clusterGates.TryGetValue(request.ClusterId, out var clusterGate))
-        {
-            return Failed(KafkaFailureMapper.ClusterNotConfigured());
-        }
-
         var globalAcquired = false;
         var clusterAcquired = false;
+        SemaphoreSlim? clusterGate = null;
 
         try
         {
+            Func<IKafkaRecordConsumerSession> createConsumer;
+            if (_profiles.TryGetValue(request.ClusterId, out var profile))
+                createConsumer = () => _consumerFactory.Create(profile);
+            else if (_registeredConsumerConfig?.Invoke(request.ClusterId) is { } config)
+                createConsumer = () => new ConfluentKafkaRecordConsumerSession(
+                    new ConsumerBuilder<byte[], byte[]>(config).SetLogHandler((_, _) => { }).Build());
+            else
+                return Failed(KafkaFailureMapper.ClusterNotConfigured());
+
+            clusterGate = _clusterGates.GetOrAdd(request.ClusterId, _ => new SemaphoreSlim(_perClusterLimit, _perClusterLimit));
             using var admissionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             admissionDeadline.CancelAfter(operation.Remaining(now));
 
@@ -123,7 +131,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
             globalAcquired = true;
 
             return await Task.Run(
-                    () => ReadPageCore(profile, request, operation, cancellationToken),
+                    () => ReadPageCore(createConsumer, request, operation, cancellationToken),
                     CancellationToken.None)
                 .ConfigureAwait(false);
         }
@@ -159,7 +167,7 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
         {
             if (clusterAcquired)
             {
-                clusterGate.Release();
+                clusterGate!.Release();
             }
 
             if (globalAcquired)
@@ -179,12 +187,12 @@ public sealed class ConfluentKafkaRecordReadAdapter : IKafkaRecordReadPort, IDis
     }
 
     private KafkaResult<RecordReadBatch> ReadPageCore(
-        ClusterProfile profile,
+        Func<IKafkaRecordConsumerSession> createConsumer,
         RecordReadRequest request,
         KafkaOperationContext operation,
         CancellationToken cancellationToken)
     {
-        using var consumer = _consumerFactory.Create(profile);
+        using var consumer = createConsumer();
 
         var startedAt = _timeProvider.GetUtcNow();
         var budgetDeadlineUtc = startedAt + request.Budget.MaxDuration;

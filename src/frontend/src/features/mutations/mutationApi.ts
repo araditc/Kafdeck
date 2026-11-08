@@ -770,6 +770,14 @@ export const mutationApi = {
     );
   },
 
+  previewConnectSettingsChanges(
+    clusterId: string, connectorName: string, changes: Record<string, string | null>, idempotencyKey: string,
+  ) {
+    return postJson<MutationStatus>(
+      connectorMutationPath(clusterId, connectorName, 'update'), { changes }, { idempotencyKey },
+    );
+  },
+
   previewConnectDelete(
     clusterId: string,
     connectorName: string,
@@ -845,6 +853,12 @@ export const mutationApi = {
       `${mutationPath(operation.operationId)}/connect/execute`,
       {},
       { signal },
+    );
+  },
+
+  executeConnectSettingsChanges(operation: MutationStatus, changes: Record<string, string | null>) {
+    return postJson<MutationStatus>(
+      `${mutationPath(operation.operationId)}/connect-configuration/execute`, { changes },
     );
   },
 

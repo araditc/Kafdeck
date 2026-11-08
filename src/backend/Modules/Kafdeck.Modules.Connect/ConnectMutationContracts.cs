@@ -434,6 +434,9 @@ internal static class ConnectMutationCanonicalization
             new("configuration", observation.ConfigurationFingerprint),
         };
 
+        if (observation.EndpointRevision is { } revision)
+            values.Add(new("endpointRevision", revision));
+
         foreach (var task in observation.Tasks
                      .OrderBy(item => item.Id))
         {

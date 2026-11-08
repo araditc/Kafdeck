@@ -32,17 +32,23 @@ public sealed class KafkaConnectMutationAdapter :
     private readonly IReadOnlyDictionary<ConnectRuntimeKey, HttpReadRuntime> _runtimes;
     private readonly HashSet<ConnectRuntimeKey> _admittedMutationProfiles;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, HttpClient?>? _registeredClient;
+    private readonly Func<string, string?>? _registeredRevision;
 
     public KafkaConnectMutationAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, HttpClient?>? registeredClient = null,
+        Func<string, string?>? registeredRevision = null)
         : this(
             clusterProfiles,
             secretResolver,
             static (_, _) => new HttpClientHandler { AllowAutoRedirect = false },
             timeProvider)
     {
+        _registeredClient = registeredClient;
+        _registeredRevision = registeredRevision;
     }
 
     internal KafkaConnectMutationAdapter(
@@ -152,7 +158,8 @@ public sealed class KafkaConnectMutationAdapter :
         }
 
         var key = new ConnectRuntimeKey(clusterId, normalizedProfileId);
-        if (!_runtimes.ContainsKey(key))
+        var registered = RegisteredRevision(key) is not null;
+        if (!_runtimes.ContainsKey(key) && !registered)
         {
             var isDefault = string.Equals(
                 normalizedProfileId,
@@ -170,7 +177,7 @@ public sealed class KafkaConnectMutationAdapter :
                     false));
         }
 
-        if (!_admittedMutationProfiles.Contains(key))
+        if (!_admittedMutationProfiles.Contains(key) && !registered)
         {
             return Task.FromResult(
                 ObservationFailed<ConnectMutationCapabilities>(
@@ -237,6 +244,7 @@ public sealed class KafkaConnectMutationAdapter :
             cancellationToken,
             async (runtime, token) =>
             {
+                var revision = runtime.IsRegistered ? RegisteredRevision(new(clusterId, normalizedProfileId)) : null;
                 var escaped = Uri.EscapeDataString(normalized);
                 var status = await TryGetJsonAsync(
                         runtime,
@@ -246,7 +254,7 @@ public sealed class KafkaConnectMutationAdapter :
 
                 if (!status.Exists)
                 {
-                    return MissingObservation(normalized);
+                    return MissingObservation(normalized) with { EndpointRevision = revision };
                 }
 
                 var config = await TryGetJsonAsync(
@@ -264,8 +272,36 @@ public sealed class KafkaConnectMutationAdapter :
                 return ProjectObservation(
                     normalized,
                     status.Value,
-                    config.Value);
+                    config.Value) with { EndpointRevision = revision };
             });
+    }
+
+    // Raw settings are request material only. The public read model always uses the redacted adapter.
+    public async Task<IReadOnlyDictionary<string, string>?> ReadRegisteredConfigurationAsync(
+        string clusterId, string connectorName, CancellationToken cancellationToken)
+    {
+        var key = new ConnectRuntimeKey(clusterId, KafkaConnectProfileSet.DefaultProfileId);
+        if (RegisteredRevision(key) is null) return null;
+        var result = await ExecuteObservationAsync(
+            clusterId, key.ProfileId,
+            new ReadViewOperationContext(_timeProvider.GetUtcNow().AddSeconds(10)),
+            cancellationToken,
+            async (runtime, token) =>
+            {
+                var name = RequireConnectorName(connectorName);
+                var config = await TryGetJsonAsync(runtime, $"connectors/{Uri.EscapeDataString(name)}/config", token)
+                    .ConfigureAwait(false);
+                if (!config.Exists) return null;
+                var values = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var property in config.Value.EnumerateObject())
+                {
+                    if (values.Count >= MaxConfigurationItems || property.Value.ValueKind != JsonValueKind.String ||
+                        !values.TryAdd(RequireConfigurationKey(property.Name), property.Value.GetString()!))
+                        throw new JsonException("Kafka Connect did not return a complete string configuration.");
+                }
+                return NormalizeConfiguration(values);
+            }).ConfigureAwait(false);
+        return result.IsSuccess ? result.Value : null;
     }
 
     public Task<MutationProviderResult> CreateAsync(
@@ -622,9 +658,8 @@ public sealed class KafkaConnectMutationAdapter :
         }
 
         var key = new ConnectRuntimeKey(clusterId, connectProfileId);
-        if (!_runtimes.TryGetValue(
-                key,
-                out var runtime))
+        var runtime = GetRuntime(key);
+        if (runtime is null)
         {
             var isDefault = string.Equals(
                 connectProfileId,
@@ -641,6 +676,7 @@ public sealed class KafkaConnectMutationAdapter :
                 false);
         }
 
+        using var ownedClient = runtime.IsRegistered ? runtime.Client : null;
         try
         {
             using var deadline =
@@ -752,15 +788,15 @@ public sealed class KafkaConnectMutationAdapter :
         }
 
         var key = new ConnectRuntimeKey(clusterId, normalizedProfileId);
-        if (!_runtimes.TryGetValue(
-                key,
-                out var runtime))
+        var runtime = GetRuntime(key);
+        if (runtime is null)
         {
             return FailedDefinitive(
                 $"{operationCode}_not_configured");
         }
 
-        if (!_admittedMutationProfiles.Contains(key))
+        using var ownedClient = runtime.IsRegistered ? runtime.Client : null;
+        if (!runtime.IsRegistered && !_admittedMutationProfiles.Contains(key))
         {
             return FailedDefinitive(
                 $"{operationCode}_provider_profile_not_admitted");
@@ -806,6 +842,17 @@ public sealed class KafkaConnectMutationAdapter :
             return Unknown(
                 $"{operationCode}_provider_exception");
         }
+    }
+
+    private string? RegisteredRevision(ConnectRuntimeKey key) =>
+        _registeredClient is not null && key.ProfileId == KafkaConnectProfileSet.DefaultProfileId
+            ? _registeredRevision?.Invoke(key.ClusterId) : null;
+
+    private HttpReadRuntime? GetRuntime(ConnectRuntimeKey key)
+    {
+        if (_runtimes.TryGetValue(key, out var configured)) return configured;
+        return RegisteredRevision(key) is not null && _registeredClient?.Invoke(key.ClusterId) is { } client
+            ? new(client, null, IsRegistered: true) : null;
     }
 
     private static async Task<OptionalJson> TryGetJsonAsync(

@@ -61,6 +61,12 @@ public sealed class MutationRequestAuthorizationService
         ArgumentNullException.ThrowIfNull(operation);
         var lifecycle = AuthorizeForLifecycle(principal, operation);
         if (lifecycle != KafdeckAuthorizationOutcome.Allowed) return lifecycle;
+        if (_authorization.IsManagedRegisteredTarget(operation.ClusterId) &&
+            operation.Risk.RequiresIndependentApproval && operation.State is MutationOperationState.Ready or MutationOperationState.Executing &&
+            (string.IsNullOrWhiteSpace(operation.ApprovedByPrincipalId) ||
+                operation.AuthorizationTargets.Any(target => !_authorization.HasLiveManagedApproval(operation.ApprovedByPrincipalId,
+                    DeclarativeMutationAuthorization.Request(target)))))
+            return KafdeckAuthorizationOutcome.Forbidden;
         if (principal?.Identity is NonBrowserReadIdentity || IsProofKind(operation.OperationKind))
         {
             if (operation.Risk.RequiresIndependentApproval && operation.State is MutationOperationState.Ready or MutationOperationState.Executing &&

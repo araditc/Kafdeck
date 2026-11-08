@@ -164,7 +164,7 @@ test('v0.8 W64 consumer analytics UI is bounded, truth-preserving and operator-t
 
   assert.match(source, /Operational analytics/);
   assert.match(source, /getConsumerOperationalAnalytics/);
-  assert.match(source, /getConsumerOperationalTrend\(clusterId, groupId\)/);
+  assert.match(source, /getConsumerOperationalTrend\(clusterId, groupId, undefined, controller.signal\)/);
   assert.match(source, /points\.slice\(-100\)/);
   assert.match(source, /Operator-triggered lag SLO/);
   assert.match(source, /getConsumerOperationalSlo/);
@@ -172,23 +172,27 @@ test('v0.8 W64 consumer analytics UI is bounded, truth-preserving and operator-t
   assert.match(source, /Missing provider evidence remains unavailable/);
   assert.match(source, /item\.value \?\? t\("Unavailable"\)/);
   assert.doesNotMatch(source, /item\.value \|\|/); // Observed zero remains zero in every locale.
-  assert.doesNotMatch(source, /setInterval\(/);
+  assert.match(source, /if \(mode !== 'background'\) \{\s*setOperationalBusy\(true\);\s*requests\.push\(Promise\.all\(\[\s*kafdeckApi\.getConsumerOperationalAnalytics/);
+  assert.match(source, /shouldAutoRefresh\(document\.visibilityState\)\)\s*void openConsumer\(activeGroup, 'background'\)/);
   assert.doesNotMatch(source, /WebSocket/);
   assert.doesNotMatch(source, /mutate Kafka/i);
 });
 
-test('v0.8 W64 opening a consumer cannot lose core read detail if analytics fails', () => {
+test('consumer members and offsets load independently of diagnostics and analytics', () => {
   const source = readFileSync(
     new URL('../src/features/readviews/ReadViewsExplorer.tsx', import.meta.url),
     'utf8',
   );
-  const start = source.indexOf('const openConsumer = async');
+  const start = source.indexOf('const openConsumer = useCallback(async');
   const end = source.indexOf('const evaluateConsumerSlo = async', start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
 
   const openConsumer = source.slice(start, end);
-  assert.match(openConsumer, /setGroupDetail\(detail\); setGroupLag\(lag\); setGroupDiagnostics\(diagnostics\)/);
+  assert.match(openConsumer, /observe\('members', .*setGroupDetail\)/);
+  assert.match(openConsumer, /observe\('offsets', .*setGroupLag\)/);
+  assert.match(openConsumer, /observe\('diagnostics', .*setGroupDiagnostics\)/);
+  assert.match(openConsumer, /if \(current\(\) && mode !== 'background'\)/);
   assert.match(openConsumer, /setOperationalError\(readViewError\(reason\)\)/);
   assert.match(openConsumer, /setOperationalBusy\(false\)/);
 });
@@ -201,11 +205,10 @@ test('v0.8 W64 consumer analytics responses are selection-generation fenced', ()
   );
 
   assert.match(source, /const consumerLoadGeneration = useRef\(0\)/);
-  assert.match(source, /const generation = \+\+consumerLoadGeneration\.current/);
-  assert.match(source, /if \(generation !== consumerLoadGeneration\.current\) return/);
-  assert.match(source, /if \(generation === consumerLoadGeneration\.current\)/);
+  assert.match(source, /if \(mode === 'open'\) \+\+consumerLoadGeneration\.current/);
+  assert.match(source, /!controller\.signal\.aborted && generation === consumerLoadGeneration\.current/);
 
-  const start = source.indexOf('const openConsumer = async');
+  const start = source.indexOf('const openConsumer = useCallback(async');
   const end = source.indexOf('const evaluateConsumerSlo = async', start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
@@ -213,7 +216,7 @@ test('v0.8 W64 consumer analytics responses are selection-generation fenced', ()
 
   assert.match(openConsumer, /setOperationalAnalytics\(live\)/);
   assert.match(openConsumer, /setOperationalTrend\(trend\)/);
-  assert.match(openConsumer, /generation !== consumerLoadGeneration\.current/);
+  assert.match(openConsumer, /if \(!current\(\)\) return/);
 });
 
 test('v0.8 W64 SLO result stays bound to immutable evaluated inputs', () => {
@@ -243,7 +246,7 @@ test('v0.8 W64 analytics requests defer history point caps to the server', () =>
 
   assert.match(apiSource, /maxPoints\?: number/);
   assert.match(apiSource, /if \(maxPoints !== undefined\) params\.set\('maxPoints', String\(maxPoints\)\)/);
-  assert.match(viewSource, /getConsumerOperationalTrend\(clusterId, groupId\)/);
+  assert.match(viewSource, /getConsumerOperationalTrend\(clusterId, groupId, undefined, controller.signal\)/);
   assert.doesNotMatch(viewSource, /getConsumerOperationalTrend\(clusterId, groupId, 100\)/);
   assert.doesNotMatch(viewSource, /target,\s*100,/);
 });
@@ -335,7 +338,7 @@ test('v0.8 W64 consumer and cluster switches preserve physical SLO request count
   const effectEnd = source.indexOf('const runKsqlQuery = async', effectStart);
   const clusterReset = source.slice(effectStart, effectEnd);
 
-  const consumerStart = source.indexOf('const openConsumer = async');
+  const consumerStart = source.indexOf('const openConsumer = useCallback(async');
   const consumerEnd = source.indexOf('const evaluateConsumerSlo = async', consumerStart);
   const consumerSwitch = source.slice(consumerStart, consumerEnd);
 

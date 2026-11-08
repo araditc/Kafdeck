@@ -93,10 +93,33 @@ public sealed class ConnectMutationPlanner
             observed.Value);
     }
 
-    public async Task<ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent>>
+    public Task<ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent>>
         PlanUpdateAsync(
             ConnectUpdateRequest request,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+        PlanUpdateCoreAsync(request, null, cancellationToken);
+
+    public async Task<ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent>> PlanRegisteredUpdateAsync(
+        string clusterId, string connectorName, IReadOnlyDictionary<string, string> current,
+        IReadOnlyDictionary<string, string?> changes, CancellationToken cancellationToken)
+    {
+        IReadOnlyDictionary<string, string> merged;
+        try
+        {
+            merged = ConnectMutationExecutionMaterialBuilder.ApplyChanges(current, changes);
+        }
+        catch (ArgumentException exception)
+        {
+            return Failed<ConnectUpdateCanonicalIntent>(ConnectMutationPlanningFailureCode.InvalidInput, exception.Message);
+        }
+        var baseFingerprint = ConnectMutationCanonicalization.ConfigurationFingerprint(
+            ConnectMutationSensitiveFingerprinting.ProjectRequested(current, _digest));
+        return await PlanUpdateCoreAsync(new(clusterId, connectorName, merged), baseFingerprint, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent>> PlanUpdateCoreAsync(
+        ConnectUpdateRequest request, string? baseFingerprint, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -153,6 +176,10 @@ public sealed class ConnectMutationPlanner
                 ConnectMutationPlanningFailureCode.ConnectorNotFound,
                 "Kafka Connect connector does not exist.");
         }
+
+        if (baseFingerprint is not null && observed.Value.ConfigurationFingerprint != baseFingerprint)
+            return Failed<ConnectUpdateCanonicalIntent>(ConnectMutationPlanningFailureCode.ObservationFailed,
+                "Connector configuration changed while preparing the preview. Refresh and try again.");
 
         var projected = ConnectMutationSensitiveFingerprinting.ProjectRequested(
             configuration,

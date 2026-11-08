@@ -15,11 +15,14 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
     private readonly IReadOnlyDictionary<string, HttpReadRuntime> _runtimes;
     private readonly IReadOnlyDictionary<string, SemaphoreSlim> _gates;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, HttpClient?>? _registeredClient;
+    private readonly SemaphoreSlim _registeredGate = new(HardMaxConcurrentQueriesPerCluster, HardMaxConcurrentQueriesPerCluster);
 
     public KsqlDbQueryAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, HttpClient?>? registeredClient = null)
         : this(
             clusterProfiles,
             secretResolver,
@@ -27,6 +30,7 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
             timeProvider,
             HardMaxConcurrentQueriesPerCluster)
     {
+        _registeredClient = registeredClient;
     }
 
     internal KsqlDbQueryAdapter(
@@ -94,8 +98,8 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
                 false);
         }
 
-        if (!_runtimes.TryGetValue(clusterId, out var runtime) ||
-            !_gates.TryGetValue(clusterId, out var gate))
+        using var client = _runtimes.ContainsKey(clusterId) ? null : _registeredClient?.Invoke(clusterId);
+        if (!_runtimes.TryGetValue(clusterId, out var runtime) && client is null)
         {
             return Failed<KsqlQueryResult>(
                 ReadViewFailureCategory.NotConfigured,
@@ -103,6 +107,8 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
                 "ksqlDB is not configured for the requested cluster.",
                 false);
         }
+        runtime ??= new HttpReadRuntime(client!, null, IsRegistered: true);
+        var gate = runtime.IsRegistered ? _registeredGate : _gates[clusterId];
 
         if (cancellationToken.IsCancellationRequested)
         {
@@ -136,7 +142,8 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
 
             using var request = BuildRequest(
                 runtime,
-                admission.CanonicalStatement!);
+                admission.CanonicalStatement!,
+                bounded.OffsetReset);
             using var response = await runtime.Client.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -213,12 +220,25 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
         {
             gate.Dispose();
         }
+        _registeredGate.Dispose();
     }
 
     private static HttpRequestMessage BuildRequest(
         HttpReadRuntime runtime,
-        string statement)
+        string statement,
+        KsqlQueryOffsetReset? offsetReset)
     {
+        var properties = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (offsetReset is { } mode)
+        {
+            properties["auto.offset.reset"] = mode switch
+            {
+                KsqlQueryOffsetReset.Latest => "latest",
+                KsqlQueryOffsetReset.Earliest => "earliest",
+                _ => throw new ArgumentOutOfRangeException(nameof(offsetReset)),
+            };
+        }
+
         var request = new HttpRequestMessage(
             HttpMethod.Post,
             "query-stream")
@@ -226,10 +246,7 @@ public sealed class KsqlDbQueryAdapter : IKsqlQueryPort, IDisposable
             Version = HttpVersion.Version20,
             VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher,
             Content = JsonContent.Create(
-                new KsqlQueryRequest(
-                    statement,
-                    new Dictionary<string, string>(
-                        StringComparer.Ordinal)),
+                new KsqlQueryRequest(statement, properties),
                 options: null,
                 mediaType: new MediaTypeHeaderValue(
                     "application/vnd.ksql.v1+json")),

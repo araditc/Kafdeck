@@ -53,24 +53,31 @@ public static class KafdeckApiEndpoints
                 HttpContext context,
                 [Microsoft.AspNetCore.Mvc.FromServices] KafdeckAuthorizationService authorization,
                 ClusterExplorerService clusters,
+                string? view,
                 CancellationToken cancellationToken) =>
             {
-                var authorizedClusterIds = options.Clusters
-                    .Select(cluster => cluster.Id)
-                    .Where(clusterId => authorization.Authorize(
+                var authorizedClusters = options.Clusters
+                    .Where(cluster => authorization.Authorize(
                         context.User,
-                        new AuthorizationRequest(AuthorizationAction.ClusterRead, clusterId)) ==
+                        new AuthorizationRequest(AuthorizationAction.ClusterRead, cluster.Id)) ==
                         KafdeckAuthorizationOutcome.Allowed)
                     .ToArray();
 
+                if (string.Equals(view, "directory", StringComparison.Ordinal))
+                    return Results.Ok(new
+                    {
+                        data = authorizedClusters.OrderBy(cluster => cluster.Id, StringComparer.Ordinal)
+                            .Select(cluster => new { clusterId = cluster.Id, displayName = cluster.DisplayName }).ToArray(),
+                    });
+
                 var projections = await clusters.ListClustersAsync(
-                        authorizedClusterIds,
+                        authorizedClusters.Select(cluster => cluster.Id),
                         cancellationToken)
                     .ConfigureAwait(false);
 
                 return Results.Ok(new
                 {
-                    data = projections.Select(projection => ToClusterEnvelope(projection, authorization, context.User)).ToArray(),
+                    data = projections.Select(projection => ToClusterEnvelope(projection, authorization, context.User, options)).ToArray(),
                 });
             })
             .WithName("v01-clusters-list");
@@ -88,7 +95,7 @@ public static class KafdeckApiEndpoints
                 }
 
                 var projection = await clusters.GetClusterAsync(clusterId, cancellationToken).ConfigureAwait(false);
-                return Results.Ok(ToClusterEnvelope(projection, authorization, context.User));
+                return Results.Ok(ToClusterEnvelope(projection, authorization, context.User, options));
             })
             .WithName("v01-clusters-detail")
             .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId");
@@ -390,12 +397,12 @@ public static class KafdeckApiEndpoints
 
     private static ApiEnvelope<ClusterData> ToClusterEnvelope(
         ClusterProjection projection,
-        KafdeckAuthorizationService? authorization = null,
-        System.Security.Claims.ClaimsPrincipal? principal = null)
+        KafdeckAuthorizationService authorization,
+        System.Security.Claims.ClaimsPrincipal principal,
+        KafdeckOptions options)
     {
         var limitations = ApiObservationMapper.FromCluster(projection.Limitations);
-        var brokers = authorization is null ||
-            authorization.Authorize(
+        var brokers = authorization.Authorize(
                 principal,
                 new AuthorizationRequest(AuthorizationAction.BrokerRead, projection.ClusterId)) ==
                 KafdeckAuthorizationOutcome.Allowed
@@ -408,7 +415,8 @@ public static class KafdeckApiEndpoints
             brokers,
             projection.Health,
             projection.HealthReasons,
-            projection.Failure?.Code);
+            projection.Failure?.Code,
+            options.Clusters.FirstOrDefault(cluster => cluster.Id == projection.ClusterId)?.DisplayName);
 
         return new ApiEnvelope<ClusterData>(
             data,
@@ -438,7 +446,8 @@ public static class KafdeckApiEndpoints
         IReadOnlyList<BrokerProjection> Brokers,
         ClusterHealthState Health,
         IReadOnlyList<ClusterHealthReason> HealthReasons,
-        string? FailureCode);
+        string? FailureCode,
+        string? DisplayName);
 
     private sealed record ClusterHealthData(
         ClusterHealthState Health,

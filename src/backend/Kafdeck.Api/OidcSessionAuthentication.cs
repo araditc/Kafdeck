@@ -74,6 +74,15 @@ public static class KafdeckOidcServiceCollectionExtensions
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = false;
                 options.SessionStore = sessionStore;
+                options.Events.OnValidatePrincipal = context =>
+                {
+                    var managed = context.HttpContext.RequestServices.GetService<ManagedIdentityStore>();
+                    if (managed is not null &&
+                        (!OperatorSessionContextFactory.TryCreate(context.Principal, out var session) || session is null ||
+                         !ManagedIdentityStore.SessionAllowed(managed.Find(session), session)))
+                        context.RejectPrincipal();
+                    return Task.CompletedTask;
+                };
             })
             .AddOpenIdConnect(KafdeckOidcDefaults.OidcScheme, options =>
             {
@@ -144,6 +153,11 @@ public static class KafdeckOidcServiceCollectionExtensions
 
                 options.Events = new OpenIdConnectEvents
                 {
+                    OnRedirectToIdentityProviderForSignOut = context =>
+                    {
+                        context.ProtocolMessage.ClientId = oidc.ClientId;
+                        return Task.CompletedTask;
+                    },
                     OnRemoteFailure = async context =>
                     {
                         var audit = context.HttpContext.RequestServices.GetRequiredService<ISecurityAuditSink>();
@@ -487,7 +501,7 @@ public static class OidcReturnUrlPolicy
 
 public static class KafdeckOidcEndpointExtensions
 {
-    public static WebApplication MapKafdeckOidcSessionEndpoints(this WebApplication app)
+    public static WebApplication MapKafdeckOidcSessionEndpoints(this WebApplication app, bool connectionWorkspace = false)
     {
         ArgumentNullException.ThrowIfNull(app);
 
@@ -502,6 +516,7 @@ public static class KafdeckOidcEndpointExtensions
 
         app.MapGet("/api/v1/auth/session", (HttpContext context) =>
         {
+            context.Response.Headers.CacheControl = "no-store";
             if (!OperatorSessionContextFactory.TryCreate(context.User, out var session) || session is null)
             {
                 return Results.Problem(
@@ -510,6 +525,10 @@ public static class KafdeckOidcEndpointExtensions
                     title: "Operator authentication required");
             }
 
+            var managed = context.RequestServices.GetService<ManagedIdentityStore>();
+            var user = managed?.Find(session);
+            var policyFingerprint = context.RequestServices.GetService<KafdeckAuthorizationService>()?.PolicyFingerprint;
+            if (user is not null) policyFingerprint += ":" + user.Role + ":" + string.Join(",", user.ClusterIds);
             return Results.Ok(new
             {
                 authenticated = true,
@@ -517,8 +536,12 @@ public static class KafdeckOidcEndpointExtensions
                 displayName = session.Identity.DisplayName,
                 email = session.Identity.Email,
                 authenticatedAt = session.AuthenticatedAtUtc,
-                sessionScope = OperatorSessionUiScope.Create(session,
-                    context.RequestServices.GetService<KafdeckAuthorizationService>()?.PolicyFingerprint),
+                recentConnectionScope = connectionWorkspace ? KafkaConnectionWorkspace.RecentScope(session.Identity.Key) : null,
+                sessionScope = OperatorSessionUiScope.Create(session, policyFingerprint),
+                canManageUsers = user?.Role == "owner",
+                managedClusterManager = user?.Role == "manager",
+                canRegisterKafkaConnections = user?.Role == "owner" && context.RequestServices
+                    .GetRequiredService<IConfiguration>().GetSection("Kafdeck:ConnectionWorkspace:RegistrationNetworks").GetChildren().Any(),
             });
         }).WithName("v02-auth-session");
 

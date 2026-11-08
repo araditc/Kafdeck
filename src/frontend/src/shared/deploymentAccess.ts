@@ -35,3 +35,7 @@ export function withDeploymentAccessToken(
 export function clearDeploymentAccessToken() {
   inMemoryDeploymentAccessToken = null;
 }
+
+export function setDeploymentAccessToken(token: string) {
+  inMemoryDeploymentAccessToken = token;
+}
