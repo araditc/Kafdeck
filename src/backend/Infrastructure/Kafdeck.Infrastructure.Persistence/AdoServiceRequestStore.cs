@@ -254,7 +254,14 @@ public sealed class AdoServiceRequestStore(IMutationDbConnectionFactory connecti
     private static bool IsTerminal(ServiceRequestState state)=>state is ServiceRequestState.Rejected or ServiceRequestState.Cancelled;
     private Task Generation(DbConnection db,DbTransaction tx,CancellationToken token)=>generationGate?.ValidateAsync(db,tx,token)??Task.CompletedTask;
     private async Task<T> Read<T>(Func<DbConnection,DbTransaction,Task<T>> body,CancellationToken token)
-    {await using var db=await connections.OpenAsync(token).ConfigureAwait(false);await using var tx=await db.BeginTransactionAsync(token).ConfigureAwait(false);await Generation(db,tx,token).ConfigureAwait(false);var value=await body(db,tx).ConfigureAwait(false);await tx.CommitAsync(token).ConfigureAwait(false);return value;}
+    {
+        await using var db = await connections.OpenAsync(token).ConfigureAwait(false);
+        await using var tx = await db.BeginTransactionAsync(token).ConfigureAwait(false);
+        if (generationGate is not null) await generationGate.ValidateReadAsync(db, tx, token).ConfigureAwait(false);
+        var value = await body(db, tx).ConfigureAwait(false);
+        await tx.CommitAsync(token).ConfigureAwait(false);
+        return value;
+    }
     private static Task<ServiceRequestRecord?> Load(DbConnection db,DbTransaction tx,string id,CancellationToken token,bool locked=false)=>LoadJson<ServiceRequestRecord>(db,tx,"SELECT body FROM service_request_heads WHERE request_id=@id"+(locked&&db is Npgsql.NpgsqlConnection?" FOR UPDATE":""),token,("@id",id));
     private static Task<int> SaveRevision(DbConnection db,DbTransaction tx,ServiceRequestRecord row,CancellationToken token)=>Run(db,tx,"INSERT INTO service_request_revisions(request_id,revision,body) VALUES(@id,@r,@body)",token,("@id",row.RequestId),("@r",row.Revision),("@body",Serialize(row)));
     private async Task<DateTimeOffset> Now(DbConnection db,DbTransaction tx,CancellationToken token)

@@ -30,6 +30,8 @@ public sealed class V09GovernanceGenerationTests
         var previous = Guid.NewGuid(); var next = Guid.NewGuid();
         var oldWorker = new AdoGovernanceGenerationGate(factory, previous);
         await oldWorker.InitializeAsync();
+        if (factory.SupportsSelectForUpdate)
+            await ProvePostgreSqlSharedReadFenceAsync(factory, oldWorker);
         var disabled = new AdoGovernanceGenerationGate(factory, null);
         await Assert.ThrowsAsync<GovernanceGenerationException>(() => disabled.InitializeAsync());
         var replacement = new AdoGovernanceGenerationGate(factory, next);
@@ -42,5 +44,28 @@ public sealed class V09GovernanceGenerationTests
         await replacement.ValidateAsync(connection, transaction, CancellationToken.None);
         await transaction.RollbackAsync();
         await Assert.ThrowsAsync<GovernanceGenerationException>(() => replacement.AdmitRestoredGenerationAsync(previous, next, new string('a', 64), new string('b', 64)));
+    }
+
+    private static async Task ProvePostgreSqlSharedReadFenceAsync(IMutationDbConnectionFactory factory, AdoGovernanceGenerationGate gate)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var token = deadline.Token;
+        await using var first = await factory.OpenAsync(token);
+        await using var heldRead = await first.BeginTransactionAsync(token);
+        await gate.ValidateReadAsync(first, heldRead, token);
+
+        await using var second = await factory.OpenAsync(token);
+        await using var concurrentRead = await second.BeginTransactionAsync(token);
+        await gate.ValidateReadAsync(second, concurrentRead, token);
+        await concurrentRead.CommitAsync(token);
+
+        await using var writer = await second.BeginTransactionAsync(token);
+        await using var update = second.CreateCommand();
+        update.Transaction = writer;
+        update.CommandText = "SET LOCAL lock_timeout='250ms'; UPDATE governance_deployment_generation SET revision=revision+1 WHERE singleton_id=1";
+        var blocked = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => update.ExecuteNonQueryAsync(token));
+        Assert.Equal(Npgsql.PostgresErrorCodes.LockNotAvailable, blocked.SqlState);
+        await writer.RollbackAsync(token);
+        await heldRead.CommitAsync(token);
     }
 }

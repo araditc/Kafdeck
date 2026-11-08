@@ -9,6 +9,8 @@ public interface IGovernanceGenerationTransactionGate
 {
     string? DeploymentGeneration => null;
     Task ValidateAsync(DbConnection connection, DbTransaction transaction, CancellationToken token);
+    Task ValidateReadAsync(DbConnection connection, DbTransaction transaction, CancellationToken token) =>
+        ValidateAsync(connection, transaction, token);
 }
 
 public sealed class GovernanceGenerationException() : InvalidOperationException("Governance deployment generation is not admitted.");
@@ -36,12 +38,20 @@ public sealed class AdoGovernanceGenerationGate(IMutationDbConnectionFactory con
         await transaction.CommitAsync(token).ConfigureAwait(false);
     }
 
-    public async Task ValidateAsync(DbConnection connection, DbTransaction transaction, CancellationToken token)
+    public Task ValidateAsync(DbConnection connection, DbTransaction transaction, CancellationToken token) =>
+        ValidateAsync(connection, transaction, readOnly: false, token);
+
+    public Task ValidateReadAsync(DbConnection connection, DbTransaction transaction, CancellationToken token) =>
+        ValidateAsync(connection, transaction, readOnly: true, token);
+
+    private async Task ValidateAsync(DbConnection connection, DbTransaction transaction, bool readOnly, CancellationToken token)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT generation FROM governance_deployment_generation WHERE singleton_id=1" +
-            (connections.SupportsSelectForUpdate ? " FOR UPDATE" : "");
+        command.CommandText = "SELECT generation FROM governance_deployment_generation WHERE singleton_id=1";
+        // A PostgreSQL share lock allows concurrent reads and still blocks the restore UPDATE.
+        if (connections.SupportsSelectForUpdate)
+            command.CommandText += readOnly ? " FOR SHARE" : " FOR UPDATE";
         var value = await command.ExecuteScalarAsync(token).ConfigureAwait(false);
         if (value is null or DBNull)
         {
