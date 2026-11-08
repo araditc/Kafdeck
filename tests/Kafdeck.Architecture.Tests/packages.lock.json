@@ -222,23 +222,23 @@
       "kafdeck": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )"
         }
       },
       "kafdeck.api": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Ecosystem": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Kafka": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Persistence": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Security": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )",
-          "Kafdeck.Modules.Clusters": "[0.8.0, )",
-          "Kafdeck.Modules.Consumers": "[0.8.0, )",
-          "Kafdeck.Modules.Schemas": "[0.8.0, )",
-          "Kafdeck.Modules.Topics": "[0.8.0, )",
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Ecosystem": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Kafka": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Persistence": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Security": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )",
+          "Kafdeck.Modules.Clusters": "[0.9.0, )",
+          "Kafdeck.Modules.Consumers": "[0.9.0, )",
+          "Kafdeck.Modules.Schemas": "[0.9.0, )",
+          "Kafdeck.Modules.Topics": "[0.9.0, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.13, )",
           "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.20.0, )",
           "OpenTelemetry.Extensions.Hosting": "[1.20.0, )"
@@ -250,31 +250,31 @@
       "kafdeck.infrastructure.configuration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )"
         }
       },
       "kafdeck.infrastructure.ecosystem": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.infrastructure.kafka": {
         "type": "Project",
         "dependencies": {
           "Confluent.Kafka": "[2.16.0, )",
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.infrastructure.persistence": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Modules.Administration": "[0.8.0, )",
-          "Kafdeck.Modules.Connect": "[0.8.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )",
+          "Kafdeck.Modules.Connect": "[0.9.0, )",
           "Microsoft.Data.Sqlite": "[10.0.13, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -284,84 +284,84 @@
         "dependencies": {
           "Apache.Avro": "[1.12.2, )",
           "Google.Protobuf": "[3.36.2, )",
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.infrastructure.security": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.infrastructure.serde": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )"
         }
       },
       "kafdeck.mcp": {
         "type": "Project",
         "dependencies": {
-          "kafdeck": "[0.8.0, )"
+          "kafdeck": "[0.9.0, )"
         }
       },
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )"
         }
       },
       "kafdeck.modules.clusters": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )"
         }
       },
       "kafdeck.modules.connect": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.modules.consumers": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.modules.generator": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )",
-          "Kafdeck.Modules.Records": "[0.8.0, )",
-          "Kafdeck.Modules.Schemas": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )",
+          "Kafdeck.Modules.Records": "[0.9.0, )",
+          "Kafdeck.Modules.Schemas": "[0.9.0, )"
         }
       },
       "kafdeck.modules.records": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.modules.schemas": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "kafdeck.modules.topics": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.8.0, )",
-          "Kafdeck.Modules.Administration": "[0.8.0, )"
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
         }
       },
       "Apache.Avro": {
