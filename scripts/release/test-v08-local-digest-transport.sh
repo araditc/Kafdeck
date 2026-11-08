@@ -34,12 +34,7 @@ for kind in accepted foreign; do
 done
 archive="$root/candidate.tar.gz"
 docker image save "kafdeck-g6-accepted:$GITHUB_RUN_ID" | gzip -n > "$archive"
-# Docker's containerd store reports a manifest/index digest as .Id. The
-# digest-only transport contract instead binds the fixture's config bytes.
-config_entry="$(tar -xOzf "$archive" manifest.json | jq -er 'if length == 1 then .[0].Config else error("Expected one fixture image") end')"
-[[ "$config_entry" =~ ^([0-9a-f]{64}\.json|blobs/sha256/[0-9a-f]{64})$ ]]
-accepted_id="sha256:$(tar -xOzf "$archive" "$config_entry" | sha256sum | cut -d' ' -f1)"
-[[ "$config_entry" == "${accepted_id#sha256:}.json" || "$config_entry" == "blobs/sha256/${accepted_id#sha256:}" ]]
+accepted_id="$(bash scripts/release/docker-archive-config-digest.sh "$archive")"
 bash scripts/release/convert-v08-publication-image.sh "$archive" "$accepted_id" "$root/layout"
 digest="$(cat "$root/layout/manifest-digest.txt")"
 repo="$endpoint/fixture"
