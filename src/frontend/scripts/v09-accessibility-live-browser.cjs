@@ -184,7 +184,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       }
     }
     phase='keyboard-catalog-navigation-'+locale;
-    await openPanel(page,'Ownership catalog','ownership-catalog');await catalog.locator('fieldset:enabled').waitFor();
+    await openPanel(page,'Ownership catalog','ownership-catalog');
+    await page.waitForFunction(()=>document.querySelector('#ownership-catalog fieldset')?.disabled===false);
     await manualPause(page,'before-actions');
     phase='keyboard-skip-main-'+locale;const beforeSkip=new URL(page.url()).hash;
     await probe.activate(page,page.getByRole('link',{name:local('Skip to main content'),exact:true}),'skip-to-main');
@@ -220,7 +221,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const ready=await handshake('catalog-applied-'+locale,{operationId,previewHash:currentPlan.operation.previewHash,catalogRecordId:currentPlan.changes[0].id});assert.equal(ready.operationId,operationId);scenario.unknownCatalogOperationId=operationId;
     }
     phase='keyboard-request-draft';const target=await boundEffect(),expiry=new Date(Math.min(Date.parse(target.previewExpiresAtUtc)-1000,scenario.requestExpirySeconds?Date.now()+scenario.requestExpirySeconds*1000:Infinity)).toISOString();
-    await openPanel(page,'Requests','service-requests');await requests.locator('fieldset:enabled').waitFor();
+    await openPanel(page,'Requests','service-requests');
+    await page.waitForFunction(()=>document.querySelector('#service-requests fieldset')?.disabled===false);
     await probe.text(page,label(requests,'Existing immutable effect operation ID'),target.operationId,'bound-operation');
     await probe.text(page,label(requests,'Request expiry UTC (ISO8601 ending in Z)'),expiry,'invariant-utc-expiry');await probe.text(page,label(requests,'Business reason'),'W79 keyboard exact immutable revision','business-reason');
     await requestAction(page,button(requests,'Preview governed request change'),'/requests/changes/preview');review=article(requests);await applied(page,review);
@@ -295,6 +297,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     phase='durable-unknown-read';if(scenario.unknownCatalogOperationId){
       const unknown=await get(context,'/api/v1/governance/catalog/operations/'+encodeURIComponent(scenario.unknownCatalogOperationId));assert.equal(unknown.operation.state,'executionUnknown');
       await openPanel(page,'Ownership catalog','ownership-catalog');
+      await probe.activate(page,dynamicButton(catalog,'Inspect',escapedName),'reopen-created-catalog-record');
+      assert.equal(await label(catalog,'Name').inputValue(),escapedName);
       await probe.text(page,label(catalog,'Existing catalog operation ID'),scenario.unknownCatalogOperationId,'unknown-same-operation-id');await probe.activate(page,button(catalog,'Inspect frozen catalog operation'),'unknown-inspect-same');
       const unknownReview=article(catalog);await unknownReview.getByText(local('Execution outcome is unknown. Do not retry blindly; inspect positive evidence and reconcile before any follow-up.'),{exact:true}).waitFor();assert.equal(await button(unknownReview,'Execute reviewed operation').isDisabled(),true);assert.equal(await button(catalog,'Create key for an intentionally new catalog request').isDisabled(),true);result.keyboardActualDurableUnknownInspected=true;
       await probe.scan(page,locale+'-durable-unknown',output);

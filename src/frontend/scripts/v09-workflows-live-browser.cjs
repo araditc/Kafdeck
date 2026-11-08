@@ -81,7 +81,12 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       Object.assign(result,{realMeasuredWindowRendered:true,realSourceProvenance:true,invariantDecimalEstimateVerified:true,realHighRateVersionAndActivationUi:true,historicalRateBindingPreserved:true,metricsAcquisitionRequiresProducerVerification:true});
     }
     phase='current-session-cross-scope-denial';const deniedPath=scenario.kind==='request'?'/api/v1/governance/requests?clusterId=forbidden&pageSize=50':'/api/v1/governance/rate-cards/state?clusterId=forbidden';const denied=await context.request.get(new URL(deniedPath,api).href);assert.ok([403,404].includes(denied.status()));result.genuineSessionCrossScopeDenied=true;
-    phase='session-logout-clears-workflows';await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('heading',{name:'Sign in to Kafdeck',exact:true}).waitFor();await page.locator('#service-requests').waitFor({state:'hidden'});await page.locator('#governance-attribution').waitFor({state:'hidden'});result.logoutClearsWorkflowState=true;
+    phase='session-logout-clears-workflows';
+    const logout=page.waitForResponse(response=>response.request().method()==='POST'&&response.url()===new URL('/api/v1/auth/logout',api).href);logout.catch(()=>{});
+    await page.getByRole('button',{name:'Sign out',exact:true}).click();
+    assert.ok((await logout).status()<400);
+    const signedOut=await context.request.get(new URL('/api/v1/auth/session',api).href);assert.equal(signedOut.status(),401);
+    await page.locator('#service-requests').waitFor({state:'hidden'});await page.locator('#governance-attribution').waitFor({state:'hidden'});result.logoutClearsWorkflowState=true;
     fs.mkdirSync(path.dirname(evidencePath),{recursive:true});fs.writeFileSync(evidencePath,JSON.stringify(result,null,2));console.log('V09_GENUINE_WORKFLOW_BROWSER_PASSED kind='+scenario.kind);await context.close();
   }catch{
     // Record only a closed phase/status and an authenticated application screenshot; never identity-page fields, URLs, tokens or raw exceptions.
