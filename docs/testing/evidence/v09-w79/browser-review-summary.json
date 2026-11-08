@@ -1,0 +1,362 @@
+{
+  "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "status": "complete-exact-head-automated-proof-manual-record-open",
+  "g2Run": 42262340971,
+  "g2Link": "https://github.com/araditc/Kafdeck/actions/runs/42262340971",
+  "workflowCounts": {
+    "success": 13,
+    "unexpectedFailure": 0,
+    "missingObservedATRecordGateFailure": 1
+  },
+  "g2JobsSuccess": 7,
+  "observedATGate": {
+    "run": 42262341040,
+    "missingRecordFailureVerified": true,
+    "job": 128045241988,
+    "relabelledAsSuccess": false,
+    "failure": "W79 admission remains open: the complete observed AT record has not been supplied."
+  },
+  "artifacts": {
+    "live": {
+      "archiveBytes": 63217884,
+      "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+      "id": 13526668496,
+      "sha256": "7e32fb04b8b24dd8f1415f5cd81603736ac9315efda344501d92f58180073040"
+    },
+    "g4-packages": {
+      "archiveBytes": 35406556,
+      "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+      "id": 13525834543,
+      "sha256": "6f14a0f32a2a573f2d431071333595b57471a1188f11947519e3f07595becfff"
+    },
+    "pg-restore": {
+      "archiveBytes": 22213,
+      "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+      "id": 13525561501,
+      "sha256": "f31d80e6b6436b0cf3b815257d5797874c4789adeccda8073bf16f00b0c1027a"
+    },
+    "pg-fencing": {
+      "archiveBytes": 52981,
+      "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+      "id": 13524998636,
+      "sha256": "2e80851f3c4f1c828078ac57367e3d4c30cb3eea8bf329d377ce8e4a306ce495"
+    },
+    "keycloak-ha": {
+      "archiveBytes": 2089,
+      "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+      "id": 13525646189,
+      "sha256": "9462faaaa49d1397af90ecd67ba065a01b75dc1bbc0027f3f9da6222e6b8848a"
+    }
+  },
+  "strictTrx": {
+    "keycloak-ha/ha-replay.trx": {
+      "total": 1,
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "live/g2-ci/g2-live.trx": {
+      "total": 297,
+      "executed": 297,
+      "passed": 297,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "live/g2-ci/v09-live.trx": {
+      "total": 134,
+      "executed": 134,
+      "passed": 134,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "live/g4-ci/g4-live.trx": {
+      "total": 40,
+      "executed": 40,
+      "passed": 40,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "live/g5-ci/g5-compensation.trx": {
+      "total": 2,
+      "executed": 2,
+      "passed": 2,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "live/g5-ci/g5-regression.trx": {
+      "total": 272,
+      "executed": 272,
+      "passed": 272,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "pg-fencing/postgres-live.trx": {
+      "total": 181,
+      "executed": 181,
+      "passed": 181,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "pg-restore/recovery-live.trx": {
+      "total": 60,
+      "executed": 60,
+      "passed": 60,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "pg-restore/v09-recovery-live.trx": {
+      "total": 4,
+      "executed": 4,
+      "passed": 4,
+      "failed": 0,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    }
+  },
+  "strictRetainedTrxTestsPassed": 991,
+  "strictRetainedTrxFailuresErrorsSkipped": 0,
+  "w79Automated": {
+    "observedSourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+    "compiledAssets": {
+      "css": "41c049e27217b33a18a241a637f25ef997de957d424bf7391c29ad0bcb286b95",
+      "js": "17fbcfc03f4cf68a599281e0da1d88e5b2bb4f5d8dc2cced9a8cad90289cee06"
+    },
+    "provenance": "Fresh actual current-head CI artifacts; no historical observations relabelled",
+    "scanCount": 44,
+    "allDocumentsEqualViewport": true,
+    "postAxeColorBindings": 954,
+    "minimumIntrinsicTextContrast": 4.5821947440494535,
+    "bindingsBelow4_5": 0,
+    "enabledBindingsBelow4_5": 0,
+    "incompleteReasons": {
+      "Fix any of the following:\n  Element's background color could not be determined due to a background image": 88,
+      "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element": 854,
+      "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements": 6,
+      "Fix any of the following:\n  Element content is too short to determine if it is actual text content": 6
+    },
+    "focusTargets": 288,
+    "reverseChecks": 284,
+    "firstDocumentEntries": 4,
+    "browserEmulatedPreferences": 24,
+    "proofByDatabase": {
+      "sqlite": {
+        "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+        "sourceWorktreeDirtyAsRecorded": true,
+        "compiledAssets": [
+          {
+            "file": "index-BooQHdsW.css",
+            "sha256": "41c049e27217b33a18a241a637f25ef997de957d424bf7391c29ad0bcb286b95"
+          },
+          {
+            "file": "index-DoGXloBW.js",
+            "sha256": "17fbcfc03f4cf68a599281e0da1d88e5b2bb4f5d8dc2cced9a8cad90289cee06"
+          }
+        ],
+        "scans": 22,
+        "violations": 0,
+        "allDocumentsEqualViewport": true,
+        "readViewCopyChecks": 16,
+        "automationCopyChecks": 8,
+        "verifiedTrueChecks": [
+          "stableOpaqueActorScope",
+          "distinctHumanOpaqueScopes",
+          "catalogKeyboardAppliedAndHistory",
+          "requesterSelfDecisionDenied",
+          "keyboardDraftSubmitDistinctHumanApprove",
+          "approvedBusinessAndKernelGatesAllowExplicitDispatch",
+          "localePreservesFrozenMaterialAndMakesNoMutation",
+          "actualExpiryObservedBeforeReplan",
+          "keyboardExplicitRevisionInvalidatesOldDecision",
+          "keyboardActualDurableUnknownInspected",
+          "keyboardActualUnknownPositiveReceiptRecovery",
+          "actualAuthenticatedRecoveryRepeatedWithoutDuplicateHistory",
+          "actualUnsupportedLocaleFallsBackToEnglish"
+        ],
+        "mandatoryMissing": [
+          "headed actual native window focus and session revalidation proof: en",
+          "headed actual native window focus and session revalidation proof: fa",
+          "observed English and Persian actual screen-reader full journeys (separate manual log)"
+        ],
+        "localeRoundTripCount": 4
+      },
+      "postgres": {
+        "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+        "sourceWorktreeDirtyAsRecorded": true,
+        "compiledAssets": [
+          {
+            "file": "index-BooQHdsW.css",
+            "sha256": "41c049e27217b33a18a241a637f25ef997de957d424bf7391c29ad0bcb286b95"
+          },
+          {
+            "file": "index-DoGXloBW.js",
+            "sha256": "17fbcfc03f4cf68a599281e0da1d88e5b2bb4f5d8dc2cced9a8cad90289cee06"
+          }
+        ],
+        "scans": 22,
+        "violations": 0,
+        "allDocumentsEqualViewport": true,
+        "readViewCopyChecks": 16,
+        "automationCopyChecks": 8,
+        "verifiedTrueChecks": [
+          "stableOpaqueActorScope",
+          "distinctHumanOpaqueScopes",
+          "catalogKeyboardAppliedAndHistory",
+          "requesterSelfDecisionDenied",
+          "keyboardDraftSubmitDistinctHumanApprove",
+          "approvedBusinessAndKernelGatesAllowExplicitDispatch",
+          "localePreservesFrozenMaterialAndMakesNoMutation",
+          "actualExpiryObservedBeforeReplan",
+          "keyboardExplicitRevisionInvalidatesOldDecision",
+          "keyboardActualDurableUnknownInspected",
+          "keyboardActualUnknownPositiveReceiptRecovery",
+          "actualAuthenticatedRecoveryRepeatedWithoutDuplicateHistory",
+          "actualUnsupportedLocaleFallsBackToEnglish"
+        ],
+        "mandatoryMissing": [
+          "headed actual native window focus and session revalidation proof: en",
+          "headed actual native window focus and session revalidation proof: fa",
+          "observed English and Persian actual screen-reader full journeys (separate manual log)"
+        ],
+        "localeRoundTripCount": 4
+      }
+    },
+    "limits": [
+      "Recorded-color software compositing includes ancestor opacity; background images, clipping/overlap, antialiasing and actual visual judgment remain separate.",
+      "Browser-emulated preferences are not physical Windows OS settings.",
+      "Fresh PNG inventory is prepared for AI visual review; no human, actual AT, pronunciation or community translation approval.",
+      "All 11 acceptance cells remain pending their required separately observed evidence."
+    ]
+  },
+  "packages": {
+    "terraformInternalDigestsVerified": 5,
+    "terraform": [
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_darwin_amd64.zip",
+        "sha256": "cc68890f39837362ba50624f889d40500aa818776cfeb33c3e9d924c234fd5fb"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_darwin_arm64.zip",
+        "sha256": "ad3869fd1e954ce9521320dff5d85ac141a77255a600c61d4e40c98c4d098f49"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_linux_amd64.zip",
+        "sha256": "f61c8820a93919ae3e876a81d55eeccbe1e726d84fe057725ef5ac0eebba6ac6"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_linux_arm64.zip",
+        "sha256": "4aa581ced02323250d2d9c6df14ee19553a15ddf903b4b3658f33436d2dbea60"
+      },
+      {
+        "file": "terraform-provider-kafdeck_0.8.0_windows_amd64.zip",
+        "sha256": "c1c4161cb560d6e0992ea9404af118ecc86a0fa69081d903f457f4db5ae11876"
+      }
+    ],
+    "mcpNupkgPresent": true,
+    "mcpSha256": "e5281266729a624f45bee7276c73fd3022af6a54be2b0419ce493482337aeefb",
+    "published": false
+  },
+  "currentHeadChecksFresh": true,
+  "olderChecksRelabelledAsCurrent": false,
+  "manualATClaimedByThisReview": false,
+  "completeObservedManualRecordPresent": false,
+  "newCurrentPngHumanVisualReviewClaimed": false
+}

@@ -1,0 +1,15 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 166145,
+  "endByte": 185402,
+  "rawLogSha256": "2254dc8b3c4ea4a6774550d058226459e90398bf8bbc65e6f2448f31691d3771",
+  "locale": "en",
+  "stage": "unknown",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'نتیجه اجرا نامعلوم است. کورکورانه تکرار نکنید؛ پیش از هر اقدام بعدی شواهد مثبت را بررسی و تطبیق کنید. ']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Execution outcome is unknown. Do not retry blindly; inspect positive evidence and reconcile before any follow-up. ']"
+  ]
+}

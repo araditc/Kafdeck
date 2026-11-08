@@ -1,0 +1,15 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 9560,
+  "endByte": 32036,
+  "rawLogSha256": "1a48bf2087d5745204ee72b0295061a219908c48cf1dac326ebc7bb3dc04cb98",
+  "locale": "en",
+  "stage": "before-actions",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'English', 'Kafdeck', 'Open Source Kafka Control Plane', 'same page', 'link', 'heading', 'level 1']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Skip to main content', 'same page', 'link']"
+  ]
+}

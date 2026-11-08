@@ -1,0 +1,17 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 95532,
+  "endByte": 105079,
+  "rawLogSha256": "ac108b08ec7be74a3bb9d9e4b4612366cc0be83105a23fc8d096061cca3da1f3",
+  "locale": "en",
+  "stage": "reviewer-before-approval",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'Business reason', 'edit', CancellableSpeech (still valid), 'selected W79 typed field survives real window return']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Preview governed request change', 'button']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Business reason', 'edit', CancellableSpeech (still valid), 'selected W79 keyboard exact immutable revision']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Review exact operation', 'heading', 'level 3']"
+  ]
+}

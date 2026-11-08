@@ -1,0 +1,60 @@
+{
+  "locale": "en",
+  "stage": "reviewer-before-approval",
+  "requestId": "be50802fb8f44f59015e4a48a9ab6514",
+  "actor": "reviewer",
+  "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "browserVersion": "156.0.8078.80",
+  "authenticatedApplication": true,
+  "inputSource": "Playwright Chromium keyboard",
+  "keyboardInputMethod": "Playwright keyboard: Tab/Shift+Tab, Alt+ArrowDown, Enter, Space, Home, ArrowDown and typed text",
+  "manualActionDelayMs": 1500,
+  "keyboardActionRange": {
+    "from": 29,
+    "to": 36
+  },
+  "keyboardActionsSincePrevious": [
+    {
+      "label": "self-approve-command",
+      "tabs": 4,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "activate-preview",
+      "tabs": 4,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "independent-request-reload",
+      "tabs": 45,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "independent-inspect",
+      "tabs": 2,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "independent-approve-command",
+      "tabs": 6,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "approval-reason",
+      "tabs": 1,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "activate-preview",
+      "tabs": 3,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    }
+  ]
+}

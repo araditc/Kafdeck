@@ -1,0 +1,10 @@
+{
+  "syntheticFocusEvents": false,
+  "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "locale": "en",
+  "direction": "away",
+  "nativeActionConfirmedByRoot": true,
+  "observedAtUtc": "2026-11-08T05:33:08.8183104+00:00",
+  "method": "SKY.activate_window after physical focus of original field",
+  "nativeWindowId": 330390
+}

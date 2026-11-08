@@ -1,0 +1,30 @@
+{
+  "locale": "fa",
+  "profile": "headed",
+  "actualWindowSwitch": true,
+  "nativeEventsVerified": true,
+  "sessionHttpStatus": 200,
+  "opaqueScopeStable": true,
+  "selectedMaterialAndInputsPreserved": true,
+  "originalInputNodeAndFocusPreserved": true,
+  "actualWindowEvents": [
+    {
+      "event": "initial",
+      "elapsedMs": 188138.39999997616,
+      "documentHasFocus": true,
+      "visibility": "visible"
+    },
+    {
+      "event": "blur",
+      "elapsedMs": 226639.79999995232,
+      "documentHasFocus": false,
+      "visibility": "visible"
+    },
+    {
+      "event": "focus",
+      "elapsedMs": 232848.29999995232,
+      "documentHasFocus": true,
+      "visibility": "visible"
+    }
+  ]
+}

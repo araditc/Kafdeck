@@ -1,0 +1,47 @@
+{
+  "locale": "en",
+  "stage": "unknown",
+  "operationId": "8601e8e0-fa86-3ca0-63e6-1e0e22ab1054",
+  "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "browserVersion": "156.0.8078.80",
+  "authenticatedApplication": true,
+  "inputSource": "Playwright Chromium keyboard",
+  "keyboardInputMethod": "Playwright keyboard: Tab/Shift+Tab, Alt+ArrowDown, Enter, Space, Home, ArrowDown and typed text",
+  "manualActionDelayMs": 1500,
+  "keyboardActionRange": {
+    "from": 59,
+    "to": 64
+  },
+  "keyboardActionsSincePrevious": [
+    {
+      "label": "unknown-same-operation-id",
+      "tabs": 87,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "unknown-inspect-same",
+      "tabs": 1,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "unknown-preserved-review-acknowledgment",
+      "tabs": 4,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "unknown-frozen-operation-switch-fa",
+      "tabs": 80,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "unknown-frozen-operation-switch-en",
+      "tabs": 0,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    }
+  ]
+}

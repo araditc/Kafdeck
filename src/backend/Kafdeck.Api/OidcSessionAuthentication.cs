@@ -517,6 +517,8 @@ public static class KafdeckOidcEndpointExtensions
                 displayName = session.Identity.DisplayName,
                 email = session.Identity.Email,
                 authenticatedAt = session.AuthenticatedAtUtc,
+                sessionScope = OperatorSessionUiScope.Create(session,
+                    context.RequestServices.GetService<KafdeckAuthorizationService>()?.PolicyFingerprint),
             });
         }).WithName("v02-auth-session");
 

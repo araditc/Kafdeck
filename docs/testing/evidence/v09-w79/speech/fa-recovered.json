@@ -1,0 +1,15 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 199145,
+  "endByte": 205617,
+  "rawLogSha256": "0a7ea67e7366bea6f55483110b19602039a9dbdfad25d903fb9f5b14ecb1cf12",
+  "locale": "fa",
+  "stage": "recovered",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'بررسی رسید مثبت؛ بدون ارسال مجدد', 'button']",
+    "Speaking [LangChangeCommand ('fa'), 'سرور همین عملیات دقیق را تأیید کرد. وضعیت فعلی منبع تحت حاکمیت را دوباره بارگیری کنید. ']"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 30463,
+  "endByte": 79794,
+  "rawLogSha256": "c3513981e4ff3f53fef46e4cb16805cd06ed1ea28428f338faa6720fd204d82a",
+  "locale": "fa",
+  "stage": "catalog",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'نام', 'edit', CancellableSpeech (still valid), 'selected w79-28f20509 <w79-escaped>& \" فارسی']",
+    "Speaking [LangChangeCommand ('fa'), 'پیش\\u200cنمایش تغییر دقیق فراداده', 'button']",
+    "Speaking [LangChangeCommand ('fa'), 'Persian', 'تصدیق پیش\\u200cنمایش دقیق', 'button']",
+    "Speaking [LangChangeCommand ('fa'), 'اقدام\\u200cهای تغییر', 'grouping', 'اجرای عملیات بررسی\\u200cشده', 'button']",
+    "Speaking [LangChangeCommand ('fa'), 'سرور همین عملیات دقیق را تأیید کرد. وضعیت فعلی منبع تحت حاکمیت را دوباره بارگیری کنید. ']"
+  ]
+}

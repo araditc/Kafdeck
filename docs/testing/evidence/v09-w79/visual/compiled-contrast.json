@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "kind": "compiled-info-loading-contrast-correction-verification",
+  "observedSourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "verifiedAtUtc": "2026-11-06T17:06:56.754162+00:00",
+  "reviewer": "AI operator",
+  "status": "presentation-contrast-corrected-in-eight-new-compiled-css-cases",
+  "candidateCssInjected": false,
+  "compiledCss": {
+    "file": "index-BooQHdsW.css",
+    "sha256": "41c049e27217b33a18a241a637f25ef997de957d424bf7391c29ad0bcb286b95"
+  },
+  "caseDimensions": {
+    "locale": [
+      "en",
+      "fa"
+    ],
+    "theme": [
+      "light",
+      "dark"
+    ],
+    "viewportWidth": [
+      320,
+      1440
+    ]
+  },
+  "cases": 8,
+  "allEnabledVisible": true,
+  "allDocumentWidthsEqualViewport": true,
+  "lightIntrinsicContrast": 7.230817217830359,
+  "darkIntrinsicContrast": 8.465642210494876,
+  "originalLightPixelContrast": 2.825690380774242,
+  "originalDarkPresentationContrast": 4.473110413308969,
+  "historicalFailurePreserved": {
+    "png": "artifacts/w79-ci-41b5ec4/live/g2-ci/identity/postgres-w79-accessibility-evidence-fa-reduced-motion-320.png",
+    "sha256": "4143740d4da3bd70964d13fb0458a4837281d0fb2c055b8c455eb45940ff8c14",
+    "AIVisualReview": "artifacts/w79-ci-41b5ec4/manual-review/visual-review.json",
+    "AIVisualReviewSha256": "ef62f42cc9738bfc71208a67e37c08999faf44f971e30cef8c50cd97055313c5",
+    "oldArtifactsRelabelledAsCurrent": false
+  },
+  "screenshotsGenerated": 8,
+  "AIViewedScreenshots": [
+    "en-light-320.png",
+    "fa-light-320.png",
+    "en-dark-320.png",
+    "fa-dark-320.png"
+  ],
+  "limits": [
+    "Isolated source-validated presentation fixture with actual NEW compiled CSS only; seeded visible loading status, no authenticated workflow/API/effect proof.",
+    "No native desktop input, reader observation, AT stage acceptance, human/community review, pronunciation approval or whole-product WCAG claim.",
+    "Dark theme here is an isolated stylesheet render; whole-product dark/native popup/physical OS preference/zoom/touch observations remain separate.",
+    "Historical41b PNG failure and AI review remain scoped to the old compiled stylesheet; final current-source workflow/AT record must bind its own production/test/assets fingerprints."
+  ]
+}

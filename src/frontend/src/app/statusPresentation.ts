@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n.js';
 export type UiStatusKind =
   | 'supported'
   | 'current'
@@ -23,72 +24,73 @@ const presentations: Record<UiStatusKind, UiStatusPresentation> = {
   supported: {
     label: 'Supported',
     badgeClass: 'bg-green-lt',
-    description: 'The capability is admitted and supported by current evidence.',
+    description: "The capability is admitted and supported by current evidence.",
   },
   current: {
     label: 'Current',
     badgeClass: 'bg-green-lt',
-    description: 'The observation is current within its bounded freshness contract.',
+    description: "The observation is current within its bounded freshness contract.",
   },
   denied: {
     label: 'Denied',
     badgeClass: 'bg-red-lt',
-    description: 'The current operator or upstream policy denied access.',
+    description: "The current operator or upstream policy denied access.",
   },
   unsupported: {
     label: 'Unsupported',
     badgeClass: 'bg-secondary-lt',
-    description: 'The configured provider does not support this admitted capability.',
+    description: "The configured provider does not support this admitted capability.",
   },
   blocked: {
     label: 'Blocked',
     badgeClass: 'bg-orange-lt',
-    description: 'A lower-level primitive may exist, but Kafdeck will not activate it under the current safety contract.',
+    description: "A lower-level primitive may exist, but Kafdeck will not activate it under the current safety contract.",
   },
   unconfigured: {
     label: 'Unconfigured',
     badgeClass: 'bg-yellow-lt',
-    description: 'No configured provider/profile is available for this capability.',
+    description: "No configured provider/profile is available for this capability.",
   },
   partial: {
     label: 'Partial',
     badgeClass: 'bg-yellow-lt',
-    description: 'Only part of the requested evidence is available.',
+    description: "Only part of the requested evidence is available.",
   },
   stale: {
     label: 'Stale',
     badgeClass: 'bg-yellow-lt',
-    description: 'The evidence exists but is older than the current freshness boundary.',
+    description: "The evidence exists but is older than the current freshness boundary.",
   },
   unavailable: {
     label: 'Unavailable',
     badgeClass: 'bg-orange-lt',
-    description: 'The capability is configured but the bounded observation could not complete.',
+    description: "The capability is configured but the bounded observation could not complete.",
   },
   unknown: {
     label: 'Unknown',
     badgeClass: 'bg-blue-lt',
-    description: 'There is not enough evidence to make a stronger claim.',
+    description: "There is not enough evidence to make a stronger claim.",
   },
   awaitingConfirmation: {
-    label: 'Awaiting confirmation',
+    label: "Awaiting confirmation",
     badgeClass: 'bg-yellow-lt',
-    description: 'A governed preview requires operator confirmation before it can advance.',
+    description: "A governed preview requires operator confirmation before it can advance.",
   },
   awaitingApproval: {
-    label: 'Awaiting approval',
+    label: "Awaiting approval",
     badgeClass: 'bg-orange-lt',
-    description: 'A governed operation requires eligible independent approval before it can advance.',
+    description: "A governed operation requires eligible independent approval before it can advance.",
   },
   externalAction: {
-    label: 'External action required',
+    label: "External action required",
     badgeClass: 'bg-red-lt',
-    description: 'An ambiguous or unresolved external effect requires reconciliation and must not be blindly retried.',
+    description: "An ambiguous or unresolved external effect requires reconciliation and must not be blindly retried.",
   },
 };
 
 export function uiStatusPresentation(kind: UiStatusKind): UiStatusPresentation {
-  return presentations[kind];
+  const presentation = presentations[kind];
+  return { ...presentation, label: t(presentation.label), description: t(presentation.description) };
 }
 
 

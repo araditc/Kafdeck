@@ -1,0 +1,17 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 107457,
+  "endByte": 117604,
+  "rawLogSha256": "a1ea9c37b163d3d795b3624f0a2cec06e531a2f0691215206f4ba0b98b81cd04",
+  "locale": "fa",
+  "stage": "reviewer-before-approval",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'دلیل کسب\\u200cوکار', 'edit', CancellableSpeech (still valid), 'selected W79 typed field survives real window return']",
+    "Speaking [LangChangeCommand ('fa'), 'پیش\\u200cنمایش تغییر درخواست تحت حاکمیت', 'button']",
+    "Speaking [LangChangeCommand ('fa'), 'دلیل کسب\\u200cوکار', 'edit', CancellableSpeech (still valid), 'selected W79 keyboard exact immutable revision']",
+    "Speaking [LangChangeCommand ('fa'), 'بررسی عملیات دقیق', 'heading', 'level 3']"
+  ]
+}

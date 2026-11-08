@@ -1,0 +1,15 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 105079,
+  "endByte": 133304,
+  "rawLogSha256": "1d8c41220a9f280f16880acd6cb1856d4fa624e483a745e608f6d2753a228ebd",
+  "locale": "en",
+  "stage": "approved",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'Business approval is recorded. The linked effect still needs current permissions, confirmation and any independent critical approval. ']",
+    "Speaking [LangChangeCommand ('en_GB'), 'تأیید کسب\\u200cوکار ثبت شده است. اثر مرتبط همچنان به مجوزهای فعلی، تصدیق و هر تأیید بحرانی مستقل نیاز دارد. ']"
+  ]
+}

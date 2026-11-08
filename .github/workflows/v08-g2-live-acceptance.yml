@@ -40,7 +40,7 @@ jobs:
 
   real-human-cli-and-transports:
     runs-on: ubuntu-24.04
-    # W74/W76 add genuine multi-human, measured-window and external-client journeys.
+    # W79 adds both-locale real keyboard/axe journeys; isolated W77 runs in parallel.
     timeout-minutes: 60
     services:
       postgres:
@@ -230,11 +230,18 @@ jobs:
           export KAFDECK_G2_KAFKA_BOOTSTRAP=127.0.0.1:9092
           export KAFDECK_G2_KAFKA_DELETE_CAPABLE=1
           export KAFDECK_V09_REAL_BROWSER=1
+          export KAFDECK_SOURCE_SHA="$(git rev-parse HEAD)"
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --configuration Release --no-build --no-restore \
             --filter 'FullyQualifiedName~V09&FullyQualifiedName!~V09W73CatalogRecoveryTests&FullyQualifiedName!~V09W77' \
             --results-directory artifacts/g2-ci --logger 'trx;LogFileName=v09-live.trx'
-          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/v09-live.trx V09W73CatalogLiveTests:2 V09W75PolicyLiveTests:2 V09W74RequestLiveTests:2 V09W76AttributionLiveTests:2
+          python3 scripts/ci/require-complete-trx.py artifacts/g2-ci/v09-live.trx V09W73CatalogLiveTests:2 V09W75PolicyLiveTests:2 V09W74RequestLiveTests:2 V09W76AttributionLiveTests:2 V09W79AccessibilityLiveTests:2
           for provider in sqlite postgres; do
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w79-accessibility-evidence.json"
+            test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w79-host-evidence.json"
+            python3 -c 'import json,subprocess,sys; p=json.load(open(sys.argv[1])); assert p["sourceSha"] == subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); assert p["actualCompiledUi"] and p["genuineKeycloakBrowserSession"] and not p["apiFixtures"] and not p["tokenInjection"]; assert {j["locale"] for j in p["localeJourneys"]} == {"en","fa"}; assert all(j["catalog"] and j["submit"] and j["approveDistinctHuman"] and j["explicitReplan"] and j["unknown"] for j in p["localeJourneys"]); assert p["actualAuthenticatedRecoveryRepeatedWithoutDuplicateHistory"]; assert p["automatedAccessibility"]["runs"] and all(not r["violations"] for r in p["automatedAccessibility"]["runs"])' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w79-accessibility-evidence.json"
+            python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["genuineKeycloak"] and p["genuineCompiledUiAndApi"] and p["actualKafkaMetadata"] and p["policyAdmittedThroughRealTwoHumanCli"] and not p["fixturePolicySeeding"]; assert p["positiveCatalogReceipts"] == 2 and p["realExpiredRequestLocales"] == 2 and p["recoveredWithoutDuplicateHistory"] and p["deniedLinkedEffectAbsentFromBroker"]' \
+              "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w79-host-evidence.json"
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w73-catalog-evidence.json"
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w75-policy-evidence.json"
             test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/$provider-w74-request-evidence.json"
@@ -335,6 +342,7 @@ jobs:
             artifacts/g4-ci/g4-live.trx
             artifacts/g5-ci/*.trx
             artifacts/g2-ci/identity/*-evidence.json
+            artifacts/g2-ci/identity/*-w79-accessibility-evidence-*.png
             artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.png
             artifacts/g2-ci/identity/sqlite-w73-w75-real-browser-failure.json
             artifacts/g2-ci/identity/sqlite-w74-real-browser-failure.*
