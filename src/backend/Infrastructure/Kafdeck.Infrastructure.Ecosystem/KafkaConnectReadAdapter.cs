@@ -23,17 +23,21 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
     private readonly IReadOnlyDictionary<ConnectRuntimeKey, SemaphoreSlim> _gates;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<ConnectProfileSummary>> _profilesByCluster;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, HttpClient?>? _registeredClient;
+    private readonly SemaphoreSlim _registeredGate;
 
     public KafkaConnectReadAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, HttpClient?>? registeredClient = null)
         : this(
             clusterProfiles,
             secretResolver,
             static (_, _) => new HttpClientHandler { AllowAutoRedirect = false },
             timeProvider,
-            DefaultMaxConcurrencyPerProfile)
+            DefaultMaxConcurrencyPerProfile,
+            registeredClient)
     {
     }
 
@@ -57,7 +61,8 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         SecretResolver secretResolver,
         Func<ClusterProfile, KafkaConnectProfile, HttpMessageHandler> handlerFactory,
         TimeProvider? timeProvider = null,
-        int maxConcurrencyPerProfile = DefaultMaxConcurrencyPerProfile)
+        int maxConcurrencyPerProfile = DefaultMaxConcurrencyPerProfile,
+        Func<string, HttpClient?>? registeredClient = null)
     {
         ArgumentNullException.ThrowIfNull(clusterProfiles);
         ArgumentNullException.ThrowIfNull(secretResolver);
@@ -69,6 +74,8 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         }
 
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _registeredClient = registeredClient;
+        _registeredGate = new SemaphoreSlim(maxConcurrencyPerProfile, maxConcurrencyPerProfile);
 
         var bindings = clusterProfiles
             .SelectMany(cluster =>
@@ -139,11 +146,15 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
 
         if (!_profilesByCluster.TryGetValue(clusterId, out var profiles))
         {
-            return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
-                ReadViewFailureCategory.NotConfigured,
-                "connect_not_configured",
-                "Kafka Connect is not configured for the requested cluster.",
-                false));
+            using var registered = _registeredClient?.Invoke(clusterId);
+            if (registered is null)
+                return Task.FromResult(Failed<IReadOnlyList<ConnectProfileSummary>>(
+                    ReadViewFailureCategory.NotConfigured,
+                    "connect_not_configured",
+                    "Kafka Connect is not configured for the requested cluster.",
+                    false));
+
+            profiles = [new(KafkaConnectProfileSet.DefaultProfileId, true, nameof(KafkaConnectMutationProviderProfile.None))];
         }
 
         if (profiles.Count > operation.MaxItems)
@@ -299,7 +310,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     GetOptionalString(root, "version"),
                     GetOptionalString(root, "commit"),
                     GetOptionalString(root, "kafka_cluster_id"));
-            });
+            }, registeredRead: true);
 
     public Task<ReadViewResult<IReadOnlyList<ConnectConnectorSummary>>> ListConnectorsAsync(
         string clusterId,
@@ -354,7 +365,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                 return names
                     .Select(name => new ConnectConnectorSummary(name))
                     .ToArray();
-            });
+            }, registeredRead: true);
 
     public Task<ReadViewResult<ConnectConnectorDetail>> GetConnectorAsync(
         string clusterId,
@@ -409,8 +420,9 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     normalized,
                     status,
                     config,
-                    operation.MaxItems);
-            });
+                    operation.MaxItems,
+                    includeTrace: !runtime.IsRegistered);
+            }, registeredRead: true);
     }
 
     public void Dispose()
@@ -424,13 +436,15 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         {
             gate.Dispose();
         }
+        _registeredGate.Dispose();
     }
 
     internal static ConnectConnectorDetail ProjectConnector(
         string connectorName,
         JsonElement status,
         JsonElement config,
-        int maxItems)
+        int maxItems,
+        bool includeTrace = true)
     {
         if (status.ValueKind != JsonValueKind.Object ||
             config.ValueKind != JsonValueKind.Object)
@@ -473,7 +487,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     id,
                     GetOptionalString(task, "state") ?? "UNKNOWN",
                     GetOptionalString(task, "worker_id"),
-                    SanitizeTrace(GetOptionalString(task, "trace"))));
+                    includeTrace ? SanitizeTrace(GetOptionalString(task, "trace")) : null));
             }
         }
 
@@ -542,7 +556,8 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         string connectProfileId,
         ReadViewOperationContext operation,
         CancellationToken cancellationToken,
-        Func<HttpReadRuntime, CancellationToken, Task<T>> action)
+        Func<HttpReadRuntime, CancellationToken, Task<T>> action,
+        bool registeredRead = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clusterId);
 
@@ -567,13 +582,11 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         var key = new ConnectRuntimeKey(
             clusterId,
             normalizedProfileId);
-        if (!_runtimes.TryGetValue(key, out var runtime) ||
-            !_gates.TryGetValue(key, out var gate))
+        var isDefault = normalizedProfileId == KafkaConnectProfileSet.DefaultProfileId;
+        var runtime = _runtimes.GetValueOrDefault(key);
+        using var registered = runtime is null && isDefault && registeredRead ? _registeredClient?.Invoke(clusterId) : null;
+        if (runtime is null && registered is null)
         {
-            var isDefault = string.Equals(
-                normalizedProfileId,
-                KafkaConnectProfileSet.DefaultProfileId,
-                StringComparison.Ordinal);
             return Failed<T>(
                 ReadViewFailureCategory.NotConfigured,
                 isDefault
@@ -584,6 +597,8 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
                     : "Kafka Connect profile is not configured for the requested cluster.",
                 false);
         }
+        var gate = runtime is null ? _registeredGate : _gates[key];
+        runtime ??= new HttpReadRuntime(registered!, null, IsRegistered: true);
 
         var gateAcquired = false;
         try
@@ -1028,7 +1043,7 @@ public sealed class KafkaConnectReadAdapter : IConnectReadPort, IDisposable
         }
 
         var normalized = name.Trim();
-        return normalized.Length <= MaxConnectorNameLength &&
+        return normalized is not ("." or "..") && normalized.Length <= MaxConnectorNameLength &&
                !normalized.Any(char.IsControl)
             ? normalized
             : null;

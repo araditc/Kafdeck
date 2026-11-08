@@ -38,8 +38,10 @@ public static class CliReadCommands
             "ControlledSerdeEncodeApiRequest" => Closed(value, ["format", "structuredValue"], DuplicateFree),
             "ConnectPluginValidationRequest" => Closed(value, ["configuration"], configuration => configuration.ValueKind == JsonValueKind.Object &&
                 Closed(configuration, configuration.EnumerateObject().Select(p => p.Name), v => v.ValueKind == JsonValueKind.String)),
-            "KsqlQueryRequestBody" => Closed(value, ["statement", "limits"], v => v.ValueKind != JsonValueKind.Object ? Scalar(v) :
-                Closed(v, ["maxRows", "maxBytes", "maxDurationSeconds"], Scalar)),
+            "KsqlQueryRequestBody" => Closed(value, ["statement", "limits", "offsetReset"], v => v.ValueKind != JsonValueKind.Object ? Scalar(v) :
+                Closed(v, ["maxRows", "maxBytes", "maxDurationSeconds"], Scalar)) &&
+                (!value.TryGetProperty("offsetReset", out var offset) || offset.ValueKind == JsonValueKind.Null ||
+                    offset.ValueKind == JsonValueKind.String && offset.GetString() is "latest" or "earliest"),
             _ => false,
         };
     }

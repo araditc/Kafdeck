@@ -18,11 +18,13 @@ public sealed class ConfluentKafkaAdministrationAdapter : IKafkaAdministrationPo
     public ConfluentKafkaAdministrationAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, IAdminClient?>? registeredClient = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
-            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)));
+            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)),
+            registeredClient);
 
         _timeProvider = timeProvider ?? TimeProvider.System;
     }

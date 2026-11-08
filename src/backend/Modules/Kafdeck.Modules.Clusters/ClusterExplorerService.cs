@@ -87,14 +87,9 @@ public sealed class ClusterExplorerService
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
 
-        var results = new List<ClusterProjection>(ids.Length);
-        foreach (var clusterId in ids)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            results.Add(await GetClusterAsync(clusterId, cancellationToken).ConfigureAwait(false));
-        }
-
-        return results;
+        cancellationToken.ThrowIfCancellationRequested();
+        // The snapshot coordinator already bounds Kafka work globally and per cluster.
+        return await Task.WhenAll(ids.Select(id => GetClusterAsync(id, cancellationToken))).ConfigureAwait(false);
     }
 
     public async Task<ClusterProjection> GetClusterAsync(

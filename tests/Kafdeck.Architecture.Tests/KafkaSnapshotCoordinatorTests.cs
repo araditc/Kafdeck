@@ -153,6 +153,43 @@ public sealed class KafkaSnapshotCoordinatorTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.ObserveAsync("cluster-a", "topics", TimeSpan.FromSeconds(5), Read, cancellation.Token));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Kafka_deadline_during_retry_returns_timeout_or_stale_data(bool hasSnapshot)
+    {
+        var clock = new MutableTestTimeProvider(DateTimeOffset.UtcNow);
+        var coordinator = new KafkaSnapshotCoordinator(
+            new KafkaSnapshotPolicy(operationDeadline: TimeSpan.FromSeconds(1)), clock);
+        var ttl = TimeSpan.FromSeconds(30);
+        if (hasSnapshot)
+        {
+            await coordinator.ObserveAsync("cluster-a", "topics", ttl,
+                (_, _) => Task.FromResult(Success("last-known-good", clock.GetUtcNow())));
+            clock.Advance(ttl + TimeSpan.FromMilliseconds(1));
+        }
+
+        async Task<KafkaResult<string>> Read(KafkaOperationContext _, CancellationToken cancellationToken)
+        {
+            // The provider returns its retryable result as the observation deadline expires.
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+            return RetryableFailure(clock.GetUtcNow());
+        }
+
+        var result = await coordinator.ObserveAsync("cluster-a", "topics", ttl, Read);
+        if (hasSnapshot)
+        {
+            Assert.Equal("last-known-good", result.Value);
+            Assert.Equal(ObservationSource.StaleSnapshot, result.Observation.Source);
+        }
+        else
+        {
+            Assert.False(result.IsSuccess);
+            Assert.Equal(KafkaFailureCategory.Timeout, result.Failure?.Category);
+        }
+    }
+
     [Fact]
     public void Accepted_policy_defaults_and_bounds_are_enforced()
     {

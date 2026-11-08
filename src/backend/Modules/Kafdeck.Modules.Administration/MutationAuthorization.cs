@@ -174,10 +174,13 @@ public sealed class MutationApprovalAuthorizationEvidence
 public sealed class MutationApprovalAuthorizer
 {
     private readonly AuthorizationPolicyEvaluator _authorization;
+    private readonly Func<OperatorIdentityKey, AuthorizationRequest, bool?>? _managedApproval;
 
-    public MutationApprovalAuthorizer(AuthorizationPolicyEvaluator authorization)
+    public MutationApprovalAuthorizer(AuthorizationPolicyEvaluator authorization,
+        Func<OperatorIdentityKey, AuthorizationRequest, bool?>? managedApproval = null)
     {
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
+        _managedApproval = managedApproval;
     }
 
     public MutationApprovalAuthorizationEvidence Authorize(
@@ -195,11 +198,11 @@ public sealed class MutationApprovalAuthorizer
 
         foreach (var target in operation.AuthorizationTargets)
         {
-            var decision = _authorization.Evaluate(
-                approver,
-                DeclarativeMutationAuthorization.Request(target));
+            var request = DeclarativeMutationAuthorization.Request(target);
+            var allowed = _managedApproval?.Invoke(approver.Key, request) ??
+                _authorization.Evaluate(approver, request).IsAllowed;
 
-            if (!decision.IsAllowed)
+            if (!allowed)
             {
                 throw new MutationStateException(
                     $"Approver is not authorized for mutation action '{target.Action}' on the required resource.");

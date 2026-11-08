@@ -2,6 +2,7 @@ import { ApplicationCopyError, markApplicationError } from './presentationProble
 import { t } from './i18n.js';
 import { clearDeploymentAccessToken, withDeploymentAccessToken } from './deploymentAccess.js';
 import { notifySessionLossIfUnauthorized } from './operatorSessionSecurity.js';
+import type { KafkaConnectionDraft, KafkaConnectionObservation, KafkaConnectionTarget } from './kafkaConnections.js';
 export { operatorSessionLostEvent } from './operatorSessionSecurity.js';
 export type Freshness = 'fresh' | 'stale';
 
@@ -9,13 +10,19 @@ export interface ApiObservation { observedAt: string; freshness: Freshness; cach
 export interface ApiLimitation { capability: string | null; state: string; reason: string | null; }
 export interface ApiEnvelope<T> { data: T; observation: ApiObservation; limitations: ApiLimitation[]; }
 export interface BrokerProjection { brokerId: number; host: string; port: number; rack: string | null; isController: boolean; }
-export interface ClusterData { clusterId: string; kafkaClusterId: string | null; controllerBrokerId: number | null; brokers: BrokerProjection[]; health: string | number; healthReasons: Array<{ code: string | number; description: string }>; failureCode: string | null; }
+export interface ClusterData { clusterId: string; displayName?: string | null; kafkaClusterId: string | null; controllerBrokerId: number | null; brokers: BrokerProjection[]; health: string | number; healthReasons: Array<{ code: string | number; description: string }>; failureCode: string | null; }
 export interface TopicListItem { name: string; partitionCount: number; isInternal: boolean; offlinePartitionCount: number | null; underReplicatedPartitionCount: number | null; anomalyState: string | number; }
 export interface TopicPageData { items: TopicListItem[]; nextCursor: string | null; }
 export interface PartitionProjection { partitionId: number; leaderBrokerId: number | null; replicaBrokerIds: number[]; inSyncReplicaBrokerIds: number[]; outOfSyncReplicaBrokerIds: number[]; health: string | number; healthReasons: string[]; }
 export interface TopicDetailData { name: string; isInternal: boolean; partitions: PartitionProjection[]; offlinePartitionCount: number; underReplicatedPartitionCount: number; anomalyState: string | number; }
 export interface ConfigurationEntryData { name: string; value: string | null; isSensitive: boolean; isReadOnly: boolean; source: string | null; }
-export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; sessionScope?: string | null; }
+export interface OperatorSession { authenticated: true; authenticationMode: 'oidc'; displayName: string | null; email: string | null; authenticatedAt: string; sessionScope?: string | null; recentConnectionScope?: string | null; canManageUsers?: boolean; canRegisterKafkaConnections?: boolean; managedClusterManager?: boolean; }
+export type SetupState = 'available' | 'recovery' | 'complete';
+export type ManagedUserAccess = { role: 'viewer' | 'operator' | 'manager'; clusterIds: string[]; enabled: boolean };
+export type ManagedUser = Omit<ManagedUserAccess, 'role'> & { id: string; email: string; role: 'owner' | ManagedUserAccess['role'] };
+export type ManagedUsers = { users: ManagedUser[]; clusterIds: string[]; clusterNames?: Record<string, string> };
+export type AccessMode = 'local' | 'token' | 'oidc';
+type BrowserSession = OperatorSession | { authenticated: true; authenticationMode: 'local' | 'token' };
 
 /** Server-authorized metadata only. Not a provider payload or a secret-bearing destination profile. */
 export interface NotificationSubscriptionData {
@@ -360,6 +367,17 @@ export interface DataQualityPolicyUpsertRequest {
 }
 
 export interface SchemaReference { name: string; subject: string; version: number; }
+export type RegisteredService = 'schema-registry' | 'kafka-connect' | 'ksqldb';
+export type ServiceAuthentication = 'none' | 'basic' | 'bearer';
+export interface RegisteredServiceSettingsData {
+  url: string | null;
+  authentication: ServiceAuthentication;
+  revision: string | null;
+}
+export interface RegisteredServiceSettingsDraft extends RegisteredServiceSettingsData {
+  username: string | null;
+  secret: string | null;
+}
 export interface SchemaSubjectSummary { subject: string; }
 export interface SchemaVersionSummary {
   subject: string;
@@ -669,10 +687,10 @@ function requestHeaders(accept: string): Record<string, string> {
   return withDeploymentAccessToken({ Accept: accept });
 }
 
-async function parseProblem(response: Response): Promise<ApiProblem> {
+async function parseProblem(response: Response, notifySessionLoss = true): Promise<ApiProblem> {
   // Notify all mounted operator views before consuming the error body.
   // This includes 401s from observation, cluster refresh and CLI/tooling paths.
-  notifySessionLossIfUnauthorized(response.status);
+  if (notifySessionLoss) notifySessionLossIfUnauthorized(response.status);
   let problem: { detail?: string; title?: string; code?: string; type?: string } = {};
   try { problem = (await response.json()) as typeof problem; } catch { /* safe generic fallback */ }
   const detail = problem.detail ?? problem.title;
@@ -680,11 +698,12 @@ async function parseProblem(response: Response): Promise<ApiProblem> {
   return detail == null ? markApplicationError(error, "Kafdeck request failed.") : error;
 }
 
-async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function readJson<T>(path: string, signal?: AbortSignal, notifySessionLoss = true): Promise<T> {
   const init: RequestInit = { method: 'GET', headers: requestHeaders('application/json') };
+  if (!notifySessionLoss) init.cache = 'no-store';
   if (signal !== undefined) init.signal = signal;
   const response = await fetch(path, init);
-  if (!response.ok) throw await parseProblem(response);
+  if (!response.ok) throw await parseProblem(response, notifySessionLoss && !signal?.aborted);
   return (await response.json()) as T;
 }
 
@@ -813,7 +832,39 @@ function recordParams(query: RecordQuery): URLSearchParams {
 }
 
 export const kafdeckApi = {
-  getOperatorSession(signal?: AbortSignal) { return readJson<OperatorSession>('/api/v1/auth/session', signal); },
+  getAccessMode(signal?: AbortSignal) { return readJson<{ authenticationMode: AccessMode; connectionWorkspace?: boolean; setupState?: SetupState | null }>('/api/v1/auth/mode', signal, false); },
+  getOperatorSession(signal?: AbortSignal) { return readJson<BrowserSession>('/api/v1/auth/session', signal, false); },
+  listKafkaConnectionTargets(signal?: AbortSignal) {
+    return readJson<KafkaConnectionTarget[]>('/api/v1/connections/targets', signal);
+  },
+  testKafkaConnection(draft: KafkaConnectionDraft, signal?: AbortSignal) {
+    return postJson<KafkaConnectionObservation>('/api/v1/connections/test', draft, signal);
+  },
+  registerKafkaConnection(draft: KafkaConnectionDraft, signal?: AbortSignal) {
+    return postJson<KafkaConnectionObservation>('/api/v1/connections/targets', draft, signal);
+  },
+  async completeInitialSetup(input: { code: string; email: string; password: string }) {
+    const status = await readJson<{ state: SetupState; csrf: string | null }>('/api/v1/setup', undefined, false);
+    if (status.state !== 'available') return status.state;
+    if (!status.csrf) throw new Error('Setup antiforgery token missing.');
+    const response = await fetch('/api/v1/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Kafdeck-CSRF': status.csrf },
+      credentials: 'same-origin',
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) throw await parseProblem(response, false);
+    return 'complete' as const;
+  },
+  listManagedUsers(signal?: AbortSignal) {
+    return readJson<ManagedUsers>('/api/v1/identity/users', signal);
+  },
+  createManagedUser(input: Omit<ManagedUserAccess, 'enabled'> & { email: string; password: string }) {
+    return postJson<ManagedUser>('/api/v1/identity/users', input);
+  },
+  updateManagedUser(id: string, input: ManagedUserAccess) {
+    return putJson<ManagedUser>(`/api/v1/identity/users/${encodeURIComponent(id)}`, input);
+  },
   async logout() {
     clearDeploymentAccessToken();
     const token = await readJson<{ requestToken: string | null; formFieldName: string | null }>('/api/v1/auth/csrf');
@@ -919,6 +970,9 @@ export const kafdeckApi = {
     );
   },
   listClusters(signal?: AbortSignal) { return readJson<{ data: ApiEnvelope<ClusterData>[] }>('/api/v1/clusters', signal); },
+  listClusterDirectory(signal?: AbortSignal) {
+    return readJson<{ data: Pick<ClusterData, 'clusterId' | 'displayName'>[] }>('/api/v1/clusters?view=directory', signal);
+  },
   getCluster(clusterId: string, signal?: AbortSignal) { return readJson<ApiEnvelope<ClusterData>>(clusterPath(clusterId), signal); },
   listTopics(clusterId: string, query: string, cursor: string | null, signal?: AbortSignal) {
     const params = new URLSearchParams({ pageSize: '50' });
@@ -1043,6 +1097,15 @@ export const kafdeckApi = {
   listSchemaSubjects(clusterId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<SchemaSubjectSummary[]>>(`${clusterPath(clusterId)}/schemas/subjects`, signal);
   },
+  getRegisteredServiceSettings(clusterId: string, service: RegisteredService, signal?: AbortSignal) {
+    return readJson<RegisteredServiceSettingsData>(`/api/v1/connections/${encodeURIComponent(clusterId)}/${service}`, signal);
+  },
+  testRegisteredServiceSettings(clusterId: string, service: RegisteredService, draft: RegisteredServiceSettingsDraft, signal?: AbortSignal) {
+    return postJson<{ connected: boolean }>(`/api/v1/connections/${encodeURIComponent(clusterId)}/${service}/test`, draft, signal);
+  },
+  saveRegisteredServiceSettings(clusterId: string, service: RegisteredService, draft: RegisteredServiceSettingsDraft, signal?: AbortSignal) {
+    return putJson<RegisteredServiceSettingsData>(`/api/v1/connections/${encodeURIComponent(clusterId)}/${service}`, draft, signal);
+  },
   listSchemaVersions(clusterId: string, subject: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<SchemaVersionSummary[]>>(`${clusterPath(clusterId)}/schemas/subjects/${encodeURIComponent(subject)}/versions`, signal);
   },
@@ -1161,15 +1224,32 @@ export const kafdeckApi = {
   listKsqlMetadata(clusterId: string, signal?: AbortSignal) {
     return readJson<ReadViewEnvelope<KsqlMetadataItem[]>>(`${clusterPath(clusterId)}/ksql/metadata`, signal);
   },
+  createKsqlCatalogEntry(clusterId: string, kind: 'stream' | 'table', definition: {
+    name: string;
+    topic: string;
+    valueFormat: string;
+    fields: { name: string; type: string }[];
+    primaryKey?: { name: string; type: string };
+    partitions?: number;
+    replicas?: number;
+  }) {
+    return postJson<{ name: string; status: 'created' | 'unconfirmed' }>(
+      `/api/v1/connections/${encodeURIComponent(clusterId)}/ksqldb/${kind === 'table' ? 'tables' : 'streams'}`,
+      definition,
+    );
+  },
   executeKsqlQuery(
     clusterId: string,
     statement: string,
-    limits?: { maxRows?: number; maxBytes?: number; maxDurationSeconds?: number },
+    options: {
+      limits?: { maxRows?: number; maxBytes?: number; maxDurationSeconds?: number };
+      offsetReset?: 'latest' | 'earliest';
+    } = {},
     signal?: AbortSignal,
   ) {
     return postJson<ReadViewEnvelope<KsqlQueryResult>>(
       `${clusterPath(clusterId)}/ksql/query`,
-      { statement, limits: limits ?? null },
+      { statement, limits: options.limits ?? null, offsetReset: options.offsetReset },
       signal,
     );
   },

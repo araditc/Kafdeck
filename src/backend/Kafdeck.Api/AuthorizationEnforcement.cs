@@ -17,7 +17,17 @@ public sealed class KafdeckAuthorizationService
     private readonly KafdeckOptions _options;
     private readonly AuthorizationPolicyEvaluator _evaluator;
     private readonly NonBrowserReadRegistry? _nonBrowser;
+    internal ManagedIdentityStore? ManagedIdentity { get; init; }
+    internal RegisteredHttpServiceRuntime? RegisteredHttpServices { get; init; }
     public string PolicyFingerprint => _evaluator.Fingerprint;
+    private bool IsSchemaRegistryConfigured(string? clusterId) =>
+        clusterId is not null && (RegisteredHttpServices?.RegistryRevision(clusterId) is not null ||
+            _options.Clusters.Any(cluster => cluster.Id == clusterId && cluster.SchemaRegistry is not null));
+    internal bool IsManagedRegisteredTarget(string clusterId) => ManagedIdentity is { } managed &&
+        ManagedIdentityEndpoints.IsRegisteredTarget(managed, clusterId);
+    internal bool HasLiveManagedApproval(string principal, AuthorizationRequest request) =>
+        ManagedIdentity is { } managed && ManagedIdentityEndpoints.IsRegisteredMutationAction(request.Action) &&
+        ManagedIdentityEndpoints.CanManageRegisteredTarget(managed.FindPrincipal(principal), request.ClusterId);
     public bool IsDirectSubjectAllowed(string principal, AuthorizationRequest request) =>
         _evaluator.EvaluateCanonicalDirectSubject(principal, request).IsAllowed;
 
@@ -122,7 +132,11 @@ public sealed class KafdeckAuthorizationService
             return KafdeckAuthorizationOutcome.Unauthenticated;
         }
 
-        return _evaluator.Evaluate(session.Identity, request).IsAllowed
+        return (ManagedIdentity is { } managed
+            ? ManagedIdentityEndpoints.Allows(managed, session, request.Action, request.ClusterId,
+                registeredWrites: _options.Administration?.Mutations.Enabled == true,
+                schemaRegistryConfigured: request.Action == AuthorizationAction.SchemaCreate && IsSchemaRegistryConfigured(request.ClusterId))
+            : _evaluator.Evaluate(session.Identity, request).IsAllowed)
             ? KafdeckAuthorizationOutcome.Allowed
             : KafdeckAuthorizationOutcome.Forbidden;
     }
@@ -146,7 +160,10 @@ public sealed class KafdeckAuthorizationService
             return KafdeckAuthorizationOutcome.Unauthenticated;
         }
 
-        return _evaluator.HasApplicablePermission(session.Identity, action, clusterId)
+        return (ManagedIdentity is { } managed
+            ? ManagedIdentityEndpoints.Allows(managed, session, action, clusterId,
+                registeredWrites: _options.Administration?.Mutations.Enabled == true)
+            : _evaluator.HasApplicablePermission(session.Identity, action, clusterId))
             ? KafdeckAuthorizationOutcome.Allowed
             : KafdeckAuthorizationOutcome.Forbidden;
     }

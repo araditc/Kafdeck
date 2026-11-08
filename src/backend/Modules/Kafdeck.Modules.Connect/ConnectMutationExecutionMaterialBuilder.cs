@@ -12,6 +12,29 @@ namespace Kafdeck.Modules.Connect;
 /// </summary>
 public static class ConnectMutationExecutionMaterialBuilder
 {
+    public static IReadOnlyDictionary<string, string> ApplyChanges(
+        IReadOnlyDictionary<string, string> current,
+        IReadOnlyDictionary<string, string?> changes)
+    {
+        if (changes.Count is < 1 or > ConnectMutationPolicy.HardMaxConfigurationItems)
+            throw new ArgumentException("Supply at least one connector setting change.");
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var merged = new Dictionary<string, string>(current, StringComparer.Ordinal);
+        foreach (var (key, value) in changes)
+        {
+            var normalized = ConnectMutationCanonicalization.RequireIdentifier(
+                key, "Connector configuration key", ConnectMutationPolicy.HardMaxConfigurationKeyCharacters);
+            if (!keys.Add(normalized))
+                throw new ArgumentException("Connector configuration keys must be unique.");
+            if (value is null) merged.Remove(normalized);
+            else merged[normalized] = value;
+        }
+        return ConnectMutationCanonicalization.NormalizeConfiguration(merged, ConnectMutationPolicy.Default);
+    }
+
+    public static ConnectUpdateCanonicalIntent ReadUpdate(MutationOperationSnapshot operation) =>
+        DeserializeUpdate(operation.CanonicalIntent);
+
     public static MutationExecutionMaterial BuildConfiguration(
         MutationOperationSnapshot operation,
         IReadOnlyDictionary<string, string> configuration,

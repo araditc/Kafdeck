@@ -17,11 +17,13 @@ public sealed class ConfluentKafkaTopicMutationAdapter :
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
         TimeSpan? requestTimeout = null,
-        TimeSpan? operationTimeout = null)
+        TimeSpan? operationTimeout = null,
+        Func<string, IAdminClient?>? registeredClient = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
-            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)));
+            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)),
+            registeredClient);
 
         _requestTimeout = ValidateTimeout(
             requestTimeout ?? TimeSpan.FromSeconds(15),

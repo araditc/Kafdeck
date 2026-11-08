@@ -12,7 +12,8 @@ public sealed record KsqlQueryLimitRequest(
 
 public sealed record KsqlQueryRequestBody(
     string Statement,
-    KsqlQueryLimitRequest? Limits = null);
+    KsqlQueryLimitRequest? Limits = null,
+    string? OffsetReset = null);
 
 public static class KafdeckStreamingEndpoints
 {
@@ -29,13 +30,10 @@ public static class KafdeckStreamingEndpoints
                     string clusterId,
                     KsqlQueryRequestBody request,
                     IKsqlQueryPort ksql,
+                    KafdeckAuthorizationService authorization,
                     CancellationToken cancellationToken) =>
                 {
-                    if (!options.Clusters.Any(cluster =>
-                            string.Equals(
-                                cluster.Id,
-                                clusterId,
-                                StringComparison.Ordinal)))
+                    if (!IsConfiguredCluster(options, clusterId) && !authorization.IsManagedRegisteredTarget(clusterId))
                     {
                         return ApiResults.Problem(
                             ApiProblemMapper.InvalidClusterId(clusterId));
@@ -52,7 +50,26 @@ public static class KafdeckStreamingEndpoints
                                 "ksql_statement_required"));
                     }
 
-                    var limits = BuildLimits(request.Limits);
+                    if (request.OffsetReset is not (null or "latest" or "earliest"))
+                    {
+                        return ApiResults.Problem(
+                            new ApiProblemDefinition(
+                                StatusCodes.Status400BadRequest,
+                                "urn:kafdeck:problem:invalid-ksql-query-request",
+                                "Invalid ksqlDB query request",
+                                "The starting offset must be latest or earliest.",
+                                "ksql_offset_reset_invalid"));
+                    }
+
+                    var limits = BuildLimits(request.Limits) with
+                    {
+                        OffsetReset = request.OffsetReset switch
+                        {
+                            "latest" => KsqlQueryOffsetReset.Latest,
+                            "earliest" => KsqlQueryOffsetReset.Earliest,
+                            _ => null,
+                        },
+                    };
                     var result = await ksql
                         .ExecuteQueryAsync(
                             clusterId,

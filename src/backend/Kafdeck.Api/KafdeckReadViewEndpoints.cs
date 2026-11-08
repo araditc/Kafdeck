@@ -561,9 +561,10 @@ public static class KafdeckReadViewEndpoints
         app.MapGet("/api/v1/clusters/{clusterId}/ksql", async (
                 string clusterId,
                 IKsqlMetadataReadPort ksql,
+                KafdeckAuthorizationService authorization,
                 CancellationToken cancellationToken) =>
             {
-                if (!IsConfiguredCluster(options, clusterId))
+                if (!IsConfiguredCluster(options, clusterId) && !authorization.IsManagedRegisteredTarget(clusterId))
                 {
                     return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
                 }
@@ -581,9 +582,10 @@ public static class KafdeckReadViewEndpoints
         app.MapGet("/api/v1/clusters/{clusterId}/ksql/metadata", async (
                 string clusterId,
                 IKsqlMetadataReadPort ksql,
+                KafdeckAuthorizationService authorization,
                 CancellationToken cancellationToken) =>
             {
-                if (!IsConfiguredCluster(options, clusterId))
+                if (!IsConfiguredCluster(options, clusterId) && !authorization.IsManagedRegisteredTarget(clusterId))
                 {
                     return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
                 }

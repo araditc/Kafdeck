@@ -200,7 +200,9 @@ public sealed class MutationDispatchService
         ClaimsPrincipal? principal,
         Guid operationId,
         IReadOnlyDictionary<string, string>? configuration,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string?>? changes = null,
+        Func<string, string, CancellationToken, Task<IReadOnlyDictionary<string, string>?>>? readRegistered = null)
     {
         var admission = await AuthorizeReadyRequesterAsync(
                 principal,
@@ -213,22 +215,28 @@ public sealed class MutationDispatchService
         }
 
         var operation = admission.Operation!;
-        if (configuration is null ||
-            operation.OperationKind is not (
-                MutationOperationKind.ConnectCreate or
-                MutationOperationKind.ConnectAlter))
-        {
-            return configuration is null
-                ? InvalidMaterial(operation)
-                : Unsupported(operation);
-        }
+        if ((configuration is null) == (changes is null))
+            return InvalidMaterial(operation);
+        if (operation.OperationKind is not (MutationOperationKind.ConnectCreate or MutationOperationKind.ConnectAlter))
+            return Unsupported(operation);
 
         MutationExecutionMaterial material;
         try
         {
+            if (changes is not null)
+            {
+                if (operation.OperationKind != MutationOperationKind.ConnectAlter || readRegistered is null)
+                    return InvalidMaterial(operation);
+                var update = ConnectMutationExecutionMaterialBuilder.ReadUpdate(operation);
+                if (update.AlterKind != ConnectAlterIntentKind.ConfigurationUpdate || update.ConnectProfileId != "default")
+                    return InvalidMaterial(operation);
+                var current = await readRegistered(update.ClusterId, update.ConnectorName, cancellationToken).ConfigureAwait(false);
+                if (current is null) return InvalidMaterial(operation);
+                configuration = ConnectMutationExecutionMaterialBuilder.ApplyChanges(current, changes);
+            }
             material = ConnectMutationExecutionMaterialBuilder.BuildConfiguration(
                 operation,
-                configuration,
+                configuration!,
                 _materialDigestService);
         }
         catch (Exception exception)

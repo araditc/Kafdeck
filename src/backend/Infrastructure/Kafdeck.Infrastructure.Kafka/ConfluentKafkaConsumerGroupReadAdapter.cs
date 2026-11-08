@@ -18,11 +18,13 @@ public sealed class ConfluentKafkaConsumerGroupReadAdapter : IConsumerGroupReadP
     public ConfluentKafkaConsumerGroupReadAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, IAdminClient?>? registeredClient = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
-            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)));
+            secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)),
+            registeredClient);
 
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -260,8 +262,9 @@ public sealed class ConfluentKafkaConsumerGroupReadAdapter : IConsumerGroupReadP
                     .Distinct()
                     .ToArray();
 
+                // librdkafka uses null to request all offsets, including those of an inactive group.
                 var committedResults = await client.ListConsumerGroupOffsetsAsync(
-                        [new ConsumerGroupTopicPartitions(groupId, [])],
+                        [new ConsumerGroupTopicPartitions(groupId, null)],
                         new ListConsumerGroupOffsetsOptions
                         {
                             RequestTimeout = timeout,

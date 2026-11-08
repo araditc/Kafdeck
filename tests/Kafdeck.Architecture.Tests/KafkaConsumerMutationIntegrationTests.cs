@@ -36,6 +36,9 @@ public sealed class KafkaConsumerMutationIntegrationTests
             new ConfluentKafkaConsumerMutationAdapter(
                 new[] { profile },
                 new SecretResolver());
+        using var reads = new ConfluentKafkaConsumerGroupReadAdapter(
+            new[] { profile },
+            new SecretResolver());
         using var cancellation =
             new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
@@ -58,6 +61,14 @@ public sealed class KafkaConsumerMutationIntegrationTests
             Assert.True(initial.Exists);
             Assert.Equal(CoreConsumerGroupState.Empty, initial.State);
             Assert.Equal(1, Assert.Single(initial.Partitions).CommittedOffset);
+
+            var lag = await new ConsumerExplorerService(reads)
+                .GetLagAsync(profile.Id, groupId, cancellation.Token);
+            Assert.True(lag.IsSuccess, lag.Failure?.SafeMessage);
+            var partition = Assert.Single(lag.Value!.Partitions);
+            Assert.Equal(topic, partition.Topic);
+            Assert.Equal(0, partition.Partition);
+            Assert.Equal(1, partition.CommittedOffset);
 
             var planner = new ConsumerMutationPlanner(observations);
             var alterPlan = await planner.PlanOffsetAlterAsync(

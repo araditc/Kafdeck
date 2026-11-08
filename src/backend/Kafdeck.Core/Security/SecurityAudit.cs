@@ -10,6 +10,12 @@ public enum SecurityAuditEventType
     LegacyTokenRequest = 6,
     MetricsScrapeRequest = 7,
     NotificationManagementChanged = 8,
+    ManagedIdentityChanged = 9,
+    SchemaRegistryConfigurationChanged = 10,
+    KafkaConnectConfigurationChanged = 11,
+    KsqlDbConfigurationChanged = 12,
+    KsqlStreamCreation = 13,
+    KsqlTableCreation = 14,
 }
 
 public enum SecurityAuditOutcome
