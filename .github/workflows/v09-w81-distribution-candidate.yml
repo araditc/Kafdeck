@@ -1,0 +1,118 @@
+name: v09-w81-distribution-candidate
+
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'deploy/helm/**'
+      - 'tools/Kafdeck.OfflineProbe/**'
+      - '.github/workflows/v09-w81-distribution-candidate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'deploy/helm/**'
+      - 'tools/Kafdeck.OfflineProbe/**'
+      - '.github/workflows/v09-w81-distribution-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v09-w81-distribution-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  helm-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify Helm archive and test chart rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/w81/helm
+          cd artifacts/w81/helm
+          curl --fail --silent --show-error --location --max-time 60 \
+            -o helm.tar.gz https://get.helm.sh/helm-v3.21.4-linux-amd64.tar.gz
+          echo '61f88ab166748cb19604d7884cb100ae9ccb13804ddeb98e08af167eacbb6a14  helm.tar.gz' | sha256sum -c -
+          tar -xzf helm.tar.gz linux-amd64/helm
+          ./linux-amd64/helm version --short
+          cd ../../..
+          pwsh -NoProfile -File deploy/helm/test-kafdeck-chart.ps1 -Helm "$PWD/artifacts/w81/helm/linux-amd64/helm"
+          ./artifacts/w81/helm/linux-amd64/helm package deploy/helm/kafdeck --destination artifacts/w81
+          (cd artifacts/w81 && sha256sum kafdeck-*.tgz > helm-sha256.txt)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: w81-helm-render-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            artifacts/w81/kafdeck-*.tgz
+            artifacts/w81/helm-sha256.txt
+          if-no-files-found: error
+
+  oci-native-startup:
+    name: oci-native-startup (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, machine: x86_64, runner: ubuntu-24.04 }
+          - { arch: arm64, machine: aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.403'
+      - name: Verify native build, nonroot read-only startup and restart
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "$MACHINE"
+          mkdir -p artifacts/w81
+          dotnet restore tools/Kafdeck.OfflineProbe/Kafdeck.OfflineProbe.csproj --locked-mode
+          dotnet publish tools/Kafdeck.OfflineProbe/Kafdeck.OfflineProbe.csproj -c Release --no-restore -o artifacts/w81/probe
+          docker build --pull --platform "linux/$ARCH" --tag kafdeck:w81-fixture .
+          test "$(docker image inspect --format '{{.Architecture}}' kafdeck:w81-fixture)" = "$ARCH"
+          container_id="$(docker create --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=64m \
+            --tmpfs /state:rw,nosuid,nodev,uid=1654,gid=1654,mode=0700,size=64m --env HOME=/state \
+            --mount "type=bind,src=$PWD/artifacts/w81/probe,dst=/probe,readonly" kafdeck:w81-fixture)"
+          trap 'docker rm -f "$container_id" >/dev/null' EXIT
+          docker start "$container_id" >/dev/null
+          test "$(docker exec "$container_id" id -u)" = 1654
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}/{{.HostConfig.NetworkMode}}' "$container_id")" = true/none
+          docker exec "$container_id" dotnet /probe/Kafdeck.OfflineProbe.dll > artifacts/w81/startup.json
+          docker restart "$container_id" >/dev/null
+          docker exec "$container_id" dotnet /probe/Kafdeck.OfflineProbe.dll > artifacts/w81/restart.json
+          jq -n --arg source "$(git rev-parse HEAD)" --arg arch "$ARCH" \
+            --arg image "$(docker image inspect --format '{{.Id}}' kafdeck:w81-fixture)" \
+            --slurpfile startup artifacts/w81/startup.json --slurpfile restart artifacts/w81/restart.json \
+            '{sourceSha:$source,architecture:$arch,imageId:$image,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
+            > artifacts/w81/oci-native-startup.json
+      - name: Install, upgrade and reinstall packaged Helm on disposable Kubernetes
+        if: matrix.arch == 'amd64'
+        run: bash deploy/helm/test-kafdeck-lifecycle.sh kafdeck:w81-fixture artifacts/w81/helm-lifecycle.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: w81-oci-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/w81/oci-native-startup.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: matrix.arch == 'amd64'
+        with:
+          name: w81-helm-lifecycle-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/w81/helm-lifecycle.json
+          if-no-files-found: error

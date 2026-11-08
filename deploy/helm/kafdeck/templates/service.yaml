@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  {{- include "kafdeck.metadata" . | nindent 2 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kafdeck.metadata" . | nindent 2 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "kafdeck.selector" . | nindent 4 }}
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+      protocol: TCP

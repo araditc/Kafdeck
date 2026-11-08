@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["image", "publicHost", "operatorConfigMap", "credentialsSecret", "tlsSecret", "oidc", "kafka", "persistence", "replicas", "network", "resources"],
+  "definitions": {
+    "dnsLabel": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
+    "dnsName": { "type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$" },
+    "resourcePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$", "maxLength": 12 },
+        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$", "maxLength": 12 }
+      }
+    }
+  },
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest", "pullSecret"],
+      "properties": {
+        "repository": { "type": "string", "maxLength": 256, "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "pullSecret": { "anyOf": [{ "const": "" }, { "$ref": "#/definitions/dnsName" }] }
+      }
+    },
+    "publicHost": { "$ref": "#/definitions/dnsName" },
+    "operatorConfigMap": { "$ref": "#/definitions/dnsName" },
+    "credentialsSecret": { "$ref": "#/definitions/dnsName" },
+    "tlsSecret": { "$ref": "#/definitions/dnsName" },
+    "oidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issuer", "clientId"],
+      "properties": {
+        "issuer": { "type": "string", "maxLength": 2048, "pattern": "^https://[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]+)?(/[A-Za-z0-9._~/%-]+)*$" },
+        "clientId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$" }
+      }
+    },
+    "kafka": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clusterId", "bootstrapServers", "protocol"],
+      "properties": {
+        "clusterId": { "$ref": "#/definitions/dnsLabel" },
+        "bootstrapServers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "maxLength": 261, "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*:[1-9][0-9]{0,4}$" }
+        },
+        "protocol": { "enum": ["Ssl", "SaslSsl"] }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "existingClaim"],
+      "properties": {
+        "provider": { "enum": ["Sqlite", "PostgreSql"] },
+        "existingClaim": { "$ref": "#/definitions/dnsName" }
+      }
+    },
+    "replicas": { "type": "integer", "const": 1 },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ingressNamespaces", "egress"],
+      "properties": {
+        "ingressNamespaces": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/dnsLabel" }
+        },
+        "egress": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cidr", "port"],
+            "properties": {
+              "cidr": {
+                "type": "string",
+                "maxLength": 49,
+                "pattern": "^[A-Fa-f0-9.:]+/[1-9][0-9]{0,2}$"
+              },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": { "$ref": "#/definitions/resourcePair" },
+        "limits": { "$ref": "#/definitions/resourcePair" }
+      }
+    }
+  }
+}

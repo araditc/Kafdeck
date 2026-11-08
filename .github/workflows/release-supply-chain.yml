@@ -73,8 +73,8 @@ jobs:
             --mount "type=bind,src=$GITHUB_WORKSPACE/.artifacts/offline-probe,dst=/offline-probe,readonly" "$CANDIDATE_REF"
           docker exec kafdeck-g5-offline dotnet /offline-probe/Kafdeck.OfflineProbe.dll > offline-startup-evidence.json
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' kafdeck-g5-offline)" = none
-          image_id="$(docker image inspect --format '{{.Id}}' "$CANDIDATE_REF")"
           docker image save "$CANDIDATE_REF" | gzip -n > kafdeck-offline-candidate.tar.gz
+          image_id="$(bash scripts/release/docker-archive-config-digest.sh kafdeck-offline-candidate.tar.gz)"
           archive_sha="$(sha256sum kafdeck-offline-candidate.tar.gz | cut -d' ' -f1)"
           jq -n --arg source "$SOURCE_SHA" --arg image "$image_id" --arg archive "$archive_sha" \
             --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --argjson metadata "$BUILD_METADATA" \
