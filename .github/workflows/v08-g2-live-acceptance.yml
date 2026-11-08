@@ -292,8 +292,13 @@ jobs:
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-declarative-cli-evidence.json"
           test -s "$KAFDECK_G2_EVIDENCE_DIRECTORY/postgres-g3-service-controller-evidence.json"
           dotnet pack src/mcp/Kafdeck.Mcp/Kafdeck.Mcp.csproj -c Release --no-build --no-restore -o artifacts/g4-ci/mcp
+          mcp_packages=(artifacts/g4-ci/mcp/Kafdeck.Mcp.*.nupkg)
+          test "${#mcp_packages[@]}" -eq 1
+          test -f "${mcp_packages[0]}"
+          mcp_package_version="${mcp_packages[0]##*/Kafdeck.Mcp.}"
+          mcp_package_version="${mcp_package_version%.nupkg}"
           printf '%s\n' '<configuration><packageSources><clear /></packageSources></configuration>' > deploy/dev/.generated/g4-toolchains/NuGet.Config
-          dotnet tool install Kafdeck.Mcp --version 0.8.0 --tool-path deploy/dev/.generated/g4-installed-mcp --configfile deploy/dev/.generated/g4-toolchains/NuGet.Config --add-source artifacts/g4-ci/mcp --no-cache
+          dotnet tool install Kafdeck.Mcp --version "$mcp_package_version" --tool-path deploy/dev/.generated/g4-installed-mcp --configfile deploy/dev/.generated/g4-toolchains/NuGet.Config --add-source artifacts/g4-ci/mcp --no-cache
           export KAFDECK_G4_MCP_DLL="$(find "$GITHUB_WORKSPACE/deploy/dev/.generated/g4-installed-mcp/.store" -name kafdeck-mcp.dll -print -quit)"
           test -s "$KAFDECK_G4_MCP_DLL"
           cmp src/mcp/Kafdeck.Mcp/bin/Release/net10.0/kafdeck-mcp.dll "$KAFDECK_G4_MCP_DLL"

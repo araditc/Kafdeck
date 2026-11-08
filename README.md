@@ -47,7 +47,7 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 Stable release **v0.8** is published from protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce`. [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest) is authoritative for the latest stable release. All W61–W71 workstreams and tracker [#209](https://github.com/araditc/Kafdeck/issues/209) are complete; [G5/W71](https://github.com/araditc/Kafdeck/issues/220) and the separate G6 publication gate are closed.
 
-The release-input snapshot records **v0.8 as the prepared build candidate**. **v0.7 is the historical published baseline at candidate preparation**. These fields record the publication input; the published runtime/package version is `0.8.0`, and GitHub Releases records publication status.
+The release-input snapshot records **v0.9 as the prepared build candidate**. **v0.8 is the historical published baseline at candidate preparation**. The candidate runtime and package version is `0.9.0`. GitHub Releases records publication status.
 
 | Capability | Introduced | Released capability posture |
 | --- | --- | --- |

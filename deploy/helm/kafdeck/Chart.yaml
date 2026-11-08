@@ -2,7 +2,7 @@ apiVersion: v2
 name: kafdeck
 description: Kafdeck API and web UI using an external Kafka cluster and identity provider
 type: application
-version: 0.9.0-rc.1
-appVersion: "0.8.0"
+version: 0.9.0
+appVersion: "0.9.0"
 kubeVersion: ">=1.32.0-0"
 home: https://github.com/araditc/Kafdeck
