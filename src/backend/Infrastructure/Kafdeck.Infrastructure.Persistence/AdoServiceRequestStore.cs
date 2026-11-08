@@ -87,7 +87,7 @@ public sealed class AdoServiceRequestStore(IMutationDbConnectionFactory connecti
         while(await reader.ReadAsync(token).ConfigureAwait(false)){var e=Deserialize<ServiceRequestHistory>(reader.GetString(0));if(e.Request.ClusterId==cluster&&visible(e.Request)){result.Add(e);if(result.Count>size)break;}}
         return result;
     },token);
-    public Task<ServiceRequestPlan> StageAsync(ServiceRequestPlan plan,CancellationToken token=default)=>Read(async(db,tx)=>
+    public Task<ServiceRequestPlan> StageAsync(ServiceRequestPlan plan,CancellationToken token=default)=>WithTransactionAsync(async(db,tx)=>
     {
         ServiceRequestContract.Validate(plan);
         if(plan.DeploymentGeneration!=DeploymentGeneration)throw new ServiceRequestConflictException("RequestRestoreGenerationChanged");
@@ -97,7 +97,7 @@ public sealed class AdoServiceRequestStore(IMutationDbConnectionFactory connecti
         if(count>=ServiceRequestContract.MaximumRequestsPerCluster*10)throw new ServiceRequestConflictException("RequestPlanCapacityExceeded");
         await Run(db,tx,"INSERT INTO service_request_plans(plan_id,cluster_id,content_hash,body) VALUES(@id,@c,@h,@body)",token,
             ("@id",plan.PlanId.ToString("D")),("@c",plan.ClusterId),("@h",plan.ContentHash),("@body",Serialize(plan))).ConfigureAwait(false);return plan;
-    },token);
+    },token,readOnly:false);
 
     public async Task<ServiceRequestReceipt> CommitAsync(ServiceRequestPlan plan,MutationOperationSnapshot changeOperation,
         Func<bool> currentChangeAuthority,Func<DbConnection,DbTransaction,MutationOperationSnapshot,CancellationToken,Task> validateBindingDigests,
@@ -253,11 +253,18 @@ public sealed class AdoServiceRequestStore(IMutationDbConnectionFactory connecti
     }
     private static bool IsTerminal(ServiceRequestState state)=>state is ServiceRequestState.Rejected or ServiceRequestState.Cancelled;
     private Task Generation(DbConnection db,DbTransaction tx,CancellationToken token)=>generationGate?.ValidateAsync(db,tx,token)??Task.CompletedTask;
-    private async Task<T> Read<T>(Func<DbConnection,DbTransaction,Task<T>> body,CancellationToken token)
+    private Task<T> Read<T>(Func<DbConnection,DbTransaction,Task<T>> body,CancellationToken token) =>
+        WithTransactionAsync(body,token,readOnly:true);
+
+    private async Task<T> WithTransactionAsync<T>(Func<DbConnection,DbTransaction,Task<T>> body,CancellationToken token,bool readOnly)
     {
         await using var db = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var tx = await db.BeginTransactionAsync(token).ConfigureAwait(false);
-        if (generationGate is not null) await generationGate.ValidateReadAsync(db, tx, token).ConfigureAwait(false);
+        if (generationGate is not null)
+        {
+            if (readOnly) await generationGate.ValidateReadAsync(db, tx, token).ConfigureAwait(false);
+            else await generationGate.ValidateAsync(db, tx, token).ConfigureAwait(false);
+        }
         var value = await body(db, tx).ConfigureAwait(false);
         await tx.CommitAsync(token).ConfigureAwait(false);
         return value;
