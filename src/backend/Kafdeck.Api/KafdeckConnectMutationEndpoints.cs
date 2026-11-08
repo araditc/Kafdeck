@@ -2,6 +2,7 @@ using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Ecosystem;
 using Kafdeck.Modules.Administration;
 using Kafdeck.Modules.Connect;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Kafdeck.Api;
 
@@ -75,7 +76,7 @@ public static class KafdeckConnectMutationEndpoints
                     HttpContext context,
                     MutationRequestAuthorizationService authorization,
                     ConnectMutationPlanner planner,
-                    KafkaConnectMutationAdapter provider,
+                    [FromServices] KafkaConnectMutationAdapter? provider,
                     MutationAdmissionService admission,
                     CancellationToken cancellationToken) =>
                 {
@@ -98,8 +99,9 @@ public static class KafdeckConnectMutationEndpoints
                     ConnectMutationPlanningResult<ConnectUpdateCanonicalIntent> planning;
                     if (request.Changes is { } changes)
                     {
-                        var current = await provider.ReadRegisteredConfigurationAsync(clusterId, connectorName, cancellationToken)
-                            .ConfigureAwait(false);
+                        var current = provider is null ? null :
+                            await provider.ReadRegisteredConfigurationAsync(clusterId, connectorName, cancellationToken)
+                                .ConfigureAwait(false);
                         if (current is null)
                             return PlanningProblem(new(ConnectMutationPlanningFailureCode.ObservationFailed,
                                 "Kafka Connect could not read the existing configuration. No settings were changed."));
@@ -423,7 +425,7 @@ public static class KafdeckConnectMutationEndpoints
                     ConnectConfigurationExecuteRequest request,
                     HttpContext context,
                     MutationDispatchService dispatch,
-                    KafkaConnectMutationAdapter provider,
+                    [FromServices] KafkaConnectMutationAdapter? provider,
                     CancellationToken cancellationToken) =>
                 {
                     var result = await dispatch
@@ -433,7 +435,7 @@ public static class KafdeckConnectMutationEndpoints
                             request.Configuration,
                             cancellationToken,
                             request.Changes,
-                            provider.ReadRegisteredConfigurationAsync)
+                            provider is null ? null : provider.ReadRegisteredConfigurationAsync)
                         .ConfigureAwait(false);
                     return MapDispatchResult(result);
                 })

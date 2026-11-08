@@ -235,9 +235,14 @@ body {
   margin-block-start: 0;
 }
 
-.kafdeck-serde-capabilities :is(th, td) {
+.kafdeck-serde-capabilities :is(th, td):last-child {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.kafdeck-serde-capabilities :is(th, td):not(:last-child) {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .kafdeck-serde-format {
