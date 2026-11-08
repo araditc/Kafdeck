@@ -14,7 +14,12 @@ import {
 
 type WorkflowKind = 'topic' | 'record' | 'consumer' | 'schema' | 'connect' | 'dataJob' | 'generator' | 'purge';
 
-function newIdempotencyKey(): string {
+export interface ConsumerMutationTarget {
+  groupId: string;
+  partition?: { topicName: string; partition: number; committedOffset: number | null };
+}
+
+export function newIdempotencyKey(): string {
   if (
     typeof globalThis.crypto === 'undefined' ||
     typeof globalThis.crypto.randomUUID !== 'function'
@@ -56,7 +61,7 @@ function nullablePairMap(source: string): Record<string, string | null> {
   return result;
 }
 
-function bytesToBase64(value: string): string {
+export function bytesToBase64(value: string): string {
   const bytes = new TextEncoder().encode(value);
   let binary = '';
   const chunk = 0x8000;
@@ -77,12 +82,21 @@ export function MutationPreviewWorkflows({
   clusterId,
   connectProfileId,
   onPreview,
+  family,
+  selectedTopic,
+  consumerTarget,
+  onConsumerDraftChange,
 }: {
   clusterId: string;
   connectProfileId?: string | null;
   onPreview: (operation: MutationStatus) => void;
+  family?: WorkflowKind;
+  selectedTopic?: string | undefined;
+  consumerTarget?: ConsumerMutationTarget | undefined;
+  onConsumerDraftChange?: (() => void) | undefined;
 }) {
-  const [workflow, setWorkflow] = useState<WorkflowKind>('topic');
+  const [selectedWorkflow, setWorkflow] = useState<WorkflowKind>('topic');
+  const workflow = family ?? selectedWorkflow;
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ reason: unknown } | null>(null);
@@ -103,7 +117,7 @@ export function MutationPreviewWorkflows({
   return <article aria-labelledby="mutation-preview-workflow-title">
     <h3 id="mutation-preview-workflow-title">{t("Create governed preview")}</h3>
     <p>{t("Each workflow is typed and scoped to the selected cluster. Kafdeck does not provide a generic provider command console.")}</p>
-    <label htmlFor="mutation-workflow">{t("Workflow")}</label>{' '}
+    {!family && <><label htmlFor="mutation-workflow">{t("Workflow")}</label>{' '}
     <select id="mutation-workflow" value={workflow} onChange={event => setWorkflow(event.target.value as WorkflowKind)}>
       <option value="topic">{t("Topic administration")}</option>
       <option value="record">{t("Record production")}</option>
@@ -113,25 +127,29 @@ export function MutationPreviewWorkflows({
       <option value="dataJob">{t("Replay / forward data job")}</option>
       <option value="generator">{t("Smart Mock / Data Generator")}</option>
       <option value="purge">{t("Controlled purge")}</option>
-    </select>
+    </select></>}
     <p><label htmlFor="mutation-idempotency-key">Idempotency-Key</label>{' '}<input dir="ltr" id="mutation-idempotency-key" value={idempotencyKey} onChange={event => setIdempotencyKey(event.target.value)} autoComplete="off" />{' '}<button type="button" onClick={() => setIdempotencyKey(newIdempotencyKey())}>{t("Generate new key")}</button></p>
     {error && <p role="alert">{errorText(error.reason)}</p>}
-    {workflow === 'topic' && <TopicWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'topic' && <TopicWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} selectedTopic={selectedTopic} />}
     {workflow === 'record' && <RecordWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
-    {workflow === 'consumer' && <ConsumerWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'consumer' && <ConsumerWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit}
+      target={consumerTarget} onDraftChange={() => {
+        setIdempotencyKey(newIdempotencyKey());
+        onConsumerDraftChange?.();
+      }} />}
     {workflow === 'schema' && <SchemaWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'connect' && <ConnectWorkflow key={`${clusterId}:${connectProfileId ?? 'default'}`} clusterId={clusterId} connectProfileId={connectProfileId ?? 'default'} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'dataJob' && <DataJobWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
     {workflow === 'generator' && <DataGeneratorWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
-    {workflow === 'purge' && <PurgeWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} />}
+    {workflow === 'purge' && <PurgeWorkflow clusterId={clusterId} idempotencyKey={idempotencyKey} busy={busy} submit={submit} selectedTopic={selectedTopic} />}
   </article>;
 }
 
 type Submit = (action: () => Promise<MutationStatus>) => Promise<void>;
 
-function TopicWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
-  const [action, setAction] = useState<'create' | 'alter' | 'increase' | 'delete'>('create');
-  const [topicName, setTopicName] = useState('');
+function TopicWorkflow({ clusterId, idempotencyKey, busy, submit, selectedTopic }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit; selectedTopic?: string | undefined }) {
+  const [action, setAction] = useState<'create' | 'alter' | 'increase' | 'delete'>(selectedTopic ? 'alter' : 'create');
+  const [topicName, setTopicName] = useState(selectedTopic ?? '');
   const [partitionCount, setPartitionCount] = useState(1);
   const [replicationFactor, setReplicationFactor] = useState(1);
   const [configuration, setConfiguration] = useState('');
@@ -148,8 +166,8 @@ function TopicWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId:
 
   return <form onSubmit={onSubmit} aria-label={t("Topic mutation preview")}>
     <fieldset disabled={busy}><legend>{t("Topic administration")}</legend>
-      <label htmlFor="topic-mutation-action">{t("Action")}</label>{' '}<select id="topic-mutation-action" value={action} onChange={event => setAction(event.target.value as typeof action)}><option value="create">{t("Create")}</option><option value="alter">{t("Alter configuration")}</option><option value="increase">{t("Increase partitions")}</option><option value="delete">{t("Delete")}</option></select><br />
-      <label htmlFor="topic-mutation-name">{t("Exact topic")}</label>{' '}<input dir="auto" id="topic-mutation-name" required value={topicName} onChange={event => setTopicName(event.target.value)} /><br />
+      <label htmlFor="topic-mutation-action">{t("Action")}</label>{' '}<select id="topic-mutation-action" value={action} onChange={event => setAction(event.target.value as typeof action)}>{!selectedTopic && <option value="create">{t("Create")}</option>}<option value="alter">{t("Alter configuration")}</option><option value="increase">{t("Increase partitions")}</option><option value="delete">{t("Delete")}</option></select><br />
+      <label htmlFor="topic-mutation-name">{t("Exact topic")}</label>{' '}<input dir="auto" id="topic-mutation-name" required value={topicName} readOnly={!!selectedTopic} onChange={event => setTopicName(event.target.value)} /><br />
       {(action === 'create' || action === 'increase') && <><label htmlFor="topic-partitions">{action === 'create' ? t("Partitions") : t("New partition count")}</label>{' '}<input dir="auto" id="topic-partitions" type="number" min="1" required value={partitionCount} onChange={event => setPartitionCount(Number(event.target.value))} /><br /></>}
       {action === 'create' && <><label htmlFor="topic-replication-factor">{t("Replication factor")}</label>{' '}<input dir="auto" id="topic-replication-factor" type="number" min="1" required value={replicationFactor} onChange={event => setReplicationFactor(Number(event.target.value))} /><br /></>}
       {(action === 'create' || action === 'alter') && <><label htmlFor="topic-config">{t("Allowlisted configuration, one key=value per line")}</label><br /><textarea dir="ltr" id="topic-config" value={configuration} onChange={event => setConfiguration(event.target.value)} rows={5} /><p>{action === 'alter' ? t("Use key=<remove> to remove an admitted dynamic topic configuration.") : t("Only server-admitted topic configuration keys are accepted.")}</p></>}
@@ -185,37 +203,69 @@ function RecordWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId
   </form>;
 }
 
-function ConsumerWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
+function ConsumerWorkflow({ clusterId, idempotencyKey, busy, submit, target, onDraftChange }: {
+  clusterId: string;
+  idempotencyKey: string;
+  busy: boolean;
+  submit: Submit;
+  target?: ConsumerMutationTarget | undefined;
+  onDraftChange: () => void;
+}) {
   const [action, setAction] = useState<'offset' | 'deleteGroup' | 'deleteOffsets'>('offset');
-  const [groupId, setGroupId] = useState('');
-  const [topicName, setTopicName] = useState('');
-  const [partition, setPartition] = useState(0);
-  const [selector, setSelector] = useState<ConsumerOffsetSelectorKind>('absolute');
-  const [value, setValue] = useState(0);
+  const [groupId, setGroupId] = useState(target?.groupId ?? '');
+  const [topicName, setTopicName] = useState(target?.partition?.topicName ?? '');
+  const [partition, setPartition] = useState(target?.partition?.partition ?? 0);
+  const [selector, setSelector] = useState<ConsumerOffsetSelectorKind>(target?.partition ? 'earliest' : 'absolute');
+  const [value, setValue] = useState(String(target?.partition?.committedOffset ?? 0));
   const [timestamp, setTimestamp] = useState('');
+  const needsValue = action === 'offset' && (selector === 'absolute' || selector === 'relativeShift');
+  const numericValue = Number(value);
+  const validValue = !needsValue || (value !== '' && Number.isSafeInteger(numericValue) && (selector !== 'absolute' || numericValue >= 0));
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
+    if (!validValue) return;
     void submit(() => {
       if (action === 'deleteGroup') return mutationApi.previewConsumerDelete(clusterId, groupId, 'group', null, idempotencyKey);
       if (action === 'deleteOffsets') return mutationApi.previewConsumerDelete(clusterId, groupId, 'offsets', [{ topicName, partition }], idempotencyKey);
       const selectorInput = selector === 'timestamp'
         ? { kind: selector, timestampUtc: new Date(timestamp).toISOString() }
         : selector === 'absolute' || selector === 'relativeShift'
-          ? { kind: selector, value }
+          ? { kind: selector, value: numericValue }
           : { kind: selector };
       return mutationApi.previewConsumerOffsets(clusterId, groupId, [{ topicName, partition, selector: selectorInput }], idempotencyKey);
     });
   };
 
-  return <form onSubmit={onSubmit} aria-label={t("Consumer mutation preview")}>
+  return <form onSubmit={onSubmit} onChange={target ? onDraftChange : undefined} aria-label={t("Consumer mutation preview")}>
     <fieldset disabled={busy}><legend>{t("Consumer administration")}</legend>
-      <label htmlFor="consumer-action">{t("Action")}</label>{' '}<select id="consumer-action" value={action} onChange={event => setAction(event.target.value as typeof action)}><option value="offset">{t("Alter/reset offset")}</option><option value="deleteOffsets">{t("Delete committed offset")}</option><option value="deleteGroup">{t("Delete group")}</option></select><br />
-      <label htmlFor="consumer-group">{t("Exact group")}</label>{' '}<input dir="ltr" id="consumer-group" required value={groupId} onChange={event => setGroupId(event.target.value)} /><br />
-      {action !== 'deleteGroup' && <><label htmlFor="consumer-topic">{t("Exact topic")}</label>{' '}<input dir="auto" id="consumer-topic" required value={topicName} onChange={event => setTopicName(event.target.value)} /><br /><label htmlFor="consumer-partition">{t("Partition")}</label>{' '}<input dir="auto" id="consumer-partition" type="number" min="0" required value={partition} onChange={event => setPartition(Number(event.target.value))} /><br /></>}
-      {action === 'offset' && <><label htmlFor="consumer-selector">{t("Target selector")}</label>{' '}<select id="consumer-selector" value={selector} onChange={event => setSelector(event.target.value as ConsumerOffsetSelectorKind)}><option value="absolute">{t("Absolute offset")}</option><option value="earliest">{t("Earliest")}</option><option value="latest">{t("Latest")}</option><option value="timestamp">{t("Timestamp")}</option><option value="relativeShift">{t("Relative shift")}</option></select><br />{(selector === 'absolute' || selector === 'relativeShift') && <><label htmlFor="consumer-offset-value">{selector === 'absolute' ? t("Offset") : t("Shift")}</label>{' '}<input dir="auto" id="consumer-offset-value" type="number" value={value} onChange={event => setValue(Number(event.target.value))} /><br /></>}{selector === 'timestamp' && <><label htmlFor="consumer-offset-time">{t("Timestamp")}</label>{' '}<input dir="auto" id="consumer-offset-time" type="datetime-local" required value={timestamp} onChange={event => setTimestamp(event.target.value)} /><br /></>}</>}
+      {!target?.partition && <><label htmlFor="consumer-action">{t("Action")}</label>{' '}<select id="consumer-action" value={action} onChange={event => setAction(event.target.value as typeof action)}><option value="offset">{t("Alter/reset offset")}</option><option value="deleteOffsets">{t("Delete committed offset")}</option><option value="deleteGroup">{t("Delete group")}</option></select><br /></>}
+      <label htmlFor="consumer-group">{t("Exact group")}</label>{' '}<input dir="ltr" id="consumer-group" required readOnly={!!target} value={groupId} onChange={event => setGroupId(event.target.value)} /><br />
+      {action !== 'deleteGroup' && <><label htmlFor="consumer-topic">{t("Exact topic")}</label>{' '}<input dir="auto" id="consumer-topic" required readOnly={!!target?.partition} value={topicName} onChange={event => setTopicName(event.target.value)} /><br /><label htmlFor="consumer-partition">{t("Partition")}</label>{' '}<input dir="auto" id="consumer-partition" type="number" min="0" required readOnly={!!target?.partition} value={partition} onChange={event => setPartition(Number(event.target.value))} /><br /></>}
+      {target?.partition && <p>{t("Committed")}{' '}<bdi>{target.partition.committedOffset ?? t("Unknown")}</bdi></p>}
+      {action === 'offset' && <>
+        <label htmlFor="consumer-selector">{t("Target selector")}</label>{' '}
+        <select id="consumer-selector" value={selector} onChange={event => setSelector(event.target.value as ConsumerOffsetSelectorKind)}>
+          <option value="absolute">{t("Absolute offset")}</option>
+          <option value="earliest">{t("Earliest")}</option>
+          <option value="latest">{t("Latest")}</option>
+          <option value="timestamp">{t("Timestamp")}</option>
+          <option value="relativeShift">{t("Relative shift")}</option>
+        </select><br />
+        {needsValue && <>
+          <label htmlFor="consumer-offset-value">{selector === 'absolute' ? t("Offset") : t("Shift")}</label>{' '}
+          <input dir="auto" id="consumer-offset-value" type="number" required value={value}
+            onChange={event => setValue(event.target.value)} /><br />
+        </>}
+        {selector === 'timestamp' && <>
+          <label htmlFor="consumer-offset-time">{t("Timestamp")}</label>{' '}
+          <input dir="auto" id="consumer-offset-time" type="datetime-local" required value={timestamp}
+            onChange={event => setTimestamp(event.target.value)} /><br />
+        </>}
+      </>}
       <p>{t("Selectors are resolved to frozen concrete offsets during planning; they are not re-resolved at dispatch.")}</p>
-      <button type="submit" disabled={!groupId.trim() || !idempotencyKey.trim() || (action !== 'deleteGroup' && !topicName.trim())}>{t("Create preview")}</button>
+      {needsValue && !validValue && <p role="alert">{t("Enter a whole offset or shift within the supported numeric range.")}</p>}
+      <button type="submit" disabled={!validValue || !groupId.trim() || !idempotencyKey.trim() || (action !== 'deleteGroup' && !topicName.trim())}>{t("Create preview")}</button>
     </fieldset>
   </form>;
 }
@@ -534,8 +584,8 @@ function DataGeneratorWorkflow({ clusterId, idempotencyKey, busy, submit }: { cl
   </form>;
 }
 
-function PurgeWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit }) {
-  const [topicName, setTopicName] = useState('');
+function PurgeWorkflow({ clusterId, idempotencyKey, busy, submit, selectedTopic }: { clusterId: string; idempotencyKey: string; busy: boolean; submit: Submit; selectedTopic?: string | undefined }) {
+  const [topicName, setTopicName] = useState(selectedTopic ?? '');
   const [partition, setPartition] = useState(0);
   const [selector, setSelector] = useState<RecordsPurgeSelectorKind>('absolute');
   const [beforeOffset, setBeforeOffset] = useState(0);
@@ -553,7 +603,7 @@ function PurgeWorkflow({ clusterId, idempotencyKey, busy, submit }: { clusterId:
   return <form onSubmit={onSubmit} aria-label={t("Controlled purge preview")}>
     <fieldset disabled={busy}><legend>{t("Controlled record purge")}</legend>
       <p role="alert"><strong>{t("Irreversible CRITICAL operation.")}</strong> {' '}{t("DeleteRecords has no rollback or undo claim. The preview freezes explicit partition/offset targets and requires independent approval.")}</p>
-      <label htmlFor="purge-topic">{t("Exact topic")}</label>{' '}<input dir="auto" id="purge-topic" required value={topicName} onChange={event => setTopicName(event.target.value)} /><br />
+      <label htmlFor="purge-topic">{t("Exact topic")}</label>{' '}<input dir="auto" id="purge-topic" required value={topicName} readOnly={!!selectedTopic} onChange={event => setTopicName(event.target.value)} /><br />
       <label htmlFor="purge-partition">{t("Partition")}</label>{' '}<input dir="auto" id="purge-partition" type="number" min="0" required value={partition} onChange={event => setPartition(Number(event.target.value))} /><br />
       <label htmlFor="purge-selector">{t("Selector")}</label>{' '}<select id="purge-selector" value={selector} onChange={event => setSelector(event.target.value as RecordsPurgeSelectorKind)}><option value="absolute">{t("Before offset")}</option><option value="timestamp">{t("Timestamp")}</option></select><br />
       {selector === 'absolute' ? <><label htmlFor="purge-offset">{t("Before offset")}</label>{' '}<input dir="ltr" id="purge-offset" type="number" min="0" required value={beforeOffset} onChange={event => setBeforeOffset(Number(event.target.value))} /></> : <><label htmlFor="purge-time">{t("Timestamp")}</label>{' '}<input dir="auto" id="purge-time" type="datetime-local" required value={timestamp} onChange={event => setTimestamp(event.target.value)} /></>}

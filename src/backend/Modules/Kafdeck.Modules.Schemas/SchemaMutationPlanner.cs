@@ -15,13 +15,15 @@ public sealed class SchemaMutationPlanner
     private readonly IMutationMaterialDigestService _digest;
     private readonly SchemaMutationPolicy _policy;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, string?>? _registryRevision;
 
     public SchemaMutationPlanner(
         ISchemaCatalogReadPort catalog,
         ISchemaMutationObservationPort mutationObservations,
         IMutationMaterialDigestService digest,
         SchemaMutationPolicy? policy = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, string?>? registryRevision = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _mutationObservations =
@@ -29,6 +31,7 @@ public sealed class SchemaMutationPlanner
         _digest = digest ?? throw new ArgumentNullException(nameof(digest));
         _policy = policy ?? SchemaMutationPolicy.Default;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _registryRevision = registryRevision;
     }
 
     public async Task<SchemaMutationPlanningResult<SchemaCreateCanonicalIntent>>
@@ -636,6 +639,11 @@ public sealed class SchemaMutationPlanner
             string subject,
             CancellationToken cancellationToken)
     {
+        var revision = _registryRevision?.Invoke(clusterId);
+        string BindRegistry(string fingerprint) => revision is null
+            ? fingerprint
+            : SchemaMutationCanonicalization.FingerprintText([new("subject", fingerprint), new("registry", revision)]);
+
         var versions = await _catalog.ListVersionsAsync(
                 clusterId,
                 subject,
@@ -677,7 +685,7 @@ public sealed class SchemaMutationPlanner
                     LatestVersion: null,
                     CompatibilityMode: global.Value.Mode,
                     CompatibilityInherited: true,
-                    Fingerprint: absentFingerprint));
+                    Fingerprint: BindRegistry(absentFingerprint)));
         }
 
         var compatibility = await _catalog.GetCompatibilityAsync(
@@ -717,7 +725,7 @@ public sealed class SchemaMutationPlanner
                 CompatibilityInherited:
                     compatibility.Value.IsInherited,
                 Fingerprint:
-                    fingerprint));
+                    BindRegistry(fingerprint)));
     }
 
     internal static string FingerprintVersion(

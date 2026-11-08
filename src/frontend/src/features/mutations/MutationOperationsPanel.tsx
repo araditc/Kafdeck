@@ -11,7 +11,7 @@ import {
   validateDataReconciliationPreview,
 } from './mutationApi.js';
 import { mutationExecutionSurface } from './mutationExecutionSurface.js';
-import { MutationPreviewWorkflows } from './MutationPreviewWorkflows.js';
+import { MutationPreviewWorkflows, type ConsumerMutationTarget } from './MutationPreviewWorkflows.js';
 import { StatusBadge } from '../../app/StatusBadge.js';
 import { mutationStateStatusKind } from '../../app/statusPresentation.js';
 
@@ -118,6 +118,10 @@ type MutationOperationsPanelProps = {
   clusterId: string;
   connectProfileId?: string | null;
   enabled?: boolean;
+  family?: 'topic' | 'consumer' | 'schema' | 'connect' | 'purge';
+  selectedTopic?: string | undefined;
+  consumerTarget?: ConsumerMutationTarget | undefined;
+  onApplied?: (() => void) | undefined;
 };
 
 type ReconciliationReview = DataReconciliationPreviewInput & {
@@ -126,7 +130,7 @@ type ReconciliationReview = DataReconciliationPreviewInput & {
   idempotencyKey: string;
 };
 
-export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }: MutationOperationsPanelProps) {
+export function MutationOperationsPanel({ clusterId, connectProfileId, enabled, family, selectedTopic, consumerTarget, onApplied }: MutationOperationsPanelProps) {
   const [mutationAvailable, setMutationAvailable] = useState<boolean | null>(enabled ?? null);
   const [approvals, setApprovals] = useState<MutationStatus[]>([]);
   const [selected, setSelected] = useState<MutationStatus | null>(null);
@@ -170,7 +174,10 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     try {
       const response = await mutationApi.listApprovals(50, signal);
       setMutationAvailable(true);
-      setApprovals(response.items);
+      setApprovals(family
+        ? response.items.filter(operation => operation.clusterId === clusterId &&
+          (family === 'purge' ? operation.operationKind === 'recordsPurge' : operation.operationKind.startsWith(family)))
+        : response.items);
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') return;
       if ((reason instanceof MutationApiProblem && reason.status === 404) ||
@@ -185,7 +192,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setMutationAvailable(true);
       setError({ reason });
     }
-  }, []);
+  }, [clusterId, family]);
 
   useEffect(() => {
     if (enabled === false) {
@@ -236,6 +243,7 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
       setSelected(operation);
       setTypedChallenge('');
       if (clearMaterialAfter) clearExecutionMaterial();
+      if (operation.state === 'appliedVerified') onApplied?.();
       await loadApprovals();
     } catch (reason) {
       setError({ reason });
@@ -398,7 +406,9 @@ export function MutationOperationsPanel({ clusterId, connectProfileId, enabled }
     <h2 id="mutations-title">{t("Governed mutations")}</h2>
     <p>{t("Mutation actions use frozen previews, explicit confirmation, current-request authorization rechecks and durable execution state. Unknown or partial outcomes are never presented as safe retries.")}</p>
 
-    <MutationPreviewWorkflows clusterId={clusterId} connectProfileId={connectProfileId ?? null} onPreview={selectOperation} />
+    <MutationPreviewWorkflows clusterId={clusterId} connectProfileId={connectProfileId ?? null} onPreview={selectOperation} selectedTopic={selectedTopic} consumerTarget={consumerTarget}
+      onConsumerDraftChange={() => { setSelected(null); setTypedChallenge(''); }}
+      {...(family ? { family } : {})} />
 
     <article aria-labelledby="mutation-lookup-title">
       <h3 id="mutation-lookup-title">{t("Operation status")}</h3>

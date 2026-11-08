@@ -12,14 +12,17 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
     IDisposable
 {
     private readonly KafkaProducerRegistry _producers;
+    private readonly Func<string, ProducerConfig?>? _registeredProducerConfig;
 
     public ConfluentKafkaRecordProduceAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
-        SecretResolver secretResolver)
+        SecretResolver secretResolver,
+        Func<string, ProducerConfig?>? registeredProducerConfig = null)
     {
         _producers = new KafkaProducerRegistry(
             clusterProfiles ?? throw new ArgumentNullException(nameof(clusterProfiles)),
             secretResolver ?? throw new ArgumentNullException(nameof(secretResolver)));
+        _registeredProducerConfig = registeredProducerConfig;
     }
 
     public async Task<MutationProviderResult> ProduceAsync(
@@ -31,9 +34,6 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
         if (cancellationToken.IsCancellationRequested)
             return Unknown("record_produce_cancelled_or_timeout");
 
-        if (!_producers.ContainsCluster(request.ClusterId))
-            return Failed("record_produce_cluster_not_configured");
-
         if (!IsExactTopicName(request.TopicName))
             return Failed("record_produce_invalid_topic");
 
@@ -43,6 +43,9 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
 
         try
         {
+            var configured = _producers.ContainsCluster(request.ClusterId);
+            var registered = configured ? null : _registeredProducerConfig?.Invoke(request.ClusterId);
+            if (!configured && registered is null) return Failed("record_produce_cluster_not_configured");
             key = request.Key?.ToArray();
             value = request.Value.ToArray();
 
@@ -62,7 +65,9 @@ public sealed class ConfluentKafkaRecordProduceAdapter :
                 headers.Add(pair.Key, headerValue);
             }
 
-            var producer = _producers.GetProducer(request.ClusterId);
+            using var requestProducer = registered is null ? null :
+                new ProducerBuilder<byte[], byte[]>(registered).SetLogHandler((_, _) => { }).Build();
+            var producer = requestProducer ?? _producers.GetProducer(request.ClusterId);
 
             // W32 has already durably marked DispatchStarted before invoking this port.
             // Do not cancel the delivery-report task from the handler token: librdkafka may

@@ -38,6 +38,9 @@ var declarativeSchemaMigration = args.Contains("--declarative-schema-migrate", S
 var declarativeSchemaAdoption = args.Contains("--declarative-adopt-existing", StringComparer.Ordinal);
 var declarativeGenerationAdmission = args.Contains("--declarative-generation-admit", StringComparer.Ordinal);
 var governanceGenerationAdmission = args.Contains("--governance-generation-admit", StringComparer.Ordinal);
+var issueSetupCode = args.Contains("--issue-setup-code", StringComparer.Ordinal);
+if (issueSetupCode && (governanceGenerationAdmission || declarativeSchemaMigration || declarativeSchemaAdoption || declarativeGenerationAdmission))
+    throw new InvalidOperationException("Setup code generation is a separate local command.");
 if (governanceGenerationAdmission && (declarativeGenerationAdmission || declarativeSchemaMigration || declarativeSchemaAdoption))
     throw new InvalidOperationException("Governance generation admission is a separate quarantined operator action.");
 if (declarativeGenerationAdmission && declarativeSchemaMigration)
@@ -45,10 +48,36 @@ if (declarativeGenerationAdmission && declarativeSchemaMigration)
 if (declarativeSchemaAdoption && !declarativeSchemaMigration)
     throw new InvalidOperationException("Declarative schema adoption requires explicit migration mode.");
 var builder = WebApplication.CreateBuilder(args.Where(value => value is not
-    ("--declarative-schema-migrate" or "--declarative-adopt-existing" or "--declarative-generation-admit" or "--governance-generation-admit")).ToArray());
+    ("--declarative-schema-migrate" or "--declarative-adopt-existing" or "--declarative-generation-admit" or "--governance-generation-admit" or "--issue-setup-code")).ToArray());
 
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
+var managedIdentityOptions = builder.Configuration.GetSection("Kafdeck:ManagedIdentity").Get<ManagedIdentityOptions>() ?? new();
+var managedIdentity = managedIdentityOptions.Enabled ? managedIdentityOptions.ValidateAndCreate(kafdeckOptions) : null;
+if (issueSetupCode)
+{
+    if (managedIdentity is null) throw new InvalidOperationException("Managed identity is disabled.");
+    Console.WriteLine(managedIdentity.IssueCode());
+    return;
+}
+if (managedIdentity is not null)
+{
+    if (builder.Configuration.GetSection("Kafdeck:Authorization:SubjectBindings").Exists() ||
+        builder.Configuration.GetSection("Kafdeck:Authorization:GroupBindings").Exists())
+        throw new KafdeckConfigurationException("Managed identity and externally configured operator bindings are separate modes.");
+    builder.Services.AddSingleton(managedIdentity);
+    if (builder.Configuration.GetValue<bool>("Kafdeck:ConnectionWorkspace:Enabled"))
+    {
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton(services => new RegisteredKafkaRuntime(
+            services.GetRequiredService<IHttpContextAccessor>(), managedIdentity, services.GetRequiredService<IConfiguration>()));
+        builder.Services.AddSingleton(services => new RegisteredHttpServiceRuntime(managedIdentity,
+            services.GetRequiredService<IHttpContextAccessor>(),
+            services.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>(),
+            services.GetRequiredService<IConfiguration>()));
+    }
+    builder.Services.AddSingleton(_ => new ManagedKeycloakUsers(kafdeckOptions.Deployment.Oidc!, managedIdentityOptions));
+}
 var mutationOptions = kafdeckOptions.Administration?.Mutations;
 var governanceOptions = builder.Configuration.GetSection("Kafdeck:Governance").Get<GovernanceRuntimeOptions>() ?? new();
 governanceOptions.Validate(kafdeckOptions.Deployment.Mode == AccessMode.Oidc, mutationOptions?.Enabled == true, governanceGenerationAdmission);
@@ -183,7 +212,9 @@ var authorizationPolicy = authorizationPolicies.Current;
 builder.Services.AddSingleton(authorizationPolicies);
 builder.Services.AddSingleton(authorizationPolicy);
 builder.Services.AddSingleton(new AuthorizationPolicyEvaluator(authorizationPolicy, () => authorizationPolicies.Current));
-builder.Services.AddSingleton<KafdeckAuthorizationService>();
+builder.Services.AddSingleton(services => new KafdeckAuthorizationService(
+    kafdeckOptions, services.GetRequiredService<AuthorizationPolicyEvaluator>(), services.GetService<NonBrowserReadRegistry>())
+    { ManagedIdentity = managedIdentity, RegisteredHttpServices = services.GetService<RegisteredHttpServiceRuntime>() });
 builder.Services.AddSingleton<ISecurityAuditSink, LoggingSecurityAuditSink>();
 builder.Services.AddSingleton<ApiTelemetry>();
 builder.Services.AddSingleton<IKafdeckOperationalTelemetry>(
@@ -191,24 +222,27 @@ builder.Services.AddSingleton<IKafdeckOperationalTelemetry>(
         services.GetRequiredService<ApiTelemetry>());
 builder.Services.AddSingleton<KafkaSnapshotPolicy>();
 builder.Services.AddSingleton<KafkaSnapshotCoordinator>(services =>
-    new KafkaSnapshotCoordinator(services.GetRequiredService<KafkaSnapshotPolicy>()));
+    new KafkaSnapshotCoordinator(services.GetRequiredService<KafkaSnapshotPolicy>(),
+        snapshotScope: services.GetService<RegisteredKafkaRuntime>() is { } runtime ? runtime.SnapshotScope : null));
+static Func<string, Confluent.Kafka.IAdminClient?>? RegisteredKafkaClient(IServiceProvider services) =>
+    services.GetService<RegisteredKafkaRuntime>() is { } runtime ? runtime.GetClient : null;
 builder.Services.AddSingleton<IKafkaAdministrationPort>(services =>
     new TelemetryKafkaAdministrationPort(
         new ConfluentKafkaAdministrationAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver, registeredClient: RegisteredKafkaClient(services)),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<IKafkaRecordReadPort>(services =>
     new TelemetryKafkaRecordReadPort(
         new ConfluentKafkaRecordReadAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver, registeredConsumerConfig: services.GetService<RegisteredKafkaRuntime>() is { } runtime ? runtime.GetConsumerConfig : null),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<ConfluentKafkaConsumerGroupReadAdapter>(
-    _ =>
+    services =>
         new ConfluentKafkaConsumerGroupReadAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
+            secretResolver, registeredClient: RegisteredKafkaClient(services)));
 builder.Services.AddSingleton<IConsumerGroupSamplingReadPort>(
     services =>
         services.GetRequiredService<
@@ -426,7 +460,8 @@ builder.Services.AddSingleton<ISchemaCatalogReadPort>(services =>
     new TelemetrySchemaCatalogReadPort(
         new ConfluentSchemaCatalogReadAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver,
+            registeredClient: services.GetService<RegisteredHttpServiceRuntime>() is { } registered ? registered.OpenRegistry : null),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<SchemaDiffService>();
 builder.Services.AddSingleton<SchemaExplorerService>();
@@ -444,19 +479,22 @@ builder.Services.AddSingleton<IConnectReadPort>(services =>
     new TelemetryConnectReadPort(
         new KafkaConnectReadAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver,
+            registeredClient: services.GetService<RegisteredHttpServiceRuntime>() is { } registered ? registered.OpenConnect : null),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<IKsqlMetadataReadPort>(services =>
     new TelemetryKsqlMetadataReadPort(
         new KsqlDbMetadataReadAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver,
+            registeredClient: services.GetService<RegisteredHttpServiceRuntime>() is { } registered ? registered.OpenKsql : null),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<IKsqlQueryPort>(services =>
     new TelemetryKsqlQueryPort(
         new KsqlDbQueryAdapter(
             kafdeckOptions.Clusters,
-            secretResolver),
+            secretResolver,
+            registeredClient: services.GetService<RegisteredHttpServiceRuntime>() is { } registered ? registered.OpenKsql : null),
         services.GetRequiredService<IKafdeckOperationalTelemetry>()));
 builder.Services.AddSingleton<IStreamsTelemetryReadPort>(services =>
     new TelemetryStreamsTelemetryReadPort(
@@ -540,7 +578,13 @@ if (mutationOptions?.Enabled == true)
             services.GetRequiredService<IGovernancePolicyTransactionGate>(),
             services.GetRequiredService<IMutationOperationTransactionReader>()));
     builder.Services.AddSingleton<IMutationAuditSink, LoggingMutationAuditSink>();
-    builder.Services.AddSingleton<MutationApprovalAuthorizer>();
+    builder.Services.AddSingleton(services => new MutationApprovalAuthorizer(
+        services.GetRequiredService<AuthorizationPolicyEvaluator>(),
+        managedIdentity is null ? null : (human, request) =>
+            ManagedIdentityEndpoints.IsRegisteredTarget(managedIdentity, request.ClusterId)
+                ? ManagedIdentityEndpoints.IsRegisteredMutationAction(request.Action) &&
+                  ManagedIdentityEndpoints.CanManageRegisteredTarget(managedIdentity.Find(human), request.ClusterId)
+                : null));
     builder.Services.AddSingleton<MutationRequestAuthorizationService>();
     builder.Services.AddSingleton<MutationAdmissionService>();
     builder.Services.AddSingleton<MutationCommandService>();
@@ -549,10 +593,10 @@ if (mutationOptions?.Enabled == true)
 
     builder.Services.AddSingleton<TopicMutationPlanner>();
     builder.Services.AddSingleton<TopicMutationPreconditionValidator>();
-    builder.Services.AddSingleton<ITopicMutationPort>(_ =>
+    builder.Services.AddSingleton<ITopicMutationPort>(services =>
         new ConfluentKafkaTopicMutationAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
+            secretResolver, registeredClient: RegisteredKafkaClient(services)));
     builder.Services.AddSingleton<TopicMutationExecutionService>();
     builder.Services.AddSingleton<IMutationExecutionHandler, TopicCreateExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, TopicAlterExecutionHandler>();
@@ -561,10 +605,10 @@ if (mutationOptions?.Enabled == true)
 
     builder.Services.AddSingleton<RecordProductionPlanner>();
     builder.Services.AddSingleton<RecordProductionPreconditionValidator>();
-    builder.Services.AddSingleton<IRecordProduceMutationPort>(_ =>
+    builder.Services.AddSingleton<IRecordProduceMutationPort>(services =>
         new ConfluentKafkaRecordProduceAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
+            secretResolver, registeredProducerConfig: services.GetService<RegisteredKafkaRuntime>() is { } runtime ? runtime.GetProducerConfig : null));
     builder.Services.AddSingleton<RecordProductionExecutionService>();
     builder.Services.AddSingleton<IMutationExecutionHandler, RecordProduceExecutionHandler>();
 
@@ -607,39 +651,48 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IMutationExecutionHandler,
         DataGeneratorActivationHandler>();
 
-    builder.Services.AddSingleton<IConsumerMutationObservationPort>(_ =>
+    builder.Services.AddSingleton<IConsumerMutationObservationPort>(services =>
         new ConfluentKafkaConsumerMutationObservationAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
-    builder.Services.AddSingleton<IConsumerMutationPort>(_ =>
+            secretResolver, registeredClient: RegisteredKafkaClient(services)));
+    builder.Services.AddSingleton<IConsumerMutationPort>(services =>
         new ConfluentKafkaConsumerMutationAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
+            secretResolver, registeredClient: RegisteredKafkaClient(services)));
     builder.Services.AddSingleton<ConsumerMutationPlanner>();
     builder.Services.AddSingleton<ConsumerMutationPreconditionValidator>();
     builder.Services.AddSingleton<ConsumerMutationExecutionService>();
     builder.Services.AddSingleton<IMutationExecutionHandler, ConsumerOffsetAlterExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, ConsumerDeleteExecutionHandler>();
 
-    builder.Services.AddSingleton<ConfluentSchemaMutationAdapter>(_ =>
+    builder.Services.AddSingleton<ConfluentSchemaMutationAdapter>(services =>
         new ConfluentSchemaMutationAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
+            secretResolver,
+            registeredClient: services.GetService<RegisteredHttpServiceRuntime>() is { } registered ? registered.OpenRegistry : null));
     builder.Services.AddSingleton<ISchemaMutationPort>(services =>
         services.GetRequiredService<ConfluentSchemaMutationAdapter>());
     builder.Services.AddSingleton<ISchemaMutationObservationPort>(services =>
         services.GetRequiredService<ConfluentSchemaMutationAdapter>());
-    builder.Services.AddSingleton<SchemaMutationPlanner>();
+    builder.Services.AddSingleton(services => new SchemaMutationPlanner(
+        services.GetRequiredService<ISchemaCatalogReadPort>(),
+        services.GetRequiredService<ISchemaMutationObservationPort>(),
+        services.GetRequiredService<IMutationMaterialDigestService>(),
+        services.GetService<SchemaMutationPolicy>(), services.GetService<TimeProvider>(),
+        registryRevision: services.GetService<RegisteredHttpServiceRuntime>() is { } registered ? registered.RegistryRevision : null));
     builder.Services.AddSingleton<SchemaMutationPreconditionValidator>();
     builder.Services.AddSingleton<SchemaMutationExecutionService>();
     builder.Services.AddSingleton<IMutationExecutionHandler, SchemaCreateExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, SchemaAlterExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, SchemaDeleteExecutionHandler>();
 
-    builder.Services.AddSingleton<KafkaConnectMutationAdapter>(_ =>
-        new KafkaConnectMutationAdapter(
-            kafdeckOptions.Clusters,
-            secretResolver));
+    builder.Services.AddSingleton<KafkaConnectMutationAdapter>(services =>
+    {
+        var registered = services.GetService<RegisteredHttpServiceRuntime>();
+        return new KafkaConnectMutationAdapter(kafdeckOptions.Clusters, secretResolver,
+            registeredClient: registered is null ? null : registered.OpenConnect,
+            registeredRevision: registered is null ? null : registered.ConnectRevision);
+    });
     builder.Services.AddSingleton<IConnectMutationPort>(services =>
         services.GetRequiredService<KafkaConnectMutationAdapter>());
     builder.Services.AddSingleton<IConnectMutationObservationPort>(services =>
@@ -668,14 +721,14 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<IMutationExecutionHandler, ConnectAlterExecutionHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler, ConnectDeleteExecutionHandler>();
 
-    builder.Services.AddSingleton<IRecordsPurgeObservationPort>(_ =>
+    builder.Services.AddSingleton<IRecordsPurgeObservationPort>(services =>
         new ConfluentKafkaRecordsPurgeObservationAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
-    builder.Services.AddSingleton<IRecordsPurgeMutationPort>(_ =>
+            secretResolver, registeredClient: RegisteredKafkaClient(services)));
+    builder.Services.AddSingleton<IRecordsPurgeMutationPort>(services =>
         new ConfluentKafkaRecordsPurgeAdapter(
             kafdeckOptions.Clusters,
-            secretResolver));
+            secretResolver, registeredClient: RegisteredKafkaClient(services)));
     builder.Services.AddSingleton<RecordsPurgePlanner>();
     builder.Services.AddSingleton<RecordsPurgePreconditionValidator>();
     builder.Services.AddSingleton<RecordsPurgeExecutionService>();
@@ -940,10 +993,19 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseMiddleware<NonBrowserReadBoundaryMiddleware>();
 
+static bool IsBrowserAccessModeRequest(HttpContext context) =>
+    HttpMethods.IsGet(context.Request.Method) &&
+    context.Request.Path.Equals(new PathString("/api/v1/auth/mode"), StringComparison.OrdinalIgnoreCase);
+
+bool IsSetupRequest(HttpContext context) => managedIdentity is not null &&
+    (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsPost(context.Request.Method)) &&
+    context.Request.Path.Equals(new PathString("/api/v1/setup"), StringComparison.OrdinalIgnoreCase);
+
 if (deploymentAccessToken is not null)
 {
     app.UseWhen(
-        context => context.Request.Path.StartsWithSegments("/api") && context.User.Identity is not NonBrowserReadIdentity,
+        context => context.Request.Path.StartsWithSegments("/api") &&
+            !IsBrowserAccessModeRequest(context) && context.User.Identity is not NonBrowserReadIdentity,
         branch => branch.UseMiddleware<DeploymentAccessTokenMiddleware>(deploymentAccessToken));
 }
 
@@ -952,6 +1014,8 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
     app.UseWhen(
         context =>
             context.Request.Path.StartsWithSegments("/api/v1") &&
+            !IsBrowserAccessModeRequest(context) &&
+            !IsSetupRequest(context) &&
             !context.Request.Path.StartsWithSegments("/api/v1/auth/login"),
         branch => branch.UseMiddleware<OidcApiAuthenticationBoundaryMiddleware>());
 }
@@ -963,17 +1027,54 @@ app.MapGet("/healthz", () => Results.Ok(new
     }))
     .WithName("healthz");
 
+var browserAccessMode = kafdeckOptions.Deployment.Mode.ToString().ToLowerInvariant();
+var connectionWorkspace = kafdeckOptions.Deployment.Mode == AccessMode.Oidc &&
+    app.Configuration.GetValue<bool>("Kafdeck:ConnectionWorkspace:Enabled");
+app.MapGet("/api/v1/auth/mode", (HttpContext context) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    return Results.Ok(new
+    {
+        authenticationMode = browserAccessMode, connectionWorkspace,
+        setupState = managedIdentity is null ? null : ManagedIdentityEndpoints.SetupState(managedIdentity.Read()),
+    });
+});
+
 if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
 {
-    app.MapKafdeckOidcSessionEndpoints();
+    app.MapKafdeckOidcSessionEndpoints(connectionWorkspace);
     app.MapKafdeckAntiforgeryEndpoint();
+    if (connectionWorkspace) app.MapKafkaConnectionWorkspace(kafdeckOptions, managedIdentity);
+    if (managedIdentity is not null)
+    {
+        _ = app.Services.GetRequiredService<ManagedKeycloakUsers>();
+        app.MapManagedIdentity(managedIdentity, kafdeckOptions);
+        if (app.Services.GetService<RegisteredHttpServiceRuntime>() is { } registered)
+            app.MapRegisteredHttpServices(managedIdentity, registered);
+    }
+}
+else
+{
+    app.MapGet("/api/v1/auth/session", (HttpContext context) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (context.User.Identity is NonBrowserReadIdentity)
+        {
+            return Results.Unauthorized();
+        }
+
+        return Results.Ok(new { authenticated = true, authenticationMode = browserAccessMode });
+    });
 }
 
-app.MapKafdeckV01(kafdeckOptions);
+var dashboardOptions = app.Services.GetService<RegisteredKafkaRuntime>() is { } registeredKafka
+    ? kafdeckOptions with { Clusters = registeredKafka.IncludeRegistered(kafdeckOptions.Clusters) }
+    : kafdeckOptions;
+app.MapKafdeckV01(dashboardOptions);
 app.MapKafdeckRecordEndpoints(kafdeckOptions);
-app.MapKafdeckV04ReadViews(kafdeckOptions);
-app.MapKafdeckV07SchemaCapabilities(kafdeckOptions);
-app.MapKafdeckV07SchemaDeveloperTools(kafdeckOptions);
+app.MapKafdeckV04ReadViews(dashboardOptions);
+app.MapKafdeckV07SchemaCapabilities(dashboardOptions);
+app.MapKafdeckV07SchemaDeveloperTools(dashboardOptions);
 app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckV08Observability(kafdeckOptions);

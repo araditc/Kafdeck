@@ -35,6 +35,27 @@ test('frontend source does not persist secrets or payloads in browser storage', 
         guarded = guarded.replace(call, '/* closed language preference operation */');
       }
     }
+    if (file === path.join(sourceRoot, 'shared', 'recentSignIns.ts')) {
+      assert.match(source, /export const recentSignInsKey = 'kafdeck\.recent-sign-ins\.v1';/);
+      for (const call of [
+        'window.localStorage.getItem(recentSignInsKey)',
+        'window.localStorage.setItem(recentSignInsKey, JSON.stringify(normalize(entries)))',
+      ]) {
+        assert.equal(source.split(call).length - 1, 1, `Expected exactly one ${call}`);
+        guarded = guarded.replace(call, '/* closed profile label operation */');
+      }
+    }
+    if (file === path.join(sourceRoot, 'shared', 'kafkaConnections.ts')) {
+      assert.match(source, /const recentConnectionsPrefix = 'kafdeck\.kafka-connections\.v1\.';/);
+      assert.match(source, /const safeProfiles = normalize\(profiles\);/);
+      for (const call of [
+        'window.localStorage.getItem(storageKey)',
+        'window.localStorage.setItem(storageKey, JSON.stringify(safeProfiles))',
+      ]) {
+        assert.equal(source.split(call).length - 1, 1, `Expected exactly one ${call}`);
+        guarded = guarded.replace(call, '/* closed Kafka connection settings operation */');
+      }
+    }
     assert.doesNotMatch(
       guarded,
       /\b(?:localStorage|sessionStorage)\b/,

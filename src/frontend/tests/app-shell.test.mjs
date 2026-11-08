@@ -5,25 +5,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AppShell, authoritativeSessionScope, canPreserveOperatorSession, verificationFocusDecision } from '../dist/test-source/app/AppShell.js';
 import { describeObservation, selectCluster, shouldAutoRefresh, visibleRefreshIntervalMs } from '../dist/test-source/app/operatorState.js';
 
-test('AppShell exposes product identity and accessible operator landmarks', () => {
+test('AppShell exposes the public sign-in landmark and withholds operator controls before verification', () => {
   const markup = renderToStaticMarkup(React.createElement(AppShell));
 
-  assert.match(markup, /<main[^>]+class="page-wrapper"[^>]+aria-labelledby="kafdeck-title"/);
-  assert.match(markup, /class="navbar[^"]*kafdeck-topbar/);
+  assert.match(markup, /<main[^>]+aria-labelledby="kafdeck-sign-in-title"/);
   assert.match(markup, /class="kafdeck-brand-logo" src="\/kafdeck-logo\.webp" alt="" width="42" height="42"/);
   assert.match(markup, /Open Source Kafka Control Plane/);
-  assert.match(markup, /class="form-label" for="cluster-selector">Cluster<\/label>/);
-  assert.match(markup, /aria-label="Kafdeck sections"/);
-  assert.match(markup, /class="nav nav-pills py-2"/);
-  assert.match(markup, /href="#consumers"/);
-  assert.match(markup, /href="#schemas"/);
-  assert.match(markup, /href="#ecosystem"/);
-  assert.match(markup, /href="#fleet"/);
-  assert.match(markup, /Fleet Operations/);
-  assert.match(markup, /Loading fleet capability status/);
-  assert.match(markup, /aria-haspopup="dialog"/);
-  assert.doesNotMatch(markup, /aria-controls="kafdeck-command-palette"/);
-  assert.match(markup, /Commands/);
+  assert.match(markup, /Sign in to Kafdeck/);
+  assert.match(markup, /Recent sign-ins/);
+  assert.match(markup, /role="status"[^>]*>Checking operator session/);
+  assert.doesNotMatch(markup, /kafdeck-shell|cluster-selector|Kafdeck sections|Fleet Operations|Commands|Signed in as/);
 });
 
 test('cluster switching clears cluster-scoped state', () => {
@@ -72,16 +63,6 @@ test('only a valid opaque server session scope preserves mounted operator state'
   assert.equal(canPreserveOperatorSession(null,{...identity,sessionScope:scope}),false);
   assert.equal(authoritativeSessionScope(Object.create({sessionScope:scope})),null);
 });
-
-test('initial operator verification hides and inerts the entire private shell with status outside', () => {
-  const html=renderToStaticMarkup(React.createElement(AppShell));
-  assert.match(html, /class="page kafdeck-shell" hidden="" inert="" aria-hidden="true" style="display:none"/);
-  const status=html.indexOf('Checking operator session');
-  assert.ok(status>=0 && status<html.indexOf('class="page kafdeck-shell"'));
-  assert.match(html,/Authorized content is hidden until verification completes/);
-  assert.doesNotMatch(html,/Signed in as/);
-});
-
 
 test('visibility verification defers original focus until actual window return without stealing user focus', () => {
   const candidate={candidateEpoch:4,currentEpoch:4,candidateScope:'server:'+'a'.repeat(64),currentScope:'server:'+'a'.repeat(64),connected:true,documentFocused:false,bodyActive:true};

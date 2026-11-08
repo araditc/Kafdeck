@@ -44,7 +44,7 @@ public static class KafdeckRecordEndpoints
         RecordFilterService filterService, RecordMaskingService maskingService, CompiledRecordMaskingPolicy maskingPolicy,
         ISecurityAuditSink auditSink, CancellationToken cancellationToken)
     {
-        if (!IsConfiguredCluster(options, clusterId)) return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
+        if (!IsKnownCluster(http, options, clusterId)) return ApiResults.Problem(ApiProblemMapper.InvalidClusterId(clusterId));
         try
         {
             var query = RecordHttpQuery.Parse(http.Request.Query, clusterId, topicName, partition);
@@ -58,7 +58,7 @@ public static class KafdeckRecordEndpoints
                 query.SerdeFormat,
                 cancellationToken).ConfigureAwait(false);
             if (!filtered.IsSuccess || filtered.Value is null) return ApiResults.Problem(ApiProblemMapper.FromKafka(filtered.Failure!));
-            if (!CurrentBearerReadAllowed(http, clusterId, topicName)) return Results.Problem(statusCode: 403, title: "Record access revoked.");
+            if (!CurrentRecordReadAllowed(http, clusterId, topicName)) return Results.Problem(statusCode: 403, title: "Record access revoked.");
 
             var safe = maskingService.Apply(query.Read, filtered.Value, maskingPolicy);
             await AuditRecordAccessAsync(http, auditSink, maskingService.BuildReadAudit(safe), cancellationToken).ConfigureAwait(false);
@@ -75,7 +75,7 @@ public static class KafdeckRecordEndpoints
         RecordLiveTailService tailService, RecordMaskingService maskingService, CompiledRecordMaskingPolicy maskingPolicy,
         IOptions<JsonOptions> jsonOptions, ISecurityAuditSink auditSink, CancellationToken cancellationToken)
     {
-        if (!IsConfiguredCluster(options, clusterId))
+        if (!IsKnownCluster(http, options, clusterId))
         {
             await WriteProblemAsync(http, ApiProblemMapper.InvalidClusterId(clusterId), cancellationToken).ConfigureAwait(false);
             return;
@@ -116,7 +116,7 @@ public static class KafdeckRecordEndpoints
             query.SerdeFormat,
             cancellationToken).ConfigureAwait(false))
         {
-            if (!CurrentBearerReadAllowed(http, clusterId, topicName)) break;
+            if (!CurrentRecordReadAllowed(http, clusterId, topicName)) break;
             object payload;
             if (frame.Kind == RecordTailFrameKind.Records && frame.Page is not null)
             {
@@ -156,7 +156,7 @@ public static class KafdeckRecordEndpoints
         CompiledRecordMaskingPolicy maskingPolicy, AuthorizationPolicyEvaluator authorizationEvaluator,
         ISecurityAuditSink auditSink, CancellationToken cancellationToken)
     {
-        if (!IsConfiguredCluster(options, clusterId))
+        if (!IsKnownCluster(http, options, clusterId))
         {
             await WriteProblemAsync(http, ApiProblemMapper.InvalidClusterId(clusterId), cancellationToken).ConfigureAwait(false);
             return;
@@ -198,8 +198,8 @@ public static class KafdeckRecordEndpoints
             var summary = await exportService.ExportAsync(
                 safe, exportRequest, authorizationEvaluator, identity, http.Response.Body, cancellationToken,
                 legacyDeploymentAuthorized: legacyDeploymentAuthorized,
-                liveAuthorization: http.User.Identity is NonBrowserReadIdentity
-                    ? () => CurrentBearerReadAllowed(http, clusterId, topicName, export: true) : null).ConfigureAwait(false);
+                liveAuthorization: RequiresLiveRecordAuthorization(http)
+                    ? () => CurrentRecordReadAllowed(http, clusterId, topicName, export: true) : null).ConfigureAwait(false);
             await AuditRecordAccessAsync(http, auditSink, exportService.BuildExportAudit(safe, summary), cancellationToken).ConfigureAwait(false);
         }
         catch (UnauthorizedAccessException)
@@ -244,12 +244,17 @@ public static class KafdeckRecordEndpoints
             reason), cancellationToken).ConfigureAwait(false);
     }
 
-    private static bool IsConfiguredCluster(KafdeckOptions options, string clusterId) =>
-        options.Clusters.Any(cluster => string.Equals(cluster.Id, clusterId, StringComparison.Ordinal));
+    private static bool IsKnownCluster(HttpContext http, KafdeckOptions options, string clusterId) =>
+        options.Clusters.Any(cluster => string.Equals(cluster.Id, clusterId, StringComparison.Ordinal)) ||
+        http.RequestServices.GetRequiredService<KafdeckAuthorizationService>().IsManagedRegisteredTarget(clusterId);
 
-    private static bool CurrentBearerReadAllowed(HttpContext http, string cluster, string topic, bool export = false)
+    private static bool RequiresLiveRecordAuthorization(HttpContext http) =>
+        http.User.Identity is NonBrowserReadIdentity ||
+        http.RequestServices.GetRequiredService<KafdeckAuthorizationService>().ManagedIdentity is not null;
+
+    private static bool CurrentRecordReadAllowed(HttpContext http, string cluster, string topic, bool export = false)
     {
-        if (http.User.Identity is not NonBrowserReadIdentity) return true;
+        if (!RequiresLiveRecordAuthorization(http)) return true;
         var authorization = http.RequestServices.GetRequiredService<KafdeckAuthorizationService>();
         return authorization.Authorize(http.User, new(AuthorizationAction.ClusterRead, cluster)) == KafdeckAuthorizationOutcome.Allowed &&
             authorization.Authorize(http.User, new(AuthorizationAction.TopicRead, cluster, topic)) == KafdeckAuthorizationOutcome.Allowed &&

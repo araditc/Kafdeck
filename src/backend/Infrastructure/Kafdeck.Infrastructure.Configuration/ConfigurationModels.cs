@@ -400,7 +400,8 @@ public sealed record ClusterProfile(
     KafkaConnectProfile? Connect = null,
     KsqlDbProfile? KsqlDb = null,
     IReadOnlyList<KafkaConnectProfile>? ConnectProfiles = null,
-    StreamsTelemetryProfile? StreamsTelemetry = null);
+    StreamsTelemetryProfile? StreamsTelemetry = null,
+    string? DisplayName = null);
 
 public enum SchemaRegistryProviderProfile
 {

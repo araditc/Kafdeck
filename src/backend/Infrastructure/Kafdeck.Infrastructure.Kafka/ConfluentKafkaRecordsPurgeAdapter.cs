@@ -21,13 +21,15 @@ public sealed class ConfluentKafkaRecordsPurgeAdapter :
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
         TimeSpan? requestTimeout = null,
-        TimeSpan? operationTimeout = null)
+        TimeSpan? operationTimeout = null,
+        Func<string, IAdminClient?>? registeredClient = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ??
                 throw new ArgumentNullException(nameof(clusterProfiles)),
             secretResolver ??
-                throw new ArgumentNullException(nameof(secretResolver)));
+                throw new ArgumentNullException(nameof(secretResolver)),
+            registeredClient);
 
         _requestTimeout = ValidateTimeout(
             requestTimeout ?? TimeSpan.FromSeconds(15),

@@ -11,15 +11,7 @@ function focusElement(id: string | undefined) {
   }
 }
 
-function runCommand(command: ProductCommand) {
-  if (command.availability !== 'available') return;
-  const target = document.getElementById(command.targetId);
-  target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  window.history.replaceState(null, '', `#${command.targetId}`);
-  window.setTimeout(() => focusElement(command.focusId ?? command.targetId), 0);
-}
-
-export function CommandPalette() {
+export function CommandPalette({ navigate }: { navigate?: (target: string, focus?: string) => void }) {
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -39,7 +31,8 @@ export function CommandPalette() {
   const activate = (command: ProductCommand) => {
     if (command.availability !== 'available') return;
     close(false);
-    runCommand(command);
+    if (navigate) navigate(command.targetId, command.focusId ?? command.targetId);
+    else window.setTimeout(() => focusElement(command.focusId ?? command.targetId), 0);
   };
 
   useEffect(() => {
@@ -121,14 +114,14 @@ export function CommandPalette() {
   };
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'ArrowDown') {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      if (commands.length > 0) setActiveIndex(index => (index + 1) % commands.length);
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (commands.length > 0) setActiveIndex(index => (index - 1 + commands.length) % commands.length);
+      if (commands.length > 0) {
+        const next = (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + commands.length) % commands.length;
+        setActiveIndex(next);
+        const command = commands[next];
+        if (command) document.getElementById(`kafdeck-command-${command.id}`)?.scrollIntoView({ block: 'nearest' });
+      }
       return;
     }
     if (event.key === 'Enter') {
@@ -173,7 +166,7 @@ export function CommandPalette() {
         </div>
         <div className="card-body">
           <label className="form-label" htmlFor="kafdeck-command-query">{t("Find a resource or tool")}</label>
-          <input dir="ltr"
+          <input dir="auto"
             ref={inputRef}
             id="kafdeck-command-query"
             className="form-control"
@@ -185,7 +178,12 @@ export function CommandPalette() {
             aria-activedescendant={commands[activeIndex] ? `kafdeck-command-${commands[activeIndex].id}` : undefined}
             autoComplete="off"
             value={query}
-            onChange={event => setQuery(event.target.value)}
+            onChange={event => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+              const results = document.getElementById('kafdeck-command-results');
+              if (results) results.scrollTop = 0;
+            }}
             onKeyDown={onInputKeyDown}
             placeholder={t("Topics, schemas, Connect, ksqlDB, data jobs…")}
           />

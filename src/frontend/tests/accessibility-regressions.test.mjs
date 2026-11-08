@@ -25,7 +25,7 @@ test('small semantic text and action states meet 4.5 contrast in both declared p
 });
 
 test('brand uses natural visible title and subtitle with a redundant decorative logo in each locale',()=>{
-  try{for(const locale of ['en','fa']){setLocale(locale,false);const html=renderToStaticMarkup(React.createElement(AppShell));const brand=html.match(/<a class="kafdeck-brand"[^>]*>/)?.[0];assert.ok(brand);assert.doesNotMatch(brand,/aria-label(?:ledby)?=/);assert.match(html,/class="kafdeck-brand-logo"[^>]*alt=""/);assert.match(html,/id="kafdeck-brand-name"[^>]*>Kafdeck<\/span>/);assert.match(html,locale==='en'?/id="kafdeck-brand-subtitle"[^>]*>Open Source Kafka Control Plane<\/span>/:/id="kafdeck-brand-subtitle"[^>]*>صفحه کنترل متن‌باز Kafka<\/span>/);}}
+  try{for(const locale of ['en','fa']){setLocale(locale,false);const html=renderToStaticMarkup(React.createElement(AppShell));const brand=html.match(/<div class="kafdeck-brand"[^>]*>/)?.[0];assert.ok(brand);assert.doesNotMatch(brand,/aria-label(?:ledby)?=/);assert.match(html,/class="kafdeck-brand-logo"[^>]*alt=""/);assert.match(html,/class="kafdeck-brand-name"[^>]*>Kafdeck<\/span>/);assert.match(html,locale==='en'?/class="kafdeck-brand-subtitle"[^>]*>Open Source Kafka Control Plane<\/span>/:/class="kafdeck-brand-subtitle"[^>]*>صفحه کنترل متن‌باز Kafka<\/span>/);}}
   finally{setLocale('en',false);}
 });
 

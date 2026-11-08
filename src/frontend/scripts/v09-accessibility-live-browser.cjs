@@ -35,6 +35,10 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     // matching. Keep the registered command label scoped and uniquely verified.
     const label=(panel,name)=>panel.getByLabel(local(name),{exact:name!=='Business command'});
     const article=panel=>panel.getByRole('article',{name:local('Immutable governance operation'),exact:true});
+    async function openPanel(target,name,id){
+      await probe.activate(target,target.getByRole('link',{name:local(name),exact:true}),'navigate-'+id);
+      await target.locator('#'+id).waitFor({state:'visible'});
+    }
     async function signIn(target,user,passwordFile){
       target.on('response',response=>{const url=new URL(response.url());if(url.origin!==api.origin||!url.pathname.startsWith('/api/v1/governance/'))return;const family=url.pathname.split('/')[4];if(!['catalog','policies','requests','dashboards','rate-cards','measurements'].includes(family))return;result.routeTrace.push({family,method:['GET','POST','HEAD','OPTIONS'].includes(response.request().method())?response.request().method():'other',status:response.status()});result.routeTrace=result.routeTrace.slice(-40);});
       // Authentication automation is fixture setup; computer-use never handles passwords.
@@ -80,7 +84,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       if(!scenario.manualHandoffDirectory)return;
       const directory=path.resolve(scenario.manualHandoffDirectory);fs.mkdirSync(directory,{recursive:true});
       fs.writeFileSync(path.join(directory,'safe-authenticated-actors-'+locale+'.json'),JSON.stringify({locale,stage,actor:metadata.actor??'requester',sourceSha:result.sourceSha,authenticatedApplication:true,nativeFocusEmulationDisabled:!launch.headless,workflowResumed:false}));
-      const focusActor=async()=>{await actorPage.bringToFront();await actorPage.locator('#service-requests').waitFor({state:'visible',timeout:120000});await actorPage.waitForFunction(()=>document.hasFocus(),undefined,{timeout:120000});};
+      const focusActor=async()=>{await actorPage.bringToFront();await actorPage.locator('#kafdeck-main').waitFor({state:'visible',timeout:120000});await actorPage.waitForFunction(()=>document.hasFocus(),undefined,{timeout:120000});};
       await focusActor();
       const suffix=locale+'-'+stage,resume=path.join(directory,'resume-'+suffix+'.json');if(fs.existsSync(resume))throw Error('stale AT handoff');
       const keyboardActionRange={from:manualActionCursor,to:result.keyboard.actions.length};
@@ -133,8 +137,6 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
         for(const next of [locale==='en'?'fa':'en',locale]){
           await probe.select(target,target.locator('#kafdeck-language'),next,stage+'-switch-'+next);await target.waitForFunction(next=>document.documentElement.lang===next&&document.documentElement.dir===(next==='fa'?'rtl':'ltr'),next);
           assert.deepEqual(await snapshot(),before,'locale changed frozen material or form/review state');assert.equal(await target.locator('#kafdeck-language').evaluate(element=>element===document.activeElement),true,'locale switch moved focus');assert.equal(mutationRequests,0,'locale emitted a mutation');
-          await assertControlledAutomationCopy(target,next,stage);
-          await assertControlledReadViewCopy(target,next,stage);
           if(scanBoth)await probe.scan(target,locale+'-'+stage+'-switch-'+next,output);
         }
       }finally{target.off('request',listener);}
@@ -165,10 +167,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     phase='authoritative-opaque-session-scope-'+locale;
     const requesterSession=await get(context,'/api/v1/auth/session'),requesterAgain=await get(context,'/api/v1/auth/session'),reviewerSession=await get(second,'/api/v1/auth/session');
     assert.match(requesterSession.sessionScope,/^[a-f0-9]{64}$/i);assert.equal(requesterAgain.sessionScope,requesterSession.sessionScope);assert.match(reviewerSession.sessionScope,/^[a-f0-9]{64}$/i);assert.notEqual(reviewerSession.sessionScope,requesterSession.sessionScope);result.stableOpaqueActorScope=true;result.distinctHumanOpaqueScopes=true;
-    const catalog=page.locator('#ownership-catalog'),requests=page.locator('#service-requests');await page.waitForFunction(()=>{
-      const catalogForm=document.querySelector('#ownership-catalog fieldset'),requestForm=document.querySelector('#service-requests fieldset');
-      return !!catalogForm&&!!requestForm&&!catalogForm.disabled&&!requestForm.disabled;
-    });
+    const catalog=page.locator('#ownership-catalog'),requests=page.locator('#service-requests');
     if(scenario.manualHandoffDirectory&&!launch.headless){
       manualNativeActors.length=0;
       for(const [actor,actorContext,actorPage] of [['requester',context,page],['reviewer',second,approver]]){
@@ -184,8 +183,15 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
         result.manualNativeFocusConfiguration??=[];result.manualNativeFocusConfiguration.push({locale,actor,method:'Emulation.setFocusEmulationEnabled',enabled:false,scope:'entire authenticated manual journey',syntheticFocusEvents:false});
       }
     }
+    phase='keyboard-catalog-navigation-'+locale;
+    await openPanel(page,'Ownership catalog','ownership-catalog');
+    await page.waitForFunction(()=>document.querySelector('#ownership-catalog fieldset')?.disabled===false);
     await manualPause(page,'before-actions');
-    phase='keyboard-skip-main-'+locale;await probe.activate(page,page.getByRole('link',{name:local('Skip to main content'),exact:true}),'skip-to-main');assert.equal(await page.locator('#kafdeck-main').evaluate(element=>element===document.activeElement),true);result.keyboardSkipToMain??=[];result.keyboardSkipToMain.push({locale,method:'Tab then Enter',activeId:'kafdeck-main'});
+    phase='keyboard-skip-main-'+locale;const beforeSkip=new URL(page.url()).hash;
+    await probe.activate(page,page.getByRole('link',{name:local('Skip to main content'),exact:true}),'skip-to-main');
+    await page.waitForFunction(()=>document.activeElement?.id==='kafdeck-main');
+    assert.equal(new URL(page.url()).hash,beforeSkip,'skip link changed the dashboard route');
+    result.keyboardSkipToMain??=[];result.keyboardSkipToMain.push({locale,method:'Tab then Enter',activeId:'kafdeck-main'});
     if(scenario.manualHandoffDirectory){
       // Native AT can finish its main-landmark announcement asynchronously.
       // Observe stable focus before starting the next keyboard interaction.
@@ -205,6 +211,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await probe.activate(page,button(catalog,'Reload authorized catalog'),'catalog-reload');await probe.activate(page,dynamicButton(catalog,'Inspect',escapedName),'inspect-created-catalog');
     assert.equal(await label(catalog,'Name').inputValue(),escapedName);assert.equal(await page.locator('w79-escaped').count(),0);
     await probe.activate(page,button(catalog,'Read immutable record history'),'catalog-history');await catalog.getByRole('table',{name:local('Immutable revisions; latest 1000 loaded history entries retained')}).waitFor();
+    await preserveLocaleAcrossRoundTrip(page,catalog,'escaped-catalog-record');
+    assert.equal(await label(catalog,'Name').inputValue(),escapedName);
     result.catalogKeyboardAppliedAndHistory=true;result.escapedCatalogInterpolation=true;
     await manualPause(page,'catalog');
     if(scenario.handshakeDirectory){
@@ -213,6 +221,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       const ready=await handshake('catalog-applied-'+locale,{operationId,previewHash:currentPlan.operation.previewHash,catalogRecordId:currentPlan.changes[0].id});assert.equal(ready.operationId,operationId);scenario.unknownCatalogOperationId=operationId;
     }
     phase='keyboard-request-draft';const target=await boundEffect(),expiry=new Date(Math.min(Date.parse(target.previewExpiresAtUtc)-1000,scenario.requestExpirySeconds?Date.now()+scenario.requestExpirySeconds*1000:Infinity)).toISOString();
+    await openPanel(page,'Requests','service-requests');
+    await page.waitForFunction(()=>document.querySelector('#service-requests fieldset')?.disabled===false);
     await probe.text(page,label(requests,'Existing immutable effect operation ID'),target.operationId,'bound-operation');
     await probe.text(page,label(requests,'Request expiry UTC (ISO8601 ending in Z)'),expiry,'invariant-utc-expiry');await probe.text(page,label(requests,'Business reason'),'W79 keyboard exact immutable revision','business-reason');
     await requestAction(page,button(requests,'Preview governed request change'),'/requests/changes/preview');review=article(requests);await applied(page,review);
@@ -254,6 +264,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await manualPause(page,'submitted',{requestId,operationId:target.operationId});
     phase='keyboard-self-approval-denied';await probe.select(page,label(requests,'Business command'),'Approve','self-approve-command');await requestAction(page,button(requests,'Preview governed request change'),'/requests/decisions/preview',403);await requests.getByRole('alert').waitFor();result.requesterSelfDecisionDenied=true;
     phase='keyboard-independent-human-approval';await approver.bringToFront();
+    await openPanel(approver,'Requests','service-requests');
     const decisions=approver.locator('#service-requests');
     const reviewerReload=approver.waitForResponse(response=>{const url=new URL(response.url());return url.origin===api.origin&&url.pathname==='/api/v1/governance/requests'&&response.request().method()==='GET';});reviewerReload.catch(()=>{});
     await probe.activate(approver,button(decisions,'Reload authorized requests'),'independent-request-reload');lastStatus=(await reviewerReload).status();assert.equal(lastStatus,200);
@@ -267,7 +278,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     await manualPause(page,'approved',{requestId,operationId:target.operationId});
     phase='desktop-scan-'+locale;await probe.scan(page,locale+'-desktop',output);
     phase='rtl-material-invariance';const materialBefore=await requests.locator('article').first().locator('code,pre').allTextContents();let localeWrites=0;const onRequest=request=>{if(new URL(request.url()).origin===api.origin&&!['GET','HEAD','OPTIONS'].includes(request.method()))localeWrites++;};page.on('request',onRequest);
-    await probe.select(page,page.locator('#kafdeck-language'),locale==='en'?'fa':'en','switch-locale');assert.deepEqual(await requests.locator('article').first().locator('code,pre').allTextContents(),materialBefore);assert.equal(await catalog.locator('input').first().inputValue(),escapedName);assert.equal(localeWrites,0);
+    await probe.select(page,page.locator('#kafdeck-language'),locale==='en'?'fa':'en','switch-locale');assert.deepEqual(await requests.locator('article').first().locator('code,pre').allTextContents(),materialBefore);assert.equal(localeWrites,0);
     await probe.select(page,page.locator('#kafdeck-language'),locale,'restore-journey-locale');page.off('request',onRequest);await page.waitForFunction(locale=>document.documentElement.lang===locale&&document.documentElement.dir===(locale==='fa'?'rtl':'ltr'),locale);result.localePreservesFrozenMaterialAndMakesNoMutation=true;
     await page.setViewportSize({width:320,height:800});await probe.tabTo(page,page.locator('#kafdeck-language'),'mobile-language-focus');await probe.scan(page,locale+'-mobile-320',output);await page.setViewportSize({width:1440,height:1000});
     if(scenario.handshakeDirectory&&scenario.requestExpirySeconds){
@@ -285,6 +296,9 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     // Reading it is safe; we do not manufacture state or infer unknown from timeouts.
     phase='durable-unknown-read';if(scenario.unknownCatalogOperationId){
       const unknown=await get(context,'/api/v1/governance/catalog/operations/'+encodeURIComponent(scenario.unknownCatalogOperationId));assert.equal(unknown.operation.state,'executionUnknown');
+      await openPanel(page,'Ownership catalog','ownership-catalog');
+      await probe.activate(page,dynamicButton(catalog,'Inspect',escapedName),'reopen-created-catalog-record');
+      assert.equal(await label(catalog,'Name').inputValue(),escapedName);
       await probe.text(page,label(catalog,'Existing catalog operation ID'),scenario.unknownCatalogOperationId,'unknown-same-operation-id');await probe.activate(page,button(catalog,'Inspect frozen catalog operation'),'unknown-inspect-same');
       const unknownReview=article(catalog);await unknownReview.getByText(local('Execution outcome is unknown. Do not retry blindly; inspect positive evidence and reconcile before any follow-up.'),{exact:true}).waitFor();assert.equal(await button(unknownReview,'Execute reviewed operation').isDisabled(),true);assert.equal(await button(catalog,'Create key for an intentionally new catalog request').isDisabled(),true);result.keyboardActualDurableUnknownInspected=true;
       await probe.scan(page,locale+'-durable-unknown',output);
@@ -297,6 +311,19 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
       await manualPause(page,'recovered',{operationId:scenario.unknownCatalogOperationId});
     }else result.mandatoryMissing.push('actual fault-created durable unknown operation keyboard journey');
     phase='browser-emulated-preferences-'+locale;await probe.preferences(page,locale,output);
+    phase='controlled-copy-by-page-'+locale;
+    // Inspect each copy on its own dashboard page, after the retained form assertions.
+    for(const [name,id,check] of [
+      ['Automation','automation',assertControlledAutomationCopy],
+      ['Ecosystem','streams-title',assertControlledReadViewCopy],
+    ]){
+      await openPanel(page,name,id);
+      for(const next of [locale==='en'?'fa':'en',locale]){
+        await probe.select(page,page.locator('#kafdeck-language'),next,'controlled-copy-'+id+'-'+next);
+        await page.waitForFunction(next=>document.documentElement.lang===next,next);
+        await check(page,next,'controlled-copy-'+id);
+      }
+    }
     result.localeJourneys.push({locale,catalog:true,submit:true,approveDistinctHuman:true,explicitReplan:true,unknown:!!scenario.unknownCatalogOperationId});await context.close();
     }
     phase='actual-unsupported-locale-fallback';const fallback=await browser.newContext({ignoreHTTPSErrors:true});const fallbackPage=await fallback.newPage();await fallbackPage.goto(api.origin,{waitUntil:'domcontentloaded'});

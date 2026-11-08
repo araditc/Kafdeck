@@ -14,16 +14,19 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
     private const int MaxSubjectLength = 1_024;
     private readonly IReadOnlyDictionary<string, RegistryRuntime> _registries;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, HttpClient?>? _registeredClient;
 
     public ConfluentSchemaCatalogReadAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, HttpClient?>? registeredClient = null)
         : this(
             clusterProfiles,
             secretResolver,
             static _ => new HttpClientHandler { AllowAutoRedirect = false },
-            timeProvider)
+            timeProvider,
+            registeredClient)
     {
     }
 
@@ -31,13 +34,15 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
         Func<ClusterProfile, HttpMessageHandler> handlerFactory,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, HttpClient?>? registeredClient = null)
     {
         ArgumentNullException.ThrowIfNull(clusterProfiles);
         ArgumentNullException.ThrowIfNull(secretResolver);
         ArgumentNullException.ThrowIfNull(handlerFactory);
 
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _registeredClient = registeredClient;
         _registries = clusterProfiles
             .Where(profile => profile.SchemaRegistry is not null)
             .ToDictionary(
@@ -270,7 +275,9 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
             return Failed<T>(ReadViewFailureCategory.Timeout, "deadline_exceeded", "Schema Registry operation exceeded its deadline.", true);
         }
 
-        if (!_registries.TryGetValue(clusterId, out var runtime))
+        using var client = _registries.ContainsKey(clusterId) ? null : _registeredClient?.Invoke(clusterId);
+        var runtime = _registries.GetValueOrDefault(clusterId) ?? RegisteredRuntime(client);
+        if (runtime is null)
         {
             return Failed<T>(
                 ReadViewFailureCategory.NotConfigured,
@@ -665,6 +672,10 @@ public sealed class ConfluentSchemaCatalogReadAdapter : ISchemaCatalogReadPort, 
         string message,
         bool retryable) =>
         ReadViewResult<T>.Failed(new ReadViewFailure(category, code, message, retryable));
+
+    private static RegistryRuntime? RegisteredRuntime(HttpClient? client) =>
+        client is null ? null : new RegistryRuntime(client, null,
+            SchemaRegistryProviderPolicy.Get(SchemaRegistryProviderProfile.ConfluentCompatibleV1));
 
     private sealed record RegistryRuntime(
         HttpClient Client,

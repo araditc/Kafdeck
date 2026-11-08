@@ -16,7 +16,8 @@ const server=createServer((req,res)=>{
 });
 (async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
-  const browser=await chromium.launch({headless:true,channel:'chromium'});
+  const launch={headless:true,channel:'chromium'};if(process.env.KAFDECK_G2_BROWSER_EXECUTABLE)launch.executablePath=process.env.KAFDECK_G2_BROWSER_EXECUTABLE;
+  const browser=await chromium.launch(launch);
   const operations=new Map();let effects=0,authenticated=true,denied=false,csrf=0,imports=0,approverPrivateStatusAttempts=0,reconciliations=0;const outside=[];
   const status=(id,kind,critical=false)=>({operationId:id,clusterId:'alpha',operationKind:kind,riskClass:critical?'critical':'moderate',confirmationMode:critical?'typedTarget':'explicit',requiresIndependentApproval:critical,requiresExecutionMaterial:false,state:'previewed',previewHash:hash,previewExpiresAtUtc:'2099-11-05T01:00:00Z',confirmationChallenge:critical?'activate alpha':null,resultCode:null,safeProviderEvidence:{},version:1,createdAtUtc:now,updatedAtUtc:now});
   const preview=(op,changes)=>({operation:op,planId:op.operationId,contentHash:hash,changes,expiresAtUtc:op.previewExpiresAtUtc});
@@ -38,8 +39,10 @@ const server=createServer((req,res)=>{
       if(url.origin!==origin){outside.push(url.origin);return route.abort();}
       if(!p.startsWith('/api/v1/'))return route.continue();
       const send=(value,code=200)=>route.fulfill({status:code,contentType:'application/json',body:JSON.stringify(value)});
+      if(p==='/api/v1/auth/mode')return send({authenticationMode:'oidc'});
       if(p==='/api/v1/auth/session')return send(authenticated?{authenticated:true,authenticationMode:'oidc',displayName:'UI fixture',email:'fixture@example.invalid',authenticatedAt:now}:{title:'Authentication required'},authenticated?200:401);
       if(p==='/api/v1/auth/csrf')return send({headerName:'X-Kafdeck-CSRF',requestToken:'fixture-csrf'});
+      if(p==='/api/v1/clusters'&&url.searchParams.get('view')==='directory')return send({data:[{clusterId:'alpha'}]});
       if(p==='/api/v1/clusters')return send({data:[{data:{clusterId:'alpha',kafkaClusterId:'fixture',brokers:[],health:'healthy',healthReasons:[],failureCode:null,controllerBrokerId:null},observation:{observedAt:now,freshness:'fresh',cacheAgeMs:0,partial:false},limitations:[]}]});
       if(p==='/api/v1/clusters/alpha/topics')return send({data:{items:[],nextCursor:null}});
       if(p.includes('/governance/')&&denied)return send({title:'Denied',code:'ScopeDenied'},403);
@@ -77,6 +80,7 @@ const server=createServer((req,res)=>{
     await context.route('**/*',fixtureRoute);
     const page=await context.newPage();await page.goto(origin);
     const catalog=page.locator('#ownership-catalog'),policy=page.locator('#governance-policy');
+    await page.getByRole('link',{name:'Ownership catalog',exact:true}).click();
     await catalog.getByText('No authorized entries in this page.',{exact:true}).waitFor();
     await catalog.getByLabel('Name',{exact:true}).fill('<img src=x onerror="window.__unsafe=true">');
     await catalog.getByRole('button',{name:'Preview exact metadata change',exact:true}).click();
@@ -92,6 +96,7 @@ const server=createServer((req,res)=>{
     await catalog.getByRole('button',{name:'Preview atomic import',exact:true}).click();await catalog.getByText('Supply 1–500 typed catalog changes.',{exact:true}).waitFor();assert.equal(imports,0);
     await catalog.getByLabel('Existing catalog operation ID').fill(ids.wrong);await catalog.getByRole('button',{name:'Inspect frozen catalog operation',exact:true}).click();
     await catalog.getByText(/does not match this scope/).waitFor();assert.equal(await catalog.getByRole('article',{name:'Immutable governance operation'}).count(),0);
+    await page.getByRole('link',{name:'Governance policy',exact:true}).click();
     await policy.getByLabel('Closed schema JSON (maximum 256 KiB)').fill(document);await policy.getByRole('button',{name:'Validate closed policy',exact:true}).click();await policy.getByRole('region',{name:'Policy validation result'}).waitFor();
     console.log('Governance fixture probe: active-version-dt');
     const currentVersion=(await policy.locator('dt').filter({hasText:/^Active version$/}).locator('xpath=following-sibling::dd[1]').textContent()).trim();assert.equal(currentVersion,ids.versionId);
@@ -114,12 +119,13 @@ const server=createServer((req,res)=>{
     assert.equal(await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).isDisabled(),true);
     const approverContext=await browser.newContext({viewport:{width:1440,height:1000},extraHTTPHeaders:{'X-Kafdeck-UI-Fixture':'approver'}});
     await approverContext.route('**/*',fixtureRoute);const approver=await approverContext.newPage();await approver.goto(origin);
+    await approver.getByRole('link',{name:'Governance policy',exact:true}).click();
     const approvalPanel=approver.locator('#governance-policy');await approvalPanel.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
     await approvalPanel.getByLabel('Existing policy operation ID').fill(ids.activation);await approvalPanel.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();
     const approvalReview=approvalPanel.getByRole('article',{name:'Immutable governance operation'});await approvalReview.waitFor();
     await approvalReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
     await approvalReview.getByRole('button',{name:'Submit independent human approval',exact:true}).click();await approvalReview.getByText('ready',{exact:false}).waitFor();
-    await page.goto(origin);await policy.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
+    await page.reload();await policy.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
     await policy.getByLabel('Existing policy operation ID').fill(ids.activation);await policy.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();await policyReview.waitFor();
     await policyReview.getByLabel('I inspected this immutable operation, scope, material and fingerprint.').check();
     await policyReview.getByRole('button',{name:'Execute reviewed operation',exact:true}).click();await policyReview.getByText('appliedVerified',{exact:false}).waitFor();assert.equal(effects,3);assert.equal(approverPrivateStatusAttempts,0);await approverContext.close();
@@ -152,7 +158,8 @@ const server=createServer((req,res)=>{
     }
     assert.equal(reflow.documentWidth<=reflow.viewport+2,true);
     authenticated=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await catalog.waitFor({state:'hidden'});await policy.waitFor({state:'hidden'});
-    authenticated=true;denied=true;await page.reload();await page.locator('#ownership-catalog').getByText(/not authorized for this scope/).waitFor();assert.equal(await page.getByRole('button',{name:'Preview exact metadata change',exact:true}).isDisabled(),true);
+    await page.goto(origin+'/#ownership-catalog');await catalog.waitFor({state:'hidden'});
+    authenticated=true;denied=true;await page.reload();await catalog.getByText(/not authorized for this scope/).waitFor();assert.equal(await page.getByRole('button',{name:'Preview exact metadata change',exact:true}).isDisabled(),true);
     assert.deepEqual(outside,[]);assert.ok(csrf>=5);fs.mkdirSync(path.dirname(evidence),{recursive:true});
     fs.writeFileSync(evidence,JSON.stringify({...sourceIdentity(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:true,genuineAuthenticationDatabaseOrEffectClaimed:false,catalogPreviewConfirmExecute:true,policyVersionAndCriticalActivation:true,distinctHumanDenialUi:true,separateApproverContext:true,approverUsesScopedFrozenReview:true,requesterReloadResume:true,wrappedSelectLabelMatched:true,exactExplanationAndDryRunLocators:true,policyRecoveryBodylessWithCsrf:true,policyPositiveReceiptNoRedispatch:true,unknownNeverDispatch:true,crossScopeRejected:true,import501RejectedBeforeNetwork:true,csrf:true,untrustedMetadataEscaped:true,sessionLossClearsPanels:true,scopeDenialDisablesControls:true,mobileWidth:390,noHorizontalOverflow:true,noExternalRequests:true,fixtureEffects:effects},null,2));
     console.log('W73/W75 compiled governance UI acceptance passed (explicit API fixtures).');await context.close();

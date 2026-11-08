@@ -22,6 +22,7 @@ const server=createServer((req,res)=>{
       if(url.origin!==origin){outgoing.push(url.origin);return route.abort();}
       if(!url.pathname.startsWith('/api/v1/'))return route.continue();
       const send=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
+      if(url.pathname==='/api/v1/auth/mode')return send({authenticationMode:'oidc',connectionWorkspace:false});
       if(url.pathname==='/api/v1/auth/session')return send(authenticated?{authenticated:true,authenticationMode:'oidc',displayName:'UI fixture operator',email:null,authenticatedAt:'2026-11-05T00:00:00Z'}:{title:'Authentication required'},authenticated?200:401);
       if(url.pathname==='/api/v1/auth/csrf')return send({headerName:'X-Kafdeck-CSRF',requestToken:'fixture-csrf'});
       if(url.pathname==='/api/v1/clusters')return send({data:[]});
@@ -36,6 +37,7 @@ const server=createServer((req,res)=>{
       return send({title:'Fixture endpoint unavailable'},403);
     });
     const page=await context.newPage();await page.goto(origin);
+    await page.getByRole('link',{name:'Automation',exact:true}).click();
     await page.getByRole('heading',{name:'Governed automation',exact:true}).waitFor();
     const lookup=page.getByLabel('Exact plan / operation UUID');await lookup.fill(id);await lookup.press('Tab');
     assert.match(await page.evaluate(()=>document.activeElement.textContent),/Refresh immutable plan/);
