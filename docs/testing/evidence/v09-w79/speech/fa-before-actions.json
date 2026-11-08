@@ -1,0 +1,16 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 9776,
+  "endByte": 30463,
+  "rawLogSha256": "8180c6ff179eeaeca9b61111baa6d36d945e32b8efa0f3b0e58adc595f8f2139",
+  "locale": "fa",
+  "stage": "before-actions",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'Kafdeck صفحه کنترل متن\\u200cباز Kafka', 'heading', CancellableSpeech (still valid)]",
+    "Speaking [LangChangeCommand ('fa'), 'clickable', 'banner landmark', 'Persian', 'Kafdeck', 'صفحه کنترل متن\\u200cباز Kafka', 'same page', 'link', 'heading', 'level 1']",
+    "Speaking [LangChangeCommand ('fa'), 'رفتن به محتوای اصلی', 'same page', 'link']"
+  ]
+}

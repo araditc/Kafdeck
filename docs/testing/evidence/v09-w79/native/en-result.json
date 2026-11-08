@@ -1,0 +1,30 @@
+{
+  "locale": "en",
+  "profile": "headed",
+  "actualWindowSwitch": true,
+  "nativeEventsVerified": true,
+  "sessionHttpStatus": 200,
+  "opaqueScopeStable": true,
+  "selectedMaterialAndInputsPreserved": true,
+  "originalInputNodeAndFocusPreserved": true,
+  "actualWindowEvents": [
+    {
+      "event": "initial",
+      "elapsedMs": 288907.5,
+      "documentHasFocus": true,
+      "visibility": "visible"
+    },
+    {
+      "event": "blur",
+      "elapsedMs": 331579.5,
+      "documentHasFocus": false,
+      "visibility": "visible"
+    },
+    {
+      "event": "focus",
+      "elapsedMs": 337922.39999997616,
+      "documentHasFocus": true,
+      "visibility": "visible"
+    }
+  ]
+}

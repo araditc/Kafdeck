@@ -1,0 +1,18 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 32036,
+  "endByte": 71180,
+  "rawLogSha256": "e56779d14a397ef7218c3e3155596474a12019a075ebabd5a6b1c974af8c88c2",
+  "locale": "en",
+  "stage": "catalog",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'Name', 'edit', CancellableSpeech (still valid), 'selected w79-fee2a84d <w79-escaped>& \" فارسی']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Preview exact metadata change', 'button']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Confirm exact preview', 'button']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Mutation actions', 'grouping', 'Execute reviewed operation', 'button']",
+    "Speaking [LangChangeCommand ('en_GB'), 'The backend verified this exact operation. Reload the current governed resource state. ']"
+  ]
+}

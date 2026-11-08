@@ -1,0 +1,17 @@
+{
+  "readerStops": [
+    {
+      "locale": "en",
+      "observedAtUtc": "2026-11-08T05:37:49.6454191+00:00",
+      "ownedReaderPrefixCount": 0,
+      "readerStoppedBeforeResume": true
+    },
+    {
+      "locale": "fa",
+      "observedAtUtc": "2026-11-08T05:47:27.0650938+00:00",
+      "ownedReaderPrefixCount": 0,
+      "readerStoppedBeforeResume": true
+    }
+  ],
+  "identityStopped": true
+}

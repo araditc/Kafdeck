@@ -1,6 +1,10 @@
 # W79 accessibility and localization evidence
 
-Status: automated execution is recorded separately below; actual assistive-technology acceptance remains open. Zero complete English/Persian AT journeys have been accepted. This document does not claim WCAG conformance, pronunciation quality or a screen-reader pass.
+Status: the headed English and Persian run completed on source `c0b6f82e551cafdf27954e99409bc3a2caafac37` on 2026-11-08. The final observed record includes owner approval for human contrast in the [manual matrix](v09-w79-manual-matrix.md).
+
+The headed Release test passed once with zero failures and skips. NVDA 2026.3 with eSpeak NG 1.52.0 produced all 18 stage observations. Both native requester–reviewer–requester switches produced browser blur and focus events, a fresh session GET 200, stable opaque scope and the same original input node, focus and values. The driver verified self-decision denial, independent approval, actual expiry, revision with cleared decisions, and positive-receipt recovery without duplicate history. Both reader processes and the temporary identity service stopped.
+
+The [automated run for the observed source](https://github.com/araditc/Kafdeck/actions/runs/42262340971) passed all seven live jobs. The two databases produced 44 scans and 954 measured contrast bindings. Review of captured screenshots covers the bilingual layouts, focus, forced colors, text spacing and the loading-alert correction. The project owner approved the human contrast review.
 
 The target is [WCAG 2.2 AA](https://www.w3.org/TR/WCAG22/), with the U1–U4 scenarios in [the acceptance strategy](v0.9-test-strategy.md). English is authoritative. Persian translation quality requires community review as well as technical RTL checks.
 
@@ -38,9 +42,9 @@ At each stage, preserve the actual AT/browser/OS versions, operator, UTC time, k
 
 Before closing the manual browser, stop only the declared owned reader through the verified ownership/stop-acknowledgment protocol in the observed-record format. Verify that no authentication window is active. Retain no speech from unrelated apps. Record cleanup and any untested pronunciation, touch, platform or AT combination explicitly.
 
-## Latest native attempt and remaining blocker
+## Earlier native attempt
 
-The fresh `ca9ead9e06d6388d98a0b7e7833af69d34ef7c62` pilot used the verified Release test assembly `tests/Kafdeck.Architecture.Tests/bin/Release/net10.0/Kafdeck.Architecture.Tests.dll`, SHA-256 `b6efe5ee50892f071c1c85ca0a1821ee27881f486557bddcb3d41a7cb7040c16`. The driver reached the English catalog checkpoint after ten actual catalog keyboard controls. A fresh source/stage-matched browser focus acknowledgment and live case did not establish Windows foreground ownership: an unrelated Edge window remained foreground and the observed catalog log range contained zero new catalog speech sequences. The attempt therefore accepted zero AT stages and establishes no product semantic failure. Completing the native observation requires interactive assistance bringing the dedicated Chromium window into the actual foreground; W79 remains draft/open.
+The earlier `ca9ead9e06d6388d98a0b7e7833af69d34ef7c62` pilot used Release test assembly SHA-256 `b6efe5ee50892f071c1c85ca0a1821ee27881f486557bddcb3d41a7cb7040c16`. It reached ten English catalog keyboard controls while an unrelated Edge window held Windows foreground focus. The catalog range contained zero new speech sequences. The November 8 retest established foreground control in a two-window preflight and completed both headed journeys.
 
 The owned NVDA process was stopped before the fixture/browser. Only the two owned raw speech logs were removed for privacy; safe hashes, timestamps, assembly hash and the closed failure category are retained in the private laboratory ledger. No raw transcript or public manual-proof package is published. Earlier page/status speech does not close any of the 18 stages or 11 matrix cells, either locale's native-window proof, Persian voice/translation review or audible pronunciation review.
 

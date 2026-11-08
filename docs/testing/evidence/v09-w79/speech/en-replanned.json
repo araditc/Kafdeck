@@ -1,0 +1,19 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 157954,
+  "endByte": 166145,
+  "rawLogSha256": "434fd7c4e1f07c2320015947b634b82e6ceedcb7e530175426d68132a7da8abe",
+  "locale": "en",
+  "stage": "replanned",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'The backend verified this exact operation. Reload the current governed resource state. ']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Revise', '2 of 6', CancellableSpeech (still valid)]",
+    "Speaking [LangChangeCommand ('en_GB'), 'Business command', 'combo box', 'Revise', 'collapsed', CancellableSpeech (still valid)]",
+    "Speaking [LangChangeCommand ('en_GB'), 'Business command', 'combo box', 'Revise', 'focused', 'collapsed']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Existing immutable effect operation ID', 'edit', CancellableSpeech (still valid), 'selected b46faa86-40cd-4934-bf15-d1bf0fa814ef']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Existing immutable effect operation ID', 'edit', 'focused', 'selected b46faa86-40cd-4934-bf15-d1bf0fa814ef']"
+  ]
+}

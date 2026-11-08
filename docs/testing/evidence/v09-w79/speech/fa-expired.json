@@ -1,0 +1,14 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 146930,
+  "endByte": 171338,
+  "rawLogSha256": "7bbfdf81cfea38736128130ecafdda1412c4a23481647245e31208e63bc85ae8",
+  "locale": "fa",
+  "stage": "expired",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'این بازبینی منقضی شد. صریحاً برنامه\\u200cریزی مجدد کنید؛ تصمیم منقضی مجوز اثر نمی\\u200cدهد. ']"
+  ]
+}

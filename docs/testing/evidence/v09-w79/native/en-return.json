@@ -1,0 +1,10 @@
+{
+  "nativeWindowId": 199472,
+  "syntheticFocusEvents": false,
+  "direction": "return",
+  "locale": "en",
+  "nativeActionConfirmedByRoot": true,
+  "observedAtUtc": "2026-11-08T05:33:14.4404713+00:00",
+  "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "method": "SKY.activate_window without a return click or typing"
+}

@@ -1,0 +1,17 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 71180,
+  "endByte": 95532,
+  "rawLogSha256": "ec2dd72854d37a60f8870e59c6ba9981b22e0f35de09d65bd1b62928440a8437",
+  "locale": "en",
+  "stage": "submitted",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'Business reason', 'edit', CancellableSpeech (still valid), 'blank']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Preview governed request change', 'button']",
+    "Speaking [LangChangeCommand ('en_GB'), 'The backend verified this exact operation. Reload the current governed resource state. ']",
+    "Speaking [LangChangeCommand ('en_GB'), 'Business reason', 'edit', CancellableSpeech (still valid), 'W79 typed field survives real window return']"
+  ]
+}

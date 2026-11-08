@@ -1,0 +1,29 @@
+{
+  "locale": "fa",
+  "stage": "recovered",
+  "operationId": "af95b52f-6e19-da71-d0d8-2f3407bbfc46",
+  "sourceSha": "c0b6f82e551cafdf27954e99409bc3a2caafac37",
+  "browserVersion": "156.0.8078.80",
+  "authenticatedApplication": true,
+  "inputSource": "Playwright Chromium keyboard",
+  "keyboardInputMethod": "Playwright keyboard: Tab/Shift+Tab, Alt+ArrowDown, Enter, Space, Home, ArrowDown and typed text",
+  "manualActionDelayMs": 1500,
+  "keyboardActionRange": {
+    "from": 138,
+    "to": 140
+  },
+  "keyboardActionsSincePrevious": [
+    {
+      "label": "unknown-review-positive-evidence",
+      "tabs": 41,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    },
+    {
+      "label": "activate-recover",
+      "tabs": 2,
+      "reverseSequenceVerified": true,
+      "firstDocumentEntry": false
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 79794,
+  "endByte": 107457,
+  "rawLogSha256": "007de344572ee0f2481f53a5865986f80e5b3a0567ab95871fd64f3b072b046c",
+  "locale": "fa",
+  "stage": "submitted",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'دلیل کسب\\u200cوکار', 'edit', CancellableSpeech (still valid), 'blank']",
+    "Speaking [LangChangeCommand ('fa'), 'پیش\\u200cنمایش تغییر درخواست تحت حاکمیت', 'button']",
+    "Speaking [LangChangeCommand ('fa'), 'سرور همین عملیات دقیق را تأیید کرد. وضعیت فعلی منبع تحت حاکمیت را دوباره بارگیری کنید. ']",
+    "Speaking [LangChangeCommand ('fa'), 'دلیل کسب\\u200cوکار', 'edit', CancellableSpeech (still valid), 'W79 typed field survives real window return']"
+  ]
+}

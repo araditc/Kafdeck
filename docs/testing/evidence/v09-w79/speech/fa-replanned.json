@@ -1,0 +1,19 @@
+{
+  "processId": 41384,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 171338,
+  "endByte": 180216,
+  "rawLogSha256": "5568550b6d806da9ca8493e4e238f15e995d8703120b65c357f3e21c16979698",
+  "locale": "fa",
+  "stage": "replanned",
+  "utterances": [
+    "Speaking [LangChangeCommand ('fa'), 'سرور همین عملیات دقیق را تأیید کرد. وضعیت فعلی منبع تحت حاکمیت را دوباره بارگیری کنید. ']",
+    "Speaking [LangChangeCommand ('fa'), 'بازبینی', '2 of 6', CancellableSpeech (still valid)]",
+    "Speaking [LangChangeCommand ('fa'), 'فرمان کسب\\u200cوکار', 'combo box', 'بازبینی', 'collapsed', CancellableSpeech (still valid)]",
+    "Speaking [LangChangeCommand ('fa'), 'فرمان کسب\\u200cوکار', 'combo box', 'بازبینی', 'focused', 'collapsed']",
+    "Speaking [LangChangeCommand ('fa'), 'شناسه عملیات موجود اثر تغییرناپذیر', 'edit', CancellableSpeech (still valid), 'selected 3429266c-0e5c-4c36-8bd9-cb7d98990414']",
+    "Speaking [LangChangeCommand ('fa'), 'شناسه عملیات موجود اثر تغییرناپذیر', 'edit', 'focused', 'selected 3429266c-0e5c-4c36-8bd9-cb7d98990414']"
+  ]
+}

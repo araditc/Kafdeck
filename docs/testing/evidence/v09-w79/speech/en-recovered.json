@@ -1,0 +1,15 @@
+{
+  "processId": 23804,
+  "readerVersion": "2026.3.0.58174",
+  "synthesizer": "eSpeak NG",
+  "synthesizerVersion": "1.52.0",
+  "startByte": 185402,
+  "endByte": 190850,
+  "rawLogSha256": "b24ddac273aeeb3381b303e22f94cf1ed7e1858428202b93c6b45f1fc4555dc9",
+  "locale": "en",
+  "stage": "recovered",
+  "utterances": [
+    "Speaking [LangChangeCommand ('en_GB'), 'Verify positive receipt; never redispatch', 'button']",
+    "Speaking [LangChangeCommand ('en_GB'), 'The backend verified this exact operation. Reload the current governed resource state. ']"
+  ]
+}
