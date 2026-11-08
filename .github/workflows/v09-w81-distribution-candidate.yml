@@ -58,7 +58,7 @@ jobs:
   oci-native-startup:
     name: oci-native-startup (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -102,8 +102,17 @@ jobs:
             --slurpfile startup artifacts/w81/startup.json --slurpfile restart artifacts/w81/restart.json \
             '{sourceSha:$source,architecture:$arch,imageId:$image,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
             > artifacts/w81/oci-native-startup.json
+      - name: Install, upgrade and reinstall packaged Helm on disposable Kubernetes
+        if: matrix.arch == 'amd64'
+        run: bash deploy/helm/test-kafdeck-lifecycle.sh kafdeck:w81-fixture artifacts/w81/helm-lifecycle.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: w81-oci-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: artifacts/w81/oci-native-startup.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: matrix.arch == 'amd64'
+        with:
+          name: w81-helm-lifecycle-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/w81/helm-lifecycle.json
           if-no-files-found: error
