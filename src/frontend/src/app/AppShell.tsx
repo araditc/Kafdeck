@@ -668,7 +668,10 @@ export function AppShell() {
   return <>
     {verificationStatus}
     <div ref={privatePage} className="page kafdeck-shell" hidden={verificationPending} inert={verificationPending} aria-hidden={verificationPending || undefined} style={{display: verificationPending ? 'none' : undefined}}>
-    <a className="kafdeck-skip-link" href="#kafdeck-main">{t("Skip to main content")}</a>
+    <a className="kafdeck-skip-link" href="#kafdeck-main" onClick={event => {
+      event.preventDefault();
+      setPageFocus({ id: 'kafdeck-main' });
+    }}>{t("Skip to main content")}</a>
     <header className="navbar navbar-expand-md bg-surface d-print-none kafdeck-topbar">
       <div className="container-xl">
         <h1 id="kafdeck-title" className="navbar-brand navbar-brand-autodark m-0">

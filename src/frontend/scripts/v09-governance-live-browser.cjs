@@ -57,8 +57,8 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     assert.ok(governanceDiscovery.paths['/api/v1/governance/policies/operations/{operationId}/reconcile'].post);
     assert.equal(governanceDiscovery.paths['/api/v1/governance/policies/active'].get.parameters.find(p=>p.name==='clusterId').required,true);
     const catalog=page.locator('#ownership-catalog'),policy=page.locator('#governance-policy');
+    await page.getByRole('link',{name:'Ownership catalog',exact:true}).click();
     await catalog.getByRole('heading',{name:'Ownership catalog',exact:true}).waitFor();
-    await policy.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.querySelector('#ownership-catalog fieldset')?.disabled);
     phase='real-catalog-preview-confirm-execute';
     const teamName='browser-team-'+crypto.randomUUID().replaceAll('-','').slice(0,12);
@@ -76,7 +76,9 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     const history=catalog.getByRole('table',{name:'Immutable revisions; latest 1000 loaded history entries retained'});await history.waitFor();
     assert.match(await history.textContent(),new RegExp(teamName));
     phase='policy-state-ready';
-    await page.waitForFunction(()=>!document.querySelector('#governance-policy fieldset')?.disabled);
+    await page.getByRole('link',{name:'Governance policy',exact:true}).click();
+    await policy.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
+    await page.waitForFunction(()=>document.querySelector('#governance-policy fieldset')?.disabled===false);
     phase='policy-validation-input';
     await policy.getByLabel('Closed schema JSON (maximum 256 KiB)').fill('{"schemaVersion":1,"rules":[]}');
     phase='policy-validation-submit';await checkedClick(page,policy.getByRole('button',{name:'Validate closed policy',exact:true}),'policy-validate');
@@ -144,6 +146,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     phase='real-independent-human-ui-approval';
     const approverContext=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000}}),approver=await approverContext.newPage();approver.setDefaultTimeout(30000);
     await signIn(approver,manifest.approverUsername,manifest.approverPasswordFile);
+    await approver.getByRole('link',{name:'Governance policy',exact:true}).click();
     const approvalPanel=approver.locator('#governance-policy');await approvalPanel.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
     await approvalPanel.getByLabel('Existing policy operation ID').fill(activationId);
     await approvalPanel.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();
@@ -154,7 +157,7 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     // Returning to a tab deliberately revalidates the operator and clears old
     // authorization-bound UI state. Reopen the exact durable operation after
     // a genuine requester reload instead of assuming stale component state.
-    phase='real-ui-approved-policy-activation-effect';await page.goto(new URL('/',api).href,{waitUntil:'domcontentloaded'});
+    phase='real-ui-approved-policy-activation-effect';await page.reload({waitUntil:'domcontentloaded'});
     await policy.getByRole('heading',{name:'Governance policy',exact:true}).waitFor();
     await policy.getByLabel('Existing policy operation ID').fill(activationId);
     await policy.getByRole('button',{name:'Inspect frozen policy operation',exact:true}).click();await policyReview.waitFor();
@@ -170,7 +173,10 @@ const {chromium}=require(path.join(root,'deploy/dev/browser-g2/node_modules/play
     const denied=await page.evaluate(async()=>{const response=await fetch('/api/v1/governance/catalog/teams?clusterId=forbidden&pageSize=50',{credentials:'same-origin'});return response.status;});
     assert.ok([403,404].includes(denied));
     const clusterOptions=await page.locator('#cluster-selector option').allTextContents();assert.ok(!clusterOptions.includes('forbidden'));
-    phase='genuine-session-logout';await page.getByRole('button',{name:'Sign out',exact:true}).click();await catalog.waitFor({state:'hidden'});await policy.waitFor({state:'hidden'});
+    phase='genuine-session-logout';await page.getByRole('button',{name:'Sign out',exact:true}).click();
+    const loginHeading=page.getByRole('heading',{name:'Sign in to Kafdeck',exact:true});
+    await loginHeading.waitFor();await catalog.waitFor({state:'hidden'});await policy.waitFor({state:'hidden'});
+    await page.goto(new URL('/#ownership-catalog',api).href,{waitUntil:'domcontentloaded'});await loginHeading.waitFor();await catalog.waitFor({state:'hidden'});
     fs.mkdirSync(path.dirname(evidencePath),{recursive:true});
     fs.writeFileSync(evidencePath,JSON.stringify({...sourceIdentity(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:false,tokenInjection:false,genuineKeycloakBrowserSession:true,realCatalogPreviewConfirmationVerifiedEffect:true,realDurableCatalogHistory:true,realPolicyValidationExplanationDryRun:true,realPolicyVersionWriteUiEffect:true,realCriticalActivationUiEffect:true,genuineTwoHumanBrowserApproval:true,requesterSelfApprovalDenied:true,reactivatedSamePolicyPreservesRuleSemantics:true,genuineSessionCrossScopeDenied:true,logoutClearsGovernanceState:true,loopbackFixtureBrowserCertificateErrorsIgnored:true,tlsConformanceClaimed:false,governanceRequests:requests.map(item=>({method:item.method,family:item.path.includes('/catalog/')?'catalog':'policy'}))},null,2));
     console.log('V09_GENUINE_GOVERNANCE_BROWSER_PASSED');await context.close();
