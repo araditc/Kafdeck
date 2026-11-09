@@ -51,7 +51,16 @@ public sealed class V09W74RequestStoreTests
         {
             var at=DateTimeOffset.UtcNow;var plan=new ServiceRequestPlan(Guid.NewGuid(),"permitted","",id,command,expected,actor,client,new string('a',64),store.DeploymentGeneration,
                 AdoServiceRequestStore.Bind(target),"bounded fixture request",command==ServiceRequestCommand.Cancel?target.PreviewExpiresAtUtc:expires,at,at.AddMinutes(1));
-            plan=plan with{ContentHash=ServiceRequestContract.PlanHash(plan)};await store.StageAsync(plan,token);
+            plan=plan with{ContentHash=ServiceRequestContract.PlanHash(plan)};
+            if (!expiry && factory.SupportsSelectForUpdate && command == ServiceRequestCommand.Draft)
+            {
+                var retries = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => store.StageAsync(plan, token)));
+                Assert.All(retries, staged => Assert.Equal(plan.ContentHash, staged.ContentHash));
+            }
+            else
+            {
+                await store.StageAsync(plan,token);
+            }
             var kind=ServiceRequestContract.IsDecision(command)?MutationOperationKind.ServiceRequestDecision:MutationOperationKind.ServiceRequestChange;
             var action=ServiceRequestContract.IsDecision(command)?AuthorizationAction.RequestDecide:AuthorizationAction.RequestSubmit;
             var operation=MutationOperation.CreatePreview(plan.PlanId,actor,new(kind,"permitted",JsonSerializer.Serialize(new{schema="request-v1",planId=plan.PlanId,contentHash=plan.ContentHash,deploymentGeneration=plan.DeploymentGeneration}),

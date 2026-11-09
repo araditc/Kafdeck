@@ -334,7 +334,7 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
     {
         await using var db = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var tx = await db.BeginTransactionAsync(token).ConfigureAwait(false);
-        await GenerationAsync(db, tx, token).ConfigureAwait(false);
+        if (generationGate is not null) await generationGate.ValidateReadAsync(db, tx, token).ConfigureAwait(false);
         var result = await read(db, tx).ConfigureAwait(false);
         await tx.CommitAsync(token).ConfigureAwait(false); return result;
     }

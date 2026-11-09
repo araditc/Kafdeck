@@ -37,7 +37,7 @@ public sealed class AdoAttributionStore(IMutationDbConnectionFactory connections
         await Run(c,t,"INSERT INTO attribution_schema(version,digest) VALUES(1,@hash) ON CONFLICT(version) DO NOTHING",token,("@hash",digest));
         if(await Scalar(c,t,"SELECT digest FROM attribution_schema WHERE version=1",token) is not string actual||actual!=digest)throw new InvalidOperationException("Attribution migration digest mismatch.");
         return true;
-    },token,false);
+    },token,fenced:false);
 
     public Task AppendAsync(IReadOnlyList<MeasurementWindow> windows,CancellationToken token=default)=>Transaction(async(c,t)=>
     {
@@ -67,7 +67,7 @@ public sealed class AdoAttributionStore(IMutationDbConnectionFactory connections
     public Task<IReadOnlyList<MeasurementWindow>> QueryAuthorizedAsync(MeasurementQuery q,Func<MeasurementAccessScope,bool> allowed,CancellationToken token=default)
     {
         AttributionContract.Query(q);ArgumentNullException.ThrowIfNull(allowed);
-        return Transaction<IReadOnlyList<MeasurementWindow>>(async(c,t)=>
+        return ReadTransaction<IReadOnlyList<MeasurementWindow>>(async(c,t)=>
         {
             var scopes=new List<string>();
             await using(var inventory=Command(c,t,"SELECT scope_id,resource_id,team_id,application_id FROM attribution_visibility_scopes WHERE cluster_id=@cluster AND (CAST(@resource AS TEXT) IS NULL OR resource_id=@resource) ORDER BY scope_id LIMIT 10001",("@cluster",q.ClusterId),("@resource",q.ResourceId)))
@@ -106,12 +106,12 @@ public sealed class AdoAttributionStore(IMutationDbConnectionFactory connections
         },token);
     }
     public Task<RateCardVersion?> GetRateAsync(string clusterId,string versionId,bool includeDraft,CancellationToken token=default)
-    {AttributionContract.Text(clusterId,256);AttributionContract.Digest(versionId);return Transaction((c,t)=>ReadRate(c,t,clusterId,versionId,includeDraft,token),token);}
-    public Task<RateCardState> GetStateAsync(string clusterId,CancellationToken token=default)=>Transaction((c,t)=>State(c,t,clusterId,token),token);
+    {AttributionContract.Text(clusterId,256);AttributionContract.Digest(versionId);return ReadTransaction((c,t)=>ReadRate(c,t,clusterId,versionId,includeDraft,token),token);}
+    public Task<RateCardState> GetStateAsync(string clusterId,CancellationToken token=default)=>ReadTransaction((c,t)=>State(c,t,clusterId,token),token);
     public Task<IReadOnlyList<RateCardVersion>> ListRatesAuthorizedAsync(string clusterId,string? afterId,int take,Func<RateCardVersion,bool> allowed,CancellationToken token=default)
     {
         AttributionContract.Text(clusterId,256);if(afterId is not null)AttributionContract.Digest(afterId);if(take is <1 or >201)throw new ArgumentException("Invalid rate page.");
-        return Transaction<IReadOnlyList<RateCardVersion>>(async(c,t)=>
+        return ReadTransaction<IReadOnlyList<RateCardVersion>>(async(c,t)=>
         {
             await using var cmd=Command(c,t,"SELECT body FROM attribution_rate_versions WHERE cluster_id=@cluster AND committed=1 AND version_id>@after ORDER BY version_id LIMIT 10001",("@cluster",clusterId),("@after",afterId??""));
             await using var reader=await cmd.ExecuteReaderAsync(token);var rows=new List<RateCardVersion>();var scanned=0;
@@ -120,7 +120,7 @@ public sealed class AdoAttributionStore(IMutationDbConnectionFactory connections
         },token);
     }
     public Task<RateCardVersion?> FindActiveRateAsync(string clusterId,string metricKind,DateTimeOffset fromUtc,DateTimeOffset toUtc,CancellationToken token=default)=>FindActiveRateAuthorizedAsync(clusterId,metricKind,fromUtc,toUtc,_=>true,token);
-    public Task<RateCardVersion?> FindActiveRateAuthorizedAsync(string clusterId,string metricKind,DateTimeOffset fromUtc,DateTimeOffset toUtc,Func<RateCardVersion,bool> allowed,CancellationToken token=default)=>Transaction(async(c,t)=>
+    public Task<RateCardVersion?> FindActiveRateAuthorizedAsync(string clusterId,string metricKind,DateTimeOffset fromUtc,DateTimeOffset toUtc,Func<RateCardVersion,bool> allowed,CancellationToken token=default)=>ReadTransaction(async(c,t)=>
     {
         ArgumentNullException.ThrowIfNull(allowed);var rows=await ActiveRates(c,t,clusterId,token);var matches=rows.Where(v=>allowed(v)&&v.Document.MetricKind==metricKind&&v.Document.EffectiveFromUtc<=fromUtc&&v.Document.EffectiveToUtc>=toUtc).ToArray();
         if(matches.Length>1)throw new AttributionConflictException("RateCardCurrencyOrIntervalAmbiguous");return matches.SingleOrDefault();
@@ -164,7 +164,7 @@ public sealed class AdoAttributionStore(IMutationDbConnectionFactory connections
         if(!currentAuthority())throw new GovernanceEffectRejectedException("ScopeDenied");return Result(saved);
     },token);
 
-    public Task<RateCardCommitReceipt?> ReadReceiptAsync(Guid id,CancellationToken token=default)=>Transaction((c,t)=>Receipt(c,t,id,token),token);
+    public Task<RateCardCommitReceipt?> ReadReceiptAsync(Guid id,CancellationToken token=default)=>ReadTransaction((c,t)=>Receipt(c,t,id,token),token);
     public Task ValidateRateReferencesAsync(RateCardVersion version,CancellationToken token=default)=>Transaction(async(c,t)=>
     {await ValidateReferences(c,t,version,token);return true;},token);
     public Task VerifyPositiveReceiptAsync(MutationOperationSnapshot op,RateCardCommitReceipt receipt,Func<bool> currentAuthority,CancellationToken token=default)=>Transaction(async(c,t)=>
@@ -193,11 +193,22 @@ public sealed class AdoAttributionStore(IMutationDbConnectionFactory connections
             if(weight.ApplicationId is not null&&!await catalogReferences.IsActiveReferenceAsync(c,t,version.ClusterId,Kafdeck.Core.Catalog.CatalogEntityKind.Application,weight.ApplicationId,token))throw new AttributionConflictException("RateCardReferenceChanged");
         }
     }
-    private async Task<T> Transaction<T>(Func<DbConnection,DbTransaction,Task<T>> action,CancellationToken token,bool fenced=true)
+    private Task<T> ReadTransaction<T>(Func<DbConnection,DbTransaction,Task<T>> action,CancellationToken token) =>
+        Transaction(action,token,readOnly:true);
+
+    private async Task<T> Transaction<T>(Func<DbConnection,DbTransaction,Task<T>> action,CancellationToken token,bool fenced=true,bool readOnly=false)
     {
         await using var c=await connections.OpenAsync(token);await using var t=await c.BeginTransactionAsync(token);
-        if(fenced&&generation is not null)await generation.ValidateAsync(c,t,token);
-        if(connections.SupportsSelectForUpdate)await Run(c,t,"SELECT pg_advisory_xact_lock(64964007601)",token);
+        if(fenced&&generation is not null)
+        {
+            if(readOnly)await generation.ValidateReadAsync(c,t,token);
+            else await generation.ValidateAsync(c,t,token);
+        }
+        if(connections.SupportsSelectForUpdate)
+        {
+            var sql=readOnly ? "SELECT pg_advisory_xact_lock_shared(64964007601)" : "SELECT pg_advisory_xact_lock(64964007601)";
+            await Run(c,t,sql,token);
+        }
         var result=await action(c,t);await t.CommitAsync(token);return result;
     }
     private static async Task<RateCardVersion?> ReadRate(DbConnection c,DbTransaction t,string cluster,string id,bool draft,CancellationToken token)

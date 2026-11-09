@@ -78,7 +78,7 @@ public sealed class AdoGovernancePolicyStore(
         await using var c = await connections.OpenAsync(token).ConfigureAwait(false);
         await using var tx = await c.BeginTransactionAsync(token).ConfigureAwait(false);
         var state = await ReadState(c, tx, clusterId, false, token).ConfigureAwait(false);
-        if (generationGate is not null) await generationGate.ValidateAsync(c, tx, token).ConfigureAwait(false);
+        if (generationGate is not null) await generationGate.ValidateReadAsync(c, tx, token).ConfigureAwait(false);
         await tx.CommitAsync(token).ConfigureAwait(false);
         return state;
     }
