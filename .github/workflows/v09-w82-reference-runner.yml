@@ -1,0 +1,73 @@
+name: v09-w82-reference-runner
+
+on:
+  push:
+    branches: [codex/w82-reference-runner]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact protected main revision to benchmark
+        required: true
+        type: string
+      schedule:
+        description: Workload schedule
+        required: true
+        type: choice
+        options: [preflight, reference]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [sqlite, postgres]
+    env:
+      W82_SOURCE_SHA: ${{ inputs.source_sha || '2aaf0110d8e96435d6494241456410decfbc0f6c' }}
+      W82_SCHEDULE: ${{ inputs.schedule || 'preflight' }}
+      W82_PROVIDER: ${{ matrix.provider }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify reference candidate
+        if: inputs.schedule == 'reference'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$W82_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$W82_SOURCE_SHA" origin/main
+      - name: Build isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --tag kafdeck-w82-runner deploy/dev/w82-reference
+          evidence="$RUNNER_TEMP/w82-evidence"
+          mkdir "$evidence"
+          sudo chown 10001:10001 "$evidence"
+          docker image inspect kafdeck-w82-runner --format '{{.Id}} {{json .RootFS.Layers}}' |
+            tee "$RUNNER_TEMP/w82-runner-image.txt"
+      - name: Measure full corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --init --cpus 4 --memory 12g --pids-limit 4096 \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/checkout,readonly" \
+            --mount "type=bind,source=$RUNNER_TEMP/w82-evidence,target=/evidence" \
+            kafdeck-w82-runner /checkout/deploy/dev/w82-reference/run-linux.sh \
+            "$W82_PROVIDER" "$W82_SCHEDULE" "$W82_SOURCE_SHA"
+      - name: Retain reference evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: w82-${{ matrix.provider }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/w82-evidence
+            ${{ runner.temp }}/w82-runner-image.txt
+          if-no-files-found: error
+          retention-days: 30

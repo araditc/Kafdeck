@@ -24,7 +24,7 @@ internal sealed class W77OwnedKafka : IAsyncDisposable
     private W77OwnedKafka(string directory, string ownedRoot, string bootstrap, ProcessStartInfo start)
     { _directory = Path.GetFullPath(directory); _ownedRoot = Path.GetFullPath(ownedRoot); Bootstrap = bootstrap; _start = start; }
     internal void MarkSuccessful() => _successful = true;
-    internal static async Task<W77OwnedKafka> CreateAsync(CancellationToken token)
+    internal static async Task<W77OwnedKafka> CreateAsync(CancellationToken token, bool referenceDensity = false)
     {
         var home = Environment.GetEnvironmentVariable("KAFDECK_W77_KAFKA_HOME") ?? throw new InvalidOperationException("Explicit verified W77 Kafka home is required.");
         var javaHome = Environment.GetEnvironmentVariable("KAFDECK_W77_JAVA_HOME") ?? throw new InvalidOperationException("Explicit W77 Java 21 home is required.");
@@ -61,6 +61,7 @@ internal sealed class W77OwnedKafka : IAsyncDisposable
         using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(directory, "lab.json"), token));
         var start = new ProcessStartInfo(Path.GetFullPath(manifest.RootElement.GetProperty("javaExecutable").GetString()!))
             { WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        if (referenceDensity) start.ArgumentList.Add("-XX:ActiveProcessorCount=2");
         foreach (var argument in new[] { "-Xms64m", "-Xmx256m", "-Dlog4j2.configurationFile=" + Path.Combine(home, "config/log4j2.yaml"),
             "-cp", Path.Combine(home, "libs/*"), "kafka.Kafka", Path.Combine(directory, "server.properties") }) start.ArgumentList.Add(argument);
         var result = new W77OwnedKafka(directory, ownedRoot, "127.0.0.1:" + port, start);

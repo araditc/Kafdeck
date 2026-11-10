@@ -97,6 +97,24 @@ internal sealed class G2HumanCliLaboratory : IAsyncDisposable
         }
     }
     internal void Secret(string name,string value)=>_start.Environment[name]=value;
+    internal async Task<G2HumanCliLaboratory> StartPeerAsync(string directory, CancellationToken token)
+    {
+        var peer = new G2HumanCliLaboratory(directory);
+        try
+        {
+            foreach (var (key, value) in Settings)
+                if (key != "Kafdeck:Deployment:ListenUrls:0") peer.Settings[key] = value;
+            foreach (var key in new[] { "KAFDECK_W77_DIGEST", "KAFDECK_W77_PG" })
+                peer.Secret(key, _start.Environment[key] ?? throw new InvalidOperationException("Missing owned peer setting."));
+            await peer.StartAsync(token);
+            return peer;
+        }
+        catch
+        {
+            await peer.DisposeAsync();
+            throw;
+        }
+    }
     internal void EnableServiceRequester()
     {
         var profile = new CliServiceOidcProfile(Field("issuer"), Field("audience"), Field("clientId"),

@@ -35,7 +35,7 @@ internal sealed class W77Laboratory : IAsyncDisposable
     private W77Laboratory(string directory) { DirectoryPath = directory; Api = new(Path.Combine(directory, "api")); }
 
     internal static async Task<W77Laboratory> CreateAsync(bool postgres, CancellationToken token, string? bootstrap = null,
-        Func<string, string>? databaseRoute = null)
+        Func<string, string>? databaseRoute = null, bool highAvailability = false, IReadOnlyList<string>? additionalClusters = null)
     {
         var directory = Path.Combine(Environment.GetEnvironmentVariable("KAFDECK_G2_EVIDENCE_DIRECTORY") ?? Path.GetTempPath(),
             "w77-private-" + Guid.NewGuid().ToString("N"));
@@ -53,16 +53,29 @@ internal sealed class W77Laboratory : IAsyncDisposable
             settings["Kafdeck:Clusters:0:Id"] = "permitted";
             settings["Kafdeck:Clusters:0:BootstrapServers:0"] = bootstrap ?? Environment.GetEnvironmentVariable("KAFDECK_G2_KAFKA_BOOTSTRAP")!;
             settings["Kafdeck:Clusters:0:SecurityProtocol"] = "Plaintext";
+            if (additionalClusters is not null)
+            {
+                for (var index = 0; index < additionalClusters.Count; index++)
+                {
+                    var prefix = $"Kafdeck:Clusters:{index + 1}:";
+                    settings[prefix + "Id"] = $"w82-reference-{index + 1:D2}";
+                    settings[prefix + "BootstrapServers:0"] = additionalClusters[index];
+                    settings[prefix + "SecurityProtocol"] = "Plaintext";
+                }
+            }
             settings["Kafdeck:Administration:Mutations:Enabled"] = "true";
             settings["Kafdeck:Administration:Mutations:BackgroundDataWorkersEnabled"] = "false";
             settings["Kafdeck:Administration:Mutations:MaterialDigestKey"] = "env:KAFDECK_W77_DIGEST";
             api.Secret("KAFDECK_W77_DIGEST", Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
             settings["Kafdeck:Administration:Mutations:Persistence:Provider"] = postgres ? "PostgreSql" : "Sqlite";
-            settings["Kafdeck:Administration:Mutations:Persistence:ExecutionMode"] = "Standalone";
+            settings["Kafdeck:Administration:Mutations:Persistence:ExecutionMode"] = highAvailability ? "HighAvailability" : "Standalone";
             if (result.Database is null) settings["Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath"] = result.SqlitePath;
             else
             {
-                var connection = new NpgsqlConnectionStringBuilder(result.Database.ConnectionString) { Timeout = 3, CommandTimeout = 3, Pooling = false };
+                var connection = new NpgsqlConnectionStringBuilder(result.Database.ConnectionString)
+                {
+                    Timeout = 3, CommandTimeout = 3, Pooling = additionalClusters is { Count: > 0 }
+                };
                 settings["Kafdeck:Administration:Mutations:Persistence:ConnectionString"] = "env:KAFDECK_W77_PG";
                 api.Secret("KAFDECK_W77_PG", databaseRoute?.Invoke(connection.ConnectionString) ?? connection.ConnectionString);
             }

@@ -11,7 +11,7 @@ namespace Kafdeck.Architecture.Tests;
 
 internal sealed record W77GovernanceDataset(string Topic, string RequestId, string PolicyVersion, string FromUtc, string ToUtc, string WindowId)
 {
-    internal static async Task<W77GovernanceDataset> CreateAsync(W77Laboratory lab, CancellationToken token)
+    internal static async Task<W77GovernanceDataset> CreateAsync(W77Laboratory lab, CancellationToken token, int ruleCount = 1)
     {
         var api = lab.Api;
         IMutationDbConnectionFactory connections = lab.Database is null ? new SqliteMutationDbConnectionFactory(lab.SqlitePath) : new PostgreSqlMutationDbConnectionFactory(lab.Database.ConnectionString);
@@ -43,9 +43,21 @@ internal sealed record W77GovernanceDataset(string Topic, string RequestId, stri
             return await Success(family, command, "permitted", "--request-file", file, "--idempotency-key", Guid.NewGuid().ToString("N"));
         }
         var topic = "w77-soak-" + Guid.NewGuid().ToString("N");
-        var policyDocument = JsonSerializer.Serialize(new { schemaVersion = 1, rules = new[] { new { id = "w77-real-approval", priority = 1,
-            scope = new { clusterId = "permitted", resourceKind = "topic", resourceIds = new[] { topic }, action = "TopicCreate" },
-            conditions = Array.Empty<object>(), outcome = "RequireApprovedRequest" } } });
+        if (ruleCount is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(ruleCount));
+        var rules = Enumerable.Range(1, ruleCount).Select(index => new
+        {
+            id = index == ruleCount ? "w77-real-approval" : $"w82-reference-rule-{index:D3}",
+            priority = index,
+            scope = new
+            {
+                clusterId = "permitted", resourceKind = "topic",
+                resourceIds = new[] { index == ruleCount ? topic : $"w82-ref-topic-{index:D4}" },
+                action = "TopicCreate"
+            },
+            conditions = Array.Empty<object>(),
+            outcome = "RequireApprovedRequest"
+        });
+        var policyDocument = JsonSerializer.Serialize(new { schemaVersion = 1, rules });
         var policy = await Preview("policies", "version-preview", new { clusterId = "permitted", document = policyDocument }); await Commit(policy);
         var policyPlan = await Success("policies", "plan", Id(policy).ToString("D")); var policyVersion = policyPlan.GetProperty("versionId").GetString()!;
         await Commit(await Preview("policies", "activate-preview", new { clusterId = "permitted", versionId = policyVersion, expectedRevision = 0, enabled = true }), true);
