@@ -1,0 +1,1669 @@
+{
+  "schemaVersion": 1,
+  "status": "requires-review",
+  "release": "0.9.0",
+  "protectedPerformanceSourceSha": "4acdc408c2476d95d9c2640280aa25e3a7027a30",
+  "packagingMainSha": "ba00168341d75e67ec2b05a0de6fc616700ff688",
+  "sameApplicationTree": true,
+  "applicationTreeSha": "d641a67c6f1c4dfa1baff5248d62719100bd0c74",
+  "singleBinaryAdmission": false,
+  "admissionNote": "Both providers ran the full corpus and passed independently. The protected application source matches, but the benchmark builds retained different API DLL hashes and used different CPU models. Treat the values as per-provider candidates and review artifact comparability before release admission.",
+  "derivation": "Use the median of three steady repetitions as the reference and the observed worst repetition as the proposed ceiling or throughput floor. Relative tolerance reflects observed spread. Evaluate each provider on equivalent CPU and runtime, or explicitly rebaseline. Error and HTTP 429 ceilings are zero.",
+  "providers": {
+    "sqlite": {
+      "sourceSha": "4acdc408c2476d95d9c2640280aa25e3a7027a30",
+      "apiDllSha256": "59fda8a67815a3c1654dc063be87a9aa1dcf2834e111f526f856d1243a164ed1",
+      "checkpointSha256": "aacd08bef1eb49743e9c4eada51204ad3e7584a8b58ee7e525da9e4e805eb987",
+      "baselineRunId": "w82-evidence",
+      "environment": {
+        "runtime": "10.0.14",
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "architecture": "X64",
+        "cpu": "AMD EPYC 9V74 80-Core Processor",
+        "logicalProcessors": 4,
+        "memoryAvailableBytes": 9663676416,
+        "databaseVersion": "3.53.3",
+        "brokerVersion": "4.3.1",
+        "keycloakVersion": "26.8.1",
+        "network": "isolated container loopback",
+        "apiNodeCount": 1,
+        "persistenceNodeCount": 1,
+        "providerTopology": "standalone"
+      },
+      "dataset": {
+        "physicalKafkaClusters": 10,
+        "actualBrokerTopics": 1000,
+        "initialTeams": 100,
+        "applications": 200,
+        "policyRules": 100,
+        "historicalRequests": 10000,
+        "historicalAttributionWindows": 43200,
+        "measuredAttributionWindows": 1,
+        "initializedByApiAndBroker": true,
+        "historicalCorpusIsSynthetic": true
+      },
+      "authenticatedColdStartMilliseconds": {
+        "observed": {
+          "samples": 5,
+          "median": 1469.5842,
+          "p95": 1515.0825,
+          "p99": 1515.0825,
+          "max": 1515.0825
+        },
+        "proposedCeiling": 1515.0825,
+        "allowedRelativeRegression": 0.030959981741774285
+      },
+      "steady": {
+        "1": {
+          "repetitions": [
+            "steady-01-1",
+            "steady-02-1",
+            "steady-03-1"
+          ],
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 3,
+              "median": 1.000334466658511,
+              "p95": 1.0003725809402166,
+              "p99": 1.0003725809402166,
+              "max": 1.0003725809402166
+            },
+            "proposedFloor": 1.0001861334183362,
+            "allowedRelativeRegression": 0.00014828364423982422
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 24.4969,
+                  "p95": 24.9254,
+                  "p99": 24.9254,
+                  "max": 24.9254
+                },
+                "proposedCeiling": 24.9254,
+                "allowedRelativeRegression": 0.017492009192999917
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 30.8913,
+                  "p95": 32.6394,
+                  "p99": 32.6394,
+                  "max": 32.6394
+                },
+                "proposedCeiling": 32.6394,
+                "allowedRelativeRegression": 0.05658874828835306
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 6.5429,
+                  "p95": 8.1009,
+                  "p99": 8.1009,
+                  "max": 8.1009
+                },
+                "proposedCeiling": 8.1009,
+                "allowedRelativeRegression": 0.23812071099970944
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 14.2067,
+                  "p95": 42.0846,
+                  "p99": 42.0846,
+                  "max": 42.0846
+                },
+                "proposedCeiling": 42.0846,
+                "allowedRelativeRegression": 1.962306517347449
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 123.5221,
+                  "p95": 208.2435,
+                  "p99": 208.2435,
+                  "max": 208.2435
+                },
+                "proposedCeiling": 208.2435,
+                "allowedRelativeRegression": 0.6858805023554491
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 166.9582,
+                  "p95": 1161.3898,
+                  "p99": 1161.3898,
+                  "max": 1161.3898
+                },
+                "proposedCeiling": 1161.3898,
+                "allowedRelativeRegression": 5.9561710655721
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 3.0021035739699617,
+                  "p95": 3.003163532464996,
+                  "p99": 3.003163532464996,
+                  "max": 3.003163532464996
+                },
+                "proposedCeiling": 3.003163532464996,
+                "allowedRelativeRegression": 0.0003530719273727356
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 256880640.0,
+                  "p95": 259362816,
+                  "p99": 259362816,
+                  "max": 259362816
+                },
+                "proposedCeiling": 259362816,
+                "allowedRelativeRegression": 0.009662760105237981
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 263151616,
+                  "p95": 266715136,
+                  "p99": 266715136,
+                  "max": 266715136
+                },
+                "proposedCeiling": 266715136,
+                "allowedRelativeRegression": 0.013541699094107027
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 3,
+                "median": 17.547028745360723,
+                "p95": 23.219062312793476,
+                "p99": 23.219062312793476,
+                "max": 23.219062312793476
+              },
+              "proposedCeiling": 23.219062312793476,
+              "allowedRelativeRegression": 0.323247522400759
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 7430492160.0,
+                "p95": 7528468480,
+                "p99": 7528468480,
+                "max": 7528468480
+              },
+              "proposedCeiling": 7528468480,
+              "allowedRelativeRegression": 0.013185710702640725
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 7533371392,
+                "p95": 7591178240,
+                "p99": 7591178240,
+                "max": 7591178240
+              },
+              "proposedCeiling": 7591178240,
+              "allowedRelativeRegression": 0.007673436631756599
+            }
+          },
+          "hostBusyPercentByRepeat": {
+            "steady-01-1": {
+              "samples": 901,
+              "median": 2.7707808564231717,
+              "p95": 6.015037593984962,
+              "p99": 9.022556390977442,
+              "max": 10.606060606060607
+            },
+            "steady-02-1": {
+              "samples": 900,
+              "median": 2.261306532663321,
+              "p95": 4.511278195488721,
+              "p99": 7.594936708860756,
+              "max": 10.579345088161208
+            },
+            "steady-03-1": {
+              "samples": 901,
+              "median": 2.015113350125941,
+              "p95": 2.777777777777779,
+              "p99": 4.522613065326631,
+              "max": 6.818181818181824
+            }
+          },
+          "allowedErrors": 0,
+          "allowedHttp429": 0
+        },
+        "10": {
+          "repetitions": [
+            "steady-01-10",
+            "steady-02-10",
+            "steady-03-10"
+          ],
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 3,
+              "median": 9.868660572943268,
+              "p95": 9.972741010579831,
+              "p99": 9.972741010579831,
+              "max": 9.972741010579831
+            },
+            "proposedFloor": 9.845107200350512,
+            "allowedRelativeRegression": 0.002386683827928202
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 769.7046,
+                  "p95": 914.7585,
+                  "p99": 914.7585,
+                  "max": 914.7585
+                },
+                "proposedCeiling": 914.7585,
+                "allowedRelativeRegression": 0.1884539861136337
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 928.2542,
+                  "p95": 1067.5046,
+                  "p99": 1067.5046,
+                  "max": 1067.5046
+                },
+                "proposedCeiling": 1067.5046,
+                "allowedRelativeRegression": 0.15001321836195303
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 760.9579,
+                  "p95": 910.5292,
+                  "p99": 910.5292,
+                  "max": 910.5292
+                },
+                "proposedCeiling": 910.5292,
+                "allowedRelativeRegression": 0.19655660319710191
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 911.8804,
+                  "p95": 1063.9788,
+                  "p99": 1063.9788,
+                  "max": 1063.9788
+                },
+                "proposedCeiling": 1063.9788,
+                "allowedRelativeRegression": 0.16679643514653905
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 793.7293,
+                  "p95": 936.4943,
+                  "p99": 936.4943,
+                  "max": 936.4943
+                },
+                "proposedCeiling": 936.4943,
+                "allowedRelativeRegression": 0.17986610800432842
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 1088.3042,
+                  "p95": 1122.3677,
+                  "p99": 1122.3677,
+                  "max": 1122.3677
+                },
+                "proposedCeiling": 1122.3677,
+                "allowedRelativeRegression": 0.03129961273695349
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 19.01163652854336,
+                  "p95": 20.976360130303,
+                  "p99": 20.976360130303,
+                  "max": 20.976360130303
+                },
+                "proposedCeiling": 20.976360130303,
+                "allowedRelativeRegression": 0.10334321292172181
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 258117632,
+                  "p95": 259379200,
+                  "p99": 259379200,
+                  "max": 259379200
+                },
+                "proposedCeiling": 259379200,
+                "allowedRelativeRegression": 0.004887570020788041
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 262393856,
+                  "p95": 267239424,
+                  "p99": 267239424,
+                  "max": 267239424
+                },
+                "proposedCeiling": 267239424,
+                "allowedRelativeRegression": 0.01846677385616834
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 3,
+                "median": 29.1809730075523,
+                "p95": 32.61593451649612,
+                "p99": 32.61593451649612,
+                "max": 32.61593451649612
+              },
+              "proposedCeiling": 32.61593451649612,
+              "allowedRelativeRegression": 0.11771237059349662
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 7472160768,
+                "p95": 7541432320,
+                "p99": 7541432320,
+                "max": 7541432320
+              },
+              "proposedCeiling": 7541432320,
+              "allowedRelativeRegression": 0.009270618519968118
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 7488122880,
+                "p95": 7559098368,
+                "p99": 7559098368,
+                "max": 7559098368
+              },
+              "proposedCeiling": 7559098368,
+              "allowedRelativeRegression": 0.009478408559449281
+            }
+          },
+          "hostBusyPercentByRepeat": {
+            "steady-01-10": {
+              "samples": 901,
+              "median": 6.030150753768848,
+              "p95": 8.080808080808078,
+              "p99": 13,
+              "max": 18.639798488664983
+            },
+            "steady-02-10": {
+              "samples": 901,
+              "median": 5.527638190954775,
+              "p95": 7.0351758793969825,
+              "p99": 8.291457286432157,
+              "max": 15.443037974683548
+            },
+            "steady-03-10": {
+              "samples": 901,
+              "median": 5.527638190954775,
+              "p95": 7.304785894206544,
+              "p99": 9.022556390977442,
+              "max": 32.82828282828283
+            }
+          },
+          "allowedErrors": 0,
+          "allowedHttp429": 0
+        },
+        "50": {
+          "repetitions": [
+            "steady-01-50",
+            "steady-02-50",
+            "steady-03-50"
+          ],
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 3,
+              "median": 29.39462395029473,
+              "p95": 30.903442419749073,
+              "p99": 30.903442419749073,
+              "max": 30.903442419749073
+            },
+            "proposedFloor": 28.372300648170075,
+            "allowedRelativeRegression": 0.03477926112793166
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 1399.2903,
+                  "p95": 1531.8624,
+                  "p99": 1531.8624,
+                  "max": 1531.8624
+                },
+                "proposedCeiling": 1531.8624,
+                "allowedRelativeRegression": 0.09474238476461969
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 1998.5894,
+                  "p95": 2137.1352,
+                  "p99": 2137.1352,
+                  "max": 2137.1352
+                },
+                "proposedCeiling": 2137.1352,
+                "allowedRelativeRegression": 0.0693217926603634
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 1675.0482,
+                  "p95": 1700.3083,
+                  "p99": 1700.3083,
+                  "max": 1700.3083
+                },
+                "proposedCeiling": 1700.3083,
+                "allowedRelativeRegression": 0.015080222766126949
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 2310.1329,
+                  "p95": 2433.552,
+                  "p99": 2433.552,
+                  "max": 2433.552
+                },
+                "proposedCeiling": 2433.552,
+                "allowedRelativeRegression": 0.05342510813988237
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 2181.1893,
+                  "p95": 2206.5128,
+                  "p99": 2206.5128,
+                  "max": 2206.5128
+                },
+                "proposedCeiling": 2206.5128,
+                "allowedRelativeRegression": 0.01160995058979978
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 2817.2727,
+                  "p95": 3268.3633,
+                  "p99": 3268.3633,
+                  "max": 3268.3633
+                },
+                "proposedCeiling": 3268.3633,
+                "allowedRelativeRegression": 0.16011605834252396
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 71.08483686128461,
+                  "p95": 71.97284464566293,
+                  "p99": 71.97284464566293,
+                  "max": 71.97284464566293
+                },
+                "proposedCeiling": 71.97284464566293,
+                "allowedRelativeRegression": 0.012492225115620379
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 267841536,
+                  "p95": 271118336,
+                  "p99": 271118336,
+                  "max": 271118336
+                },
+                "proposedCeiling": 271118336,
+                "allowedRelativeRegression": 0.012234099493814134
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 282533888,
+                  "p95": 286478336,
+                  "p99": 286478336,
+                  "max": 286478336
+                },
+                "proposedCeiling": 286478336,
+                "allowedRelativeRegression": 0.013960973063875438
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 3,
+                "median": 80.49824746255547,
+                "p95": 82.35657629696352,
+                "p99": 82.35657629696352,
+                "max": 82.35657629696352
+              },
+              "proposedCeiling": 82.35657629696352,
+              "allowedRelativeRegression": 0.02308533282382918
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 7516016640,
+                "p95": 7584714752,
+                "p99": 7584714752,
+                "max": 7584714752
+              },
+              "proposedCeiling": 7584714752,
+              "allowedRelativeRegression": 0.00914022883270253
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 7532195840,
+                "p95": 7612817408,
+                "p99": 7612817408,
+                "max": 7612817408
+              },
+              "proposedCeiling": 7612817408,
+              "allowedRelativeRegression": 0.01070359423899419
+            }
+          },
+          "hostBusyPercentByRepeat": {
+            "steady-01-50": {
+              "samples": 901,
+              "median": 14.35768261964736,
+              "p95": 20.854271356783915,
+              "p99": 23.60406091370558,
+              "max": 37.27959697732997
+            },
+            "steady-02-50": {
+              "samples": 901,
+              "median": 15.151515151515149,
+              "p95": 20.253164556962023,
+              "p99": 21.57360406091371,
+              "max": 24.873096446700504
+            },
+            "steady-03-50": {
+              "samples": 901,
+              "median": 13.85390428211587,
+              "p95": 19.94949494949495,
+              "p99": 21.717171717171713,
+              "max": 25.380710659898476
+            }
+          },
+          "allowedErrors": 0,
+          "allowedHttp429": 0
+        }
+      },
+      "soak": {
+        "durationSeconds": 7200.1943762,
+        "operations": 209000,
+        "verifiedCatalogCommits": 10450,
+        "successfulOperationsPerSecond": 29.026994144886206,
+        "process": {
+          "process": {
+            "rssBytes": {
+              "observedNetGrowthPerHour": 2115876.6738302857,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": 1359871.9155368444,
+                "p95": 6291453.473631907,
+                "p99": 6291453.473631907,
+                "max": 6291453.473631907
+              },
+              "proposedGrowthCeilingPerHour": 6291453.473631907
+            },
+            "handles": {
+              "observedNetGrowthPerHour": 0.0,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0,
+                "max": 0.0
+              },
+              "proposedGrowthCeilingPerHour": 0
+            },
+            "threads": {
+              "observedNetGrowthPerHour": -4.0000001935873115,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": -8.000003048890049,
+                "p95": 43.99998233156266,
+                "p99": 43.99998233156266,
+                "max": 43.99998233156266
+              },
+              "proposedGrowthCeilingPerHour": 43.99998233156266
+            }
+          }
+        },
+        "container": {
+          "cpuPercentOfOneLogicalProcessor": {
+            "samples": 7200,
+            "median": 55.066597856953095,
+            "p95": 79.37748410348257,
+            "p99": 84.98161246245667,
+            "max": 150.48685951296667
+          },
+          "memoryCurrentBytes": {
+            "samples": 7200,
+            "median": 7689062400.0,
+            "p95": 7773597696,
+            "p99": 7782150144,
+            "max": 7794692096
+          }
+        },
+        "hostBusyPercent": {
+          "samples": 7200,
+          "median": 13.85390428211587,
+          "p95": 20.100502512562812,
+          "p99": 21.662468513853906,
+          "max": 45.979899497487445
+        },
+        "latencyMilliseconds": {
+          "read": {
+            "median": 464.94,
+            "p95": 1404.0367,
+            "p99": 2019.2604,
+            "max": 5643.8951
+          },
+          "explain": {
+            "median": 497.118,
+            "p95": 1673.8981,
+            "p99": 2312.5736,
+            "max": 5198.9306
+          },
+          "catalogCommit": {
+            "median": 1029.047,
+            "p95": 2180.8648,
+            "p99": 2793.362,
+            "max": 5960.9092
+          }
+        },
+        "postLoadIdle": {
+          "process": {
+            "rssBytes": {
+              "observed": {
+                "samples": 2,
+                "median": 279175168.0,
+                "p95": 279257088,
+                "p99": 279257088,
+                "max": 279257088
+              },
+              "proposedCeiling": 279257088,
+              "allowedRelativeRegression": 0.0002934358402535286
+            },
+            "handles": {
+              "observed": {
+                "samples": 2,
+                "median": 365.0,
+                "p95": 365,
+                "p99": 365,
+                "max": 365
+              },
+              "proposedCeiling": 365.0,
+              "allowedRelativeRegression": 0.0
+            },
+            "threads": {
+              "observed": {
+                "samples": 2,
+                "median": 46.0,
+                "p95": 48,
+                "p99": 48,
+                "max": 48
+              },
+              "proposedCeiling": 48,
+              "allowedRelativeRegression": 0.043478260869565216
+            }
+          }
+        }
+      },
+      "githubRunId": "42820100615",
+      "harnessSha": "da236f5c4ba41c51363a6501d90d83309f7c0551",
+      "verifiedEvidenceFiles": 9
+    },
+    "postgres": {
+      "sourceSha": "4acdc408c2476d95d9c2640280aa25e3a7027a30",
+      "apiDllSha256": "ee83940f280ab2fedcf4056a1c579290445a8bbe27a7803ea25908e5f0bd1f7e",
+      "checkpointSha256": "693cef46c3bc3bd2fc218b15a9c5dea1be26eaabb5cc160a164a40ec2371c070",
+      "baselineRunId": "w82-evidence",
+      "environment": {
+        "runtime": "10.0.14",
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "architecture": "X64",
+        "cpu": "AMD EPYC 7763 64-Core Processor",
+        "logicalProcessors": 4,
+        "memoryAvailableBytes": 9663676416,
+        "databaseVersion": "18.6 (Debian 18.6-1.pgdg13+2)",
+        "brokerVersion": "4.3.1",
+        "keycloakVersion": "26.8.1",
+        "network": "isolated container loopback",
+        "databaseConnectTimeoutSeconds": 5,
+        "databaseCommandTimeoutSeconds": 15,
+        "apiNodeCount": 2,
+        "persistenceNodeCount": 2,
+        "providerTopology": "high-availability"
+      },
+      "dataset": {
+        "physicalKafkaClusters": 10,
+        "actualBrokerTopics": 1000,
+        "initialTeams": 100,
+        "applications": 200,
+        "policyRules": 100,
+        "historicalRequests": 10000,
+        "historicalAttributionWindows": 43200,
+        "measuredAttributionWindows": 1,
+        "initializedByApiAndBroker": true,
+        "historicalCorpusIsSynthetic": true
+      },
+      "authenticatedColdStartMilliseconds": {
+        "observed": {
+          "samples": 5,
+          "median": 1918.0371,
+          "p95": 1986.018,
+          "p99": 1986.018,
+          "max": 1986.018
+        },
+        "proposedCeiling": 1986.018,
+        "allowedRelativeRegression": 0.03544295363212736
+      },
+      "steady": {
+        "1": {
+          "repetitions": [
+            "steady-01-1",
+            "steady-02-1",
+            "steady-03-1"
+          ],
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 3,
+              "median": 1.000365216908501,
+              "p95": 1.0003861951490491,
+              "p99": 1.0003861951490491,
+              "max": 1.0003861951490491
+            },
+            "proposedFloor": 1.0003347169924282,
+            "allowedRelativeRegression": 3.0488781054596152e-05
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 51.4342,
+                  "p95": 54.6618,
+                  "p99": 54.6618,
+                  "max": 54.6618
+                },
+                "proposedCeiling": 54.6618,
+                "allowedRelativeRegression": 0.06275202102880968
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 67.2266,
+                  "p95": 70.3581,
+                  "p99": 70.3581,
+                  "max": 70.3581
+                },
+                "proposedCeiling": 70.3581,
+                "allowedRelativeRegression": 0.04658126396396647
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 12.1946,
+                  "p95": 13.8062,
+                  "p99": 13.8062,
+                  "max": 13.8062
+                },
+                "proposedCeiling": 13.8062,
+                "allowedRelativeRegression": 0.1321568563134503
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 23.6941,
+                  "p95": 53.4362,
+                  "p99": 53.4362,
+                  "max": 53.4362
+                },
+                "proposedCeiling": 53.4362,
+                "allowedRelativeRegression": 1.2552534175174412
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 72.9953,
+                  "p95": 76.6817,
+                  "p99": 76.6817,
+                  "max": 76.6817
+                },
+                "proposedCeiling": 76.6817,
+                "allowedRelativeRegression": 0.050501881627995314
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 78.3985,
+                  "p95": 81.3065,
+                  "p99": 81.3065,
+                  "max": 81.3065
+                },
+                "proposedCeiling": 81.3065,
+                "allowedRelativeRegression": 0.03709254641351558
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 6.004003469511284,
+                  "p95": 6.999793506091723,
+                  "p99": 6.999793506091723,
+                  "max": 6.999793506091723
+                },
+                "proposedCeiling": 6.999793506091723,
+                "allowedRelativeRegression": 0.1658543406307349
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 273793024,
+                  "p95": 283250688,
+                  "p99": 283250688,
+                  "max": 283250688
+                },
+                "proposedCeiling": 283250688,
+                "allowedRelativeRegression": 0.03454311531326671
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 293044224,
+                  "p95": 301563904,
+                  "p99": 301563904,
+                  "max": 301563904
+                },
+                "proposedCeiling": 301563904,
+                "allowedRelativeRegression": 0.029073018002907302
+              }
+            },
+            "peerProcess": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 7.000201605800645,
+                  "p95": 7.983107744012939,
+                  "p99": 7.983107744012939,
+                  "max": 7.983107744012939
+                },
+                "proposedCeiling": 7.983107744012939,
+                "allowedRelativeRegression": 0.1404111186451857
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 272142336,
+                  "p95": 276692992,
+                  "p99": 276692992,
+                  "max": 276692992
+                },
+                "proposedCeiling": 276692992,
+                "allowedRelativeRegression": 0.016721602624885236
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 280391680,
+                  "p95": 291926016,
+                  "p99": 291926016,
+                  "max": 291926016
+                },
+                "proposedCeiling": 291926016,
+                "allowedRelativeRegression": 0.041136513037762036
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 3,
+                "median": 25.32633740597466,
+                "p95": 30.308038215931187,
+                "p99": 30.308038215931187,
+                "max": 30.308038215931187
+              },
+              "proposedCeiling": 30.308038215931187,
+              "allowedRelativeRegression": 0.19670040440909986
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 8533544960.0,
+                "p95": 8708251648.0,
+                "p99": 8708251648.0,
+                "max": 8708251648.0
+              },
+              "proposedCeiling": 8708251648.0,
+              "allowedRelativeRegression": 0.02047293227127967
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 8609202176,
+                "p95": 8836984832,
+                "p99": 8836984832,
+                "max": 8836984832
+              },
+              "proposedCeiling": 8836984832,
+              "allowedRelativeRegression": 0.026458044699541737
+            }
+          },
+          "hostBusyPercentByRepeat": {
+            "steady-01-1": {
+              "samples": 901,
+              "median": 5.343511450381677,
+              "p95": 8.951406649616366,
+              "p99": 13.520408163265307,
+              "max": 16.581632653061227
+            },
+            "steady-02-1": {
+              "samples": 901,
+              "median": 5.089058524173029,
+              "p95": 8.43989769820972,
+              "p99": 13.197969543147202,
+              "max": 50.83333333333333
+            },
+            "steady-03-1": {
+              "samples": 901,
+              "median": 4.580152671755721,
+              "p95": 6.41025641025641,
+              "p99": 7.908163265306123,
+              "max": 53.562005277044854
+            }
+          },
+          "allowedErrors": 0,
+          "allowedHttp429": 0
+        },
+        "10": {
+          "repetitions": [
+            "steady-01-10",
+            "steady-02-10",
+            "steady-03-10"
+          ],
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 3,
+              "median": 10.00372332697687,
+              "p95": 10.00390884917778,
+              "p99": 10.00390884917778,
+              "max": 10.00390884917778
+            },
+            "proposedFloor": 10.003664377790692,
+            "allowedRelativeRegression": 5.892724563743478e-06
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 150.1986,
+                  "p95": 153.015,
+                  "p99": 153.015,
+                  "max": 153.015
+                },
+                "proposedCeiling": 153.015,
+                "allowedRelativeRegression": 0.01875117344635694
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 170.6094,
+                  "p95": 177.5162,
+                  "p99": 177.5162,
+                  "max": 177.5162
+                },
+                "proposedCeiling": 177.5162,
+                "allowedRelativeRegression": 0.040483115232806656
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 82.6645,
+                  "p95": 84.2805,
+                  "p99": 84.2805,
+                  "max": 84.2805
+                },
+                "proposedCeiling": 84.2805,
+                "allowedRelativeRegression": 0.019548899467123126
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 105.3009,
+                  "p95": 109.083,
+                  "p99": 109.083,
+                  "max": 109.083
+                },
+                "proposedCeiling": 109.083,
+                "allowedRelativeRegression": 0.03591707193385811
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 184.7176,
+                  "p95": 184.8384,
+                  "p99": 184.8384,
+                  "max": 184.8384
+                },
+                "proposedCeiling": 184.8384,
+                "allowedRelativeRegression": 0.0006539712512505721
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 201.1381,
+                  "p95": 223.8084,
+                  "p99": 223.8084,
+                  "max": 223.8084
+                },
+                "proposedCeiling": 223.8084,
+                "allowedRelativeRegression": 0.11271012304481347
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 22.03250676050752,
+                  "p95": 22.99778301372138,
+                  "p99": 22.99778301372138,
+                  "max": 22.99778301372138
+                },
+                "proposedCeiling": 22.99778301372138,
+                "allowedRelativeRegression": 0.043811458392200964
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 283975680,
+                  "p95": 290578432,
+                  "p99": 290578432,
+                  "max": 290578432
+                },
+                "proposedCeiling": 290578432,
+                "allowedRelativeRegression": 0.02325111784220395
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 289648640,
+                  "p95": 302010368,
+                  "p99": 302010368,
+                  "max": 302010368
+                },
+                "proposedCeiling": 302010368,
+                "allowedRelativeRegression": 0.04267835678427491
+              }
+            },
+            "peerProcess": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 23.939595612356264,
+                  "p95": 23.969668781126096,
+                  "p99": 23.969668781126096,
+                  "max": 23.969668781126096
+                },
+                "proposedCeiling": 23.969668781126096,
+                "allowedRelativeRegression": 0.0012562103912193744
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 281538560,
+                  "p95": 285724672,
+                  "p99": 285724672,
+                  "max": 285724672
+                },
+                "proposedCeiling": 285724672,
+                "allowedRelativeRegression": 0.014868698625154579
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 286404608,
+                  "p95": 292229120,
+                  "p99": 292229120,
+                  "max": 292229120
+                },
+                "proposedCeiling": 292229120,
+                "allowedRelativeRegression": 0.020336656035925233
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 3,
+                "median": 65.08985137978978,
+                "p95": 73.14911295021093,
+                "p99": 73.14911295021093,
+                "max": 73.14911295021093
+              },
+              "proposedCeiling": 73.14911295021093,
+              "allowedRelativeRegression": 0.12381748305732859
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 8606081024,
+                "p95": 8766722048,
+                "p99": 8766722048,
+                "max": 8766722048
+              },
+              "proposedCeiling": 8766722048,
+              "allowedRelativeRegression": 0.018665990193680055
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 8628719616,
+                "p95": 8790085632,
+                "p99": 8790085632,
+                "max": 8790085632
+              },
+              "proposedCeiling": 8790085632,
+              "allowedRelativeRegression": 0.018701038297823862
+            }
+          },
+          "hostBusyPercentByRepeat": {
+            "steady-01-10": {
+              "samples": 901,
+              "median": 16.752577319587626,
+              "p95": 20.769230769230774,
+              "p99": 26.530612244897956,
+              "max": 39.48717948717949
+            },
+            "steady-02-10": {
+              "samples": 901,
+              "median": 16.49746192893401,
+              "p95": 18.112244897959183,
+              "p99": 20.918367346938773,
+              "max": 28.607594936708857
+            },
+            "steady-03-10": {
+              "samples": 901,
+              "median": 16.368286445012792,
+              "p95": 18.41432225063938,
+              "p99": 20.1530612244898,
+              "max": 22.391857506361323
+            }
+          },
+          "allowedErrors": 0,
+          "allowedHttp429": 0
+        },
+        "50": {
+          "repetitions": [
+            "steady-01-50",
+            "steady-02-50",
+            "steady-03-50"
+          ],
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 3,
+              "median": 50.01887945117707,
+              "p95": 50.01892356886452,
+              "p99": 50.01892356886452,
+              "max": 50.01892356886452
+            },
+            "proposedFloor": 49.80064459969007,
+            "allowedRelativeRegression": 0.004363049590105695
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 637.7974,
+                  "p95": 646.8523,
+                  "p99": 646.8523,
+                  "max": 646.8523
+                },
+                "proposedCeiling": 646.8523,
+                "allowedRelativeRegression": 0.014197141600138186
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 664.1852,
+                  "p95": 679.926,
+                  "p99": 679.926,
+                  "max": 679.926
+                },
+                "proposedCeiling": 679.926,
+                "allowedRelativeRegression": 0.02369941395863689
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 500.1153,
+                  "p95": 508.5479,
+                  "p99": 508.5479,
+                  "max": 508.5479
+                },
+                "proposedCeiling": 508.5479,
+                "allowedRelativeRegression": 0.01686131178150326
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 545.9949,
+                  "p95": 550.3485,
+                  "p99": 550.3485,
+                  "max": 550.3485
+                },
+                "proposedCeiling": 550.3485,
+                "allowedRelativeRegression": 0.007973700853249572
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 3,
+                  "median": 716.4405,
+                  "p95": 726.0697,
+                  "p99": 726.0697,
+                  "max": 726.0697
+                },
+                "proposedCeiling": 726.0697,
+                "allowedRelativeRegression": 0.013440334542784737
+              },
+              "p99": {
+                "observed": {
+                  "samples": 3,
+                  "median": 740.2162,
+                  "p95": 777.3589,
+                  "p99": 777.3589,
+                  "max": 777.3589
+                },
+                "proposedCeiling": 777.3589,
+                "allowedRelativeRegression": 0.05017817767295554
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 99.08898190577547,
+                  "p95": 99.13257991237684,
+                  "p99": 99.13257991237684,
+                  "max": 99.13257991237684
+                },
+                "proposedCeiling": 99.13257991237684,
+                "allowedRelativeRegression": 0.00043998844031750125
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 292599808.0,
+                  "p95": 295890944.0,
+                  "p99": 295890944.0,
+                  "max": 295890944.0
+                },
+                "proposedCeiling": 295890944.0,
+                "allowedRelativeRegression": 0.011247908952831575
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 308183040,
+                  "p95": 313044992,
+                  "p99": 313044992,
+                  "max": 313044992
+                },
+                "proposedCeiling": 313044992,
+                "allowedRelativeRegression": 0.01577618288144604
+              }
+            },
+            "peerProcess": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 3,
+                  "median": 99.98537214006897,
+                  "p95": 100.00513026322753,
+                  "p99": 100.00513026322753,
+                  "max": 100.00513026322753
+                },
+                "proposedCeiling": 100.00513026322753,
+                "allowedRelativeRegression": 0.0001976101377196859
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 289812480.0,
+                  "p95": 292192256.0,
+                  "p99": 292192256.0,
+                  "max": 292192256.0
+                },
+                "proposedCeiling": 292192256.0,
+                "allowedRelativeRegression": 0.008211433820931383
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 3,
+                  "median": 306991104,
+                  "p95": 309981184,
+                  "p99": 309981184,
+                  "max": 309981184
+                },
+                "proposedCeiling": 309981184,
+                "allowedRelativeRegression": 0.009739956503755887
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 3,
+                "median": 266.6331925181805,
+                "p95": 275.464496972503,
+                "p99": 275.464496972503,
+                "max": 275.464496972503
+              },
+              "proposedCeiling": 275.464496972503,
+              "allowedRelativeRegression": 0.03312154938744292
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 8801849344,
+                "p95": 8933996544.0,
+                "p99": 8933996544.0,
+                "max": 8933996544.0
+              },
+              "proposedCeiling": 8933996544.0,
+              "allowedRelativeRegression": 0.015013572129598132
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 3,
+                "median": 8871317504,
+                "p95": 9022771200,
+                "p99": 9022771200,
+                "max": 9022771200
+              },
+              "proposedCeiling": 9022771200,
+              "allowedRelativeRegression": 0.017072288973053986
+            }
+          },
+          "hostBusyPercentByRepeat": {
+            "steady-01-50": {
+              "samples": 900,
+              "median": 65.79962116087134,
+              "p95": 70.81218274111676,
+              "p99": 76.54320987654322,
+              "max": 84.51776649746193
+            },
+            "steady-02-50": {
+              "samples": 900,
+              "median": 64.99990624472625,
+              "p95": 68.11594202898551,
+              "p99": 70.95959595959596,
+              "max": 78.55421686746989
+            },
+            "steady-03-50": {
+              "samples": 900,
+              "median": 64.96060278089908,
+              "p95": 67.8921568627451,
+              "p99": 69.64285714285714,
+              "max": 76.7337807606264
+            }
+          },
+          "allowedErrors": 0,
+          "allowedHttp429": 0
+        }
+      },
+      "soak": {
+        "durationSeconds": 7200.2739708,
+        "operations": 360150,
+        "verifiedCatalogCommits": 18007,
+        "successfulOperationsPerSecond": 50.01893003801699,
+        "process": {
+          "process": {
+            "rssBytes": {
+              "observedNetGrowthPerHour": 1660640.616267737,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": 196608.19256680197,
+                "p95": 14335671.907441325,
+                "p99": 14335671.907441325,
+                "max": 14335671.907441325
+              },
+              "proposedGrowthCeilingPerHour": 14335671.907441325
+            },
+            "handles": {
+              "observedNetGrowthPerHour": 0.0,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0,
+                "max": 0.0
+              },
+              "proposedGrowthCeilingPerHour": 0
+            },
+            "threads": {
+              "observedNetGrowthPerHour": -4.000012495689829,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": -4.000017733411956,
+                "p95": 15.999697573716452,
+                "p99": 15.999697573716452,
+                "max": 15.999697573716452
+              },
+              "proposedGrowthCeilingPerHour": 15.999697573716452
+            }
+          },
+          "peerProcess": {
+            "rssBytes": {
+              "observedNetGrowthPerHour": 1811613.3651821802,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": 1875997.04585382,
+                "p95": 6782525.476397334,
+                "p99": 6782525.476397334,
+                "max": 6782525.476397334
+              },
+              "proposedGrowthCeilingPerHour": 6782525.476397334
+            },
+            "handles": {
+              "observedNetGrowthPerHour": 0.0,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0,
+                "max": 0.0
+              },
+              "proposedGrowthCeilingPerHour": 0
+            },
+            "threads": {
+              "observedNetGrowthPerHour": -2.2857282647748356,
+              "segmentGrowthPerHour": {
+                "samples": 7,
+                "median": -3.99973432098084,
+                "p95": 48.00308149914642,
+                "p99": 48.00308149914642,
+                "max": 48.00308149914642
+              },
+              "proposedGrowthCeilingPerHour": 48.00308149914642
+            }
+          }
+        },
+        "container": {
+          "cpuPercentOfOneLogicalProcessor": {
+            "samples": 6961,
+            "median": 250.79267728218971,
+            "p95": 264.407846275841,
+            "p99": 274.36169550271114,
+            "max": 329.1438495702278
+          },
+          "memoryCurrentBytes": {
+            "samples": 6961,
+            "median": 9362432000,
+            "p95": 9756868608,
+            "p99": 9813708800,
+            "max": 9866739712
+          }
+        },
+        "hostBusyPercent": {
+          "samples": 7201,
+          "median": 65.80976863753214,
+          "p95": 69.21182266009852,
+          "p99": 71.49532710280374,
+          "max": 86.09112709832134
+        },
+        "latencyMilliseconds": {
+          "read": {
+            "median": 508.8015,
+            "p95": 641.2813,
+            "p99": 666.9621,
+            "max": 785.4802
+          },
+          "explain": {
+            "median": 360.9033,
+            "p95": 503.4375,
+            "p99": 545.6599,
+            "max": 648.7182
+          },
+          "catalogCommit": {
+            "median": 674.6595,
+            "p95": 733.2769,
+            "p99": 754.1971,
+            "max": 996.8699
+          }
+        },
+        "postLoadIdle": {
+          "process": {
+            "rssBytes": {
+              "observed": {
+                "samples": 2,
+                "median": 299284480.0,
+                "p95": 299409408,
+                "p99": 299409408,
+                "max": 299409408
+              },
+              "proposedCeiling": 299409408,
+              "allowedRelativeRegression": 0.00041742224655284496
+            },
+            "handles": {
+              "observed": {
+                "samples": 2,
+                "median": 349.0,
+                "p95": 349,
+                "p99": 349,
+                "max": 349
+              },
+              "proposedCeiling": 349.0,
+              "allowedRelativeRegression": 0.0
+            },
+            "threads": {
+              "observed": {
+                "samples": 2,
+                "median": 44.5,
+                "p95": 48,
+                "p99": 48,
+                "max": 48
+              },
+              "proposedCeiling": 48,
+              "allowedRelativeRegression": 0.07865168539325842
+            }
+          },
+          "peerProcess": {
+            "rssBytes": {
+              "observed": {
+                "samples": 2,
+                "median": 298699776.0,
+                "p95": 298704896,
+                "p99": 298704896,
+                "max": 298704896
+              },
+              "proposedCeiling": 298704896,
+              "allowedRelativeRegression": 1.7140956945344345e-05
+            },
+            "handles": {
+              "observed": {
+                "samples": 2,
+                "median": 369.0,
+                "p95": 369,
+                "p99": 369,
+                "max": 369
+              },
+              "proposedCeiling": 369.0,
+              "allowedRelativeRegression": 0.0
+            },
+            "threads": {
+              "observed": {
+                "samples": 2,
+                "median": 54.75,
+                "p95": 55,
+                "p99": 55,
+                "max": 55
+              },
+              "proposedCeiling": 55,
+              "allowedRelativeRegression": 0.0045662100456621
+            }
+          }
+        }
+      },
+      "githubRunId": "42865556010",
+      "harnessSha": "7eba541e7c85069c701d9f932f19949bb94cc69d",
+      "verifiedEvidenceFiles": 12
+    }
+  }
+}
