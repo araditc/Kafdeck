@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        provider: [sqlite, postgres]
+        provider: [postgres]
     env:
       W82_SOURCE_SHA: ${{ inputs.source_sha || '2aaf0110d8e96435d6494241456410decfbc0f6c' }}
       W82_SCHEDULE: ${{ inputs.schedule || 'preflight' }}

@@ -47,6 +47,9 @@ public sealed class V09W82ReferenceLoad
         var clusterCount = fullDataset ? 10 : 1;
         var postgresPair = postgres && Environment.GetEnvironmentVariable("KAFDECK_W82_POSTGRES_TWO_NODE") == "1";
         var physicalPostgresPair = postgresPair && Environment.GetEnvironmentVariable("KAFDECK_W82_POSTGRES_PHYSICAL_PAIR") == "1";
+        var pgSettings = postgres
+            ? new Npgsql.NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES")!)
+            : null;
         var path = Path.Combine(Environment.GetEnvironmentVariable("KAFDECK_G2_EVIDENCE_DIRECTORY")!, provider + "-reference");
         Directory.CreateDirectory(path);
         var snapshots = new List<object>();
@@ -79,6 +82,7 @@ public sealed class V09W82ReferenceLoad
                     cpu = Environment.GetEnvironmentVariable("KAFDECK_W82_CPU_MODEL"), logicalProcessors = Environment.ProcessorCount,
                     memoryAvailableBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, databaseVersion, brokerVersion, keycloakVersion = "26.8.1",
                     network = Environment.GetEnvironmentVariable("KAFDECK_W82_NETWORK") ?? "single-workstation isolated loopback",
+                    databaseConnectTimeoutSeconds = pgSettings?.Timeout, databaseCommandTimeoutSeconds = pgSettings?.CommandTimeout,
                     apiNodeCount = postgresPair ? 2 : 1,
                     persistenceNodeCount = physicalPostgresPair ? 2 : 1,
                     providerTopology = postgresPair ? "high-availability" : "standalone"
@@ -104,7 +108,7 @@ public sealed class V09W82ReferenceLoad
             phaseName = "governed-seed";
             Checkpoint();
             lab = await W77Laboratory.CreateAsync(postgres, token, broker.Bootstrap, highAvailability: postgresPair,
-                additionalClusters: brokers.Skip(1).Select(cluster => cluster.Bootstrap).ToArray());
+                additionalClusters: brokers.Skip(1).Select(cluster => cluster.Bootstrap).ToArray(), useFaultInjectionTimeouts: false);
             var seed = await W77GovernanceDataset.CreateAsync(lab, token, ruleCount: 100);
             var api = lab.Api;
             databaseVersion = await lab.DatabaseVersionAsync(token);

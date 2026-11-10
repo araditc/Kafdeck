@@ -36,7 +36,8 @@ internal sealed class W77Laboratory : IAsyncDisposable
     private W77Laboratory(string directory) { DirectoryPath = directory; Api = new(Path.Combine(directory, "api")); }
 
     internal static async Task<W77Laboratory> CreateAsync(bool postgres, CancellationToken token, string? bootstrap = null,
-        Func<string, string>? databaseRoute = null, bool highAvailability = false, IReadOnlyList<string>? additionalClusters = null)
+        Func<string, string>? databaseRoute = null, bool highAvailability = false, IReadOnlyList<string>? additionalClusters = null,
+        bool useFaultInjectionTimeouts = true)
     {
         var directory = Path.Combine(Environment.GetEnvironmentVariable("KAFDECK_G2_EVIDENCE_DIRECTORY") ?? Path.GetTempPath(),
             "w77-private-" + Guid.NewGuid().ToString("N"));
@@ -75,8 +76,13 @@ internal sealed class W77Laboratory : IAsyncDisposable
             {
                 var connection = new NpgsqlConnectionStringBuilder(result.Database.ConnectionString)
                 {
-                    Timeout = 3, CommandTimeout = 3, Pooling = additionalClusters is { Count: > 0 }
+                    Pooling = additionalClusters is { Count: > 0 }
                 };
+                if (useFaultInjectionTimeouts)
+                {
+                    connection.Timeout = 3;
+                    connection.CommandTimeout = 3;
+                }
                 settings["Kafdeck:Administration:Mutations:Persistence:ConnectionString"] = "env:KAFDECK_W77_PG";
                 api.Secret("KAFDECK_W77_PG", databaseRoute?.Invoke(connection.ConnectionString) ?? connection.ConnectionString);
             }

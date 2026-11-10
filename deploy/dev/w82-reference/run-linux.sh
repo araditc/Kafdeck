@@ -163,8 +163,15 @@ KAFDECK_W82_CPU_MODEL=$(awk -F ': ' '/^model name/ { print $2; exit }' /proc/cpu
 
 python3 deploy/dev/w82-reference/sample-cgroup.py "$evidence/container-samples.csv" &
 sampler_pid=$!
+test_exit=0
 dotnet test "$test_dll" --filter "FullyQualifiedName~V09W82ReferenceLoad.$test_filter" \
-  --results-directory "$private" --logger 'trx;LogFileName=reference.trx' || { test_exit=$?; exit "$test_exit"; }
+  --results-directory "$private" --logger 'trx;LogFileName=reference.trx' || test_exit=$?
+if [[ "$provider" == postgres ]]; then
+  pwsh -NoProfile -File "$controller" -Action Sync "${pair_args[@]}"
+  cp "$pair/latest-sync-evidence.json" "$evidence/"
+  replayed=true
+fi
+(( test_exit == 0 )) || exit "$test_exit"
 python3 - "$private/reference.trx" "$reference/checkpoint.json" <<'PY'
 import json
 import sys
@@ -176,10 +183,4 @@ with open(sys.argv[2]) as checkpoint:
     result = json.load(checkpoint)
 assert result["completed"] and result["cleaned"] and result["errors"] == 0, result["phase"]
 PY
-test_exit=0
-if [[ "$provider" == postgres ]]; then
-  pwsh -NoProfile -File "$controller" -Action Sync "${pair_args[@]}"
-  cp "$pair/latest-sync-evidence.json" "$evidence/"
-  replayed=true
-fi
 (( $(wc -l <"$evidence/container-samples.csv") >= 60 ))

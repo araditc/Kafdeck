@@ -278,8 +278,16 @@ public sealed class V09W82MixedLoadPilot
         var route = "/api/v1/automation/mutations/" + id.ToString("D");
         await SendAsync(client, HttpMethod.Post, route + "/confirm", new { previewHash }, null, wire, token);
         var executed = await SendAsync(client, HttpMethod.Post, route + "/execute", null, null, wire, token);
-        if (executed.GetProperty("state").GetString() != "appliedVerified")
+        var state = executed.GetProperty("state").GetString();
+        if (state != "appliedVerified")
+        {
+            wire[^1] = wire[^1] with
+            {
+                MutationState = state,
+                MutationResultCode = executed.TryGetProperty("resultCode", out var code) ? code.GetString() : null
+            };
             throw new InvalidOperationException("Catalog operation lacked verified applied state.");
+        }
         return teamId;
     }
 
@@ -317,7 +325,8 @@ public sealed class V09W82MixedLoadPilot
         return new { median = Percentile(.5), p95 = Percentile(.95), p99 = Percentile(.99), max = values[^1] };
     }
 
-    internal sealed record Wire(string Route, int Status, double ElapsedMs, int ResponseBytes);
+    internal sealed record Wire(string Route, int Status, double ElapsedMs, int ResponseBytes,
+        string? MutationState = null, string? MutationResultCode = null);
     internal sealed record OperationSample(int Batch, int Worker, string Kind, double StartedAtSeconds, double ElapsedMs,
         string? Error, string? CatalogTeamId, List<Wire> Http);
 }
