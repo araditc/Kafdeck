@@ -16,7 +16,7 @@ public sealed class V09W82ReferenceLoad
     private const long FixtureDiskSafetyBytes = 2_147_483_648;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    [W77LiveFact] public Task SQLite_reference_schedule() => RunAsync(false);
+    [W77LiveFact(requirePostgres: false)] public Task SQLite_reference_schedule() => RunAsync(false);
     [W77LiveFact] public Task PostgreSQL_reference_schedule() => RunAsync(true);
 
     private sealed record Phase(string Name, int Workers, int Seconds);

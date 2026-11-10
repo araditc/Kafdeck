@@ -12,12 +12,13 @@ namespace Kafdeck.Architecture.Tests;
 
 public sealed class W77LiveFactAttribute : FactAttribute
 {
-    public W77LiveFactAttribute()
+    public W77LiveFactAttribute(bool requirePostgres = true)
     {
         if (Environment.GetEnvironmentVariable("KAFDECK_RUN_W77") != "1" ||
-            new[] { "KAFDECK_KEYCLOAK_G2_LAB", "KAFDECK_G2_KAFKA_BOOTSTRAP", "KAFDECK_TEST_POSTGRES" }
-                .Any(name => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name))))
-            Skip = "Requires explicit W77 opt-in and genuine isolated G2 Keycloak/Kafka/PostgreSQL fixtures; skips cannot close H1/H2.";
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KAFDECK_KEYCLOAK_G2_LAB")) ||
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KAFDECK_G2_KAFKA_BOOTSTRAP")) ||
+            (requirePostgres && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES"))))
+            Skip = "Requires explicit W77 opt-in and the isolated Keycloak, Kafka and applicable persistence fixtures.";
     }
 }
 
