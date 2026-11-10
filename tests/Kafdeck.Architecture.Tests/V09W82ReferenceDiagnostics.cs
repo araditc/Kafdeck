@@ -57,8 +57,15 @@ internal sealed class V09W82ReferenceDiagnostics : IAsyncDisposable
 
     internal static (ulong Idle, ulong Total)? HostCpu()
     {
-        if (!OperatingSystem.IsWindows() || !GetSystemTimes(out var idle, out var kernel, out var user)) return null;
-        return (idle, kernel + user);
+        if (OperatingSystem.IsWindows() && GetSystemTimes(out var idle, out var kernel, out var user))
+            return (idle, kernel + user);
+        if (!OperatingSystem.IsLinux()) return null;
+
+        using var stats = File.OpenText("/proc/stat");
+        var fields = stats.ReadLine()?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (fields is null || fields.Length < 9 || fields[0] != "cpu") return null;
+        var ticks = fields.Skip(1).Take(8).Select(value => ulong.Parse(value, CultureInfo.InvariantCulture)).ToArray();
+        return (ticks[3] + ticks[4], ticks.Aggregate(0UL, (sum, value) => sum + value));
     }
 
     [DllImport("kernel32.dll")]

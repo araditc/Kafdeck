@@ -18,7 +18,7 @@ source="$private/source"
 mkdir "$source"
 cp -R /checkout/. "$source/"
 cd "$source"
-git diff --quiet "$source_sha" HEAD -- src Directory.Build.props Directory.Packages.props global.json
+git diff --quiet "$source_sha" HEAD -- src deploy/postgresql Directory.Build.props Directory.Build.targets Directory.Packages.props global.json
 git diff --quiet -- src
 harness_sha=$(git rev-parse HEAD)
 lab="$private/lab"
@@ -30,6 +30,7 @@ export JAVA_HOME
 JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
+export CI=true
 
 dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
 dotnet build tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj -c Release --no-restore -p:SourceRevisionId="$source_sha"
@@ -60,21 +61,24 @@ chmod +x "$keycloak/bin/kc.sh"
 pwsh -NoProfile -File deploy/dev/prepare-keycloak-g2.ps1 -KeycloakHome "$keycloak" -OutputDirectory "$identity" -HttpsPort 18450
 keycloak_pid=
 sampler_pid=
+test_exit=1
+replayed=false
 pair="$lab/pair"
 pair_args=(-OutputDirectory "$pair" -BinDirectory /usr/lib/postgresql/18/bin -PrimaryPort 15432 -StandbyPort 15433 -RestorePort 15434)
 cleanup() {
   local code=$?
+  local stopped=true
   trap - EXIT
   if [[ -n "$sampler_pid" ]]; then
     kill "$sampler_pid" 2>/dev/null || code=1
     wait "$sampler_pid" 2>/dev/null || true
   fi
   if [[ -n "$keycloak_pid" ]]; then
-    kill "$keycloak_pid" 2>/dev/null || code=1
+    kill "$keycloak_pid" 2>/dev/null || stopped=false
     wait "$keycloak_pid" 2>/dev/null || true
   fi
   if [[ -f "$pair/lab.json" ]]; then
-    pwsh -NoProfile -File "$controller" -Action Stop "${pair_args[@]}" || code=1
+    pwsh -NoProfile -File "$controller" -Action Stop "${pair_args[@]}" || stopped=false
   fi
   if [[ -d "$reference" ]]; then
     destination="$evidence/$provider-reference"
@@ -85,9 +89,24 @@ cleanup() {
       fi
     done
   fi
-  if (( code == 0 )); then
-    printf 'true\n' > "$evidence/owned-infrastructure-stopped"
-  fi
+  [[ "$stopped" == true ]] || code=1
+  python3 - "$evidence/run-provenance.json" "$source_sha" "$harness_sha" "$provider" "$schedule" \
+    "$test_exit" "$stopped" "$replayed" "$api_dll" "$test_dll" "$private/tools/dotnet-counters" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+output, source, harness, provider, schedule, status, stopped, replayed, api, tests, counters = sys.argv[1:]
+digest = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
+data = {
+    "sourceSha": source, "harnessSha": harness, "providerSelection": provider, "schedule": schedule,
+    "fullDataset": True, "testExit": int(status), "ownedInfrastructureStopped": stopped == "true",
+    "physicalReplicationVerifiedAfterLoad": replayed == "true", "runtime": "linux-cgroup-v2",
+    "apiDllSha256": digest(api), "testDllSha256": digest(tests), "countersSha256": digest(counters),
+}
+Path(output).write_text(json.dumps(data, indent=2) + "\n")
+PY
   chmod -R a+rX "$evidence"
   exit "$code"
 }
@@ -145,7 +164,7 @@ KAFDECK_W82_CPU_MODEL=$(awk -F ': ' '/^model name/ { print $2; exit }' /proc/cpu
 python3 deploy/dev/w82-reference/sample-cgroup.py "$evidence/container-samples.csv" &
 sampler_pid=$!
 dotnet test "$test_dll" --filter "FullyQualifiedName~V09W82ReferenceLoad.$test_filter" \
-  --results-directory "$private" --logger 'trx;LogFileName=reference.trx'
+  --results-directory "$private" --logger 'trx;LogFileName=reference.trx' || { test_exit=$?; exit "$test_exit"; }
 python3 - "$private/reference.trx" "$reference/checkpoint.json" <<'PY'
 import json
 import sys
@@ -157,8 +176,10 @@ with open(sys.argv[2]) as checkpoint:
     result = json.load(checkpoint)
 assert result["completed"] and result["cleaned"] and result["errors"] == 0, result["phase"]
 PY
+test_exit=0
 if [[ "$provider" == postgres ]]; then
   pwsh -NoProfile -File "$controller" -Action Sync "${pair_args[@]}"
   cp "$pair/latest-sync-evidence.json" "$evidence/"
+  replayed=true
 fi
 (( $(wc -l <"$evidence/container-samples.csv") >= 60 ))

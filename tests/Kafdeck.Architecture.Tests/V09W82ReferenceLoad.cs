@@ -356,7 +356,8 @@ public sealed class V09W82ReferenceLoad
                 var sample = W77ProcessSample.Read(pid, clock);
                 var peerSample = peerPid is int id ? W77ProcessSample.Read(id, clock) : null;
                 var latestHostCpu = V09W82ReferenceDiagnostics.HostCpu();
-                double? hostBusyPercent = hostCpu is { } prior && latestHostCpu is { } latest && latest.Total > prior.Total
+                double? hostBusyPercent = hostCpu is { } prior && latestHostCpu is { } latest &&
+                    latest.Total > prior.Total && latest.Idle >= prior.Idle
                     ? 100.0 * (1.0 - (double)(latest.Idle - prior.Idle) / (latest.Total - prior.Total))
                     : null;
                 hostCpu = latestHostCpu;
@@ -368,7 +369,8 @@ public sealed class V09W82ReferenceLoad
                 }
                 await output.WriteLineAsync(JsonSerializer.Serialize(new
                 {
-                    phase = phase(), process = sample, peerProcess = peerSample, hostBusyPercent, sqliteBytes = FileSize(sqlite),
+                    observedAtUtc = DateTimeOffset.UtcNow, phase = phase(), process = sample, peerProcess = peerSample,
+                    hostBusyPercent, sqliteBytes = FileSize(sqlite),
                     walBytes = FileSize(sqlite is null ? null : sqlite + "-wal")
                 }, Json));
                 await output.FlushAsync(stop);

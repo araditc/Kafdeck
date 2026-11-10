@@ -35,13 +35,19 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify reference candidate
-        if: inputs.schedule == 'reference'
+      - name: Select and verify reference candidate
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == push && -f deploy/dev/w82-reference/reference-target.txt ]]; then
+            W82_SOURCE_SHA=$(<deploy/dev/w82-reference/reference-target.txt)
+            W82_SCHEDULE=reference
+          fi
           [[ "$W82_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          git merge-base --is-ancestor "$W82_SOURCE_SHA" origin/main
+          if [[ "$W82_SCHEDULE" == reference ]]; then
+            git merge-base --is-ancestor "$W82_SOURCE_SHA" origin/main
+          fi
+          printf 'W82_SOURCE_SHA=%s\nW82_SCHEDULE=%s\n' "$W82_SOURCE_SHA" "$W82_SCHEDULE" >> "$GITHUB_ENV"
       - name: Build isolated runner
         shell: bash
         run: |
