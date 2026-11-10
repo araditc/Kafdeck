@@ -27,6 +27,52 @@ public sealed class V09W73CatalogPersistenceTests
         await ExerciseAsync(new PostgreSqlMutationDbConnectionFactory(database.ConnectionString));
     }
 
+    [CatalogPostgreSqlFact]
+    public async Task PostgreSql_parallel_catalog_previews_keep_plan_identity_and_exclude_commits()
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        var token = deadline.Token;
+        await using var database = await G2CliPostgreSqlDatabase.CreateAsync();
+        var settings = new Npgsql.NpgsqlConnectionStringBuilder(database.ConnectionString) { CommandTimeout = 3 };
+        var connections = new PostgreSqlMutationDbConnectionFactory(settings.ConnectionString);
+        var generation = Guid.NewGuid();
+        var gate = new AdoGovernanceGenerationGate(connections, generation);
+        await gate.InitializeAsync(token);
+        var store = new AdoCatalogStore(connections, generation.ToString("D"), gate);
+        await store.InitializeAsync(token);
+
+        CatalogPlan TeamPlan(string name) => Plan(store,
+            [new(new(CatalogEntityKind.Team, null, 0, name), Guid.NewGuid().ToString("N"), null)]);
+        var plan = TeamPlan("Concurrent previews");
+        await using var holder = await connections.OpenAsync(token);
+        await using var shared = await holder.BeginTransactionAsync(token);
+        await using var command = holder.CreateCommand();
+        command.Transaction = shared;
+        command.CommandText = "SELECT pg_advisory_xact_lock_shared(64964007301)";
+        await command.ExecuteNonQueryAsync(token);
+        await gate.ValidateReadAsync(holder, shared, token);
+
+        var retries = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => store.StageAsync(plan, token)));
+        Assert.All(retries, staged => Assert.Equal(plan.ContentHash, staged.ContentHash));
+        Assert.Null(await store.GetAsync("alpha", CatalogEntityKind.Team, plan.Changes[0].Id, token));
+
+        var first = TeamPlan("First payload");
+        var second = TeamPlan("Different payload") with { PlanId = first.PlanId };
+        async Task<CatalogPlan?> TryStageAsync(CatalogPlan candidate)
+        {
+            try { return await store.StageAsync(candidate, token); }
+            catch (CatalogConflictException error) when (error.Code == "IdempotencyConflict") { return null; }
+        }
+        var candidates = await Task.WhenAll(TryStageAsync(first), TryStageAsync(second));
+        var winner = Assert.Single(candidates.OfType<CatalogPlan>());
+        Assert.Equal(winner.ContentHash, (await store.GetPlanAsync(first.PlanId, token))!.ContentHash);
+
+        var blocked = await Assert.ThrowsAsync<Npgsql.NpgsqlException>(() => store.CommitAsync(plan, () => true, token));
+        Assert.IsType<TimeoutException>(blocked.InnerException);
+        await shared.RollbackAsync(token);
+        Assert.NotNull(await store.CommitAsync(plan, () => true, token));
+    }
+
     private static async Task ExerciseAsync(IMutationDbConnectionFactory connections)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2)); var token = deadline.Token;

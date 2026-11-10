@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using System.Text.Json;
@@ -158,21 +159,31 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
         CatalogContract.ValidatePlan(plan);
         if (plan.DeploymentGeneration != DeploymentGeneration) throw new CatalogConflictException("CatalogRestoreGenerationChanged");
         await using var db = await connections.OpenAsync(token).ConfigureAwait(false);
-        await using var tx = await db.BeginTransactionAsync(token).ConfigureAwait(false);
-        await LockAsync(db, tx, token).ConfigureAwait(false);
-        await GenerationAsync(db, tx, token).ConfigureAwait(false);
+        await using var tx = connections.SupportsSelectForUpdate
+            ? await db.BeginTransactionAsync(IsolationLevel.ReadCommitted, token).ConfigureAwait(false)
+            : await db.BeginTransactionAsync(token).ConfigureAwait(false);
+        await LockAsync(db, tx, token, shared: true).ConfigureAwait(false);
+        if (generationGate is not null) await generationGate.ValidateReadAsync(db, tx, token).ConfigureAwait(false);
         var existing = await LoadPlanAsync(db, tx, plan.PlanId, token).ConfigureAwait(false);
-        if (existing is not null)
-        {
-            if (existing.ContentHash != plan.ContentHash || existing.RequesterPrincipalId != plan.RequesterPrincipalId || existing.ClusterId != plan.ClusterId)
-                throw new CatalogConflictException("IdempotencyConflict");
-            return existing;
-        }
+        if (existing is not null) return MatchPlan(existing, plan);
         await ValidateRowsAsync(db, tx, plan, token).ConfigureAwait(false);
-        await RunAsync(db, tx, "INSERT INTO catalog_owned_plans(plan_id,content_hash,body) VALUES(@id,@hash,@body)", token,
+        var inserted = await RunAsync(db, tx, "INSERT INTO catalog_owned_plans(plan_id,content_hash,body) VALUES(@id,@hash,@body) ON CONFLICT(plan_id) DO NOTHING", token,
             ("@id", plan.PlanId.ToString("D")), ("@hash", plan.ContentHash), ("@body", Serialize(plan))).ConfigureAwait(false);
+        if (inserted == 0)
+        {
+            // A concurrent insert with the same ID is visible to the next read at READ COMMITTED.
+            existing = await LoadPlanAsync(db, tx, plan.PlanId, token).ConfigureAwait(false);
+            return MatchPlan(existing, plan);
+        }
         await tx.CommitAsync(token).ConfigureAwait(false);
         return plan;
+    }
+    private static CatalogPlan MatchPlan(CatalogPlan? existing, CatalogPlan requested)
+    {
+        if (existing is null || existing.ContentHash != requested.ContentHash ||
+            existing.RequesterPrincipalId != requested.RequesterPrincipalId || existing.ClusterId != requested.ClusterId)
+            throw new CatalogConflictException("IdempotencyConflict");
+        return existing;
     }
     public async Task ValidateAsync(CatalogPlan plan, CancellationToken token)
     {
@@ -339,8 +350,12 @@ public sealed class AdoCatalogStore(IMutationDbConnectionFactory connections, st
         await tx.CommitAsync(token).ConfigureAwait(false); return result;
     }
     private Task GenerationAsync(DbConnection db, DbTransaction tx, CancellationToken token) => generationGate?.ValidateAsync(db, tx, token) ?? Task.CompletedTask;
-    private async Task LockAsync(DbConnection db, DbTransaction tx, CancellationToken token)
-    { if (connections.SupportsSelectForUpdate) await RunAsync(db, tx, "SELECT pg_advisory_xact_lock(64964007301)", token).ConfigureAwait(false); }
+    private async Task LockAsync(DbConnection db, DbTransaction tx, CancellationToken token, bool shared = false)
+    {
+        if (!connections.SupportsSelectForUpdate) return;
+        var sql = shared ? "SELECT pg_advisory_xact_lock_shared(64964007301)" : "SELECT pg_advisory_xact_lock(64964007301)";
+        await RunAsync(db, tx, sql, token).ConfigureAwait(false);
+    }
     private static async Task<CatalogRecord?> LoadAsync(DbConnection db, DbTransaction tx, string clusterId, CatalogEntityKind kind, string id, CancellationToken token)
     { var value = await ScalarAsync(db, tx, "SELECT body FROM catalog_owned_entities WHERE cluster_id=@cluster AND kind=@kind AND id=@id", token, ("@cluster", clusterId), ("@kind", (int)kind), ("@id", id)).ConfigureAwait(false); return value is string json ? Deserialize<CatalogRecord>(json) : null; }
     private static async Task<CatalogPlan?> LoadPlanAsync(DbConnection db, DbTransaction tx, Guid id, CancellationToken token)
