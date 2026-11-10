@@ -97,10 +97,14 @@ jobs:
           docker exec "$container_id" dotnet /probe/Kafdeck.OfflineProbe.dll > artifacts/w81/startup.json
           docker restart "$container_id" >/dev/null
           docker exec "$container_id" dotnet /probe/Kafdeck.OfflineProbe.dll > artifacts/w81/restart.json
+          archive="artifacts/w81/kafdeck-linux-$ARCH.docker.tar.gz"
+          docker image save kafdeck:w81-fixture | gzip -n > "$archive"
+          image_id="$(docker image inspect --format '{{.Id}}' kafdeck:w81-fixture)"
+          test "$(bash scripts/release/docker-archive-config-digest.sh "$archive")" = "$image_id"
           jq -n --arg source "$(git rev-parse HEAD)" --arg arch "$ARCH" \
-            --arg image "$(docker image inspect --format '{{.Id}}' kafdeck:w81-fixture)" \
+            --arg image "$image_id" --arg archive "$(sha256sum "$archive" | cut -d' ' -f1)" \
             --slurpfile startup artifacts/w81/startup.json --slurpfile restart artifacts/w81/restart.json \
-            '{sourceSha:$source,architecture:$arch,imageId:$image,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
+            '{sourceSha:$source,architecture:$arch,imageId:$image,archiveSha256:$archive,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
             > artifacts/w81/oci-native-startup.json
       - name: Install, upgrade and reinstall packaged Helm on disposable Kubernetes
         if: matrix.arch == 'amd64'
@@ -108,11 +112,16 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: w81-oci-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: artifacts/w81/oci-native-startup.json
+          compression-level: 0
+          path: |
+            artifacts/w81/oci-native-startup.json
+            artifacts/w81/kafdeck-linux-${{ matrix.arch }}.docker.tar.gz
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.arch == 'amd64'
         with:
           name: w81-helm-lifecycle-${{ github.event.pull_request.head.sha || github.sha }}
-          path: artifacts/w81/helm-lifecycle.json
+          path: |
+            artifacts/w81/helm-lifecycle.json
+            artifacts/w81/kafdeck-*.tgz
           if-no-files-found: error

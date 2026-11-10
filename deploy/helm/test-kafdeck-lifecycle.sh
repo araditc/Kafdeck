@@ -152,7 +152,9 @@ probe_https
 [[ "$(pod_uid)" != "$upgraded_pod" && "$(claim_uid)" == "$original_claim" ]]
 kubectl -n "$namespace" exec "deployment/$workload" -- grep -qx w81-retained /var/lib/kafdeck/w81-fixture
 
+tested_chart="$(dirname "$evidence")/$(basename "$chart")"
+cp -- "$chart" "$tested_chart"
 jq -n --arg source "$(git rev-parse HEAD)" --arg kube "$(kubectl version -o json | jq -er .serverVersion.gitVersion)" \
     --arg kind "$(kind version)" --arg helm "$(helm version --short)" --arg digest "$manifest_digest" \
-    --arg chart "$(sha256sum "$chart" | cut -d' ' -f1)" --arg image "$image_id" \
+    --arg chart "$(sha256sum "$tested_chart" | cut -d' ' -f1)" --arg image "$image_id" \
     '{sourceSha:$source,kubernetes:$kube,kind:$kind,helm:$helm,imageDigest:$digest,imageId:$image,chartSha256:$chart,install:true,upgrade:true,uninstall:true,reinstall:true,retainedClaimAndFile:true,verifiedHttps:true,scope:"standalone SQLite pod/PVC and packaged chart lifecycle; no broker, IdP, database restore, or NetworkPolicy enforcement proof",published:false}' > "$evidence"
