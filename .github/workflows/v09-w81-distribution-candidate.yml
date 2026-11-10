@@ -106,6 +106,31 @@ jobs:
             --slurpfile startup artifacts/w81/startup.json --slurpfile restart artifacts/w81/restart.json \
             '{sourceSha:$source,architecture:$arch,imageId:$image,archiveSha256:$archive,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
             > artifacts/w81/oci-native-startup.json
+      - name: Generate SPDX SBOM for the tested image
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: kafdeck:w81-fixture
+          format: spdx-json
+          output-file: artifacts/w81/sbom.spdx.json
+      - name: Scan the tested image for High and Critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kafdeck:w81-fixture
+          format: sarif
+          output: artifacts/w81/trivy-results.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: false
+          exit-code: '1'
+      - name: Bind scan and SBOM to the tested image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts/w81
+          jq --arg sbom "$(sha256sum sbom.spdx.json | cut -d' ' -f1)" \
+            --arg scan "$(sha256sum trivy-results.sarif | cut -d' ' -f1)" \
+            '. + {sbomSha256:$sbom,scanSha256:$scan}' oci-native-startup.json > oci-native-startup.tmp
+          mv oci-native-startup.tmp oci-native-startup.json
       - name: Install, upgrade and reinstall packaged Helm on disposable Kubernetes
         if: matrix.arch == 'amd64'
         run: bash deploy/helm/test-kafdeck-lifecycle.sh kafdeck:w81-fixture artifacts/w81/helm-lifecycle.json
@@ -116,6 +141,8 @@ jobs:
           path: |
             artifacts/w81/oci-native-startup.json
             artifacts/w81/kafdeck-linux-${{ matrix.arch }}.docker.tar.gz
+            artifacts/w81/sbom.spdx.json
+            artifacts/w81/trivy-results.sarif
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.arch == 'amd64'
