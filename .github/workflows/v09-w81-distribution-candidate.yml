@@ -86,10 +86,11 @@ jobs:
           dotnet publish tools/Kafdeck.OfflineProbe/Kafdeck.OfflineProbe.csproj -c Release --no-restore -o artifacts/w81/probe
           docker build --pull --platform "linux/$ARCH" --tag kafdeck:w81-fixture .
           test "$(docker image inspect --format '{{.Architecture}}' kafdeck:w81-fixture)" = "$ARCH"
+          image_id="$(docker image inspect --format '{{.Id}}' kafdeck:w81-fixture)"
           container_id="$(docker create --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=64m \
             --tmpfs /state:rw,nosuid,nodev,uid=1654,gid=1654,mode=0700,size=64m --env HOME=/state \
-            --mount "type=bind,src=$PWD/artifacts/w81/probe,dst=/probe,readonly" kafdeck:w81-fixture)"
+            --mount "type=bind,src=$PWD/artifacts/w81/probe,dst=/probe,readonly" "$image_id")"
           trap 'docker rm -f "$container_id" >/dev/null' EXIT
           docker start "$container_id" >/dev/null
           test "$(docker exec "$container_id" id -u)" = 1654
@@ -97,22 +98,62 @@ jobs:
           docker exec "$container_id" dotnet /probe/Kafdeck.OfflineProbe.dll > artifacts/w81/startup.json
           docker restart "$container_id" >/dev/null
           docker exec "$container_id" dotnet /probe/Kafdeck.OfflineProbe.dll > artifacts/w81/restart.json
+          archive="artifacts/w81/kafdeck-linux-$ARCH.docker.tar.gz"
+          test "$(docker image inspect --format '{{.Id}}' kafdeck:w81-fixture)" = "$image_id"
+          docker image save kafdeck:w81-fixture | gzip -n > "$archive"
+          config_digest="$(bash scripts/release/docker-archive-config-digest.sh "$archive")"
           jq -n --arg source "$(git rev-parse HEAD)" --arg arch "$ARCH" \
-            --arg image "$(docker image inspect --format '{{.Id}}' kafdeck:w81-fixture)" \
+            --arg image "$image_id" --arg config "$config_digest" --arg archive "$(sha256sum "$archive" | cut -d' ' -f1)" \
             --slurpfile startup artifacts/w81/startup.json --slurpfile restart artifacts/w81/restart.json \
-            '{sourceSha:$source,architecture:$arch,imageId:$image,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
+            '{sourceSha:$source,architecture:$arch,imageId:$image,configDigest:$config,archiveSha256:$archive,uid:1654,readOnlyRoot:true,network:"none",startup:$startup[0],restart:$restart[0],published:false}' \
             > artifacts/w81/oci-native-startup.json
+      - name: Generate SPDX SBOM for the tested image
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: kafdeck:w81-fixture
+          format: spdx-json
+          output-file: artifacts/w81/sbom.spdx.json
+      - name: Scan the tested image for High and Critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kafdeck:w81-fixture
+          format: sarif
+          output: artifacts/w81/trivy-results.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: false
+          exit-code: '1'
+      - name: Bind scan and SBOM to the tested image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts/w81
+          jq --arg sbom "$(sha256sum sbom.spdx.json | cut -d' ' -f1)" \
+            --arg scan "$(sha256sum trivy-results.sarif | cut -d' ' -f1)" \
+            '. + {sbomSha256:$sbom,scanSha256:$scan}' oci-native-startup.json > oci-native-startup.tmp
+          mv oci-native-startup.tmp oci-native-startup.json
       - name: Install, upgrade and reinstall packaged Helm on disposable Kubernetes
         if: matrix.arch == 'amd64'
-        run: bash deploy/helm/test-kafdeck-lifecycle.sh kafdeck:w81-fixture artifacts/w81/helm-lifecycle.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          config_digest="$(jq -er .configDigest artifacts/w81/oci-native-startup.json)"
+          bash deploy/helm/test-kafdeck-lifecycle.sh kafdeck:w81-fixture artifacts/w81/helm-lifecycle.json "$config_digest"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: w81-oci-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: artifacts/w81/oci-native-startup.json
+          compression-level: 0
+          path: |
+            artifacts/w81/oci-native-startup.json
+            artifacts/w81/kafdeck-linux-${{ matrix.arch }}.docker.tar.gz
+            artifacts/w81/sbom.spdx.json
+            artifacts/w81/trivy-results.sarif
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.arch == 'amd64'
         with:
           name: w81-helm-lifecycle-${{ github.event.pull_request.head.sha || github.sha }}
-          path: artifacts/w81/helm-lifecycle.json
+          path: |
+            artifacts/w81/helm-lifecycle.json
+            artifacts/w81/kafdeck-*.tgz
           if-no-files-found: error

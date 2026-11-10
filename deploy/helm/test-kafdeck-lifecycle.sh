@@ -3,6 +3,8 @@ set -euo pipefail
 
 image="${1:?Pass the already-built amd64 candidate image}"
 evidence="${2:?Pass the evidence output file}"
+config_digest="${3:?Pass the tested archive config digest}"
+[[ "$config_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
 [[ "$(uname -sm)" == 'Linux x86_64' ]]
 scratch="$(mktemp -d)"
 cluster="w81-helm-${RANDOM}-$$"
@@ -52,7 +54,7 @@ curl --fail --silent --show-error --max-time 10 \
     --header 'Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json' \
     "http://$endpoint/v2/kafdeck/manifests/fixture" > "$scratch/manifest.json"
 image_id="$(docker image inspect --format '{{.Id}}' "$image")"
-[[ "$(jq -er .config.digest "$scratch/manifest.json")" == "$image_id" ]]
+[[ "$(jq -er .config.digest "$scratch/manifest.json")" == "$config_digest" ]]
 manifest_digest="sha256:$(sha256sum "$scratch/manifest.json" | cut -d' ' -f1)"
 
 # The local HTTP registry is reachable only from the disposable host/Kind
@@ -152,7 +154,9 @@ probe_https
 [[ "$(pod_uid)" != "$upgraded_pod" && "$(claim_uid)" == "$original_claim" ]]
 kubectl -n "$namespace" exec "deployment/$workload" -- grep -qx w81-retained /var/lib/kafdeck/w81-fixture
 
+tested_chart="$(dirname "$evidence")/$(basename "$chart")"
+cp -- "$chart" "$tested_chart"
 jq -n --arg source "$(git rev-parse HEAD)" --arg kube "$(kubectl version -o json | jq -er .serverVersion.gitVersion)" \
     --arg kind "$(kind version)" --arg helm "$(helm version --short)" --arg digest "$manifest_digest" \
-    --arg chart "$(sha256sum "$chart" | cut -d' ' -f1)" --arg image "$image_id" \
-    '{sourceSha:$source,kubernetes:$kube,kind:$kind,helm:$helm,imageDigest:$digest,imageId:$image,chartSha256:$chart,install:true,upgrade:true,uninstall:true,reinstall:true,retainedClaimAndFile:true,verifiedHttps:true,scope:"standalone SQLite pod/PVC and packaged chart lifecycle; no broker, IdP, database restore, or NetworkPolicy enforcement proof",published:false}' > "$evidence"
+    --arg chart "$(sha256sum "$tested_chart" | cut -d' ' -f1)" --arg image "$image_id" --arg config "$config_digest" \
+    '{sourceSha:$source,kubernetes:$kube,kind:$kind,helm:$helm,imageDigest:$digest,imageId:$image,configDigest:$config,chartSha256:$chart,install:true,upgrade:true,uninstall:true,reinstall:true,retainedClaimAndFile:true,verifiedHttps:true,scope:"standalone SQLite pod/PVC and packaged chart lifecycle; no broker, IdP, database restore, or NetworkPolicy enforcement proof",published:false}' > "$evidence"
