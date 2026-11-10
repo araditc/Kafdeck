@@ -22,7 +22,9 @@ git diff --quiet "$source_sha" HEAD -- src Directory.Build.props Directory.Packa
 git diff --quiet -- src
 harness_sha=$(git rev-parse HEAD)
 lab="$private/lab"
-mkdir "$lab"
+measurements="$private/measurements"
+reference="$measurements/$provider-reference"
+mkdir "$lab" "$measurements"
 controller="$source/deploy/dev/w82-reference/physical-lab-control.ps1"
 export JAVA_HOME
 JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")
@@ -74,6 +76,15 @@ cleanup() {
   if [[ -f "$pair/lab.json" ]]; then
     pwsh -NoProfile -File "$controller" -Action Stop "${pair_args[@]}" || code=1
   fi
+  if [[ -d "$reference" ]]; then
+    destination="$evidence/$provider-reference"
+    mkdir "$destination"
+    for file in checkpoint.json operations.ndjson resources.ndjson cancellation.json primary-runtime-counters.csv peer-runtime-counters.csv; do
+      if [[ -f "$reference/$file" ]]; then
+        cp "$reference/$file" "$destination/" || code=1
+      fi
+    done
+  fi
   if (( code == 0 )); then
     printf 'true\n' > "$evidence/owned-infrastructure-stopped"
   fi
@@ -112,7 +123,7 @@ fi
 
 export KAFDECK_RUN_W77=1 KAFDECK_W82_FULL_DATASET=1 KAFDECK_G2_KAFKA_DELETE_CAPABLE=0
 export KAFDECK_SOURCE_SHA="$source_sha" KAFDECK_W82_REFERENCE_SCHEDULE="$schedule"
-export KAFDECK_KEYCLOAK_G2_LAB="$identity/lab.json" KAFDECK_G2_EVIDENCE_DIRECTORY="$evidence"
+export KAFDECK_KEYCLOAK_G2_LAB="$identity/lab.json" KAFDECK_G2_EVIDENCE_DIRECTORY="$measurements"
 export KAFDECK_W77_KAFKA_HOME="$lab/kafka_2.13-4.3.1" KAFDECK_W77_JAVA_HOME="$JAVA_HOME"
 export KAFDECK_G2_KAFKA_BOOTSTRAP=127.0.0.1:19092 KAFDECK_W82_COUNTERS="$private/tools/dotnet-counters"
 export KAFDECK_W82_NETWORK='isolated container loopback'
@@ -135,7 +146,7 @@ python3 deploy/dev/w82-reference/sample-cgroup.py "$evidence/container-samples.c
 sampler_pid=$!
 dotnet test "$test_dll" --filter "FullyQualifiedName~V09W82ReferenceLoad.$test_filter" \
   --results-directory "$private" --logger 'trx;LogFileName=reference.trx'
-python3 - "$private/reference.trx" "$evidence/$provider-reference/checkpoint.json" <<'PY'
+python3 - "$private/reference.trx" "$reference/checkpoint.json" <<'PY'
 import json
 import sys
 import xml.etree.ElementTree as et
