@@ -242,6 +242,8 @@ A typical request flows like this:
 
 ## Getting started
 
+To evaluate 0.9.0, see the [v0.9 installation and operator guide](docs/operator/v0.9-installation-guide.md). The examples below use the published v0.8 image.
+
 ### Recommended path: OCI / Docker
 
 Kafdeck v0.8 is distributed as a non-root OCI image. Pin the verified immutable digest:
