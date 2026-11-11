@@ -43,6 +43,40 @@ class ExtractionTests(unittest.TestCase):
 
 
 class IsolationTests(unittest.TestCase):
+    def test_containerd_image_id_can_differ_from_signed_config_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = "a" * 40
+            media = Path(directory)
+            archive = media / f"distribution/w81-oci-amd64-{source}/kafdeck-linux-amd64.docker.tar.gz"
+            archive.parent.mkdir(parents=True)
+            body = json.dumps([{"RepoTags": ["kafdeck:w81-fixture"]}]).encode()
+            with tarfile.open(archive, "w:gz") as package:
+                item = tarfile.TarInfo("manifest.json")
+                item.size = len(body)
+                package.addfile(item, io.BytesIO(body))
+            config = "sha256:" + "b" * 64
+            daemon = "sha256:" + "c" * 64
+            calls = []
+            def execute(*args, **kwargs):
+                calls.append(args)
+                if args[:3] == ("docker", "image", "inspect"):
+                    return json.dumps([{"Id": daemon, "Architecture": "amd64", "Os": "linux"}])
+                if args[:2] == ("docker", "create"):
+                    return "d" * 64
+                if args[:2] == ("docker", "inspect"):
+                    return json.dumps([{"HostConfig": {"NetworkMode": "none", "ReadonlyRootfs": True},
+                                        "Config": {"User": "1654:1654"}, "State": {"Pid": 10}}])
+                if args[0] == "nsenter":
+                    return json.dumps({"health": True, "staticFrontend": True})
+                return ""
+            with patch.object(offline, "run", side_effect=execute):
+                proof = offline.oci_install(media, {"sourceSha": source, "content": {"imageConfigDigests": {"amd64": config}}})
+            self.assertEqual(config, proof["configDigest"])
+            self.assertEqual(daemon, proof["daemonImageId"])
+            create = next(args for args in calls if args[:2] == ("docker", "create"))
+            self.assertEqual(daemon, create[-1])
+            self.assertIn("--pull=never", create)
+
     def test_egress_interface_or_default_route_rejected(self):
         for outputs in ((json.dumps([{"ifname": "lo"}, {"ifname": "eth0"}]),),
                         (json.dumps([{"ifname": "lo"}]), "default via 10.0.0.1"),

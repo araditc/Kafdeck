@@ -130,12 +130,21 @@ def oci_install(media, manifest):
     source = manifest["sourceSha"]
     archive = media / f"distribution/w81-oci-amd64-{source}/kafdeck-linux-amd64.docker.tar.gz"
     expected = manifest["content"]["imageConfigDigests"]["amd64"]
+    with tarfile.open(archive, "r:gz") as package:
+        archived = json.load(package.extractfile("manifest.json"))
+    require(len(archived) == 1 and archived[0].get("RepoTags") == ["kafdeck:w81-fixture"],
+            "Unexpected signed fixture image tag")
     run("docker", "image", "load", "--input", str(archive), timeout=300)
-    image = json.loads(run("docker", "image", "inspect", expected))[0]
-    require(image["Id"] == expected and image["Architecture"] == "amd64" and image["Os"] == "linux", "Loaded OCI config/platform identity differs")
+    image = json.loads(run("docker", "image", "inspect", "kafdeck:w81-fixture"))[0]
+    daemon_id = image["Id"]
+    require(daemon_id.startswith("sha256:") and len(daemon_id) == 71
+            and all(c in "0123456789abcdef" for c in daemon_id[7:])
+            and image["Architecture"] == "amd64" and image["Os"] == "linux", "Loaded OCI platform identity differs")
+    # Docker's containerd store uses a manifest/index ID. The signed config
+    # digest is verified from archive bytes by verify() before this installer.
     container = run("docker", "create", "--pull=never", "--network=none", "--read-only", "--user=1654:1654",
                     "--cap-drop=ALL", "--security-opt=no-new-privileges", "--tmpfs=/tmp:rw,nosuid,nodev,size=64m",
-                    "--tmpfs=/state:rw,nosuid,nodev,uid=1654,gid=1654,mode=0700,size=64m", "--env=HOME=/state", expected).strip()
+                    "--tmpfs=/state:rw,nosuid,nodev,uid=1654,gid=1654,mode=0700,size=64m", "--env=HOME=/state", daemon_id).strip()
     require(len(container) == 64 and all(c in "0123456789abcdef" for c in container), "Unexpected owned container identity")
     try:
         run("docker", "start", container)
@@ -149,7 +158,7 @@ def oci_install(media, manifest):
                  "isolated_network(); import json; print(json.dumps(http_probe('http://127.0.0.1:8080')))")
         proof = json.loads(run("nsenter", "--target", str(details["State"]["Pid"]), "--net", "/usr/bin/python3", "-c", probe,
                                str(Path(__file__).resolve().parent), timeout=100))
-        return {"architecture": "amd64", "loadedFromVerifiedArchive": True, "configDigest": expected,
+        return {"architecture": "amd64", "loadedFromVerifiedArchive": True, "configDigest": expected, "daemonImageId": daemon_id,
                 "network": "none", "readOnlyRoot": True, "uid": 1654, **proof,
                 "authenticatedOperation": False, "scope": "signed OCI load and isolated startup; external identity/broker operations are separate"}
     finally:
