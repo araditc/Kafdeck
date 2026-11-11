@@ -36,7 +36,7 @@ subprocess.run(["dotnet", "build", str(source / "UpgradeProbe.csproj"), "-c", "R
 # Preserve official old dependency bytes/native assets for the fixture probe;
 # this does not rebuild either product binary.
 shutil.copytree(private / "released-v08", private / "probe", dirs_exist_ok=True)
-for library in (private / "released-v08").rglob("*.so"):
+for library in (private / "released-v08/runtimes/linux-x64/native").glob("*.so"):
     shutil.copyfile(library, private / "probe" / library.name)
 write(evidence / "upgrade-input.json", {"schemaVersion": 1, "baselineSourceSha": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
     "officialPublishedV08Image": old, "officialPublishedV08SignatureVerified": True,
