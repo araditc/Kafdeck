@@ -15,11 +15,11 @@ mkdir "$private/state"
 openssl rand -hex 32 > "$private/material-key.txt"
 sudo chown -R 1654:1654 "$private"
 sudo chmod 755 "$private"
-anchor="$(docker create --name "$D1_ANCHOR" --pull=never --network=none --read-only --user=1654:1654 --cap-drop=ALL --security-opt=no-new-privileges --entrypoint /bin/sleep "$D1_IMAGE_ID" 2000)"
+anchor="$(docker create --name "$D1_ANCHOR" --pull=never --network=none --read-only --ulimit=core=0 --user=1654:1654 --cap-drop=ALL --security-opt=no-new-privileges --entrypoint /bin/sleep "$D1_IMAGE_ID" 2000)"
 cleanup() { docker rm -f d1-fresh d1-stale d1-admission "$D1_API_CONTAINER" "$D1_ANCHOR" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker start "$anchor" >/dev/null
-docker create --name "$D1_API_CONTAINER" --pull=never --network="container:$anchor" --read-only --user=1654:1654 --cap-drop=ALL --security-opt=no-new-privileges \
+docker create --name "$D1_API_CONTAINER" --pull=never --network="container:$anchor" --read-only --ulimit=core=0 --user=1654:1654 --cap-drop=ALL --security-opt=no-new-privileges \
   --tmpfs=/tmp:rw,nosuid,nodev,size=64m --env=HOME=/state \
   --mount "type=bind,src=$private,dst=$private,readonly" --mount "type=bind,src=$private/state,dst=/state" \
   "$D1_IMAGE_ID" --contentRoot "$private" --webroot /app/wwwroot >/dev/null

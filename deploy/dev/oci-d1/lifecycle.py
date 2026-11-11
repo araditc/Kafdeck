@@ -18,7 +18,7 @@ def command(*args, timeout=90):
 
 def create(name, private, admission=False):
     args = ['docker', 'create', '--name', name, '--pull=never', '--network=container:' + os.environ['D1_ANCHOR'],
-            '--read-only', '--user=1654:1654', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+            '--read-only', '--ulimit=core=0', '--user=1654:1654', '--cap-drop=ALL', '--security-opt=no-new-privileges',
             '--tmpfs=/tmp:rw,nosuid,nodev,size=64m', '--env=HOME=/state',
             '--mount', f'type=bind,src={private},dst={private},readonly',
             '--mount', f'type=bind,src={private / "state"},dst=/state',
@@ -94,7 +94,12 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
         write(private / 'appsettings.json', settings)
         stale = create('d1-stale', private)
         owned.append(stale)
-        subprocess.run(['docker', 'start', '--attach', stale], capture_output=True, text=True, timeout=45)
+        try:
+            subprocess.run(['docker', 'start', '--attach', stale], capture_output=True, text=True, timeout=90)
+        except subprocess.TimeoutExpired:
+            diagnostic = subprocess.run(['docker', 'logs', stale], capture_output=True, text=True, timeout=15)
+            print('Bounded stale-guard diagnostic: ' + (diagnostic.stdout + diagnostic.stderr)[-3000:], flush=True)
+            raise
         details = json.loads(command('docker', 'inspect', stale))[0]
         log_result = subprocess.run(['docker', 'logs', stale], capture_output=True, text=True, check=True, timeout=20)
         logs = log_result.stdout + log_result.stderr

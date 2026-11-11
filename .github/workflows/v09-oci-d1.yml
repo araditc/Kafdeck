@@ -15,8 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # x64 full proof retained from run42996452390; only remaining native ARM cell executes.
         include:
-          - {arch: amd64, rid: linux-x64, runner: ubuntu-24.04}
           - {arch: arm64, rid: linux-arm64, runner: ubuntu-24.04-arm}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
