@@ -135,6 +135,8 @@ def identity(actual, budget, candidate, repository, source):
 def admission(candidate):
     require(candidate["status"] == "admitted", "W82 candidate requires review before release admission")
     review = candidate["admission"]
+    require(review.get("ownerAccepted") is True and re.fullmatch(r"[0-9a-f]{64}", review.get("acceptedProposalSha256", "")),
+            "Missing owner acceptance of an identified proposal")
     require(review["artifactComparabilityReviewed"] is True and review["reviewReference"].strip(),
             "Missing reviewed per-provider artifact comparability decision")
     require(review["hardwarePolicy"] == "per-provider", "Missing per-provider hardware policy")

@@ -28,10 +28,21 @@ class BudgetChecks(unittest.TestCase):
             self.assertGreater(budget.compare(values, values, provider), 40)
 
     def test_candidate_cannot_grant_release_admission(self):
+        self.candidate["status"] = "requires-review"
         with self.assertRaisesRegex(ValueError, "requires review"):
             budget.admission(self.candidate)
 
+    def test_canonical_admission_requires_owner_and_review(self):
+        budget.admission(self.candidate)
+        self.candidate["admission"]["reviewReference"] = ""
+        with self.assertRaisesRegex(ValueError, "Missing reviewed"):
+            budget.admission(self.candidate)
+        self.candidate["admission"]["ownerAccepted"] = False
+        with self.assertRaisesRegex(ValueError, "Missing owner acceptance"):
+            budget.admission(self.candidate)
+
     def test_admission_requires_explicit_soak_bounds(self):
+        del self.reference["soak"]["limits"]
         with self.assertRaisesRegex(ValueError, "reviewed numeric soak"):
             budget.enforce_soak(self.actual, self.reference, "sqlite")
 

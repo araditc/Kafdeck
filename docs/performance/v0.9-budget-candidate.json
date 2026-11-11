@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "status": "requires-review",
+  "status": "admitted",
   "release": "0.9.0",
   "protectedPerformanceSourceSha": "4acdc408c2476d95d9c2640280aa25e3a7027a30",
   "packagingMainSha": "ba00168341d75e67ec2b05a0de6fc616700ff688",
   "sameApplicationTree": true,
   "applicationTreeSha": "d641a67c6f1c4dfa1baff5248d62719100bd0c74",
   "singleBinaryAdmission": false,
-  "admissionNote": "Both providers ran the full corpus and passed independently. The protected application source matches, but the benchmark builds retained different API DLL hashes and used different CPU models. Treat the values as per-provider candidates and review artifact comparability before release admission.",
+  "admissionNote": "The owner accepted these exact per-provider limits and default-build equivalence on 2026-11-11. Each provider retains its recorded CPU, API DLL, harness and checkpoint identity, with the exact protected application tree and build-input snapshots required by the verifier.",
   "derivation": "Use the median of three steady repetitions as the reference and the observed worst repetition as the proposed ceiling or throughput floor. Relative tolerance reflects observed spread. Evaluate each provider on equivalent CPU and runtime, or explicitly rebaseline. Error and HTTP 429 ceilings are zero.",
   "providers": {
     "sqlite": {
@@ -741,6 +741,167 @@
               },
               "proposedCeiling": 48,
               "allowedRelativeRegression": 0.043478260869565216
+            }
+          }
+        },
+        "limits": {
+          "allowedErrors": 0,
+          "allowedHttp429": 0,
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 8,
+              "median": 29.10796217684579,
+              "p95": 30.666666666666668,
+              "p99": 30.666666666666668,
+              "max": 30.666666666666668
+            },
+            "proposedFloor": 27.055555555555557,
+            "allowedRelativeRegression": 0.07051014457215551
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 8,
+                  "median": 1400.4303,
+                  "p95": 1538.9338,
+                  "p99": 1538.9338,
+                  "max": 1538.9338
+                },
+                "proposedCeiling": 1538.9338,
+                "allowedRelativeRegression": 0.09890067360010707
+              },
+              "p99": {
+                "observed": {
+                  "samples": 8,
+                  "median": 1994.7622000000001,
+                  "p95": 2219.9509,
+                  "p99": 2219.9509,
+                  "max": 2219.9509
+                },
+                "proposedCeiling": 2219.9509,
+                "allowedRelativeRegression": 0.11288999761475312
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 8,
+                  "median": 1668.16785,
+                  "p95": 1822.2394,
+                  "p99": 1822.2394,
+                  "max": 1822.2394
+                },
+                "proposedCeiling": 1822.2394,
+                "allowedRelativeRegression": 0.09235974065799187
+              },
+              "p99": {
+                "observed": {
+                  "samples": 8,
+                  "median": 2244.8781,
+                  "p95": 2897.7043,
+                  "p99": 2897.7043,
+                  "max": 2897.7043
+                },
+                "proposedCeiling": 2897.7043,
+                "allowedRelativeRegression": 0.29080697076602957
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 8,
+                  "median": 2167.4075000000003,
+                  "p95": 2323.7685,
+                  "p99": 2323.7685,
+                  "max": 2323.7685
+                },
+                "proposedCeiling": 2323.7685,
+                "allowedRelativeRegression": 0.07214194838764738
+              },
+              "p99": {
+                "observed": {
+                  "samples": 8,
+                  "median": 2659.4165000000003,
+                  "p95": 3239.7215,
+                  "p99": 3239.7215,
+                  "max": 3239.7215
+                },
+                "proposedCeiling": 3239.7215,
+                "allowedRelativeRegression": 0.21820764066102463
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 8,
+                  "median": 70.9824134712238,
+                  "p95": 72.06399282555854,
+                  "p99": 72.06399282555854,
+                  "max": 72.06399282555854
+                },
+                "proposedCeiling": 72.06399282555854,
+                "allowedRelativeRegression": 0.015237286271947077
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 8,
+                  "median": 275944448.0,
+                  "p95": 278476800.0,
+                  "p99": 278476800.0,
+                  "max": 278476800.0
+                },
+                "proposedCeiling": 278476800.0,
+                "allowedRelativeRegression": 0.009177035516945788
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 8,
+                  "median": 289435648.0,
+                  "p95": 294146048,
+                  "p99": 294146048,
+                  "max": 294146048
+                },
+                "proposedCeiling": 294146048,
+                "allowedRelativeRegression": 0.016274429333597497
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 8,
+                "median": 79.39533119262163,
+                "p95": 81.6533354375058,
+                "p99": 81.6533354375058,
+                "max": 81.6533354375058
+              },
+              "proposedCeiling": 81.6533354375058,
+              "allowedRelativeRegression": 0.02844001291972717
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 8,
+                "median": 7689647104.0,
+                "p95": 7769208832.0,
+                "p99": 7769208832.0,
+                "max": 7769208832.0
+              },
+              "proposedCeiling": 7769208832.0,
+              "allowedRelativeRegression": 0.010346603286724768
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 8,
+                "median": 7713062912.0,
+                "p95": 7794692096,
+                "p99": 7794692096,
+                "max": 7794692096
+              },
+              "proposedCeiling": 7794692096,
+              "allowedRelativeRegression": 0.010583238452910988
             }
           }
         }
@@ -1659,11 +1820,803 @@
               "allowedRelativeRegression": 0.0045662100456621
             }
           }
+        },
+        "limits": {
+          "allowedErrors": 0,
+          "allowedHttp429": 0,
+          "successfulOperationsPerSecond": {
+            "observed": {
+              "samples": 8,
+              "median": 50.0,
+              "p95": 50.05555555555556,
+              "p99": 50.05555555555556,
+              "max": 50.05555555555556
+            },
+            "proposedFloor": 49.984784031923276,
+            "allowedRelativeRegression": 0.00030431936153448193
+          },
+          "latencyMilliseconds": {
+            "read": {
+              "p95": {
+                "observed": {
+                  "samples": 8,
+                  "median": 640.9511,
+                  "p95": 645.3239,
+                  "p99": 645.3239,
+                  "max": 645.3239
+                },
+                "proposedCeiling": 645.3239,
+                "allowedRelativeRegression": 0.006822361331465043
+              },
+              "p99": {
+                "observed": {
+                  "samples": 8,
+                  "median": 666.24405,
+                  "p95": 670.302,
+                  "p99": 670.302,
+                  "max": 670.302
+                },
+                "proposedCeiling": 670.302,
+                "allowedRelativeRegression": 0.006090786101579451
+              }
+            },
+            "explain": {
+              "p95": {
+                "observed": {
+                  "samples": 8,
+                  "median": 503.00975,
+                  "p95": 511.5837,
+                  "p99": 511.5837,
+                  "max": 511.5837
+                },
+                "proposedCeiling": 511.5837,
+                "allowedRelativeRegression": 0.01704529584168105
+              },
+              "p99": {
+                "observed": {
+                  "samples": 8,
+                  "median": 545.33155,
+                  "p95": 554.1399,
+                  "p99": 554.1399,
+                  "max": 554.1399
+                },
+                "proposedCeiling": 554.1399,
+                "allowedRelativeRegression": 0.01615228387207749
+              }
+            },
+            "catalogCommit": {
+              "p95": {
+                "observed": {
+                  "samples": 8,
+                  "median": 732.7072499999999,
+                  "p95": 741.1069,
+                  "p99": 741.1069,
+                  "max": 741.1069
+                },
+                "proposedCeiling": 741.1069,
+                "allowedRelativeRegression": 0.01146385544840735
+              },
+              "p99": {
+                "observed": {
+                  "samples": 8,
+                  "median": 756.00325,
+                  "p95": 757.9898,
+                  "p99": 757.9898,
+                  "max": 757.9898
+                },
+                "proposedCeiling": 757.9898,
+                "allowedRelativeRegression": 0.0026277003438807513
+              }
+            }
+          },
+          "process": {
+            "process": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 8,
+                  "median": 99.72088917399705,
+                  "p95": 105.12927747237038,
+                  "p99": 105.12927747237038,
+                  "max": 105.12927747237038
+                },
+                "proposedCeiling": 105.12927747237038,
+                "allowedRelativeRegression": 0.0542352594644092
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 8,
+                  "median": 300341248.0,
+                  "p95": 303949824.0,
+                  "p99": 303949824.0,
+                  "max": 303949824.0
+                },
+                "proposedCeiling": 303949824.0,
+                "allowedRelativeRegression": 0.012014919775521476
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 8,
+                  "median": 317210624.0,
+                  "p95": 321859584,
+                  "p99": 321859584,
+                  "max": 321859584
+                },
+                "proposedCeiling": 321859584,
+                "allowedRelativeRegression": 0.014655751252517949
+              }
+            },
+            "peerProcess": {
+              "cpuP95PercentOfOneLogicalProcessor": {
+                "observed": {
+                  "samples": 8,
+                  "median": 99.1306312768248,
+                  "p95": 105.48208621710482,
+                  "p99": 105.48208621710482,
+                  "max": 105.48208621710482
+                },
+                "proposedCeiling": 105.48208621710482,
+                "allowedRelativeRegression": 0.06407156757171678
+              },
+              "rssSteadyMedianBytes": {
+                "observed": {
+                  "samples": 8,
+                  "median": 297018368.0,
+                  "p95": 298121216.0,
+                  "p99": 298121216.0,
+                  "max": 298121216.0
+                },
+                "proposedCeiling": 298121216.0,
+                "allowedRelativeRegression": 0.0037130632944559175
+              },
+              "rssPeakBytes": {
+                "observed": {
+                  "samples": 8,
+                  "median": 313137152.0,
+                  "p95": 314920960,
+                  "p99": 314920960,
+                  "max": 314920960
+                },
+                "proposedCeiling": 314920960,
+                "allowedRelativeRegression": 0.005696570938985866
+              }
+            }
+          },
+          "container": {
+            "cpuP95PercentOfOneLogicalProcessor": {
+              "observed": {
+                "samples": 8,
+                "median": 264.23755699821714,
+                "p95": 268.98208377523986,
+                "p99": 268.98208377523986,
+                "max": 268.98208377523986
+              },
+              "proposedCeiling": 268.98208377523986,
+              "allowedRelativeRegression": 0.01795553528015219
+            },
+            "memorySteadyMedianBytes": {
+              "observed": {
+                "samples": 8,
+                "median": 9398626304.0,
+                "p95": 9744125952.0,
+                "p99": 9744125952.0,
+                "max": 9744125952.0
+              },
+              "proposedCeiling": 9744125952.0,
+              "allowedRelativeRegression": 0.03676065382586361
+            },
+            "memoryPeakBytes": {
+              "observed": {
+                "samples": 8,
+                "median": 9488494592.0,
+                "p95": 9866739712,
+                "p99": 9866739712,
+                "max": 9866739712
+              },
+              "proposedCeiling": 9866739712,
+              "allowedRelativeRegression": 0.03986355436392496
+            }
+          }
         }
       },
       "githubRunId": "42865556010",
       "harnessSha": "7eba541e7c85069c701d9f932f19949bb94cc69d",
       "verifiedEvidenceFiles": 12
     }
+  },
+  "buildInputIdentity": {
+    "baseline": {
+      "algorithm": "git-path-mode-blob-sha256-v1",
+      "sha256": "30188143a7d6dd579ed518ee356a7854f9570be2fb6e057a86f9f98b80b96238",
+      "entries": [
+        {
+          "path": ".dockerignore",
+          "mode": "100644",
+          "blob": "1a82390e9ef11c35df5f87e8bb1f1e5b418a5e9b"
+        },
+        {
+          "path": ".gitattributes",
+          "mode": "100644",
+          "blob": "cdc564d5332c4accf730f35fb40acec73bba2d52"
+        },
+        {
+          "path": "Directory.Build.props",
+          "mode": "100644",
+          "blob": "864781cf4a6381fb2124b22b1abfdb04dd54ed77"
+        },
+        {
+          "path": "Directory.Packages.props",
+          "mode": "100644",
+          "blob": "8421e4266c30b130a046217b296762398656dcf1"
+        },
+        {
+          "path": "Dockerfile",
+          "mode": "100644",
+          "blob": "2d4a3c2eca64e567663ea22b4f6b5918c69f6af5"
+        },
+        {
+          "path": "Kafdeck.slnx",
+          "mode": "100644",
+          "blob": "9cb13a3f80c4b4aaf35e137bcf8774505708c666"
+        },
+        {
+          "path": "global.json",
+          "mode": "100644",
+          "blob": "d46d21e50b3f3284ca3589173cac1e0af1076810"
+        }
+      ]
+    },
+    "equivalentSnapshots": [
+      {
+        "sourceSha": "3ae5b7a894a158f84fd9e57fc05d9d2a0080a0df",
+        "snapshot": {
+          "algorithm": "git-path-mode-blob-sha256-v1",
+          "sha256": "8e5bba002f1e620bff82d1d1d2fe88b8a26eb81b21a6be2455f382c26ebc010a",
+          "entries": [
+            {
+              "path": ".dockerignore",
+              "mode": "100644",
+              "blob": "1a82390e9ef11c35df5f87e8bb1f1e5b418a5e9b"
+            },
+            {
+              "path": ".gitattributes",
+              "mode": "100644",
+              "blob": "cdc564d5332c4accf730f35fb40acec73bba2d52"
+            },
+            {
+              "path": "Directory.Build.props",
+              "mode": "100644",
+              "blob": "864781cf4a6381fb2124b22b1abfdb04dd54ed77"
+            },
+            {
+              "path": "Directory.Build.targets",
+              "mode": "100644",
+              "blob": "d0e478821c3b575c117784c99eb49e3f0cef2ca2"
+            },
+            {
+              "path": "Directory.Packages.props",
+              "mode": "100644",
+              "blob": "8421e4266c30b130a046217b296762398656dcf1"
+            },
+            {
+              "path": "Dockerfile",
+              "mode": "100644",
+              "blob": "2d4a3c2eca64e567663ea22b4f6b5918c69f6af5"
+            },
+            {
+              "path": "Kafdeck.slnx",
+              "mode": "100644",
+              "blob": "9cb13a3f80c4b4aaf35e137bcf8774505708c666"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Api.json",
+              "mode": "100644",
+              "blob": "8f505157f5f4b83bca0d5694643b447df0e5e8cc"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Cli.json",
+              "mode": "100644",
+              "blob": "486bc4b163d8dc24a61353b1f8893a7697e634c0"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Core.json",
+              "mode": "100644",
+              "blob": "b47d603226410dc4f7b944c53da99e26b0893e77"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.Configuration.json",
+              "mode": "100644",
+              "blob": "486bc4b163d8dc24a61353b1f8893a7697e634c0"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.Ecosystem.json",
+              "mode": "100644",
+              "blob": "07575da5d2cea5c125c72df19cbd174c46643770"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.Kafka.json",
+              "mode": "100644",
+              "blob": "70b9478f311994bcd3c85f9cbf084f16ccbdf359"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.Persistence.json",
+              "mode": "100644",
+              "blob": "811ebf1e4e7b87b608f2f407712ba0a8151d5238"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.SchemaRegistry.json",
+              "mode": "100644",
+              "blob": "7301cf27da369f02edb8e82564c5ea304b6e3c44"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.Security.json",
+              "mode": "100644",
+              "blob": "7dc83026ec78acd9b166ee9b8c7219eb2b7f8159"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Infrastructure.SerDe.json",
+              "mode": "100644",
+              "blob": "486bc4b163d8dc24a61353b1f8893a7697e634c0"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Mcp.json",
+              "mode": "100644",
+              "blob": "a5fb7f09eeb3926732a865babc0dd9ceb5ea5154"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Administration.json",
+              "mode": "100644",
+              "blob": "486bc4b163d8dc24a61353b1f8893a7697e634c0"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Clusters.json",
+              "mode": "100644",
+              "blob": "486bc4b163d8dc24a61353b1f8893a7697e634c0"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Connect.json",
+              "mode": "100644",
+              "blob": "7dc83026ec78acd9b166ee9b8c7219eb2b7f8159"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Consumers.json",
+              "mode": "100644",
+              "blob": "7dc83026ec78acd9b166ee9b8c7219eb2b7f8159"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Generator.json",
+              "mode": "100644",
+              "blob": "8f94e353899f11ec229552007c0276fbe091a1a8"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Records.json",
+              "mode": "100644",
+              "blob": "7dc83026ec78acd9b166ee9b8c7219eb2b7f8159"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Schemas.json",
+              "mode": "100644",
+              "blob": "7dc83026ec78acd9b166ee9b8c7219eb2b7f8159"
+            },
+            {
+              "path": "build/native-locks/linux-arm64/Kafdeck.Modules.Topics.json",
+              "mode": "100644",
+              "blob": "7dc83026ec78acd9b166ee9b8c7219eb2b7f8159"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Api.json",
+              "mode": "100644",
+              "blob": "fd51cd6d98bd87d35aaba9ed6c7035bc4f61d979"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Cli.json",
+              "mode": "100644",
+              "blob": "334be32e54c99cd304bff947be5b682225f18cdd"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Core.json",
+              "mode": "100644",
+              "blob": "d4eccf7d27b2a305bf665a8a97f7835372b6196b"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.Configuration.json",
+              "mode": "100644",
+              "blob": "334be32e54c99cd304bff947be5b682225f18cdd"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.Ecosystem.json",
+              "mode": "100644",
+              "blob": "8c572d9106dede34d496f0ca13e7cb8c1d7253b9"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.Kafka.json",
+              "mode": "100644",
+              "blob": "1f50aa5b1941d3ba7b4e90041a99ea02ac33d71c"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.Persistence.json",
+              "mode": "100644",
+              "blob": "4d09ad32e5c3e19ee13798b7668ee16c9b87df2d"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.SchemaRegistry.json",
+              "mode": "100644",
+              "blob": "06fa7dca7859126e39912380abcd0a7a5b17fded"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.Security.json",
+              "mode": "100644",
+              "blob": "f9f7f51fc956be24f945b510a198599488f4ea7e"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Infrastructure.SerDe.json",
+              "mode": "100644",
+              "blob": "334be32e54c99cd304bff947be5b682225f18cdd"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Mcp.json",
+              "mode": "100644",
+              "blob": "d5aac64824d16de79a58b136b26d1bdfeb6b2b8b"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Administration.json",
+              "mode": "100644",
+              "blob": "334be32e54c99cd304bff947be5b682225f18cdd"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Clusters.json",
+              "mode": "100644",
+              "blob": "334be32e54c99cd304bff947be5b682225f18cdd"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Connect.json",
+              "mode": "100644",
+              "blob": "f9f7f51fc956be24f945b510a198599488f4ea7e"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Consumers.json",
+              "mode": "100644",
+              "blob": "f9f7f51fc956be24f945b510a198599488f4ea7e"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Generator.json",
+              "mode": "100644",
+              "blob": "38705a7f4a5c2f3db147bb775b21dffcad2fbdf7"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Records.json",
+              "mode": "100644",
+              "blob": "f9f7f51fc956be24f945b510a198599488f4ea7e"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Schemas.json",
+              "mode": "100644",
+              "blob": "f9f7f51fc956be24f945b510a198599488f4ea7e"
+            },
+            {
+              "path": "build/native-locks/linux-x64/Kafdeck.Modules.Topics.json",
+              "mode": "100644",
+              "blob": "f9f7f51fc956be24f945b510a198599488f4ea7e"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Api.json",
+              "mode": "100644",
+              "blob": "42bb76db61fd9829a3c2adc971b42fccce5c0383"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Cli.json",
+              "mode": "100644",
+              "blob": "308c2a2841f8d3639c56ef1f8fa7ce48aaaa4e16"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Core.json",
+              "mode": "100644",
+              "blob": "5b39f608ff96faab8d8a979f841ae380fe374ecb"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.Configuration.json",
+              "mode": "100644",
+              "blob": "308c2a2841f8d3639c56ef1f8fa7ce48aaaa4e16"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.Ecosystem.json",
+              "mode": "100644",
+              "blob": "0bb84f9b8834bcb14416e19505695c43a19b97dd"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.Kafka.json",
+              "mode": "100644",
+              "blob": "051855f4175fb745651ec0d4207be9acf36c944b"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.Persistence.json",
+              "mode": "100644",
+              "blob": "c81d65b31d763058632771e87040494f96acf3c3"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.SchemaRegistry.json",
+              "mode": "100644",
+              "blob": "481bccb28aed1e2413e2d0d8a439b672f3f5eef9"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.Security.json",
+              "mode": "100644",
+              "blob": "c7d702d0bca88c022b8992a82911f6f95d6265a3"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Infrastructure.SerDe.json",
+              "mode": "100644",
+              "blob": "308c2a2841f8d3639c56ef1f8fa7ce48aaaa4e16"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Mcp.json",
+              "mode": "100644",
+              "blob": "8507b536980aa79c3ff3939cedd798c5b30274bd"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Administration.json",
+              "mode": "100644",
+              "blob": "308c2a2841f8d3639c56ef1f8fa7ce48aaaa4e16"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Clusters.json",
+              "mode": "100644",
+              "blob": "308c2a2841f8d3639c56ef1f8fa7ce48aaaa4e16"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Connect.json",
+              "mode": "100644",
+              "blob": "c7d702d0bca88c022b8992a82911f6f95d6265a3"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Consumers.json",
+              "mode": "100644",
+              "blob": "c7d702d0bca88c022b8992a82911f6f95d6265a3"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Generator.json",
+              "mode": "100644",
+              "blob": "e79e6de3242ee28c53b2f5daacab08f10061cadd"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Records.json",
+              "mode": "100644",
+              "blob": "c7d702d0bca88c022b8992a82911f6f95d6265a3"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Schemas.json",
+              "mode": "100644",
+              "blob": "c7d702d0bca88c022b8992a82911f6f95d6265a3"
+            },
+            {
+              "path": "build/native-locks/osx-arm64/Kafdeck.Modules.Topics.json",
+              "mode": "100644",
+              "blob": "c7d702d0bca88c022b8992a82911f6f95d6265a3"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Api.json",
+              "mode": "100644",
+              "blob": "7279dba50d2b6061d0b887949f338019e8833939"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Cli.json",
+              "mode": "100644",
+              "blob": "4c4513bd712d8d31d927df1edaffa0b62c0128e7"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Core.json",
+              "mode": "100644",
+              "blob": "d58581f09cc0cfd405a0e831ae2bf97d9f49c861"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.Configuration.json",
+              "mode": "100644",
+              "blob": "4c4513bd712d8d31d927df1edaffa0b62c0128e7"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.Ecosystem.json",
+              "mode": "100644",
+              "blob": "3dec0aea8a6537778ddf2d050cc5ecefb9aebd2f"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.Kafka.json",
+              "mode": "100644",
+              "blob": "81fe102e8b6368191c50e96c75af327321d35c84"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.Persistence.json",
+              "mode": "100644",
+              "blob": "d31b250ca20eaf0c74e67f52e68f1f1f7fd19fb0"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.SchemaRegistry.json",
+              "mode": "100644",
+              "blob": "1762ab4152a8f3a4fff676b6df0baf248442a1de"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.Security.json",
+              "mode": "100644",
+              "blob": "222736ea048e4a5beb98561d1d049e91dbb6fa3b"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Infrastructure.SerDe.json",
+              "mode": "100644",
+              "blob": "4c4513bd712d8d31d927df1edaffa0b62c0128e7"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Mcp.json",
+              "mode": "100644",
+              "blob": "d895b707647024bf18ad3d6d4cc5a5d38e98daca"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Administration.json",
+              "mode": "100644",
+              "blob": "4c4513bd712d8d31d927df1edaffa0b62c0128e7"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Clusters.json",
+              "mode": "100644",
+              "blob": "4c4513bd712d8d31d927df1edaffa0b62c0128e7"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Connect.json",
+              "mode": "100644",
+              "blob": "222736ea048e4a5beb98561d1d049e91dbb6fa3b"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Consumers.json",
+              "mode": "100644",
+              "blob": "222736ea048e4a5beb98561d1d049e91dbb6fa3b"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Generator.json",
+              "mode": "100644",
+              "blob": "3554db617e6555eaa83052a38e03764264355952"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Records.json",
+              "mode": "100644",
+              "blob": "222736ea048e4a5beb98561d1d049e91dbb6fa3b"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Schemas.json",
+              "mode": "100644",
+              "blob": "222736ea048e4a5beb98561d1d049e91dbb6fa3b"
+            },
+            {
+              "path": "build/native-locks/osx-x64/Kafdeck.Modules.Topics.json",
+              "mode": "100644",
+              "blob": "222736ea048e4a5beb98561d1d049e91dbb6fa3b"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Api.json",
+              "mode": "100644",
+              "blob": "4bd1c9cf45b48ab6462ce622dd76a4264b6b5a9a"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Cli.json",
+              "mode": "100644",
+              "blob": "bbd6e8cd7b1ab5897785369c870f9ba8dd193f3e"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Core.json",
+              "mode": "100644",
+              "blob": "0f43b377473b7cba5cfb89d3387392ddc54237b4"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.Configuration.json",
+              "mode": "100644",
+              "blob": "bbd6e8cd7b1ab5897785369c870f9ba8dd193f3e"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.Ecosystem.json",
+              "mode": "100644",
+              "blob": "2092dc8d7d280dc3090bbac643d2ef8b7b349d92"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.Kafka.json",
+              "mode": "100644",
+              "blob": "7d525bfb9b7b0064d4f64955333178195c1ec565"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.Persistence.json",
+              "mode": "100644",
+              "blob": "b1497ec26e1a947c0979b9d284d745a53f4f14e2"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.SchemaRegistry.json",
+              "mode": "100644",
+              "blob": "d0c97a32ad9771ed9fd77fe8875a85145286920a"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.Security.json",
+              "mode": "100644",
+              "blob": "f7bc45ad24ddb48cdf55b6d581645fc1b64df503"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Infrastructure.SerDe.json",
+              "mode": "100644",
+              "blob": "bbd6e8cd7b1ab5897785369c870f9ba8dd193f3e"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Mcp.json",
+              "mode": "100644",
+              "blob": "c5e76e44623ee608f3749bfa04791b216413f9e8"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Administration.json",
+              "mode": "100644",
+              "blob": "bbd6e8cd7b1ab5897785369c870f9ba8dd193f3e"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Clusters.json",
+              "mode": "100644",
+              "blob": "bbd6e8cd7b1ab5897785369c870f9ba8dd193f3e"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Connect.json",
+              "mode": "100644",
+              "blob": "f7bc45ad24ddb48cdf55b6d581645fc1b64df503"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Consumers.json",
+              "mode": "100644",
+              "blob": "f7bc45ad24ddb48cdf55b6d581645fc1b64df503"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Generator.json",
+              "mode": "100644",
+              "blob": "b078babf5c90ef5174cb7be9ef848ad610e8e672"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Records.json",
+              "mode": "100644",
+              "blob": "f7bc45ad24ddb48cdf55b6d581645fc1b64df503"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Schemas.json",
+              "mode": "100644",
+              "blob": "f7bc45ad24ddb48cdf55b6d581645fc1b64df503"
+            },
+            {
+              "path": "build/native-locks/win-x64/Kafdeck.Modules.Topics.json",
+              "mode": "100644",
+              "blob": "f7bc45ad24ddb48cdf55b6d581645fc1b64df503"
+            },
+            {
+              "path": "global.json",
+              "mode": "100644",
+              "blob": "d46d21e50b3f3284ca3589173cac1e0af1076810"
+            }
+          ]
+        },
+        "defaultBuildEquivalent": true,
+        "reviewReference": "docs/decisions/approval-log.md#w82-numerical-budget-admission--2026-11-11",
+        "rationale": "The exact additional Directory.Build.targets sets NuGetLockFilePath only when KafdeckNativeRid is nonempty. All 95 exact native RID lock files are referenced only in that conditional mode. With KafdeckNativeRid unset, the default build retains the measured props/packages/global/NuGet configuration. This equivalence applies only to the recorded path/mode/blob snapshot; any edit, added or deleted selected input requires another review."
+      }
+    ]
+  },
+  "soakDerivation": {
+    "windowSeconds": 900,
+    "windowsPerProvider": 8,
+    "method": "Use eight consecutive windows anchored at the first soak operation launch. Retain overflow in the last window and divide its operation count by the remaining measured phase duration. Each upper bound is the worst window statistic and each throughput floor is the minimum window rate. Relative allowance is observed spread from the median of the eight window statistics. Keep every raw operation and sample.",
+    "precision": "JSON retains binary64 round-trip precision. Verifier comparisons allow four ULPs for final binary rounding only.",
+    "growth": "Existing growth and idle limits are unchanged. Preserve signed net/segment growth measurements. The existing increase-only growth ceiling is max(0, worst segment growth); zero ceilings remain zero."
+  },
+  "admissionProposal": {
+    "ownerAccepted": true,
+    "hardwarePolicy": "per-provider",
+    "singleBinaryAdmission": false,
+    "decision": "Approve each provider's complete proposed numeric limits as its own baseline on the recorded exact CPU model, runtime, resource profile and topology. Preserve that provider's API DLL, harness and checkpoint hashes and require the current protected application tree to equal the measured source tree. A different CPU, binary, runtime, topology or source tree requires a separately reviewed baseline or artifact binding decision. Cross-provider numbers do not establish hardware or binary equivalence.",
+    "quality": "Zero logical-operation errors and zero HTTP 429 responses throughout all mandatory phases. Require all phases, raw operation validation, telemetry coverage, cancellation recovery, physical PostgreSQL replay and cleanup evidence.",
+    "variation": "One completed two-hour soak per provider supplies eight within-run windows. These windows describe observed time variation within that run, with no additional cross-run allowance.",
+    "buildInputs": "Approve the exact baseline and proposed equivalent default-build snapshots listed in buildInputIdentity, with KafdeckNativeRid unset. Retain every original provider binary and checkpoint identity. A future candidate source change or binary change requires explicitly reviewed new evidence; this decision reuses the current retained acceptance runs only."
+  },
+  "admission": {
+    "ownerAccepted": true,
+    "acceptedProposalSha256": "049d4633741ec1c805f65a0a5fa65dcc346f852b61e8698501e7ac8338d7f3c6",
+    "acceptedOn": "2026-11-11",
+    "artifactComparabilityReviewed": true,
+    "hardwarePolicy": "per-provider",
+    "reviewReference": "docs/decisions/approval-log.md#w82-numerical-budget-admission--2026-11-11"
   }
 }
