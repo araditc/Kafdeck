@@ -40,7 +40,7 @@ if sys.argv[1] == "serve":
     run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-noenc", "-days", "1", "-subj", "/CN=W81 private fixture CA",
          "-addext", "basicConstraints=critical,CA:true", "-keyout", private / "ca.key", "-out", ca])
     password = (private / "identity/https-password.txt").read_text().strip()
-    for name, san in (("idp", f"IP:{host}"), ("app", "DNS:localhost,IP:127.0.0.1")):
+    for name, san in (("idp", f"IP:{host},IP:127.0.0.1"), ("app", "DNS:localhost,IP:127.0.0.1")):
         run(["openssl", "req", "-newkey", "rsa:2048", "-noenc", "-subj", "/CN=" + (host if name == "idp" else "localhost"),
              "-keyout", private / f"{name}.key", "-out", private / f"{name}.csr"])
         (private / f"{name}.ext").write_text("subjectAltName=" + san + "\nbasicConstraints=CA:false\nextendedKeyUsage=serverAuth\n")
@@ -52,6 +52,7 @@ if sys.argv[1] == "serve":
     lab["caPemFile"] = str(ca)
     write("identity/lab.json", lab)
     owned, logs = [], []
+    pg = None
     def launch(args, name, env=None):
         output = (private / (name + ".log")).open("w")
         logs.append(output)
@@ -104,6 +105,10 @@ if sys.argv[1] == "serve":
         run([kafka / "bin/kafka-topics.sh", "--bootstrap-server", f"{host}:19092", "--command-config", client,
              "--create", "--topic", topic, "--partitions", "1", "--replication-factor", "1"])
         run([kafka / "bin/kafka-console-producer.sh", "--bootstrap-server", f"{host}:19092", "--producer.config", client, "--topic", topic], marker + "\n")
+        if os.environ.get("W81_PROVIDER") == "PostgreSql":
+            from postgres import PostgresFixture
+            pg = PostgresFixture(private, host)
+            pg.start()
         generation = str(uuid.uuid4())
         settings = {"Kafdeck:Deployment:Oidc:TrustedCaPemFile": "/run/kafdeck-credentials/ca.pem",
             "Kafdeck:Clusters:0:Tls:CaCertificate": "file:/run/kafdeck-credentials/ca.pem", "Kafdeck:NonBrowserRead:Enabled": "true",
@@ -132,6 +137,8 @@ if sys.argv[1] == "serve":
     except KeyboardInterrupt:
         pass
     finally:
+        if pg is not None:
+            pg.stop()
         for process in reversed(owned):
             if process.poll() is None:
                 process.terminate()

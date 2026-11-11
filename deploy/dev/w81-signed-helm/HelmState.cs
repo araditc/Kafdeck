@@ -2,8 +2,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Kafdeck.Infrastructure.Persistence;
+using Kafdeck.Modules.Administration;
 
-var factory = new SqliteMutationDbConnectionFactory(args[1]);
+var pg = args[1].EndsWith(".pgconn", StringComparison.Ordinal);
+IMutationDbConnectionFactory factory = pg
+    ? new PostgreSqlMutationDbConnectionFactory(File.ReadAllText(args[1]).Trim())
+    : new SqliteMutationDbConnectionFactory(args[1]);
 if (args[0] == "admit")
 {
     var gate = new AdoGovernanceGenerationGate(factory, Guid.Parse(args[3]));
@@ -13,7 +17,9 @@ await using var connection = await factory.OpenAsync();
 var tables = new List<string>();
 await using (var command = connection.CreateCommand())
 {
-    command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
+    command.CommandText = pg
+        ? "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname=current_schema() ORDER BY tablename"
+        : "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
     await using var reader = await command.ExecuteReaderAsync();
     while (await reader.ReadAsync()) tables.Add(reader.GetString(0));
 }

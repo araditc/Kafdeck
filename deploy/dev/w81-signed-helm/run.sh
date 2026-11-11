@@ -53,7 +53,8 @@ docker network connect kind "$registry"
 registry_alias="localhost:${endpoint#*:}"
 docker exec "$node" mkdir -p "/etc/containerd/certs.d/$registry_alias"
 printf '[host."http://%s:5000"]\n' "$registry" | docker exec -i "$node" tee "/etc/containerd/certs.d/$registry_alias/hosts.toml" >/dev/null
-host="$(docker network inspect kind --format '{{(index .IPAM.Config 0).Gateway}}')"
+host="$(docker exec "$node" ip -4 route show default | awk 'NR==1 {print $3}')"
+[[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
 python3 -B deploy/dev/w81-signed-helm/fixture.py serve "$private" "$host" > "$private/fixture-driver.log" 2>&1 &
 fixture_pid=$!
 for attempt in $(seq 1 180); do
