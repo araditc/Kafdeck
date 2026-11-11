@@ -375,3 +375,11 @@ All W72–W82 themes remain accepted: catalog, requests/approvals, policy, measu
 ### W72 planning admission — 2026-11-05
 
 PR #437 was approved by CODEOWNER `akhiabanchian` on exact head `a6bfc207d025b2114488e08c537d3d4e460fdcbf` with all 14 checks successful and no unresolved threads. The merged tree at `d8d9e6319b536760993d840ce084dfc832c543de` equals that reviewed tree; all seven applicable main workflows succeeded. W72 #426 closed and tracker #425 activated dependency-valid lanes. The reviewed package contains the author architecture/security assessment; W78 independent implemented-system review remains required. This admission authorizes implementation under the complete scope and preserves separate runtime acceptance and publication gates.
+
+### W78 KAF-02 conditional residual-risk acceptance — 2026-11-11
+
+The project owner accepted deployment-enforced egress as the KAF-02 mitigation, conditional on a successful egress test for each deployment and explicit support boundaries.
+
+> پذیرش مشروط به egress آزموده‌شده
+
+The [independent technical review and disposition](../security/v0.9-w78-independent-review.md) record the reviewed source, reviewer independence, evidence and topology limitations. This decision does not substitute for the remaining specialist adoption, artifact or publication gates.
