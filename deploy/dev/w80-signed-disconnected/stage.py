@@ -41,6 +41,7 @@ if __name__ == "__main__":
     print("Official signature, independent Sigstore root and signed installed apphost hashes verified", flush=True)
     write(evidence / "signed-input.json", {"schemaVersion": 1, "applicationSourceSha": SOURCE, "signedManifestSha256": MANIFEST,
         "trustedRootSha256": root_hash, "officialSignedRunId": SIGNED_RUN, "officialArtifactId": ARTIFACT,
+        "independentDefaultSigstoreRootCompared": True,
         "officialArtifactZipSha256": ZIP_HASH, "signatureVerified": True, "allMediaHashesVerified": True,
         "installedFromOfficialSignedArchives": True,
         "apphosts": {component: digest(private / "installed" / component / name) for component, name in
