@@ -28,6 +28,9 @@ jobs:
       - name: Validate repository structure and workflow pinning
         run: bash scripts/ci/validate-repository.sh
 
+      - name: Test W82 budget verifier failure cases
+        run: python3 -B -m unittest discover -s scripts/ci -p test_w82_budget.py -v
+
       - name: Validate PR commits
         if: github.event_name == 'pull_request'
         env:

@@ -1,0 +1,159 @@
+name: v09-prepublication-signing
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/v09-prepublication-signing.yml'
+      - '.github/release/**'
+      - 'scripts/release/v09_prepublication.py'
+      - 'scripts/release/test_v09_prepublication.py'
+      - 'scripts/release/verify-v09-offline.sh'
+      - 'scripts/release/verify-v09-signature.sh'
+      - 'scripts/release/v09_offline_install.py'
+      - 'scripts/release/test_v09_offline_install.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/v09-prepublication-signing.yml'
+      - '.github/release/**'
+      - 'scripts/release/v09_prepublication.py'
+      - 'scripts/release/test_v09_prepublication.py'
+      - 'scripts/release/verify-v09-offline.sh'
+      - 'scripts/release/verify-v09-signature.sh'
+      - 'scripts/release/v09_offline_install.py'
+      - 'scripts/release/test_v09_offline_install.py'
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Exact successful main producer source (ancestor allowed only for staging subset)'
+        required: true
+        type: string
+      run_ids:
+        description: 'Comma-separated successful distribution, integration and optional native producer run IDs'
+        required: true
+        type: string
+      scope:
+        description: 'Full requires all five native RIDs from exact current main; neither scope publishes'
+        required: true
+        type: choice
+        options: [staging-distribution, full-distribution]
+      manifest_sha256:
+        description: 'Leave empty for preparation; signing requires the reviewed deterministic manifest SHA256'
+        required: false
+        type: string
+      owner_approval:
+        description: 'Leave empty to prepare; signing: SIGN v0.9 <scope> FROM <source_sha> MANIFEST <manifest_sha256>'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v09-prepublication-${{ github.event_name == 'workflow_dispatch' && 'manual' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test fail-closed identity, artifact and authorization gates
+        run: python3 -m unittest discover -s scripts/release -p 'test_v09_*.py' -v
+      - name: Check offline verifier shell syntax
+        run: bash -n scripts/release/verify-v09-offline.sh
+
+  prepare:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      manifest_sha256: ${{ steps.manifest.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - name: Reject non-owner identities before producer I/O
+        run: bash scripts/release/assert-v08-release-owner.sh
+      - name: Authenticate producer runs, ZIP digests and selected media
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PRODUCER_RUN_IDS: ${{ inputs.run_ids }}
+          SCOPE: ${{ inputs.scope }}
+        run: >-
+          python3 scripts/release/v09_prepublication.py prepare
+          --source "$SOURCE_SHA" --scope "$SCOPE" --run-ids "$PRODUCER_RUN_IDS" --output staging
+      - name: Record deterministic review digest
+        id: manifest
+        run: |
+          sha="$(sha256sum staging/manifest.json | cut -d ' ' -f 1)"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "Manifest SHA256: \`$sha\`. No publication or signing occurred in preparation." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: v09-prepublication-prepared-${{ github.run_id }}
+          path: staging/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+
+  sign:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.owner_approval != ''
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - name: Reject identities before retrieving prepared media
+        run: bash scripts/release/assert-v08-release-owner.sh
+      - name: Retrieve only this run's prepared artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREPARE_RUN_ID: ${{ github.run_id }}
+        run: gh run download "$PREPARE_RUN_ID" --repo araditc/Kafdeck --name "v09-prepublication-prepared-$PREPARE_RUN_ID" --dir staging
+      - name: Authorize exact source, scope, manifest digest and current protected policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          OWNER_APPROVAL: ${{ inputs.owner_approval }}
+        run: python3 scripts/release/v09_prepublication.py authorize staging
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.0.6
+      - name: Sign approved manifest using the GitHub workflow identity
+        run: |
+          cosign trusted-root create --with-default-services --out staging/trusted-root.json
+          cosign sign-blob --yes --new-bundle-format=true --oidc-provider=github-actions \
+            --bundle staging/manifest.sigstore.json staging/manifest.json
+      - name: Verify signature then install signed native and OCI media without egress
+        run: |
+          root_hash="$(sha256sum staging/trusted-root.json | cut -d ' ' -f 1)"
+          sudo unshare --net env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin COSIGN="$(command -v cosign)" \
+            bash "$PWD/scripts/release/verify-v09-offline.sh" "$PWD/staging" "$GITHUB_SHA" "$root_hash"
+          echo "Trusted root SHA256: \`$root_hash\`; distribute this and the manifest digest independently." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: v09-prepublication-signed-${{ github.run_id }}
+          path: staging/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90

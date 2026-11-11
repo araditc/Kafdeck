@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup Condition="'$(KafdeckNativeRid)' != ''">
+    <NuGetLockFilePath>$(MSBuildThisFileDirectory)build/native-locks/$(KafdeckNativeRid)/$(MSBuildProjectName).json</NuGetLockFilePath>
+  </PropertyGroup>
+</Project>

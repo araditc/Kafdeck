@@ -1,0 +1,103 @@
+name: v09-release-readiness
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/v09-release-readiness.yml'
+      - '.github/release/**'
+      - 'scripts/release/v09*.py'
+      - 'scripts/release/test_v09*.py'
+      - 'scripts/release/verify-v09*.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/v09-release-readiness.yml'
+      - '.github/release/**'
+      - 'scripts/release/v09*.py'
+      - 'scripts/release/test_v09*.py'
+      - 'scripts/release/verify-v09*.sh'
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Exact current protected main source; all signed producer sources must match'
+        required: true
+        type: string
+      signed_run_id:
+        description: 'Successful owner-authorized v09-prepublication-signing main run containing full-distribution media'
+        required: true
+        type: string
+      manifest_sha256:
+        description: 'Owner-reviewed signed full-distribution manifest SHA256'
+        required: true
+        type: string
+      trusted_root_sha256:
+        description: 'Independently reviewed trusted-root SHA256 from the signing evidence'
+        required: true
+        type: string
+      w80_packet_base64:
+        description: 'Optional base64 of the exact reviewed local signed-media W80 evidence JSON; absent means NOT ready'
+        required: false
+        type: string
+      w80_owner_approval:
+        description: 'ACCEPT W80 <raw-packet-sha256> FOR <source_sha> MANIFEST <manifest_sha256>'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test read-only packet and strict provenance gates
+        run: python3 -B -m unittest discover -s scripts/release -p 'test_v09_*.py' -v
+      - name: Validate signature-only and installation shell entry points
+        run: |
+          bash -n scripts/release/verify-v09-signature.sh
+          bash -n scripts/release/verify-v09-offline.sh
+
+  readiness:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.0.6
+      - name: Enforce admitted budgets and authenticate existing signed-install/recovery evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SIGNED_RUN_ID: ${{ inputs.signed_run_id }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          TRUSTED_ROOT_SHA256: ${{ inputs.trusted_root_sha256 }}
+          W80_PACKET_BASE64: ${{ inputs.w80_packet_base64 }}
+          W80_OWNER_APPROVAL: ${{ inputs.w80_owner_approval }}
+        run: >-
+          python3 -B scripts/release/v09_release_readiness.py --source "$SOURCE_SHA"
+          --signed-run-id "$SIGNED_RUN_ID" --manifest-sha256 "$MANIFEST_SHA256"
+          --trusted-root-sha256 "$TRUSTED_ROOT_SHA256" --output readiness
+      - name: Retain exact-source decision even when an explicit gate is missing
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: v09-release-readiness-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            readiness/release-decision.json
+            readiness/release-decision.sha256
+          if-no-files-found: warn

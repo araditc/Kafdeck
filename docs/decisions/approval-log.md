@@ -375,3 +375,19 @@ All W72–W82 themes remain accepted: catalog, requests/approvals, policy, measu
 ### W72 planning admission — 2026-11-05
 
 PR #437 was approved by CODEOWNER `akhiabanchian` on exact head `a6bfc207d025b2114488e08c537d3d4e460fdcbf` with all 14 checks successful and no unresolved threads. The merged tree at `d8d9e6319b536760993d840ce084dfc832c543de` equals that reviewed tree; all seven applicable main workflows succeeded. W72 #426 closed and tracker #425 activated dependency-valid lanes. The reviewed package contains the author architecture/security assessment; W78 independent implemented-system review remains required. This admission authorizes implementation under the complete scope and preserves separate runtime acceptance and publication gates.
+
+### W78 KAF-02 conditional residual-risk acceptance — 2026-11-11
+
+The project owner accepted deployment-enforced egress as the KAF-02 mitigation, conditional on a successful egress test for each deployment and explicit support boundaries.
+
+> پذیرش مشروط به egress آزموده‌شده
+
+The [independent technical review and disposition](../security/v0.9-w78-independent-review.md) record the reviewed source, reviewer independence, evidence and topology limitations. This decision does not substitute for the remaining specialist adoption, artifact or publication gates.
+
+### W82 numerical budget admission — 2026-11-11
+
+The project owner explicitly accepted the complete measured proposal with SHA256 `049d4633741ec1c805f65a0a5fa65dcc346f852b61e8698501e7ac8338d7f3c6`, including observed-worst steady and soak bounds, zero errors or HTTP 429, separate CPU and binary baselines per provider, and the exact native-only default-build-equivalent snapshot.
+
+> این حدود و هم‌ارزی را می‌پذیرم
+
+The [versioned limits](../performance/v0.9-budget-candidate.json) retain the accepted numbers and identities. The baseline default-build fingerprint is `30188143a7d6dd579ed518ee356a7854f9570be2fb6e057a86f9f98b80b96238`. The explicitly equivalent native-only input fingerprint is `8e5bba002f1e620bff82d1d1d2fe88b8a26eb81b21a6be2455f382c26ebc010a`. Their delta adds the conditional native restore target and 95 RID lockfiles, with no change to existing default build configuration or portable dependency graphs. A different source, binary, CPU or build-input snapshot requires its own admitted evidence. This acceptance grants no signature, registry push, tag or release authorization.
