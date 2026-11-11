@@ -179,6 +179,15 @@ class BuildInputChecks(unittest.TestCase):
         self.commit()
         self.assertNotEqual(before, build_inputs.snapshot(self.repository, "HEAD"))
 
+    def test_ignored_input_directory_case_matches_tracked_selector(self):
+        (self.repository / ".gitignore").write_text("Build/\n.Config/\n")
+        for name in ("Build", ".Config"):
+            target = self.repository / name
+            target.mkdir()
+            (target / "input.json").write_text("{}")
+        with self.assertRaisesRegex(ValueError, "Untracked or ignored"):
+            build_inputs.verify(self.repository, "HEAD", self.policy)
+
 
 if __name__ == "__main__":
     unittest.main()

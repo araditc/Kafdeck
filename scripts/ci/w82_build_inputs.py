@@ -8,7 +8,7 @@ import subprocess
 from w82_evidence import require
 
 ALGORITHM = "git-path-mode-blob-sha256-v1"
-PATHS = [":(top)build", ":(top).config"] + [
+PATHS = [":(top,icase)build", ":(top,icase).config"] + [
     ":(top,glob,icase)" + pattern for pattern in (
         "Directory.Build.*", "Directory.Packages.*", "global.json", "NuGet.Config", "*.props", "*.targets",
         "*.proj", "*.sln", "*.slnx", "*.rsp", "Dockerfile", ".dockerignore", ".gitattributes")]
