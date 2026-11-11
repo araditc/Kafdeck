@@ -1,8 +1,5 @@
 name: v09-oci-d1-remaining
 on:
-  push:
-    branches: [codex/v09-oci-d1]
-    paths: ['deploy/dev/oci-d1-remaining/**', '.github/workflows/v09-oci-d1-remaining.yml']
   workflow_dispatch:
 permissions:
   contents: read

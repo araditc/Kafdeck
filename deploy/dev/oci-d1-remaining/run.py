@@ -108,7 +108,7 @@ def sqlite_upgrade():
              'scope':'synthetic pending/approved/unknown snapshots initialized and reopened by actual official amd64 old OCI; no real user data'})
     else:
         canonical=p/'canonical';meta=read(canonical/'canonical.json')
-        require(meta['sourceSha']==SOURCE and meta['runId']==os.environ['GITHUB_RUN_ID'] and digest(canonical/'preupgrade.db')==meta['databaseSha256'],
+        require(meta['sourceSha']==SOURCE and meta['runId']==os.environ.get('D1_CANONICAL_RUN',os.environ['GITHUB_RUN_ID']) and digest(canonical/'preupgrade.db')==meta['databaseSha256'],
                 'Canonical old-container data source differs')
         shutil.copyfile(canonical/'preupgrade.db',db);original=observe_sqlite(db)
         require(original==meta['original'],'Cross-platform old schema/snapshots differ')
@@ -146,7 +146,7 @@ def postgres():
     generation=str(uuid.uuid4());c=config('PostgreSql','file:'+str(connection),generation)
     app=create('d1-pg-initial',c);start(app);stop(app)
     # Populate actual API-created PG storage with the canonical synthetic legacy representations; no effect dispatch.
-    canonical=e/'canonical' if (e/'canonical').exists() else p/'canonical'
+    canonical=e/'canonical' if (e/'canonical/preupgrade.db').is_file() else p/'canonical'
     with closing(sqlite3.connect(canonical/'preupgrade.db')) as db:
         columns=[r[1] for r in db.execute('PRAGMA table_info(kafdeck_mutation_operations)')]
         require(all(re.fullmatch('[a-z_]+',x) for x in columns),'Unsafe fixture column')
