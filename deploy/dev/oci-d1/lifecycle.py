@@ -1,5 +1,6 @@
 """Bounded actual OCI process restart and SQLite backup/restore generation proof."""
 import base64
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -32,7 +33,7 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
     database = private / 'state/data.db'
     generation = os.environ['D1_GENERATION']
     def observe(path):
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db:
             require(db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok', 'Actual SQLite integrity failure')
             row = db.execute('SELECT generation,revision FROM governance_deployment_generation WHERE singleton_id=1').fetchone()
             require(row is not None, 'Actual OCI did not initialize persisted governance state')
@@ -52,9 +53,9 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
     require(observe(database) == before, 'Persisted application state changed on restart')
     command('docker', 'stop', '--time=15', original)
     backup, restored = private / 'state/backup.db', private / 'state/restored.db'
-    with sqlite3.connect(database) as source, sqlite3.connect(backup) as target:
+    with closing(sqlite3.connect(database)) as source, closing(sqlite3.connect(backup)) as target:
         source.backup(target)
-    with sqlite3.connect(backup) as source, sqlite3.connect(restored) as target:
+    with closing(sqlite3.connect(backup)) as source, closing(sqlite3.connect(restored)) as target:
         source.backup(target)
     require(observe(restored) == before, 'Verified backup/restore changed application state')
     for path in (backup, restored):
