@@ -66,6 +66,13 @@ class GuardTests(unittest.TestCase):
 
 
 class LayerTests(unittest.TestCase):
+    def test_foreign_tag_content_cannot_change_even_if_name_stays_the_same(self):
+        with self.assertRaisesRegex(ValueError, "tag bytes changed"):
+            driver.preserve_tags({"v0.8": "old"}, {"v0.8": "new"})
+        driver.preserve_tags({"v0.8": "old"}, {"v0.8": "old", "sha256-owned": "proof"}, {"sha256-owned"})
+        with self.assertRaises(ValueError):
+            driver.preserve_tags({"v0.8": "old"}, {"v0.8": "old", "latest": "unapproved"}, {"sha256-owned"})
+
     def fixture(self, root, changed=False):
         directory = root / "blobs/sha256"
         directory.mkdir(parents=True)

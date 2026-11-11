@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.parse
 import zipfile
 
@@ -55,6 +56,22 @@ def skopeo(*args):
 
 def tag_names(raw):
     return sorted(json.loads(raw).get("Tags") or [])
+
+
+def tag_snapshot(reference, local=False):
+    flags = ["--tls-verify=false"] if local else []
+    result = {}
+    for tag in tag_names(skopeo("list-tags", *flags, "docker://" + reference)):
+        data = subprocess.check_output(["bash", "-c", 'source scripts/release/skopeo-v08-tool.sh; skopeo_pinned "$@"', "skopeo",
+                                       "inspect", *flags, "--raw", "docker://" + reference + ":" + tag], timeout=120)
+        result[tag] = hashlib.sha256(data).hexdigest()
+    return result
+
+
+def preserve_tags(before, after, proof_tags=()):
+    allowed = set(proof_tags)
+    require(all(after.get(tag) == value for tag, value in before.items() if tag not in allowed)
+            and set(after) - set(before) <= allowed, "Foreign/application registry tag bytes changed")
 
 
 def owners():
@@ -276,16 +293,22 @@ def local_transport():
     try:
         endpoint = run("docker", "port", name, "5000/tcp").splitlines()[0]
         require(re.fullmatch(r"127\.0\.0\.1:[0-9]+", endpoint), "Registry fixture is not loopback-bound")
+        for attempt in range(30):
+            if subprocess.run(["curl", "--fail", "--silent", "http://" + endpoint + "/v2/"], stdout=subprocess.DEVNULL).returncode == 0:
+                break
+            time.sleep(1)
+        else:
+            raise ValueError("Owned local registry did not become healthy")
         target = endpoint + "/fixture"
         # Local sentinel tag tests preservation; no external registry reference enters this path.
         skopeo("copy", "--dest-tls-verify=false", "--preserve-digests", "oci:/work/" + str(OUT / "oci-amd64") + ":image", "docker://" + target + ":foreign-sentinel")
-        before = skopeo("list-tags", "--tls-verify=false", "docker://" + target)
+        before = tag_snapshot(target, local=True)
         skopeo("copy", "--all", "--dest-tls-verify=false", "--preserve-digests", "oci:/work/" + str(OUT / "oci") + ":release", "docker://" + target + "@" + selection["indexDigest"])
         verify_transport(selection, target, local=True)
-        require(tag_names(before) == tag_names(skopeo("list-tags", "--tls-verify=false", "docker://" + target)), "Digest transport changed a local mutable tag")
+        preserve_tags(before, tag_snapshot(target, local=True))
         write(OUT / "local-transport.json", {"externalPublication": False, "localRegistry": True, "indexDigest": selection["indexDigest"],
             "bothArchitecturesVerified": True, "configAndCompressedLayersPreserved": True, "signedUncompressedLayersVerified": True,
-            "foreignSentinelTagUnchanged": True, "noProductBuildOrStartup": True})
+            "foreignSentinelTagUnchanged": True, "foreignSentinelManifestBytesUnchanged": True, "noProductBuildOrStartup": True})
     finally:
         run("docker", "rm", "--force", name)
 
@@ -407,12 +430,17 @@ def publish():
     token = os.environ.get("REGISTRY_TOKEN", "")
     require(token, "Missing scoped registry credential")
     subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"], "--password-stdin"], input=token, text=True, check=True)
-    tags_before = skopeo("list-tags", "docker://" + IMAGE)
+    tags_before = tag_snapshot(IMAGE)
     authority(selection, expected, approval, write_intent=True)
     skopeo("copy", "--all", "--preserve-digests", "oci:/work/" + str(OUT / "oci") + ":release", "docker://" + IMAGE + "@" + selection["indexDigest"])
     verify_transport(selection, IMAGE)
-    require(tag_names(tags_before) == tag_names(skopeo("list-tags", "docker://" + IMAGE)) and privacy() == selection["privacy"], "Registry tags or privacy changed")
+    preserve_tags(tags_before, tag_snapshot(IMAGE))
+    require(privacy() == selection["privacy"], "Registry privacy changed")
     signatures = registry_signatures(selection, decision, expected, approval)
+    proof_tags = {"sha256-" + value.removeprefix("sha256:") + suffix
+                  for value in [selection["indexDigest"], *[item["manifestDigest"] for item in selection["platforms"].values()]]
+                  for suffix in ("", ".sig", ".att")}
+    preserve_tags(tags_before, tag_snapshot(IMAGE), proof_tags)
     require(privacy() == selection["privacy"], "Registry privacy changed during signature publication")
     authority(selection, expected, approval, write_intent=True)
     if existing_tag() is None:
