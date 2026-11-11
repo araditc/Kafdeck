@@ -1,0 +1,36 @@
+{
+  "originalSource": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+  "candidateSource": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "candidateArchiveSha256": "9dd556375a96dd7f8f7315fc02c83f87a30ee2a500d6b9a4199bd47a5e517f8f",
+  "oldRuntimeSha256": "078b4fb64264bfd69cc919d4bea6592b3c98c567712020e8260090e839e68583",
+  "candidateRuntimeSha256": "50fdd22e00a4972be700c5352738953536293157a2289f03d2eff0d6d21b55a5",
+  "postgresVersion": "postgres (PostgreSQL) 17.11",
+  "baselineSnapshotHashes": [
+    {
+      "State": 3,
+      "SnapshotSha256": "ef2cec530e41ad495c4fd132aff958dae7980817b8146cd6df05b30c8881f7a1"
+    },
+    {
+      "State": 4,
+      "SnapshotSha256": "3eff6bcbbbebb10e06be13441fc2ea3436538aee1ca052bb4100d1af451b81db"
+    },
+    {
+      "State": 9,
+      "SnapshotSha256": "c4bb370129881c350e26b0796b8e2f9b455eaa0042e7033e029ac18cf28c0ac8"
+    }
+  ],
+  "upgradedAndReopened": true,
+  "migrationInterruptedAndRetried": true,
+  "physicalBackupVerified": true,
+  "nativeWalTargetRecovered": true,
+  "bothOriginalDatabasePortsFenced": true,
+  "quarantineWriteDeniedSqlState": "25006",
+  "offlineAdmissionProducedNoHttp": true,
+  "staleGenerationRefused": true,
+  "freshGenerationReady": true,
+  "legacySnapshotHashesPreserved": true,
+  "priorUnknownRemainedUnknown": true,
+  "kafkaWorkDispatched": false,
+  "fenceEvidenceSha256": "95f31c9588685401ae2fef2fb6402794d934ea32189726689ed8f15e20b2537d",
+  "restoreEvidenceSha256": "febbb1764fa7d070cd9a95ef099ac0ba0b6bb4db3f9df6fbbdac5d26dced1fc0"
+}

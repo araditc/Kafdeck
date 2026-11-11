@@ -1,0 +1,29 @@
+{
+  "actualFixtureMessageReadThroughSignedApi": true,
+  "actualSignedInstalledApiUi": {
+    "health": true,
+    "staticFrontend": true
+  },
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "authenticatedJourney": true,
+  "cliAuthenticatedRead": true,
+  "disconnectedFixtureOnly": true,
+  "fixtureMessageSha256": "8703ae1943770d7118ce624a37014150af6c5a40a229832b5cfb36e6b2c9b097",
+  "genuineKeycloak": true,
+  "humanBusinessApprovalClaimed": false,
+  "identity": "Keycloak26.8.1 HTTPS private_key_jwt",
+  "ipv4DefaultRoute": false,
+  "ipv6DefaultRoute": false,
+  "mcpAuthenticatedRead": true,
+  "namespaceInterfaces": [
+    "lo"
+  ],
+  "productMutationExecuted": false,
+  "realKafka": true,
+  "realTopicObservedThroughSignedApi": true,
+  "schemaVersion": 1,
+  "scope": "real service-authenticated operator reads and exact fixture Kafka record through installed signed API/CLI/MCP; fixtures seeded directly; no product mutation/approval or browser-human session claimed",
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "topic": "w80-signed-offline-01c7553",
+  "unauthenticatedReadRejected": true
+}

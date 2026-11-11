@@ -1,0 +1,87 @@
+{
+  "actualOfficialV08ToSignedV09OfflineUpgrade": true,
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "baseline": {
+    "baselineSourceSha": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+    "driverSourceFiles": {
+      "UpgradeProbe.cs": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+      "offline-upgrade.sh": "18c13341a18aad2626e8cff3da4088fc0fc8b75ae54af7168b36625b3eca398a",
+      "offline.sh": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a",
+      "run.py": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d",
+      "stage-upgrade.py": "0c36e49cd194b42228779dea599e65adfbd6c8731cbe15bb6ff08155797901fc",
+      "stage.py": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0",
+      "upgrade.py": "eb702641be41a68107c9765e62f9260a81e21f36d0a3353e916c1fb43d4c63c4"
+    },
+    "fixtureOnlyCompiled": true,
+    "fixtureProbeAssemblySha256": "22955ba6c0547436d8846837ac05b2cdb51ebc2f5ac5076cf6a5ff2db5a529af",
+    "fixtureProbeSourceSha256": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+    "newProductRebuilt": false,
+    "officialPublishedV08Image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+    "officialPublishedV08SignatureVerified": true,
+    "oldApiAssemblySha256": "658250544809283d13aa8dc7c366fbb7851748fe061411127cc3c538c44db62d",
+    "oldProductRebuilt": false,
+    "oldRuntimeHostSha256": "634efbf2414144d140d6f59d167342c8b3b53b4c34346ed786dd0470ddc9a3cb",
+    "schemaVersion": 1
+  },
+  "ipv4DefaultRoute": false,
+  "ipv6DefaultRoute": false,
+  "namespaceInterfaces": [
+    "lo"
+  ],
+  "productMutationDispatched": false,
+  "providers": {
+    "postgres": {
+      "actualPhysicalPitrClaimed": false,
+      "interruptionClaimed": false,
+      "legacySnapshotHashes": [
+        {
+          "SnapshotSha256": "7feaf0f4a3c72fbe43b7f4b2a066e8ad54bf307e0229a7bec7fc460edf3b4957",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "fa4f2774e330ca7d1f3d7a3e2d36e55f5877bf366111567fcb69af3aaa6f95ae",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "8d59ec2c419c323eef4c83c991e3bbc5741245615bf55a9349c5594a1475b29a",
+          "State": 9
+        }
+      ],
+      "officialReleasedV08OpenedActualDatabase": true,
+      "schemaStableOnReentry": true,
+      "signedCandidateMigratedSchema": true,
+      "signedCandidateReopened": true,
+      "syntheticApprovalFixture": true,
+      "threeLegacySnapshotsPreserved": true,
+      "verifiedPreUpgradeBackupRollback": false
+    },
+    "sqlite": {
+      "actualPhysicalPitrClaimed": false,
+      "interruptionClaimed": false,
+      "legacySnapshotHashes": [
+        {
+          "SnapshotSha256": "e31e917ab804229313c3a5b5bf8170925ff485a607cc5a241dfae54cdaa3d477",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "d08723754b902c8dcdb162d126d838e703c55c0fa7d3de835318b3b150c460f4",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "61dc8818a9467268edd1585fc99b10acc4efe7194cea0bb231ec8a492893e41c",
+          "State": 9
+        }
+      ],
+      "officialReleasedV08OpenedActualDatabase": true,
+      "schemaStableOnReentry": true,
+      "signedCandidateMigratedSchema": true,
+      "signedCandidateReopened": true,
+      "syntheticApprovalFixture": true,
+      "threeLegacySnapshotsPreserved": true,
+      "verifiedPreUpgradeBackupRollback": true
+    }
+  },
+  "schemaVersion": 1,
+  "scope": "actual official published image binaries open v0.8 data and final signed native app migrates/reopens both providers inside network-none namespace; synthetic pending/approved/unknown migration fixtures; SQLite verified backup rollback; physical PITR/fencing/interruption and authenticated journey are separate proofs",
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba"
+}
