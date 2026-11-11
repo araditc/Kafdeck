@@ -35,7 +35,8 @@ fetch kind https://github.com/kubernetes-sigs/kind/releases/download/v0.31.0/kin
 fetch kubectl https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubectl ab60ca5f0fd60c1eb81b52909e67060e3ba0bd27e55a8ac147cbc2172ff14212
 chmod +x "$scratch/kind" "$scratch/kubectl"
 signed="$private/signed"
-chart="$signed/media/distribution/w81-helm-$source_sha/kafdeck-0.9.0.tgz"
+chart="$signed/media/$(jq -er '.content.files[] | select(.path | endswith("/kafdeck-0.9.0.tgz")) | .path' "$signed/manifest.json")"
+test -f "$chart"
 archive="$signed/media/distribution/w81-oci-amd64-$source_sha/kafdeck-linux-amd64.docker.tar.gz"
 config_digest="$(jq -er '.content.imageConfigDigests.amd64' "$signed/manifest.json")"
 docker load --input "$archive" >/dev/null
@@ -146,6 +147,10 @@ probe() {
   status="$(curl --silent --show-error --cacert "$private/ca.pem" --max-time 10 --output /dev/null --write-out '%{http_code}' "https://localhost:$port/api/v1/system/info")"
   [[ "$status" == 401 ]]
   python3 -B deploy/dev/w81-signed-helm/fixture.py probe "$private" "$port" "$1" "$evidence/journeys.ndjson"
+  kubectl -n "$namespace" get pods -l "app.kubernetes.io/instance=$release" -o json \
+    | jq -c --arg phase "$1" --arg expected "$registry_alias/kafdeck@$manifest_digest" \
+      '[.items[]|select(.metadata.deletionTimestamp==null)]|if length==1 and .[0].spec.containers[0].image==$expected and (.[0].status.containerStatuses[0].imageID|length)>0 then {phase:$phase,podUid:.[0].metadata.uid,specImage:.[0].spec.containers[0].image,runtimeImageId:.[0].status.containerStatuses[0].imageID} else error("Actual signed workload identity mismatch") end' \
+      >> "$evidence/runtime-pods.ndjson"
   kill "$forward_pid"; wait "$forward_pid" 2>/dev/null || true; forward_pid=
 }
 helm_args=(--namespace "$namespace" --wait --timeout 180s --values "$scratch/values.json")
@@ -234,5 +239,8 @@ jq -n --arg source "$source_sha" --arg driver "$(git rev-parse HEAD)" --arg conf
  '{applicationSourceSha:$source,driverSha:$driver,signedChartSha256:$chart,imageConfigDigest:$config,runtimeImageManifestDigest:$manifest,helm:$helm,kubernetes:$kube,provider:$provider,apiReplicas:1,persistenceExecutionMode:"Standalone",externalDatabaseHa:($provider=="PostgreSql"),actualIdentityAndKafkaTls:true,exactFixtureRecordEachStage:true,install:true,upgrade:true,failedRolloutRollback:true,uninstallReinstall:true,appOwnedGenerationAndSchemaStateRetained:true,restore:true,restoredGenerationQuarantined:true,owningGateAdmittedOffline:true,fencedApiPods:0,restoreSha256:$restore,fenceSha256:$fence,multiApiHaClaimed:false,networkPolicyEnforcementClaimed:false,published:false}' > "$evidence/helm-lifecycle.json"
 cleanup
 trap - EXIT
+! docker inspect "$node" >/dev/null 2>&1
+! docker inspect "$registry" >/dev/null 2>&1
+! kill -0 "$fixture_pid" 2>/dev/null
 jq '.+{ownedKindRegistryFixturesRemoved:true}' "$evidence/helm-lifecycle.json" > "$evidence/final.tmp"
 mv "$evidence/final.tmp" "$evidence/helm-lifecycle.json"
