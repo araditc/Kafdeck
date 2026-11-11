@@ -3,10 +3,13 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
 import w82_evidence as evidence
+import w82_build_inputs as build_inputs
 
 spec = importlib.util.spec_from_file_location("budget", Path(__file__).with_name("check-w82-budget.py"))
 budget = importlib.util.module_from_spec(spec)
@@ -121,6 +124,60 @@ class BudgetChecks(unittest.TestCase):
         with patch.object(evidence, "records", return_value=iter([sample])):
             with self.assertRaisesRegex(ValueError, "Raw HTTP error"):
                 evidence.validate_raw(Path("unused"), checkpoint, "sqlite")
+
+
+class BuildInputChecks(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.repository = Path(self.directory.name)
+        self.git("init", "-q")
+        (self.repository / "Directory.Packages.props").write_text("<Project>1.0</Project>\n")
+        self.commit()
+        self.baseline = self.git("rev-parse", "HEAD").strip()
+        self.policy = {"protectedPerformanceSourceSha": self.baseline, "status": "requires-review",
+                       "buildInputIdentity": {"baseline": build_inputs.snapshot(self.repository, self.baseline), "equivalentSnapshots": []}}
+
+    def git(self, *args):
+        return subprocess.check_output(["git", "-C", str(self.repository), *args], text=True)
+
+    def commit(self):
+        self.git("add", ".")
+        self.git("-c", "user.name=W82 verifier test", "-c", "user.email=w82@example.invalid", "commit", "-qm", "fixture")
+
+    def test_build_input_change_requires_exact_reviewed_snapshot(self):
+        build_inputs.verify(self.repository, "HEAD", self.policy)
+        (self.repository / "Directory.Packages.props").write_text("<Project>2.0</Project>\n")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "exact reviewed"):
+            build_inputs.verify(self.repository, "HEAD", self.policy)
+        equivalent = {"snapshot": build_inputs.snapshot(self.repository, "HEAD"), "defaultBuildEquivalent": True,
+                      "rationale": "Synthetic comparison decision", "reviewReference": None}
+        self.policy["buildInputIdentity"]["equivalentSnapshots"].append(equivalent)
+        build_inputs.verify(self.repository, "HEAD", self.policy)
+        self.policy["status"] = "admitted"
+        with self.assertRaisesRegex(ValueError, "requires review"):
+            build_inputs.verify(self.repository, "HEAD", self.policy)
+        equivalent["reviewReference"] = "SYNTHETIC test only"
+        build_inputs.verify(self.repository, "HEAD", self.policy)
+
+    def test_dirty_and_ignored_new_inputs_are_rejected(self):
+        (self.repository / "Directory.Packages.props").write_text("dirty")
+        with self.assertRaisesRegex(ValueError, "Dirty"):
+            build_inputs.verify(self.repository, "HEAD", self.policy)
+        self.git("checkout", "--", "Directory.Packages.props")
+        (self.repository / ".gitignore").write_text("Directory.Build.targets\n")
+        (self.repository / "Directory.Build.targets").write_text("<Project />")
+        with self.assertRaisesRegex(ValueError, "Untracked or ignored"):
+            build_inputs.verify(self.repository, "HEAD", self.policy)
+
+    def test_new_build_metadata_paths_change_the_snapshot(self):
+        before = build_inputs.snapshot(self.repository, "HEAD")
+        target = self.repository / "build/native-locks"
+        target.mkdir(parents=True)
+        (target / "runtime.json").write_text("{}")
+        self.commit()
+        self.assertNotEqual(before, build_inputs.snapshot(self.repository, "HEAD"))
 
 
 if __name__ == "__main__":

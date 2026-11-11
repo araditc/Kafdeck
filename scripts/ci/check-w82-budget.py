@@ -7,6 +7,7 @@ import re
 import subprocess
 
 from w82_evidence import evaluate, read, require
+from w82_build_inputs import verify as verify_build_inputs
 
 
 def finite(value, path="budget"):
@@ -128,6 +129,7 @@ def identity(actual, budget, candidate, repository, source):
     require(actual["harnessSha"] == budget["harnessSha"] and re.fullmatch(r"[0-9a-f]{40}", actual["harnessSha"]), "Provider harness identity mismatch")
     require(actual["environment"] == budget["environment"], "Provider CPU/runtime/topology identity mismatch")
     require(actual["dataset"] == budget["dataset"], "Provider dataset mismatch")
+    verify_build_inputs(repository, source, candidate)
 
 
 def admission(candidate):
@@ -144,9 +146,10 @@ def main():
     parser.add_argument("--sqlite", required=True, type=Path)
     parser.add_argument("--postgres", required=True, type=Path)
     parser.add_argument("--source", default="HEAD")
+    parser.add_argument("--repository", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--candidate-audit", action="store_true")
     args = parser.parse_args()
-    repository = Path(__file__).resolve().parents[2]
+    repository = args.repository.resolve()
     try:
         candidate = read(args.budget)
         finite(candidate)
