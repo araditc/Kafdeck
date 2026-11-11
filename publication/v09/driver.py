@@ -268,6 +268,10 @@ def prepare(w80_hash):
             "newOwnerAuthorizationRequired": True, "originalOfflineManifestResigned": False},
         "trustMethod": "unchanged official main01c GitHub-OIDC signed offline manifest; source/config/layer-bound OCI conversion; newly owner-authorized registry image signatures and readiness/SPDX attestations under separately adopted protected publisher identity"}
     write(OUT / "publication-selection.json", selection)
+    existing_tag()
+    prior = repo_api("releases/tags/v0.9", optional=True)
+    require(prior is None or prior["body"] == release_body(selection, digest(OUT / "publication-selection.json")),
+            "Existing v0.9 release body is foreign to this exact selection; never overwrite")
     print("Prepared selection SHA256: " + digest(OUT / "publication-selection.json"))
 
 
@@ -335,6 +339,12 @@ def existing_tag():
     tag = repo_api("git/ref/tags/v0.9", optional=True)
     require(tag is None or tag["object"]["type"] == "commit" and tag["object"]["sha"] == SOURCE, "Existing v0.9 tag is foreign or ambiguous; never retarget")
     return tag
+
+
+def release_body(selection, selection_hash):
+    return (Path("publication/v09/release-notes.md").read_text() + "\n\nPublication selection SHA256: " + selection_hash
+            + "\n\nProtected publisher workflow commit: `" + selection["publisherCommit"] + "`\n"
+            + "\nImage: `" + IMAGE + "@" + selection["indexDigest"] + "`\n")
 
 
 def attestation_matches(text, expected, kind, digest_value):
@@ -424,7 +434,8 @@ def publish():
     release = repo_api("releases/tags/v0.9", optional=True)
     marker = "Publication selection SHA256: " + expected
     if release:
-        require(tag is not None and release["tag_name"] == "v0.9" and marker in (release.get("body") or ""), "Existing release is foreign; never overwrite")
+        require(tag is not None and release["tag_name"] == "v0.9" and release["name"] == "Kafdeck v0.9"
+                and release.get("body") == release_body(selection, expected), "Existing release is foreign; never overwrite")
         require(all(item["name"] in expected_assets and item.get("digest") == "sha256:" + expected_assets[item["name"]] for item in release["assets"]), "Existing release assets differ or are unverifiable")
     require(privacy() == selection["privacy"], "GHCR privacy/identity changed before publication")
     token = os.environ.get("REGISTRY_TOKEN", "")
@@ -447,7 +458,7 @@ def publish():
         repo_api("git/refs", data={"ref": "refs/tags/v0.9", "sha": SOURCE})
     require(existing_tag() is not None, "Exact source tag was not created")
     if release is None:
-        body = Path("publication/v09/release-notes.md").read_text() + "\n\n" + marker + "\n\nImage: `" + IMAGE + "@" + selection["indexDigest"] + "`\n"
+        body = release_body(selection, expected)
         release = repo_api("releases", data={"tag_name": "v0.9", "target_commitish": SOURCE, "name": "Kafdeck v0.9", "body": body, "draft": True, "prerelease": False})
     existing = {item["name"] for item in release["assets"]}
     for name in sorted(expected_assets):
