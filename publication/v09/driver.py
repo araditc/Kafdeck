@@ -70,8 +70,22 @@ def tag_snapshot(reference, local=False):
 
 def preserve_tags(before, after, proof_tags=()):
     allowed = set(proof_tags)
-    require(all(after.get(tag) == value for tag, value in before.items() if tag not in allowed)
+    # A reserved spelling is not proof of ownership/type. Existing discoveries
+    # require separate review; fail closed instead of overwriting any old tag.
+    require(not set(before) & allowed, "Pre-existing reserved proof tag collision requires explicit review")
+    require(all(after.get(tag) == value for tag, value in before.items())
             and set(after) - set(before) <= allowed, "Foreign/application registry tag bytes changed")
+
+
+def proof_tag_names(selection):
+    return {"sha256-" + value.removeprefix("sha256:") + suffix
+            for value in [selection["indexDigest"], *[item["manifestDigest"] for item in selection["platforms"].values()]]
+            for suffix in ("", ".sig", ".att")}
+
+
+def guard_unused_proof_tags(snapshot, selection):
+    require(not set(snapshot) & proof_tag_names(selection),
+            "Pre-existing reserved proof tag collision requires explicit review before any registry mutation")
 
 
 def owners():
@@ -375,6 +389,7 @@ def attestation_matches(text, expected, kind, digest_value):
 
 
 def registry_signatures(selection, decision, expected_hash, approval):
+    guard_unused_proof_tags(tag_snapshot(IMAGE), selection)
     identity = selection["registrySigning"]["identity"]
     certificate = ["--certificate-identity", identity, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com",
         "--certificate-github-workflow-repository", REPOSITORY, "--certificate-github-workflow-name", "v09-publication",
@@ -442,15 +457,14 @@ def publish():
     require(token, "Missing scoped registry credential")
     subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"], "--password-stdin"], input=token, text=True, check=True)
     tags_before = tag_snapshot(IMAGE)
+    guard_unused_proof_tags(tags_before, selection)
     authority(selection, expected, approval, write_intent=True)
     skopeo("copy", "--all", "--preserve-digests", "oci:/work/" + str(OUT / "oci") + ":release", "docker://" + IMAGE + "@" + selection["indexDigest"])
     verify_transport(selection, IMAGE)
     preserve_tags(tags_before, tag_snapshot(IMAGE))
     require(privacy() == selection["privacy"], "Registry privacy changed")
     signatures = registry_signatures(selection, decision, expected, approval)
-    proof_tags = {"sha256-" + value.removeprefix("sha256:") + suffix
-                  for value in [selection["indexDigest"], *[item["manifestDigest"] for item in selection["platforms"].values()]]
-                  for suffix in ("", ".sig", ".att")}
+    proof_tags = proof_tag_names(selection)
     preserve_tags(tags_before, tag_snapshot(IMAGE), proof_tags)
     require(privacy() == selection["privacy"], "Registry privacy changed during signature publication")
     authority(selection, expected, approval, write_intent=True)

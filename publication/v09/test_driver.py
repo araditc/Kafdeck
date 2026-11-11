@@ -66,6 +66,23 @@ class GuardTests(unittest.TestCase):
 
 
 class LayerTests(unittest.TestCase):
+    def test_preexisting_runtime_tag_with_bare_proof_spelling_is_not_owned(self):
+        selection = {"indexDigest": "sha256:" + "d" * 64, "platforms": {"amd64": {"manifestDigest": "sha256:" + "e" * 64}}}
+        foreign = {"sha256-" + "d" * 64: "foreign-runtime-manifest"}
+        with self.assertRaisesRegex(ValueError, "requires explicit review"):
+            driver.guard_unused_proof_tags(foreign, selection)
+        with self.assertRaisesRegex(ValueError, "reserved proof tag collision"):
+            driver.preserve_tags(foreign, {next(iter(foreign)): "new-proof-index"}, driver.proof_tag_names(selection))
+        with patch.object(driver, "tag_snapshot", return_value=foreign), patch.object(driver, "run") as cosign:
+            with self.assertRaisesRegex(ValueError, "before any registry mutation"):
+                driver.registry_signatures(selection, Path("unused"), "unused", "unused")
+            cosign.assert_not_called()
+
+    def test_existing_proof_metadata_also_fails_closed_without_separate_review(self):
+        selection = {"indexDigest": "sha256:" + "d" * 64, "platforms": {}}
+        with self.assertRaises(ValueError):
+            driver.guard_unused_proof_tags({"sha256-" + "d" * 64 + ".sig": "old-owned-proof"}, selection)
+
     def test_foreign_tag_content_cannot_change_even_if_name_stays_the_same(self):
         with self.assertRaisesRegex(ValueError, "tag bytes changed"):
             driver.preserve_tags({"v0.8": "old"}, {"v0.8": "new"})
