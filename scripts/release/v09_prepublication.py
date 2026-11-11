@@ -90,7 +90,7 @@ def remote_guard(source, scope):
     return policy_sha
 
 
-def validate_run(run, source):
+def validate_run(run, source, producers=None):
     require(run.get("head_sha") == source and run.get("head_branch") == "main"
             and run.get("event") in ("push", "workflow_dispatch")
             and run.get("status") == "completed" and run.get("conclusion") == "success",
@@ -98,7 +98,7 @@ def validate_run(run, source):
     require(run.get("repository", {}).get("full_name") == REPOSITORY
             and run.get("head_repository", {}).get("full_name") == REPOSITORY,
             "Foreign producer repository")
-    kinds = [kind for kind, (name, path) in PRODUCERS.items()
+    kinds = [kind for kind, (name, path) in (PRODUCERS if producers is None else producers).items()
              if run.get("name") == name and run.get("path", "").split("@")[0] == path]
     require(len(kinds) == 1, "Untrusted producer workflow name/path")
     return kinds[0]
@@ -143,6 +143,20 @@ def extract(zip_path, target, expected_hash):
                 output.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(item) as source, output.open("wb") as destination:
                     shutil.copyfileobj(source, destination)
+
+
+def retrieve_artifact(artifact, run_id, source, target):
+    require(artifact.get("expired") is False, "Expired artifact")
+    binding = artifact.get("workflow_run", {})
+    require(str(binding.get("id")) == str(run_id) and binding.get("head_sha") == source, "Artifact source/run binding differs")
+    artifact_digest = artifact.get("digest", "")
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_digest), "GitHub artifact has no immutable SHA256 digest")
+    with tempfile.TemporaryDirectory() as temporary:
+        archive = Path(temporary) / "artifact.zip"
+        with archive.open("wb") as stream:
+            subprocess.run(["gh", "api", f'repos/{REPOSITORY}/actions/artifacts/{artifact["id"]}/zip'],
+                           stdout=stream, check=True, timeout=900)
+        extract(archive, target, artifact_digest.removeprefix("sha256:"))
 
 
 def selected_files(name, source):
@@ -259,17 +273,9 @@ def prepare(source, scope, run_ids, output):
                     continue
                 require(expected[name][0] == kind and name not in found and artifact.get("expired") is False,
                         "Duplicate, expired or wrong-workflow artifact")
-                binding = artifact.get("workflow_run", {})
-                require(str(binding.get("id")) == run_id and binding.get("head_sha") == source,
-                        "Artifact source/run binding differs")
                 artifact_digest = artifact.get("digest", "")
-                require(re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_digest), "GitHub artifact has no immutable SHA256 digest")
-                zip_path = temp / f'{artifact["id"]}.zip'
-                with zip_path.open("wb") as stream:
-                    subprocess.run(["gh", "api", f'repos/{REPOSITORY}/actions/artifacts/{artifact["id"]}/zip'],
-                                   stdout=stream, check=True, timeout=900)
                 extracted = temp / str(artifact["id"])
-                extract(zip_path, extracted, artifact_digest.removeprefix("sha256:"))
+                retrieve_artifact(artifact, run_id, source, extracted)
                 target = output / "media" / expected[name][1]
                 target.mkdir(parents=True)
                 for filename in selected_files(name, source):

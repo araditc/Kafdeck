@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "admittedBudgetSha256": "71058945f98c717c696cd3ceb907277a479717b4dc225f85e1e809e7a347791b",
+  "acceptedProposalSha256": "049d4633741ec1c805f65a0a5fa65dcc346f852b61e8698501e7ac8338d7f3c6",
+  "acceptanceReference": "Owner acceptance recorded in the admitted v0.9 budget admission.reviewReference; historical driver provenance is separate from protected application source",
+  "applicationSourceSha": "4acdc408c2476d95d9c2640280aa25e3a7027a30",
+  "workflowName": "v09-w82-reference-runner",
+  "workflowPath": ".github/workflows/v09-w82-reference-runner.yml",
+  "branch": "codex/w82-reference-runner",
+  "providers": {
+    "sqlite": {
+      "runId": 42820100615,
+      "driverSha": "da236f5c4ba41c51363a6501d90d83309f7c0551",
+      "runConclusion": "failure",
+      "jobId": 129843147262,
+      "jobName": "benchmark (sqlite)",
+      "artifactId": 13787195674,
+      "artifactName": "w82-sqlite-1",
+      "zipSha256": "75aec48051fa3ab1d03cccfd2e002a7e1c1f0b6233775a06790855319093feec"
+    },
+    "postgres": {
+      "runId": 42865556010,
+      "driverSha": "7eba541e7c85069c701d9f932f19949bb94cc69d",
+      "runConclusion": "success",
+      "jobId": 130002837548,
+      "jobName": "benchmark (postgres)",
+      "artifactId": 13805584222,
+      "artifactName": "w82-postgres-1",
+      "zipSha256": "b694d89937653f57f9174bf32ba9b2c9e1e3e124f6ac26402b5cce81bc19f65f"
+    }
+  }
+}

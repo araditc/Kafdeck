@@ -8,18 +8,9 @@ trusted_root_sha="$3"
 [[ "$(ip -o link show | wc -l)" == 1 ]]
 ip -o link show | grep -Eq '^[0-9]+: lo:'
 [[ -z "$(ip -4 route show default)" && -z "$(ip -6 route show default)" ]]
-echo "$trusted_root_sha  $media/trusted-root.json" | sha256sum --check --status
 rm -f -- "$media/offline-verification.json"
-"${COSIGN:-cosign}" verify-blob --bundle "$media/manifest.sigstore.json" \
-  --trusted-root "$media/trusted-root.json" \
-  --certificate-identity 'https://github.com/araditc/Kafdeck/.github/workflows/v09-prepublication-signing.yml@refs/heads/main' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --certificate-github-workflow-repository 'araditc/Kafdeck' \
-  --certificate-github-workflow-name 'v09-prepublication-signing' \
-  --certificate-github-workflow-ref 'refs/heads/main' \
-  --certificate-github-workflow-trigger 'workflow_dispatch' \
-  --certificate-github-workflow-sha "$policy_sha" "$media/manifest.json"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+bash "$script_dir/verify-v09-signature.sh" "$media" "$policy_sha" "$trusted_root_sha"
 python3 - "$media" "$policy_sha" "$script_dir" "$trusted_root_sha" <<'PY'
 import json, pathlib, sys
 sys.path.insert(0, sys.argv[3])

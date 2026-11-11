@@ -8,6 +8,7 @@ on:
       - 'scripts/release/v09_prepublication.py'
       - 'scripts/release/test_v09_prepublication.py'
       - 'scripts/release/verify-v09-offline.sh'
+      - 'scripts/release/verify-v09-signature.sh'
       - 'scripts/release/v09_offline_install.py'
       - 'scripts/release/test_v09_offline_install.py'
   push:
@@ -18,6 +19,7 @@ on:
       - 'scripts/release/v09_prepublication.py'
       - 'scripts/release/test_v09_prepublication.py'
       - 'scripts/release/verify-v09-offline.sh'
+      - 'scripts/release/verify-v09-signature.sh'
       - 'scripts/release/v09_offline_install.py'
       - 'scripts/release/test_v09_offline_install.py'
   workflow_dispatch:
