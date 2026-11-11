@@ -172,13 +172,30 @@ def prepare(w80_hash):
     for arch in ("amd64", "arm64"):
         layout = OUT / ("oci-" + arch)
         archive = signed / f"media/distribution/w81-oci-{arch}-{SOURCE}/kafdeck-linux-{arch}.docker.tar.gz"
-        tar = OUT / (arch + ".docker.tar")
-        with gzip.open(archive, "rb") as source, tar.open("wb") as target:
-            shutil.copyfileobj(source, target)
-        skopeo("copy", "--format=oci", "--dest-compress", "--dest-compress-format=gzip", "--dest-compress-level=6",
-               "docker-archive:/work/" + str(tar), "oci:/work/" + str(layout) + ":image")
-        tar.unlink()
-        descriptor = read(layout / "index.json")["manifests"][0]
+        converted = OUT / ("converted-" + arch)
+        expected_config = manifest["content"]["imageConfigDigests"][arch]
+        # Force-format conversion may normalize config JSON. The immutable main
+        # helper instead preserves exact config bytes while compressing layers.
+        run("bash", "scripts/release/convert-v08-publication-image.sh", str(archive), expected_config, str(converted))
+        docker_manifest = read(converted / "image/manifest.json")
+        require(docker_manifest["config"]["digest"] == expected_config, "Signed config changed during compressed-dir conversion")
+        (layout / "blobs/sha256").mkdir(parents=True)
+        for path in (converted / "image").iterdir():
+            if HASH.fullmatch(path.name):
+                require(digest(path) == path.name, "Converted blob name/hash differs")
+                os.link(path, layout / "blobs/sha256" / path.name)
+        # OCI descriptor wrapping changes media-type declarations only; config
+        # JSON and compressed layer bytes are retained unchanged and checked.
+        config = {**docker_manifest["config"], "mediaType": "application/vnd.oci.image.config.v1+json"}
+        layers = [{**item, "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip"} for item in docker_manifest["layers"]]
+        image_bytes = json.dumps({"schemaVersion": 2, "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                                  "config": config, "layers": layers}, separators=(",", ":")).encode()
+        image_hash = hashlib.sha256(image_bytes).hexdigest()
+        (layout / "blobs/sha256" / image_hash).write_bytes(image_bytes)
+        descriptor = {"mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": "sha256:" + image_hash, "size": len(image_bytes)}
+        write(layout / "oci-layout", {"imageLayoutVersion": "1.0.0"})
+        write(layout / "index.json", {"schemaVersion": 2, "manifests": [{**descriptor, "annotations": {"org.opencontainers.image.ref.name": "image"}}]})
+        (converted / "candidate-image.tar").unlink()
         platforms[arch] = validate_arch(layout, descriptor, manifest["content"]["imageConfigDigests"][arch])
         for path in (layout / "blobs/sha256").iterdir():
             target = combined / "blobs/sha256" / path.name
