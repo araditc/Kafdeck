@@ -1,0 +1,186 @@
+[
+  {
+    "path": "amd64.zip",
+    "sha256": "b4938f4a846b5a9d637428ecf3f5b508aab28c538ef95da2383496ec87595080"
+  },
+  {
+    "path": "arm64.zip",
+    "sha256": "f6e9161ea6cc66088dd66ec2e33b5d11ed1170f08607b8a1a64b4f08658167d1"
+  },
+  {
+    "path": "canonical-old.zip",
+    "sha256": "37d8765e8d49a4e712c3528b11f2ba7828971b8a1bc9dfe1d81f1ca5dea19c35"
+  },
+  {
+    "path": "driver-0ea689c.zip",
+    "sha256": "f757d91940190ecd0255fec421b2ade3438612b3afa361f2ca98b795ddf9c932"
+  },
+  {
+    "path": "driver-31cfa25.zip",
+    "sha256": "3de8388d84f154fdce767600ff613404b20eb454c81788116f12c44f4594caec"
+  },
+  {
+    "path": "driver-64dc90e.zip",
+    "sha256": "5f7ad970729c6817033335caf19a048fd7add55aacd23d6c54340cd218015711"
+  },
+  {
+    "path": "driver-72c5d23.zip",
+    "sha256": "dfc88877b1ef4220b3568745c7b70368344406610e530cd57d9a05b6eab5bc7b"
+  },
+  {
+    "path": "driver-hashes.json",
+    "sha256": "11c33289b33359ae15637713ee75f0681529df89f766d67c5114bb3d0a0fbca2"
+  },
+  {
+    "path": "postgres-amd64.zip",
+    "sha256": "429444be12c95174e7b8ff4af0e62b6a0d07f0f26e9b1b51774547641d024dd2"
+  },
+  {
+    "path": "README.md",
+    "sha256": "d3e27e6ff8a30658625edf3b37d7f3ab28a3ec298d399ae73720aa6f3b041151"
+  },
+  {
+    "path": "remaining-arm64.zip",
+    "sha256": "4309c44a0436242de27e6cd128bd1aac02ecbf3d473ced18dfaf451b3e66587d"
+  },
+  {
+    "path": "remaining-verification.json",
+    "sha256": "1a635d7c2d927207d6f82daf1a150fed5792b0649707446fc089fe36169bfdfa"
+  },
+  {
+    "path": "upgrade-amd64.zip",
+    "sha256": "a1688b3a3251d12021a1504f9520feceb704ccf8194ffb1d6d845248dc1dd506"
+  },
+  {
+    "path": "W81-D1-complete-ledger.md",
+    "sha256": "9e348ef572741cd2c992140ce33d018bd6aff8cbd4408afc6e83341e21f53dbf"
+  },
+  {
+    "path": "amd64/dependencies.json",
+    "sha256": "b2e75f653250dec6fbb0a70bd0f05a956dad74466d927d9619224d2c8ec95cda"
+  },
+  {
+    "path": "amd64/journey.json",
+    "sha256": "302036b98c4317f13f7b00e5bc2452724f01fcb8993a2531416fe8865974f2c1"
+  },
+  {
+    "path": "amd64/oci-identity.json",
+    "sha256": "4f80d61924b15410f17bc9f22173ecff2f0ac175a4e287dd7f6bf617ee8f9a27"
+  },
+  {
+    "path": "amd64/signed-input.json",
+    "sha256": "6a49586a0ca3214a50332f10553da17fb0ab2e86ef29f6146b5015345f2152ce"
+  },
+  {
+    "path": "amd64/trust-root-observation.json",
+    "sha256": "e3a1f4ce2eb40bebd4815829a3bacc21bb53ce91fcd1335496210325c0102fae"
+  },
+  {
+    "path": "amd64/writer-fence.json",
+    "sha256": "fefe838f858fd524fcd0e65eb7e68bfffc57ecf66786ecd9bdb74a6866f0086c"
+  },
+  {
+    "path": "arm64/dependencies.json",
+    "sha256": "32311f449426010b3b8bda23fbfaab5cc5235de2e437fdd343adea2496e0c819"
+  },
+  {
+    "path": "arm64/journey.json",
+    "sha256": "5d4edb79d14f10947e90206dd7ce4e29a0e397471943e0904529f00c3c83344e"
+  },
+  {
+    "path": "arm64/oci-identity.json",
+    "sha256": "96544b01c1d338c5521e3ac97abf77e13bf47d5809497de713396161af446dc7"
+  },
+  {
+    "path": "arm64/signed-input.json",
+    "sha256": "52badca6a14039c6955dc9b157c05ffbc2131f266a49597a1007a4a4ff524389"
+  },
+  {
+    "path": "arm64/trust-root-observation.json",
+    "sha256": "76e6e73778baf21f72d032b28c14af9cfb88591d4458d2878d7eb9052a0cb7fe"
+  },
+  {
+    "path": "arm64/writer-fence.json",
+    "sha256": "c9d2cb0e3fc446533989b2ed041cf8071eb650d26798daa43195a70531786d89"
+  },
+  {
+    "path": "canonical-old/canonical.json",
+    "sha256": "5a1031275f8d31619552e7a434f9efad35d9feecb534804adbbd16952d2ad4b2"
+  },
+  {
+    "path": "canonical-old/preupgrade.db",
+    "sha256": "62216d2eb6df46671e9dca6ad9f92f6c773f797be66adace153f81c6625841ba"
+  },
+  {
+    "path": "postgres-amd64/canonical-input.json",
+    "sha256": "f0efc29b137aa461d37592fff682881ffd02cc48f2f1214b70ec6cf7bcdcba53"
+  },
+  {
+    "path": "postgres-amd64/pg-fence.json",
+    "sha256": "b53013e64c0dcf1ec5f013fcba8068263da8dd96e9a1953c198e568c3bbbf7fc"
+  },
+  {
+    "path": "postgres-amd64/postgres-input.json",
+    "sha256": "680f3792660c6bc2f65116f60d8e16902f9fa1b912e1b2fd4708896776403b6b"
+  },
+  {
+    "path": "postgres-amd64/remaining-ledger.json",
+    "sha256": "162f4fb77b784fba69c77e4c9a7dd3a96e29838fcc37f41e1c6fc7bf5a2b4181"
+  },
+  {
+    "path": "postgres-amd64/signed-input.json",
+    "sha256": "a97a45607dbc0a988e6b2fd1101acae78ccd864b1a934a5b9375bd0c3e547b9e"
+  },
+  {
+    "path": "postgres-amd64/trust-root-observation.json",
+    "sha256": "e3a1f4ce2eb40bebd4815829a3bacc21bb53ce91fcd1335496210325c0102fae"
+  },
+  {
+    "path": "remaining-arm64/canonical-input.json",
+    "sha256": "f0efc29b137aa461d37592fff682881ffd02cc48f2f1214b70ec6cf7bcdcba53"
+  },
+  {
+    "path": "remaining-arm64/pg-fence.json",
+    "sha256": "b53013e64c0dcf1ec5f013fcba8068263da8dd96e9a1953c198e568c3bbbf7fc"
+  },
+  {
+    "path": "remaining-arm64/postgres-input.json",
+    "sha256": "3e65c7494a6c2c5c58ea51a040c40289957686b117bf0a804fa420b96692a675"
+  },
+  {
+    "path": "remaining-arm64/remaining-ledger.json",
+    "sha256": "26fe9359a496bc9a3b97ece69c5bed4ecedfa13a240dcf088cfb39f96d3edf78"
+  },
+  {
+    "path": "remaining-arm64/signed-input.json",
+    "sha256": "80198f3748fcc67473813fdc565d9150a492df280ae298a3fb0bed4b02d2f28e"
+  },
+  {
+    "path": "remaining-arm64/trust-root-observation.json",
+    "sha256": "76e6e73778baf21f72d032b28c14af9cfb88591d4458d2878d7eb9052a0cb7fe"
+  },
+  {
+    "path": "upgrade-amd64/old-image-manifest.json",
+    "sha256": "60979bc6deb3672a8da5791c8a1ea76db3e477376dfb1abcab036b47892a0721"
+  },
+  {
+    "path": "upgrade-amd64/old-platform.json",
+    "sha256": "248079380e04c7cc21d378687aed24db4e8578a6d9123ff4f4cd1a21365ea45a"
+  },
+  {
+    "path": "upgrade-amd64/remaining-ledger.json",
+    "sha256": "7acf508217443834de47e0a705f326df5e9446b24f7104f63a24c69c626b267f"
+  },
+  {
+    "path": "upgrade-amd64/signed-input.json",
+    "sha256": "a97a45607dbc0a988e6b2fd1101acae78ccd864b1a934a5b9375bd0c3e547b9e"
+  },
+  {
+    "path": "upgrade-amd64/trust-root-observation.json",
+    "sha256": "e3a1f4ce2eb40bebd4815829a3bacc21bb53ce91fcd1335496210325c0102fae"
+  },
+  {
+    "path": "upgrade-amd64/upgrade-input.json",
+    "sha256": "20afa2a3b29f1a72fcb1e7b44755359408106a6759e355d53cc2cd5ca0b5e6d1"
+  }
+]

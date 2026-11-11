@@ -1,0 +1,2 @@
+Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected GithubWorkflowSHA to be "ffffffffffffffffffffffffffffffffffffffff", got "01c7553425fbc61ba4a7a21918265c562086ba02"
+error during command execution: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected GithubWorkflowSHA to be "ffffffffffffffffffffffffffffffffffffffff", got "01c7553425fbc61ba4a7a21918265c562086ba02"

@@ -66,6 +66,23 @@ class GuardTests(unittest.TestCase):
 
 
 class LayerTests(unittest.TestCase):
+    def test_preexisting_runtime_tag_with_bare_proof_spelling_is_not_owned(self):
+        selection = {"indexDigest": "sha256:" + "d" * 64, "platforms": {"amd64": {"manifestDigest": "sha256:" + "e" * 64}}}
+        foreign = {"sha256-" + "d" * 64: "foreign-runtime-manifest"}
+        with self.assertRaisesRegex(ValueError, "requires explicit review"):
+            driver.guard_unused_proof_tags(foreign, selection)
+        with self.assertRaisesRegex(ValueError, "reserved proof tag collision"):
+            driver.preserve_tags(foreign, {next(iter(foreign)): "new-proof-index"}, driver.proof_tag_names(selection))
+        with patch.object(driver, "tag_snapshot", return_value=foreign), patch.object(driver, "run") as cosign:
+            with self.assertRaisesRegex(ValueError, "before any registry mutation"):
+                driver.registry_signatures(selection, Path("unused"), "unused", "unused")
+            cosign.assert_not_called()
+
+    def test_existing_proof_metadata_also_fails_closed_without_separate_review(self):
+        selection = {"indexDigest": "sha256:" + "d" * 64, "platforms": {}}
+        with self.assertRaises(ValueError):
+            driver.guard_unused_proof_tags({"sha256-" + "d" * 64 + ".sig": "old-owned-proof"}, selection)
+
     def test_foreign_tag_content_cannot_change_even_if_name_stays_the_same(self):
         with self.assertRaisesRegex(ValueError, "tag bytes changed"):
             driver.preserve_tags({"v0.8": "old"}, {"v0.8": "new"})
@@ -106,7 +123,7 @@ class LayerTests(unittest.TestCase):
             (root / "assets").mkdir()
             (root / "assets/client.nupkg").write_bytes(b"changed")
             selection = {"sourceSha": driver.SOURCE, "signedManifestSha256": driver.MANIFEST,
-                         "indexDigest": "sha256:" + "d" * 64, "assets": [{"file": "client.nupkg", "sha256": "0" * 64}]}
+                         "indexDigest": "sha256:" + "d" * 64, "assets": [{"file": "client.nupkg", "sha256": "0" * 64}], "reviewAssets": []}
             driver.write(root / "publication-selection.json", selection)
             with patch.object(driver, "OUT", root), patch.object(driver, "authority"), \
                     patch.object(driver, "readiness") as readiness, patch.object(driver, "skopeo") as registry:
@@ -124,6 +141,47 @@ class LayerTests(unittest.TestCase):
         self.assertTrue(driver.attestation_matches(envelope, expected, "urn:kafdeck:test", "sha256:" + "d" * 64))
         self.assertFalse(driver.attestation_matches(envelope, {"releaseReady": False}, "urn:kafdeck:test", "sha256:" + "d" * 64))
         self.assertFalse(driver.attestation_matches(envelope, expected, "urn:kafdeck:test", "sha256:" + "e" * 64))
+
+
+class SupplementTests(unittest.TestCase):
+    def fixture(self, root):
+        public = root / "public"
+        (public / "raw").mkdir(parents=True)
+        path = public / "raw/evidence.json"
+        path.write_text('{"fixture":true}')
+        driver.write(public / "index.json", {"schemaVersion": 1, "sourceSha": driver.SOURCE,
+            "signedManifestSha256": driver.MANIFEST, "acceptedW80ProposalSha256": driver.W80_PACKET,
+            "allAdmittedCellsPassed": True, "mandatoryMissing": [], "status": "technical-complete-pending-owner-adoption",
+            "files": [{"path": "raw/evidence.json", "sha256": driver.digest(path), "size": path.stat().st_size}]})
+        return public
+
+    def test_frozen_index_and_deterministic_extra_zip_bind_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            public = self.fixture(root)
+            first, second = root / "one", root / "two"
+            first.mkdir(); second.mkdir()
+            with patch.object(driver, "W81_INDEX", driver.digest(public / "index.json")):
+                a = driver.w81_supplement(public, first)
+                b = driver.w81_supplement(public, second)
+            self.assertEqual(a["archiveSha256"], b["archiveSha256"])
+            self.assertEqual(driver.digest(public / "index.json"), a["indexSha256"])
+            self.assertTrue(a["ownerAdoptionRequired"])
+
+    def test_missing_mutated_or_unlisted_evidence_cannot_be_packaged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "missing evidence is not admission"):
+                driver.w81_supplement(root / "missing")
+            public = self.fixture(root)
+            (public / "raw/evidence.json").write_text('{"changed":true}')
+            with patch.object(driver, "W81_INDEX", driver.digest(public / "index.json")), self.assertRaisesRegex(ValueError, "bytes differ"):
+                driver.w81_supplement(public)
+        with tempfile.TemporaryDirectory() as temporary:
+            public = self.fixture(Path(temporary))
+            (public / "unlisted.credentials").write_text("synthetic unlisted fixture")
+            with patch.object(driver, "W81_INDEX", driver.digest(public / "index.json")), self.assertRaisesRegex(ValueError, "Unlisted W81"):
+                driver.w81_supplement(public)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+{
+  "artifactId": 13851562928,
+  "artifactZipSha256": "sha256:37d8765e8d49a4e712c3528b11f2ba7828971b8a1bc9dfe1d81f1ca5dea19c35",
+  "baselineImage": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+  "databaseSha256": "62216d2eb6df46671e9dca6ad9f92f6c773f797be66adace153f81c6625841ba",
+  "driverSha": "0ea689c61be521c9ba12a971579b424c64e37e9f",
+  "runId": "43013654037"
+}

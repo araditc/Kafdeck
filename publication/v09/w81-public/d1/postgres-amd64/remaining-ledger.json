@@ -1,0 +1,67 @@
+{
+  "actualSignedOciConfigDigest": "sha256:8b87c333d701f77511de2745f7e22c4cd4519aac296d30db28e983bba8ea7624",
+  "architecture": "amd64",
+  "authenticationRerun": false,
+  "completedUtc": "2026-11-11T11:41:18.914449+00:00",
+  "driverSha": "0ea689c61be521c9ba12a971579b424c64e37e9f",
+  "emulated": false,
+  "machine": "x86_64",
+  "manifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "postgres": {
+    "actualOciMaintenanceAdmission": true,
+    "after": {
+      "generation": "866096db-c7ed-4fc0-9989-98fe6563b50c|2",
+      "snapshots": [
+        {
+          "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+          "State": 9
+        }
+      ],
+      "tablesSha256": "83f920258cdfb7d2cb6d1084d85b00e8a1af04c2ff7605c244f296adabc3e2ba"
+    },
+    "backupSha256": "f42e6e2697a984160ac5586b853a70a5b673ca060fa2a26e471c2c4bb21173c2",
+    "before": {
+      "generation": "029bc4dc-e747-4870-a2fd-b48a82385141|1",
+      "snapshots": [
+        {
+          "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+          "State": 9
+        }
+      ],
+      "tablesSha256": "83f920258cdfb7d2cb6d1084d85b00e8a1af04c2ff7605c244f296adabc3e2ba"
+    },
+    "customDumpRestoredAndCompared": true,
+    "freshGenerationActualOciReady": true,
+    "originalAppWritersFenced": true,
+    "provider": "PostgreSql",
+    "quarantineWriteDeniedSqlState": "25006",
+    "scope": "actual single-node PostgreSQL OCI app profile; verified custom backup restore and generation safety; physical PITR/HA remain separate accepted W80 proofs",
+    "serverVersion": "18.6",
+    "staleContainerRequiredForcedCleanup": true,
+    "staleGenerationRefused": true,
+    "statePreservedOnActualOciRestart": true,
+    "threeSyntheticSnapshotsPreserved": true
+  },
+  "previousAuthEvidenceReused": true,
+  "schemaVersion": 1,
+  "scope": "remaining actual OCI-container upgrade and PostgreSQL state/restart/restore only; official signed media unchanged",
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "sqliteUpgrade": null,
+  "unknownEffectReplayClaimed": false
+}

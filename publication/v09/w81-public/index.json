@@ -1,0 +1,554 @@
+{
+  "acceptedW80ProposalSha256": "5e86572f5983aca73cbdd28136194267db6ef323c8e95907d4fdeb45f7a1b01f",
+  "allAdmittedCellsPassed": true,
+  "chartSha256": "3e403f55c185ca0eb855ee96347d52b27e15e7729f2f139a4aee3702b3d851d1",
+  "coverage": {
+    "D1-OCI-PostgreSQL-both-architectures": "passed",
+    "D1-OCI-native-amd64-auth-state": "passed",
+    "D1-OCI-native-arm64-auth-state": "passed",
+    "D1-old-amd64-container-upgrade-rollback": "passed",
+    "D1-old-data-native-arm-migration": "passed",
+    "D2-native-five-RID-fifteen-components": "passed",
+    "D3-Helm-SQLite-lifecycle-auth-restore": "passed",
+    "D3-Helm-external-PG-HA-single-app-lifecycle": "passed",
+    "D3-conditionally-admitted-unchanged-egress-boundary": "passed-with-explicit-limits",
+    "D4-actual-crypto-tamper-source-rejection": "passed",
+    "D4-authenticated-airgap-journey": "passed",
+    "D4-official-signature-complete-media-offline-install": "passed"
+  },
+  "files": [
+    {
+      "path": "d1/amd64/dependencies.json",
+      "sha256": "b2e75f653250dec6fbb0a70bd0f05a956dad74466d927d9619224d2c8ec95cda",
+      "size": 588
+    },
+    {
+      "path": "d1/amd64/journey.json",
+      "sha256": "302036b98c4317f13f7b00e5bc2452724f01fcb8993a2531416fe8865974f2c1",
+      "size": 2176
+    },
+    {
+      "path": "d1/amd64/oci-identity.json",
+      "sha256": "4f80d61924b15410f17bc9f22173ecff2f0ac175a4e287dd7f6bf617ee8f9a27",
+      "size": 1364
+    },
+    {
+      "path": "d1/amd64/signed-input.json",
+      "sha256": "6a49586a0ca3214a50332f10553da17fb0ab2e86ef29f6146b5015345f2152ce",
+      "size": 954
+    },
+    {
+      "path": "d1/amd64/trust-root-observation.json",
+      "sha256": "e3a1f4ce2eb40bebd4815829a3bacc21bb53ce91fcd1335496210325c0102fae",
+      "size": 372
+    },
+    {
+      "path": "d1/amd64/writer-fence.json",
+      "sha256": "fefe838f858fd524fcd0e65eb7e68bfffc57ecf66786ecd9bdb74a6866f0086c",
+      "size": 175
+    },
+    {
+      "path": "d1/arm64/dependencies.json",
+      "sha256": "32311f449426010b3b8bda23fbfaab5cc5235de2e437fdd343adea2496e0c819",
+      "size": 588
+    },
+    {
+      "path": "d1/arm64/journey.json",
+      "sha256": "5d4edb79d14f10947e90206dd7ce4e29a0e397471943e0904529f00c3c83344e",
+      "size": 2391
+    },
+    {
+      "path": "d1/arm64/oci-identity.json",
+      "sha256": "96544b01c1d338c5521e3ac97abf77e13bf47d5809497de713396161af446dc7",
+      "size": 1365
+    },
+    {
+      "path": "d1/arm64/signed-input.json",
+      "sha256": "52badca6a14039c6955dc9b157c05ffbc2131f266a49597a1007a4a4ff524389",
+      "size": 954
+    },
+    {
+      "path": "d1/arm64/trust-root-observation.json",
+      "sha256": "76e6e73778baf21f72d032b28c14af9cfb88591d4458d2878d7eb9052a0cb7fe",
+      "size": 372
+    },
+    {
+      "path": "d1/arm64/writer-fence.json",
+      "sha256": "c9d2cb0e3fc446533989b2ed041cf8071eb650d26798daa43195a70531786d89",
+      "size": 175
+    },
+    {
+      "path": "d1/canonical-old/canonical.json",
+      "sha256": "5a1031275f8d31619552e7a434f9efad35d9feecb534804adbbd16952d2ad4b2",
+      "size": 1557
+    },
+    {
+      "path": "d1/driver-hashes.json",
+      "sha256": "11c33289b33359ae15637713ee75f0681529df89f766d67c5114bb3d0a0fbca2",
+      "size": 517
+    },
+    {
+      "path": "d1/hashes.json",
+      "sha256": "fb0a8f7488da62199b09de157b3293284ecad7dc38770ddadb529ecd2c5d7a71",
+      "size": 6273
+    },
+    {
+      "path": "d1/postgres-amd64/canonical-input.json",
+      "sha256": "f0efc29b137aa461d37592fff682881ffd02cc48f2f1214b70ec6cf7bcdcba53",
+      "size": 421
+    },
+    {
+      "path": "d1/postgres-amd64/pg-fence.json",
+      "sha256": "b53013e64c0dcf1ec5f013fcba8068263da8dd96e9a1953c198e568c3bbbf7fc",
+      "size": 78
+    },
+    {
+      "path": "d1/postgres-amd64/postgres-input.json",
+      "sha256": "680f3792660c6bc2f65116f60d8e16902f9fa1b912e1b2fd4708896776403b6b",
+      "size": 403
+    },
+    {
+      "path": "d1/postgres-amd64/remaining-ledger.json",
+      "sha256": "162f4fb77b784fba69c77e4c9a7dd3a96e29838fcc37f41e1c6fc7bf5a2b4181",
+      "size": 2686
+    },
+    {
+      "path": "d1/postgres-amd64/signed-input.json",
+      "sha256": "a97a45607dbc0a988e6b2fd1101acae78ccd864b1a934a5b9375bd0c3e547b9e",
+      "size": 954
+    },
+    {
+      "path": "d1/postgres-amd64/trust-root-observation.json",
+      "sha256": "e3a1f4ce2eb40bebd4815829a3bacc21bb53ce91fcd1335496210325c0102fae",
+      "size": 372
+    },
+    {
+      "path": "d1/README.md",
+      "sha256": "d3e27e6ff8a30658625edf3b37d7f3ab28a3ec298d399ae73720aa6f3b041151",
+      "size": 6355
+    },
+    {
+      "path": "d1/remaining-arm64/canonical-input.json",
+      "sha256": "f0efc29b137aa461d37592fff682881ffd02cc48f2f1214b70ec6cf7bcdcba53",
+      "size": 421
+    },
+    {
+      "path": "d1/remaining-arm64/pg-fence.json",
+      "sha256": "b53013e64c0dcf1ec5f013fcba8068263da8dd96e9a1953c198e568c3bbbf7fc",
+      "size": 78
+    },
+    {
+      "path": "d1/remaining-arm64/postgres-input.json",
+      "sha256": "3e65c7494a6c2c5c58ea51a040c40289957686b117bf0a804fa420b96692a675",
+      "size": 403
+    },
+    {
+      "path": "d1/remaining-arm64/remaining-ledger.json",
+      "sha256": "26fe9359a496bc9a3b97ece69c5bed4ecedfa13a240dcf088cfb39f96d3edf78",
+      "size": 6240
+    },
+    {
+      "path": "d1/remaining-arm64/signed-input.json",
+      "sha256": "80198f3748fcc67473813fdc565d9150a492df280ae298a3fb0bed4b02d2f28e",
+      "size": 954
+    },
+    {
+      "path": "d1/remaining-arm64/trust-root-observation.json",
+      "sha256": "76e6e73778baf21f72d032b28c14af9cfb88591d4458d2878d7eb9052a0cb7fe",
+      "size": 372
+    },
+    {
+      "path": "d1/remaining-verification.json",
+      "sha256": "1a635d7c2d927207d6f82daf1a150fed5792b0649707446fc089fe36169bfdfa",
+      "size": 395
+    },
+    {
+      "path": "d1/upgrade-amd64/old-image-manifest.json",
+      "sha256": "60979bc6deb3672a8da5791c8a1ea76db3e477376dfb1abcab036b47892a0721",
+      "size": 2134
+    },
+    {
+      "path": "d1/upgrade-amd64/old-platform.json",
+      "sha256": "248079380e04c7cc21d378687aed24db4e8578a6d9123ff4f4cd1a21365ea45a",
+      "size": 374
+    },
+    {
+      "path": "d1/upgrade-amd64/remaining-ledger.json",
+      "sha256": "7acf508217443834de47e0a705f326df5e9446b24f7104f63a24c69c626b267f",
+      "size": 4298
+    },
+    {
+      "path": "d1/upgrade-amd64/signed-input.json",
+      "sha256": "a97a45607dbc0a988e6b2fd1101acae78ccd864b1a934a5b9375bd0c3e547b9e",
+      "size": 954
+    },
+    {
+      "path": "d1/upgrade-amd64/trust-root-observation.json",
+      "sha256": "e3a1f4ce2eb40bebd4815829a3bacc21bb53ce91fcd1335496210325c0102fae",
+      "size": 372
+    },
+    {
+      "path": "d1/upgrade-amd64/upgrade-input.json",
+      "sha256": "20afa2a3b29f1a72fcb1e7b44755359408106a6759e355d53cc2cd5ca0b5e6d1",
+      "size": 1209
+    },
+    {
+      "path": "d1/W81-D1-complete-ledger.md",
+      "sha256": "9e348ef572741cd2c992140ce33d018bd6aff8cbd4408afc6e83341e21f53dbf",
+      "size": 8904
+    },
+    {
+      "path": "d2/linux-arm64/native-evidence.json",
+      "sha256": "76e81b35c27ff6085ab32e7bcb5068a6400e66b0ae2ef90436e96a33c6d05c6b",
+      "size": 1060
+    },
+    {
+      "path": "d2/linux-x64/native-evidence.json",
+      "sha256": "21aa63dd815fc44ed5829294dd8beef0a8728b5a9aa4b13314d925b9ab13eb8d",
+      "size": 1052
+    },
+    {
+      "path": "d2/osx-arm64/native-evidence.json",
+      "sha256": "1afb2a92111b46f6742d5b2426646ab8b29e45bb0826ce7a1d765fb2f026bda0",
+      "size": 1046
+    },
+    {
+      "path": "d2/osx-x64/native-evidence.json",
+      "sha256": "88ae21a0bb59b024525f2ed204e2d23c70f1481a368d716cbb31e994ed21bc67",
+      "size": 1038
+    },
+    {
+      "path": "d2/win-x64/native-evidence.json",
+      "sha256": "35818e88af1b585ab6e726cc2dc009327efbb575648c739d1e88fa01cf1edba9",
+      "size": 1084
+    },
+    {
+      "path": "d3/conditional-network-boundary/kaf02-deployment-retest.md",
+      "sha256": "c0fc9419167fb8c0c837e15bf5078af1ecaa1547af3de4b2c2e0f600e8ca6e8f",
+      "size": 4365
+    },
+    {
+      "path": "d3/conditional-network-boundary/network-policy.yaml",
+      "sha256": "b4f57d1cfbe5e606bd318fffc9e4e3748dc62192dc3ace788906e23e2712b021",
+      "size": 1001
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/cni-pod-rules.txt",
+      "sha256": "1555b3b8cec984bdc1cd4a74d297296017b8d68837c78f0d9e5fae1581605f53",
+      "size": 1256
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/k3s-network-controller.txt",
+      "sha256": "85258cbe85d14ad5e89b0a78a83f9299e360934a60aacd4de38bbaa6fc55cbe5",
+      "size": 552
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/kaf02-deployment-result.json",
+      "sha256": "dc07ba6a6114b570b4a222a87115309586cf4e519a9c821d79c5cee4fdd02220",
+      "size": 1127
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/lab-cleanup.txt",
+      "sha256": "c731de94805da707164a1ee1776727170443d1381e17c6a24f9bf8838caf645c",
+      "size": 130
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/positive-syn.txt",
+      "sha256": "e5f11e214227b632ba53613ced5f424184a89407230865714d1d49ce7b0e3f7a",
+      "size": 344
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/restricted-policy.json",
+      "sha256": "8428761f6bef068b5364b9d45dde5bcbdf7c5d609d2b1397c33a18d2648af0ff",
+      "size": 1865
+    },
+    {
+      "path": "d3/conditional-network-boundary/observed-final/restricted-syn.txt",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "size": 1
+    },
+    {
+      "path": "d3/driver/.github/workflows/v09-w81-signed-helm-auth.yml",
+      "sha256": "02a3aa256d055051628fcae5a39421c45079a3cc276e12fbd704ff52733c5977",
+      "size": 3283
+    },
+    {
+      "path": "d3/driver/deploy/dev/prepare-keycloak-g2.ps1",
+      "sha256": "4b2596db11db1e1f9642a1cdf68c7b6296cd2a5b45c8860371fb3de9c5e65bf8",
+      "size": 11218
+    },
+    {
+      "path": "d3/driver/deploy/dev/prepare-postgres-g2-recovery.ps1",
+      "sha256": "0005e8491aa6d6aaebeb4fa22cfd465312b4a9574183a08ab25dda28da876bd3",
+      "size": 32965
+    },
+    {
+      "path": "d3/driver/deploy/dev/w80-signed-disconnected/stage.py",
+      "sha256": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0",
+      "size": 3434
+    },
+    {
+      "path": "d3/driver/deploy/dev/w81-signed-helm/fixture.py",
+      "sha256": "37f404f4648251cd26c43e71114df2246750bb7aefa8823ba07fe865ad7e4f19",
+      "size": 10780
+    },
+    {
+      "path": "d3/driver/deploy/dev/w81-signed-helm/HelmState.cs",
+      "sha256": "9600b15c8d87f5fa0149412182771bcbc02da7bb9aa73c93a19c42f9df0656c0",
+      "size": 2280
+    },
+    {
+      "path": "d3/driver/deploy/dev/w81-signed-helm/postgres.py",
+      "sha256": "fd36b533fcb783e86a908887f10a886e5e6ea12bef46057d8a5662fb0ff61874",
+      "size": 5293
+    },
+    {
+      "path": "d3/driver/deploy/dev/w81-signed-helm/run.sh",
+      "sha256": "118fa3fe31ac9c8de90d5d56fa4aba13cebf8c1e522571488e3bb1b71ab67039",
+      "size": 15540
+    },
+    {
+      "path": "d3/failed-fixture-attempts.json",
+      "sha256": "05b01f1284fe59a05c987241df2eafe137f3e38eeebb20942d1711af7416d010",
+      "size": 1058
+    },
+    {
+      "path": "d3/index.json",
+      "sha256": "beef201ef20b3a2b13815510f08589210ae1bd78ae61c8d29d130226aa534f96",
+      "size": 9121
+    },
+    {
+      "path": "d3/PostgreSql/helm-history.json",
+      "sha256": "962a038ad3df478cbefdaa9536f63350ac8b3b0d2a8a25c447135a06aa7859b4",
+      "size": 667
+    },
+    {
+      "path": "d3/PostgreSql/helm-lifecycle.json",
+      "sha256": "e991ab81c1ba570abf53444384aa7a488b03cbe8cb0c251e1e0a0f47393c2976",
+      "size": 1267
+    },
+    {
+      "path": "d3/PostgreSql/journeys.ndjson",
+      "sha256": "fd0b52d0835633e9d253f3f5d480b45bf611921a893dc73a35aca8e66960437c",
+      "size": 1465
+    },
+    {
+      "path": "d3/PostgreSql/kafka-image-digests.json",
+      "sha256": "bcdfe45df33bb8271386479d7418ed4dba101b31244fd893e3b1e05a745e46de",
+      "size": 89
+    },
+    {
+      "path": "d3/PostgreSql/pg-primary-fence.json",
+      "sha256": "1a77c1aa48d86206db434359e706b28cf7e218e6113dde7b7413e44ba52d0041",
+      "size": 285
+    },
+    {
+      "path": "d3/PostgreSql/pg-replication.json",
+      "sha256": "77b67d250517235f3fb1f43bdf010562ac3a4092c615ee4ac436a8eaff1425f4",
+      "size": 371
+    },
+    {
+      "path": "d3/PostgreSql/producer.json",
+      "sha256": "ac99ab8a88c49f9a8fcd1f5665b607ffe996607ead77105ca3ccc27d5f46d09f",
+      "size": 296
+    },
+    {
+      "path": "d3/PostgreSql/restore-fence.json",
+      "sha256": "d0e8e629afa4cf39edd6b1e49f3fee514c8350608611a33fb931976d9f072947",
+      "size": 195
+    },
+    {
+      "path": "d3/PostgreSql/runtime-pods.ndjson",
+      "sha256": "326a21e96d37c8798877288e6e95818a3a6354ccdb42955db775344c8a467abd",
+      "size": 1784
+    },
+    {
+      "path": "d3/PostgreSql/signed-input.json",
+      "sha256": "8fc44e78f3cf1864991c1121fc130a8a322e380945216ae4e18350aba36a3be7",
+      "size": 1440
+    },
+    {
+      "path": "d3/PostgreSql/state-admitted.json",
+      "sha256": "a8062f8b59322cb964eb6629babee282c8ce76baa81f521c8d4634de7bf3b433",
+      "size": 1658
+    },
+    {
+      "path": "d3/PostgreSql/state-failover.json",
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550",
+      "size": 1351
+    },
+    {
+      "path": "d3/PostgreSql/state-initial.json",
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550",
+      "size": 1351
+    },
+    {
+      "path": "d3/PostgreSql/state-reinstalled.json",
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550",
+      "size": 1351
+    },
+    {
+      "path": "d3/PostgreSql/state-rollback.json",
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550",
+      "size": 1351
+    },
+    {
+      "path": "d3/PostgreSql/state-upgraded.json",
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550",
+      "size": 1351
+    },
+    {
+      "path": "d3/PostgreSql-producer.zip",
+      "sha256": "f29b5ab720a230601b431a77ebd98be136bea0b8623e965877768aef0896b17a",
+      "size": 9004
+    },
+    {
+      "path": "d3/Sqlite/helm-history.json",
+      "sha256": "5756c458250cd778d7912f9ccde3b92ecc254a8212f555f054198473734dcf4d",
+      "size": 666
+    },
+    {
+      "path": "d3/Sqlite/helm-lifecycle.json",
+      "sha256": "cf20a97a77b00bc1dc7403e498183699b964a63f276ae18d3a636286050ec816",
+      "size": 1264
+    },
+    {
+      "path": "d3/Sqlite/journeys.ndjson",
+      "sha256": "5c604f491e3fd28c1fe3f2a00807db947fcedeb9cff800c53280a5ecbeb3c9a7",
+      "size": 1226
+    },
+    {
+      "path": "d3/Sqlite/kafka-image-digests.json",
+      "sha256": "bcdfe45df33bb8271386479d7418ed4dba101b31244fd893e3b1e05a745e46de",
+      "size": 89
+    },
+    {
+      "path": "d3/Sqlite/producer.json",
+      "sha256": "9ca0fa310ddb7294c97d19b9aadd9edd547020e5d339caeb98e4904f08537a11",
+      "size": 296
+    },
+    {
+      "path": "d3/Sqlite/restore-fence.json",
+      "sha256": "1728451e61952fa2f18246c813f47bde202364845fe559d38f4940f156896d61",
+      "size": 195
+    },
+    {
+      "path": "d3/Sqlite/runtime-pods.ndjson",
+      "sha256": "4d73e8897b7c927d9087eb73b1e6b030aac0bad834c763ef34ae83e00cf7180e",
+      "size": 1478
+    },
+    {
+      "path": "d3/Sqlite/signed-input.json",
+      "sha256": "8fc44e78f3cf1864991c1121fc130a8a322e380945216ae4e18350aba36a3be7",
+      "size": 1440
+    },
+    {
+      "path": "d3/Sqlite/state-admitted.json",
+      "sha256": "554e62e9af54aa5d49a20626b31186d61cc08ef76423e10859baa61afa034c77",
+      "size": 1839
+    },
+    {
+      "path": "d3/Sqlite/state-initial.json",
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097",
+      "size": 1532
+    },
+    {
+      "path": "d3/Sqlite/state-reinstalled.json",
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097",
+      "size": 1532
+    },
+    {
+      "path": "d3/Sqlite/state-rollback.json",
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097",
+      "size": 1532
+    },
+    {
+      "path": "d3/Sqlite/state-upgraded.json",
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097",
+      "size": 1532
+    },
+    {
+      "path": "d3/Sqlite-producer.zip",
+      "sha256": "9b4b599782c6dc20a9350eaf79fea681f23b75ff5bb3f32c0189b1ad7c6923f3",
+      "size": 7905
+    },
+    {
+      "path": "d3/verification.json",
+      "sha256": "074487c375e90fdfbba6d275da61dd1f1ea88892fa3c07c62a5001da8affdcf7",
+      "size": 2458
+    },
+    {
+      "path": "d3/verify-and-index.py",
+      "sha256": "3277ea5ef61afb0a2c4a0669f29b76d468268518a95e4340fbaa907e3c79962a",
+      "size": 6638
+    },
+    {
+      "path": "d3/W81-D3-complete-ledger.md",
+      "sha256": "2f39bb59974be04f218d7191220a8ac9a6d52e582e0cde163ff8236c49f4388b",
+      "size": 8095
+    },
+    {
+      "path": "d4/authenticated-offline-journey.json",
+      "sha256": "d5e1f48b711e0a7f00455b520dd5fcfa126df02685361ccf40b3b65b6a661153",
+      "size": 1168
+    },
+    {
+      "path": "d4/crypto/altered-manifest.log",
+      "sha256": "b20f4244446d6d8fc0c53f030599afb8399cf46d23f9fcdc367ea14613386b02",
+      "size": 265
+    },
+    {
+      "path": "d4/crypto/negative-verification.json",
+      "sha256": "0e869e73a6b86637e32cf40d75defe93b21a18d939c2a03b526da573ae23cade",
+      "size": 1255
+    },
+    {
+      "path": "d4/crypto/wrong-workflow-source.log",
+      "sha256": "080a4f041710d92bbc5a0d7543cc241d947e13246a555facd1cee08299d4d8fb",
+      "size": 469
+    },
+    {
+      "path": "d4/independent-root-proof.json",
+      "sha256": "675f596b9c3ff5037bd5f20417600e7696fd3542ad6a02f529f9083b58074788",
+      "size": 826
+    },
+    {
+      "path": "d4/manifest.json",
+      "sha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+      "size": 11807
+    },
+    {
+      "path": "d4/manifest.sigstore.json",
+      "sha256": "bc4059cd5e8fff46419045addf4b2bdf202f653090181efea74fc486653a90f5",
+      "size": 10755
+    },
+    {
+      "path": "d4/offline-verification.json",
+      "sha256": "6b11a3b832a21b37c65ec100ead5fa2976d63fd261748fee20a85c8f7303c273",
+      "size": 1632
+    },
+    {
+      "path": "d4/trusted-root.json",
+      "sha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724",
+      "size": 5790
+    },
+    {
+      "path": "README.md",
+      "sha256": "fee9e0a1f1b8f82f26402ef2f965a2d1cac06d2c322a3ebf8c4aade512942a56",
+      "size": 3372
+    }
+  ],
+  "initialDistributionProducerRunId": 42980367614,
+  "mandatoryMissing": [],
+  "nativeProducerRunId": 42980302057,
+  "newProductBuilds": 0,
+  "newW82LoadRuns": 0,
+  "publicationPerformed": false,
+  "schemaVersion": 1,
+  "signedArtifactId": 13839715488,
+  "signedArtifactZipSha256": "7100754a28ebc405a8ca9739412341a3e13587f6e9514882ab547f2e62b8c295",
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "signedProducerRunId": 42984770583,
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "status": "technical-complete-pending-owner-adoption"
+}

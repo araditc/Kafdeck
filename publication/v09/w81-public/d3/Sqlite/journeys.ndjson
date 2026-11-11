@@ -1,0 +1,6 @@
+{"phase": "install", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "ed0ee9eaad4e3982a806247ddba8fbdb5b29c40561f1bea21b3deee0d861266b", "catalogGenerationReadAllowed": true}
+{"phase": "upgrade", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "ed0ee9eaad4e3982a806247ddba8fbdb5b29c40561f1bea21b3deee0d861266b", "catalogGenerationReadAllowed": true}
+{"phase": "rollback", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "ed0ee9eaad4e3982a806247ddba8fbdb5b29c40561f1bea21b3deee0d861266b", "catalogGenerationReadAllowed": true}
+{"phase": "reinstall", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "ed0ee9eaad4e3982a806247ddba8fbdb5b29c40561f1bea21b3deee0d861266b", "catalogGenerationReadAllowed": true}
+{"phase":"restored-unadmitted","httpReady":false,"restoreQuarantineObserved":true}
+{"phase": "restored-admitted", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "ed0ee9eaad4e3982a806247ddba8fbdb5b29c40561f1bea21b3deee0d861266b", "catalogGenerationReadAllowed": true}

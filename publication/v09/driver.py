@@ -16,7 +16,7 @@ import zipfile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts/release"))
-from v09_prepublication import (HASH, SHA, REPOSITORY, digest, extract, read, require, retrieve_artifact, validate_run, verify, write)
+from v09_prepublication import (HASH, SHA, REPOSITORY, digest, extract, read, require, retrieve_artifact, safe_relative, validate_run, verify, write)
 
 SOURCE = "01c7553425fbc61ba4a7a21918265c562086ba02"
 MANIFEST = "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba"
@@ -27,6 +27,7 @@ BRANCH = "codex/v09-publication"
 WORKFLOW = ".github/workflows/v09-publication.yml"
 IMAGE = "ghcr.io/araditc/kafdeck"
 W80_PACKET = "5e86572f5983aca73cbdd28136194267db6ef323c8e95907d4fdeb45f7a1b01f"
+W81_INDEX = "e9e6510c2f170773f9cb6e81ceb9525eba0d0ff5426e813b048591a34867064c"
 OUT = Path("artifacts/v09-publication")
 
 
@@ -70,8 +71,22 @@ def tag_snapshot(reference, local=False):
 
 def preserve_tags(before, after, proof_tags=()):
     allowed = set(proof_tags)
-    require(all(after.get(tag) == value for tag, value in before.items() if tag not in allowed)
+    # A reserved spelling is not proof of ownership/type. Existing discoveries
+    # require separate review; fail closed instead of overwriting any old tag.
+    require(not set(before) & allowed, "Pre-existing reserved proof tag collision requires explicit review")
+    require(all(after.get(tag) == value for tag, value in before.items())
             and set(after) - set(before) <= allowed, "Foreign/application registry tag bytes changed")
+
+
+def proof_tag_names(selection):
+    return {"sha256-" + value.removeprefix("sha256:") + suffix
+            for value in [selection["indexDigest"], *[item["manifestDigest"] for item in selection["platforms"].values()]]
+            for suffix in ("", ".sig", ".att")}
+
+
+def guard_unused_proof_tags(snapshot, selection):
+    require(not set(snapshot) & proof_tag_names(selection),
+            "Pre-existing reserved proof tag collision requires explicit review before any registry mutation")
 
 
 def owners():
@@ -162,10 +177,49 @@ def validate_arch(layout, descriptor, expected_config):
             "layers": image["layers"], "signedUncompressedLayerDiffIds": config["rootfs"]["diff_ids"]}
 
 
+def w81_supplement(public=Path("publication/v09/w81-public"), output=None):
+    index_file = public / "index.json"
+    require(index_file.is_file(), "Frozen public W81 supplement is required; missing evidence is not admission")
+    require(digest(index_file) == W81_INDEX, "W81 index differs from the frozen owner-review proposal")
+    index = read(index_file)
+    require(index["schemaVersion"] == 1 and index["sourceSha"] == SOURCE and index["signedManifestSha256"] == MANIFEST,
+            "W81 supplement source/manifest differs from the accepted media")
+    require(index["acceptedW80ProposalSha256"] == W80_PACKET and index["allAdmittedCellsPassed"] is True
+            and index["mandatoryMissing"] == [] and index["status"] == "technical-complete-pending-owner-adoption",
+            "W81 technical evidence is incomplete or not the exact pending owner-adoption proposal")
+    require(isinstance(index["files"], list) and index["files"], "W81 public raw evidence inventory is missing")
+    expected = {"index.json", "index.sha256"}
+    for entry in index["files"]:
+        relative = str(safe_relative(entry["path"]))
+        require(relative not in expected and HASH.fullmatch(entry["sha256"]), "Duplicate/invalid W81 public evidence identity")
+        path = public / relative
+        require(path.is_file() and not path.is_symlink() and digest(path) == entry["sha256"]
+                and path.stat().st_size == entry["size"], "W81 public evidence bytes differ")
+        expected.add(relative)
+    actual = {path.relative_to(public).as_posix() for path in public.rglob("*") if path.is_file()}
+    require(not any(path.is_symlink() for path in public.rglob("*")) and actual <= expected, "Unlisted W81 files are prohibited")
+    if (public / "index.sha256").exists():
+        require((public / "index.sha256").read_text().split()[0] == digest(index_file), "Frozen W81 index SHA256 differs")
+    result = {"sourceSha": SOURCE, "signedManifestSha256": MANIFEST, "indexSha256": digest(index_file),
+              "indexedPublicFiles": len(index["files"]), "ownerAdoptionRequired": True}
+    if output is not None:
+        archive_path = output / "v0.9-w81-public-evidence.zip"
+        with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            for path in sorted(public.rglob("*")):
+                if path.is_file():
+                    info = zipfile.ZipInfo(path.relative_to(public).as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
+                    info.compress_type, info.external_attr = zipfile.ZIP_DEFLATED, 0o100644 << 16
+                    archive.writestr(info, path.read_bytes(), compresslevel=6)
+        result["archiveSha256"] = digest(archive_path)
+        result["assets"] = [(index_file, "v0.9-w81-supplement-index.json"), (archive_path, archive_path.name)]
+    return result
+
+
 def prepare(w80_hash):
     w80_hash = w80_hash or W80_PACKET
     require(w80_hash == W80_PACKET, "Only the exact frozen public W80 proposal is admitted for selection")
     local_actor_guard()
+    w81_supplement()  # Local frozen-evidence check before heavy media/network preparation.
     require(not OUT.exists(), "Use a fresh publisher workspace")
     OUT.mkdir(parents=True)
     publisher = run("git", "rev-parse", "HEAD")
@@ -253,11 +307,21 @@ def prepare(w80_hash):
         require(re.fullmatch(r"[A-Za-z0-9_.-]+", name) and path.stat().st_size < 2 * 1024**3, "Release asset name/size invalid")
         os.link(path, assets / name)
         entries.append({"file": name, "sha256": digest(path), "size": path.stat().st_size})
+    baseline = read("publication/v09/fixed-assets.json")
+    require(baseline["sourceSha"] == SOURCE and baseline["signedManifestSha256"] == MANIFEST
+            and sorted(entries, key=lambda item: item["file"]) == baseline["assets"], "The original 45 accepted fixed asset bytes must not change")
+    supplement = w81_supplement(output=OUT)
+    review_assets = []
+    for path, name in supplement.pop("assets"):
+        os.link(path, assets / name)
+        review_assets.append({"file": name, "sha256": digest(path), "size": path.stat().st_size})
     selection = {"schemaVersion": 1, "version": "v0.9", "sourceSha": SOURCE, "signedManifestSha256": MANIFEST,
         "trustedRootSha256": TRUST, "officialSignedArtifactZipSha256": SIGNED_ZIP, "w80PacketSha256": w80_hash or None,
         "publisherCommit": publisher, "publisherBranch": BRANCH, "publisherBranchProtectedAtPreparation": protected,
         "releaseReady": False, "published": False, "image": IMAGE, "indexDigest": "sha256:" + index_hash,
         "platforms": platforms, "assets": sorted(entries, key=lambda item: item["file"]), "privacy": privacy(),
+        "reviewEvidence": {"w81": supplement}, "reviewAssets": review_assets,
+        "fixedAssetBaselineSha256": digest(Path("publication/v09/fixed-assets.json")),
         "transportTooling": read(".github/release/publication-tooling.json"),
         "conditionalReadiness": {"workflow": ".github/workflows/v09-release-readiness.yml", "sourceSha": SOURCE,
             "signedManifestSha256": MANIFEST, "w80PacketSha256": w80_hash or None, "requiresSuccessfulOwnerMainDispatch": True,
@@ -375,6 +439,7 @@ def attestation_matches(text, expected, kind, digest_value):
 
 
 def registry_signatures(selection, decision, expected_hash, approval):
+    guard_unused_proof_tags(tag_snapshot(IMAGE), selection)
     identity = selection["registrySigning"]["identity"]
     certificate = ["--certificate-identity", identity, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com",
         "--certificate-github-workflow-repository", REPOSITORY, "--certificate-github-workflow-name", "v09-publication",
@@ -387,8 +452,7 @@ def registry_signatures(selection, decision, expected_hash, approval):
     for name, target in targets.items():
         authority(selection, expected_hash, approval, write_intent=True)
         ref = IMAGE + "@" + target
-        run("cosign", "sign", "--yes", "--new-bundle-format=true", "--oidc-provider=github-actions",
-            "--registry-referrers-mode=oci-1-1", *annotations, ref)
+        run("cosign", "sign", "--yes", "--new-bundle-format=true", "--oidc-provider=github-actions", *annotations, ref)
         path = OUT / ("registry-signature-" + name + ".json")
         path.write_text(run("cosign", "verify", *certificate, *annotations, ref) + "\n")
         proofs.append({"file": path.name, "sha256": digest(path), "subjectDigest": target, "publisherIdentity": identity})
@@ -412,6 +476,7 @@ def registry_signatures(selection, decision, expected_hash, approval):
 def admission():
     selection = read(OUT / "publication-selection.json")
     authority(selection, os.environ.get("SELECTION_SHA256", ""), os.environ.get("OWNER_APPROVAL", ""), write_intent=True)
+    require(w81_supplement()["indexSha256"] == selection["reviewEvidence"]["w81"]["indexSha256"], "W81 supplement differs from owner-reviewed selection")
     readiness(os.environ.get("READINESS_RUN_ID", ""), selection)
     print("Exact conditional owner decision, protected publisher and actual matching main readiness admitted; no write performed")
 
@@ -421,7 +486,7 @@ def publish():
     expected, approval = os.environ.get("SELECTION_SHA256", ""), os.environ.get("OWNER_APPROVAL", "")
     authority(selection, expected, approval, write_intent=True)
     require(selection["sourceSha"] == SOURCE and selection["signedManifestSha256"] == MANIFEST and selection["indexDigest"].startswith("sha256:"), "Selection source differs")
-    for item in selection["assets"]:
+    for item in selection["assets"] + selection["reviewAssets"]:
         require(digest(OUT / "assets" / item["file"]) == item["sha256"], "Approved asset changed")
     decision = readiness(os.environ.get("READINESS_RUN_ID", ""), selection)
     assets = OUT / "assets"
@@ -442,15 +507,14 @@ def publish():
     require(token, "Missing scoped registry credential")
     subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"], "--password-stdin"], input=token, text=True, check=True)
     tags_before = tag_snapshot(IMAGE)
+    guard_unused_proof_tags(tags_before, selection)
     authority(selection, expected, approval, write_intent=True)
     skopeo("copy", "--all", "--preserve-digests", "oci:/work/" + str(OUT / "oci") + ":release", "docker://" + IMAGE + "@" + selection["indexDigest"])
     verify_transport(selection, IMAGE)
     preserve_tags(tags_before, tag_snapshot(IMAGE))
     require(privacy() == selection["privacy"], "Registry privacy changed")
     signatures = registry_signatures(selection, decision, expected, approval)
-    proof_tags = {"sha256-" + value.removeprefix("sha256:") + suffix
-                  for value in [selection["indexDigest"], *[item["manifestDigest"] for item in selection["platforms"].values()]]
-                  for suffix in ("", ".sig", ".att")}
+    proof_tags = proof_tag_names(selection)
     preserve_tags(tags_before, tag_snapshot(IMAGE), proof_tags)
     require(privacy() == selection["privacy"], "Registry privacy changed during signature publication")
     authority(selection, expected, approval, write_intent=True)

@@ -63,7 +63,12 @@ Publication writes the two-platform index by digest with `--preserve-digests`,
 reads all remote configs/layers back, and checks registry tags/privacy unchanged.
 No version/latest/sha image tag is written. Tag `v0.9` is created only at accepted
 source; existing foreign/ambiguous tags or release assets fail without overwrite.
-A matching release can resume idempotently. New release metadata starts as a
+A matching release's immutable tags/assets retain non-clobber checks. A pre-existing
+reserved proof-discovery tag, including a bare `sha256-<digest>` runtime image or
+previous metadata, is never inferred to be owned: publication fails **before any
+registry mutation**. Automatic resume after partial proof writes is blocked if
+such reserved tags remain; explicit verification/cleanup and a separate reviewed
+decision are required. New release metadata starts as a
 draft; every uploaded asset is independently downloaded and hashed before the
 draft is published. External writes are never attempted by read-only preparation.
 
@@ -83,3 +88,21 @@ The pinned upstream [sign](https://github.com/sigstore/cosign/blob/v3.0.6/doc/co
 [verify](https://github.com/sigstore/cosign/blob/v3.0.6/doc/cosign_verify.md) flag
 contracts define this narrowly authorized registry-signing operation. The existing
 manifest-signing authorization alone does not permit these new writes.
+
+## Frozen supplementary W81 review evidence
+
+The original 45 fixed asset entries must remain byte-identical to the successful
+preparation baseline in `fixed-assets.json`; W80 packet `5e865...` is unchanged.
+The final curated W81 `w81-public/index.json` binds the same application source and
+signed manifest and inventories every public raw file by relative path/SHA256.
+Missing, changed, symlinked or unlisted evidence fails closed. A deterministic
+W81 ZIP and exact index JSON are additional `reviewAssets`; their hashes are bound
+in `reviewEvidence.w81` and the owner-reviewed selection. They do not alter any
+product package or pretend to change the immutable main readiness schema.
+
+The bounded `local-proof` job tests the reserved runtime-image collision and
+Cosign3.0.6 sign/attest/verify with an ephemeral local key in a loopback-only
+namespace. No OIDC, tlog upload, external registry or product image is involved.
+Its private-infrastructure/tlog opt-outs are confined to that fixture; production
+verification retains all issuer/identity/commit/transparency constraints. Heavy
+mirror preparation runs only on manual dispatch, after final review/protection.

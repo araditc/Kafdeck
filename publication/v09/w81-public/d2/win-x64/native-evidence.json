@@ -1,0 +1,30 @@
+{
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "runtime": "Microsoft Windows 10.0.26100",
+  "rid": "win-x64",
+  "identity": "Keycloak 26.8.1 HTTPS private_key_jwt",
+  "components": {
+    "api-ui": {
+      "authenticatedOperation": true,
+      "started": true,
+      "sha256": "9dd556375a96dd7f8f7315fc02c83f87a30ee2a500d6b9a4199bd47a5e517f8f",
+      "archive": "kafdeck-api-ui-win-x64.tar.gz"
+    },
+    "cli": {
+      "authenticatedOperation": true,
+      "started": true,
+      "sha256": "8cc5f139c449042d5745e848a2b02e097bb5f66b67cf8c2152b9f5474da07260",
+      "archive": "kafdeck-cli-win-x64.tar.gz"
+    },
+    "mcp": {
+      "authenticatedOperation": true,
+      "started": true,
+      "sha256": "27359a39506948cf6febb5cfddda118f40f902178f2d56134f57aecbf3bde714",
+      "archive": "kafdeck-mcp-win-x64.tar.gz"
+    }
+  },
+  "installedFromArchives": true,
+  "schemaVersion": 1,
+  "scope": "native archive install, API/frontend startup and service-authenticated reads; effect and restore acceptance is separate",
+  "version": "0.9.0"
+}

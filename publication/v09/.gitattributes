@@ -1,2 +1,3 @@
 # Preserve the reviewed packet/evidence bytes, including historical CRLF files.
 w80-public/** -text whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
+w81-public/** -text whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol

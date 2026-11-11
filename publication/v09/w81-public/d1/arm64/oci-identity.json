@@ -1,0 +1,23 @@
+{
+  "architecture": "arm64",
+  "archiveSha256": "7b2b5e6304a224ec2b198c70c11c03aa96cf9ce5bb2a2bc0ca6088fb4953fbd3",
+  "capabilities": "ALL dropped",
+  "completedUtc": "2026-11-11T09:47:52.526178+00:00",
+  "configDigest": "sha256:2128b2c2c1c08187fd4f0c3f64fdfa6e7847a1b8ed531967a655bbe12bc8b216",
+  "daemonImageId": "sha256:2128b2c2c1c08187fd4f0c3f64fdfa6e7847a1b8ed531967a655bbe12bc8b216",
+  "driverFiles": {
+    "deploy/dev/oci-d1/journey.py": "9ecce28d4b1414a3b9e635009f1acc3ebb770674cd732975b5650752b158740c",
+    "deploy/dev/oci-d1/lifecycle.py": "d4dbedb8002c9f0070f34908611d5036c931b8952467099009cd6af7d86bff63",
+    "deploy/dev/oci-d1/run.sh": "30e481c9069afe4a35ce81421523377ee95e9064006aacfc69438dea4c777f96",
+    "deploy/dev/oci-d1/stage.py": "ef83b4cc0e786269cec4a070071d1a3323c33607649c6eda74f5b8c16f14e391"
+  },
+  "driverSha": "31cfa25ce6178843230073a12ff4939a1e02fdc7",
+  "emulated": false,
+  "machine": "aarch64",
+  "manifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "network": "container network namespace held by network-none anchor",
+  "readOnlyRoot": true,
+  "scope": "actual signed OCI API runtime authenticated Keycloak/Kafka fixture reads, restart and SQLite backup/restore; no product rebuild or browser/business approval claim",
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "uid": 1654
+}

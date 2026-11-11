@@ -1,0 +1,6 @@
+{
+  "currentVendorRootSemanticallyEqual": true,
+  "currentVendorRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724",
+  "ownerReviewedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724",
+  "trustAuthority": "independent owner-reviewed historical root pin; current vendor response is observational, not substituted"
+}
