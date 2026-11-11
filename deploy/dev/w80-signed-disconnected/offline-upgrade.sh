@@ -10,4 +10,8 @@ ip -o link show | grep -Eq '^[0-9]+: lo:'
 bash "$root/scripts/release/verify-v09-signature.sh" "$private/signed" \
   01c7553425fbc61ba4a7a21918265c562086ba02 \
   0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724
-python3 -B "$root/deploy/dev/w80-signed-disconnected/upgrade.py" "$private" "$evidence"
+if [[ -n "${3:-}" ]]; then
+  python3 -B "$root/deploy/dev/w80-signed-disconnected/upgrade.py" "$private" "$evidence" "$3"
+else
+  python3 -B "$root/deploy/dev/w80-signed-disconnected/upgrade.py" "$private" "$evidence"
+fi

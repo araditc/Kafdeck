@@ -1,6 +1,7 @@
 """Actual published v0.8 -> signed v0.9 SQLite and PostgreSQL, no external network."""
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -15,6 +16,8 @@ from v09_offline_install import http_probe, isolated_network
 from v09_prepublication import digest, read, require, write
 
 private, evidence = Path(sys.argv[1]), Path(sys.argv[2])
+pg_rollback_only = len(sys.argv) == 4 and sys.argv[3] == "postgres-rollback"
+require(len(sys.argv) == 3 or pg_rollback_only, "Unknown bounded offline-upgrade scenario")
 isolated_network()
 environment = {**os.environ, "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
 dotnet = private / "old-dotnet/dotnet"
@@ -85,7 +88,7 @@ def assert_states(expected, actual):
 
 try:
     providers = {}
-    for provider in ("sqlite", "postgres"):
+    for provider in (("postgres",) if pg_rollback_only else ("sqlite", "postgres")):
         location = private / "old-sqlite.db" if provider == "sqlite" else connection
         generation = str(uuid.uuid4())
         old = start(provider, location, False, generation, "released-open")
@@ -97,6 +100,17 @@ try:
         backup = private / "verified-v08-backup.db"
         if provider == "sqlite":
             fixture("backup", provider, location, backup)
+        elif pg_rollback_only:
+            container = os.environ.get("PG_CONTAINER", "")
+            require(re.fullmatch(r"[0-9a-f]{64}", container), "Require the exact owned PostgreSQL fixture container")
+            backup = private / "verified-v08-postgres.dump"
+            with backup.open("wb") as dump:
+                subprocess.run(["docker", "exec", container, "pg_dump", "-U", "offline_fixture", "-d", "offline_fixture", "--format=custom"],
+                               stdout=dump, check=True, timeout=60)
+            subprocess.run(["docker", "cp", str(backup), container + ":/tmp/pre-upgrade-v08.dump"], check=True, timeout=60)
+            listing = subprocess.run(["docker", "exec", container, "pg_restore", "--list", "/tmp/pre-upgrade-v08.dump"],
+                                     capture_output=True, text=True, check=True, timeout=30)
+            require("kafdeck_mutation_operations" in listing.stdout, "Custom preupgrade backup does not list the actual legacy table")
         candidate = start(provider, location, True, generation, "signed-upgrade")
         stop(candidate)
         upgraded = fixture("observe", provider, location)
@@ -117,16 +131,32 @@ try:
             assert_states(original, restored_data)
             require(original["Tables"] == restored_data["Tables"], "Verified v0.8 restore changed schema")
             rollback = True
+        elif pg_rollback_only:
+            subprocess.run(["docker", "exec", container, "createdb", "-U", "offline_fixture", "offline_rollback"], check=True, timeout=30)
+            subprocess.run(["docker", "exec", container, "pg_restore", "--exit-on-error", "--single-transaction", "-U", "offline_fixture",
+                            "-d", "offline_rollback", "/tmp/pre-upgrade-v08.dump"], check=True, timeout=60)
+            restored = private / "restored-postgres-connection.txt"
+            restored.write_text(connection.read_text().replace("Database=offline_fixture;", "Database=offline_rollback;"))
+            old = start(provider, restored, False, generation, "released-restored-preupgrade-backup")
+            stop(old)
+            restored_data = fixture("observe", provider, restored)
+            assert_states(original, restored_data)
+            require(original["Tables"] == restored_data["Tables"], "Official old PostgreSQL restore changed the preupgrade schema")
+            rollback = True
         providers[provider] = {"officialReleasedV08OpenedActualDatabase": True, "threeLegacySnapshotsPreserved": True,
             "legacySnapshotHashes": original["States"], "signedCandidateMigratedSchema": True, "signedCandidateReopened": True,
             "schemaStableOnReentry": True, "verifiedPreUpgradeBackupRollback": rollback,
+            "verifiedPreUpgradeBackupSha256": digest(backup) if rollback else None,
             "actualPhysicalPitrClaimed": False, "interruptionClaimed": False, "syntheticApprovalFixture": True}
     isolated_network()
-    write(evidence / "offline-upgrade.json", {"schemaVersion": 1, "applicationSourceSha": read(evidence / "signed-input.json")["applicationSourceSha"],
+    write(evidence / ("offline-pg-rollback.json" if pg_rollback_only else "offline-upgrade.json"), {"schemaVersion": 1, "applicationSourceSha": read(evidence / "signed-input.json")["applicationSourceSha"],
         "signedManifestSha256": read(evidence / "signed-input.json")["signedManifestSha256"], "baseline": read(evidence / "upgrade-input.json"),
         "namespaceInterfaces": ["lo"], "ipv4DefaultRoute": False, "ipv6DefaultRoute": False, "providers": providers,
         "actualOfficialV08ToSignedV09OfflineUpgrade": True, "productMutationDispatched": False,
-        "scope": "actual official published image binaries open v0.8 data and final signed native app migrates/reopens both providers inside network-none namespace; synthetic pending/approved/unknown migration fixtures; SQLite verified backup rollback; physical PITR/fencing/interruption and authenticated journey are separate proofs"})
+        "providerSelection": "postgres-preupgrade-backup-rollback-only" if pg_rollback_only else "sqlite-and-postgres",
+        "postgresVerifiedPreUpgradeCustomDumpRestoreToSeparateDatabase": pg_rollback_only,
+        "scope": ("actual official v0.8 PostgreSQL database and verified preupgrade custom dump; signed candidate upgrade; dump restored into separate database and opened by official old binary with exact schema and all three snapshot hashes; no SQLite/auth/PITR rerun"
+                  if pg_rollback_only else "actual official published image binaries open v0.8 data and final signed native app migrates/reopens both providers inside network-none namespace; synthetic pending/approved/unknown migration fixtures; SQLite verified backup rollback; physical PITR/fencing/interruption and authenticated journey are separate proofs")})
 finally:
     for process in reversed(owned):
         stop(process)
