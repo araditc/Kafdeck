@@ -1,0 +1,62 @@
+name: v09-native-distribution
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/v09-native-distribution.yml'
+      - 'scripts/release/test-v09-native.ps1'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/v09-native-distribution.yml'
+      - 'scripts/release/test-v09-native.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: native (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {rid: win-x64, runner: windows-2025}
+          - {rid: linux-x64, runner: ubuntu-24.04}
+          - {rid: linux-arm64, runner: ubuntu-24.04-arm}
+          - {rid: osx-x64, runner: macos-15-intel}
+          - {rid: osx-arm64, runner: macos-15}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.403'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.2'
+      - name: Build the packaged frontend
+        shell: pwsh
+        run: |
+          npm --prefix src/frontend ci
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm --prefix src/frontend run build
+          exit $LASTEXITCODE
+      - name: Install archives and exercise native API, CLI and MCP
+        shell: pwsh
+        env:
+          KAFDECK_NATIVE_RID: ${{ matrix.rid }}
+        run: ./scripts/release/test-v09-native.ps1 -Rid $env:KAFDECK_NATIVE_RID
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: v09-native-${{ matrix.rid }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            artifacts/native/${{ matrix.rid }}/native-evidence.json
+            artifacts/native/${{ matrix.rid }}/*.tar.gz
+          compression-level: 0
+          if-no-files-found: error

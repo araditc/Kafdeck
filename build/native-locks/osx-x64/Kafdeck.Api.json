@@ -1,0 +1,334 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.AspNetCore.Authentication.OpenIdConnect": {
+        "type": "Direct",
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "dlyqhtVS6t6IeVvpxV8RuTQzrAFedkKbDoIbKbwjSmTimR4X/OxKvt+jwKLk8Qw/lqvoSQUl8iHLCO9CUCCH8A==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.19.2"
+        }
+      },
+      "OpenTelemetry.Exporter.OpenTelemetryProtocol": {
+        "type": "Direct",
+        "requested": "[1.20.0, )",
+        "resolved": "1.20.0",
+        "contentHash": "lr18RekIxV5MUP/gWnDOkYmdm4zvE0q8OQVYKrQcN0xqOCqPcuIHl2uJbe8A3CZujIAy90hhfBMvKNRV/hgBPQ==",
+        "dependencies": {
+          "OpenTelemetry": "1.20.0"
+        }
+      },
+      "OpenTelemetry.Extensions.Hosting": {
+        "type": "Direct",
+        "requested": "[1.20.0, )",
+        "resolved": "1.20.0",
+        "contentHash": "UJXCmt0jSUKQWIyMCzDY9fqNymvFgnMWrl0m8Z/M7ez1wpEy6bshXLTZxXGIoA/JjuhwPU71PyhIBWYDXI9+cw==",
+        "dependencies": {
+          "OpenTelemetry": "1.20.0"
+        }
+      },
+      "librdkafka.redist": {
+        "type": "Transitive",
+        "resolved": "2.16.0",
+        "contentHash": "cr/wX7+G/rqOwN88Imxxco+OMGG6XslgSFh9xMb3utHY7/iWfssD2AY9MF7rsGdGm+mGuRw+1IQ+Zslris9IoQ=="
+      },
+      "Microsoft.Bcl.Cryptography": {
+        "type": "Transitive",
+        "resolved": "10.0.2",
+        "contentHash": "LG9Yll3B5aNpxv0+D47g6LiOiKBIlodhcHdQwcYzo8VeexFLGqx5ymetmA2aBRyo9cCcWsQWrFsdbsr8LvmWDw=="
+      },
+      "Microsoft.Data.Sqlite.Core": {
+        "type": "Transitive",
+        "resolved": "10.0.13",
+        "contentHash": "Gge8XsSCOwcbkbdmt2UDAe6kIv9Q0vA6yb3wsTStjjexaMFLTWfc/1gH4kbhJ+zWiXRTRA4lG2sOQNVfir204w==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.13"
+        }
+      },
+      "Microsoft.IdentityModel.Abstractions": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "HJbo/lnSfNHUfphPRT910poQc4T2/9+8svFLvzuaYHGAOJ2Tu+oEDqpX0BVP3BJ4OuUM1kylEKyaiX2fCAK3Cw=="
+      },
+      "Microsoft.IdentityModel.JsonWebTokens": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "ui3fuBT4fs8kdKfBthI4NzLYIBIneEVS8UrL1JVBzAn80UiKmngBBi0BEByE7n/9c+EElcfFlCMFFTqpkBSLNA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Logging": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "r5YLDIxGOnkVJHrqXv/iD1FM1CgGrQOdriXuvuWvTPmKbnGANhEysq9XKmN6IHjf2a+9bAGEpnoRBsAQlvJU5w==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Abstractions": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "sGxSsSrZXNmca6D+jHH2rVRyo2nNRd/g4H9CFbPmLLq0xgoH1U0orLWE5minfijw7+zq49tBs7txenbfAErRoQ==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols.OpenIdConnect": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "1XOcyY36cVymzE3qKdzKaUEZ4Pzt7ZpSa14JZoPPK1NLFUkQDs85TCqpV6XDo0YjFXj6nVK00AfOHppjghjhtw==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols": "8.19.2",
+          "System.IdentityModel.Tokens.Jwt": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Tokens": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "GtPC1S02uH1gOO4fQ+zRysIicKmEXaYFP8PIkdJYXqMyruYhopre4ozVHp0XiDSA0+GJvOZH9prxCPvgBMg4Ww==",
+        "dependencies": {
+          "Microsoft.Bcl.Cryptography": "10.0.2",
+          "Microsoft.IdentityModel.Logging": "8.19.2"
+        }
+      },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
+      },
+      "OpenTelemetry": {
+        "type": "Transitive",
+        "resolved": "1.20.0",
+        "contentHash": "aV9S8ovlBpR+g3PaSlkTjN7jOfJly4+bmfRImn3G+moflKjZV2bDw41U+/pMkHUjn7vcZ06yvwKMbHASMUeR/Q==",
+        "dependencies": {
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "1.20.0"
+        }
+      },
+      "OpenTelemetry.Api": {
+        "type": "Transitive",
+        "resolved": "1.20.0",
+        "contentHash": "kLqqAdAF6q+mbS5Rp6YJ+hbGwbt+vQC8spJh3TpRGvZPGZK+DbEB0B/Fq4YqiMKkqsdShehJZfxfVjlzGb2B3Q=="
+      },
+      "OpenTelemetry.Api.ProviderBuilderExtensions": {
+        "type": "Transitive",
+        "resolved": "1.20.0",
+        "contentHash": "689zUHtj7zXYzMAO/TkI5S5/mqOS8n55DLrYZ2KAhQrCDKJDDmFHB9w8dKY7gmL6fihMdkt+k3mTqcqL3nInng==",
+        "dependencies": {
+          "OpenTelemetry.Api": "1.20.0"
+        }
+      },
+      "SQLitePCLRaw.bundle_e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "NlDixlC7uHmo+ojXRgkNvN0tQtVGpLDZ3x2OpgNj+G07VHh5cXSszFDrAiC4BpUiPwkcaeuQkMV9WQ123xVtmQ==",
+        "dependencies": {
+          "SQLitePCLRaw.lib.e_sqlite3": "2.1.13",
+          "SQLitePCLRaw.provider.e_sqlite3": "2.1.13"
+        }
+      },
+      "SQLitePCLRaw.core": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "2joofoinuHBFs0nMX3nKuXgxpXryRkCOdM2Ua6HBqQLLy6IW+5f28ZI+HAvMyF8vG7XfNz/lwfBfE6V4juru8Q=="
+      },
+      "SQLitePCLRaw.lib.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "D2UAuiGxFYBqeRXjjjGgvJ5UQifzn6wefmSqeKU7XcNGKLbJRP6X7kcPZ6opOBJGdCIlgbSxTvDpBbLvsN594A=="
+      },
+      "SQLitePCLRaw.provider.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "ZU60dSqoSNRe49KcQDUmOVgdRtjITOssVXFtiISs+zJXDI4D2Sndwpn2NOtzDQNPu0ZAvpoLPQ+GLKv6iEZn8Q==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.13"
+        }
+      },
+      "System.CodeDom": {
+        "type": "Transitive",
+        "resolved": "10.0.10",
+        "contentHash": "lru5igKxs4OgWKfMeOpMAYpfB1tNSSXHk2zyiSDO/h0u8RVAhN6KqW9d3ANybDB+ePIHg6HM/NlE8HlpOk4k5A=="
+      },
+      "System.IdentityModel.Tokens.Jwt": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "gqhDC/icByKEutygpr+OFgAmjwTVowyzFjWB8K0q1ww8uFj5a1BQNL+QvijUl9uhq4p8OdDwcAIrjVC+eC9FVA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.JsonWebTokens": "8.19.2",
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      },
+      "kafdeck.core": {
+        "type": "Project"
+      },
+      "kafdeck.infrastructure.configuration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )"
+        }
+      },
+      "kafdeck.infrastructure.ecosystem": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.infrastructure.kafka": {
+        "type": "Project",
+        "dependencies": {
+          "Confluent.Kafka": "[2.16.0, )",
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.infrastructure.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Modules.Administration": "[0.9.0, )",
+          "Kafdeck.Modules.Connect": "[0.9.0, )",
+          "Microsoft.Data.Sqlite": "[10.0.13, )",
+          "Npgsql": "[10.0.3, )"
+        }
+      },
+      "kafdeck.infrastructure.schemaregistry": {
+        "type": "Project",
+        "dependencies": {
+          "Apache.Avro": "[1.12.2, )",
+          "Google.Protobuf": "[3.36.2, )",
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.infrastructure.security": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.infrastructure.serde": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.administration": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.clusters": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.connect": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.consumers": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.generator": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )",
+          "Kafdeck.Modules.Records": "[0.9.0, )",
+          "Kafdeck.Modules.Schemas": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.records": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.schemas": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "kafdeck.modules.topics": {
+        "type": "Project",
+        "dependencies": {
+          "Kafdeck.Core": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[0.9.0, )"
+        }
+      },
+      "Apache.Avro": {
+        "type": "CentralTransitive",
+        "requested": "[1.12.2, )",
+        "resolved": "1.12.2",
+        "contentHash": "/QiCsVWTCCv1Gvx1JsXwEsgQPBtY/+Ncj0UL3EzVjlgU/SFRT0p86w4d6QOr2s1+uFmLLfqzMCiDU36WrqPoGQ==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.4",
+          "System.CodeDom": "10.0.10"
+        }
+      },
+      "Confluent.Kafka": {
+        "type": "CentralTransitive",
+        "requested": "[2.16.0, )",
+        "resolved": "2.16.0",
+        "contentHash": "BREXaSYr9BrXpaJ7S4TTSIhI6q5amIjxoxJGbvKLQjAG/08hs223UDt60j42JdCgtD+aFYuduG/oP/tHqNJt8w==",
+        "dependencies": {
+          "librdkafka.redist": "2.16.0"
+        }
+      },
+      "Google.Protobuf": {
+        "type": "CentralTransitive",
+        "requested": "[3.36.2, )",
+        "resolved": "3.36.2",
+        "contentHash": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ=="
+      },
+      "Microsoft.Data.Sqlite": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "w37nz3WFmDtRfXxWEwIXX2OgqDRiwhD1JGbFwfpFCF8GkCrV/yO6Y2JF5058J2RGoI2sCcdn02wrk0yEcekWcw==",
+        "dependencies": {
+          "Microsoft.Data.Sqlite.Core": "10.0.13",
+          "SQLitePCLRaw.bundle_e_sqlite3": "2.1.13",
+          "SQLitePCLRaw.core": "2.1.13"
+        }
+      },
+      "Npgsql": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.3, )",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
+      }
+    },
+    "net10.0/osx-x64": {
+      "librdkafka.redist": {
+        "type": "Transitive",
+        "resolved": "2.16.0",
+        "contentHash": "cr/wX7+G/rqOwN88Imxxco+OMGG6XslgSFh9xMb3utHY7/iWfssD2AY9MF7rsGdGm+mGuRw+1IQ+Zslris9IoQ=="
+      },
+      "SQLitePCLRaw.lib.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "D2UAuiGxFYBqeRXjjjGgvJ5UQifzn6wefmSqeKU7XcNGKLbJRP6X7kcPZ6opOBJGdCIlgbSxTvDpBbLvsN594A=="
+      }
+    }
+  }
+}
