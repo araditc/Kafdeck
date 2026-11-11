@@ -4,6 +4,12 @@ on:
   push:
     branches: [codex/w81-helm-auth-lifecycle]
   workflow_dispatch:
+    inputs:
+      provider:
+        type: choice
+        options: [Sqlite, PostgreSql]
+        default: Sqlite
+        required: true
 
 permissions:
   contents: read
@@ -14,6 +20,8 @@ jobs:
   signed-helm-auth:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      W81_PROVIDER: ${{ inputs.provider || 'Sqlite' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,7 +68,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: w81-signed-helm-auth-01c7553-${{ github.run_id }}
+          name: w81-signed-helm-auth-${{ inputs.provider || 'Sqlite' }}-01c7553-${{ github.run_id }}
           path: |
             artifacts/w81-signed-helm/*.json
             artifacts/w81-signed-helm/*.ndjson

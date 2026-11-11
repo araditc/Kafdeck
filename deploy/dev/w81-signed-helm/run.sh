@@ -4,6 +4,8 @@ private="$(realpath "$1")"
 evidence="$(realpath "$2")"
 root="$(pwd)"
 source_sha=01c7553425fbc61ba4a7a21918265c562086ba02
+provider="${W81_PROVIDER:-Sqlite}"
+[[ "$provider" == Sqlite || "$provider" == PostgreSql ]]
 scratch="$private/helm"
 mkdir -m700 "$scratch"
 cluster="w81-auth-${RANDOM}-$$"
@@ -93,10 +95,12 @@ spec:
   resources: {requests: {storage: 128Mi}}
 EOF
 kubectl -n "$namespace" create secret generic fixture-tls --from-file="tls.pfx=$private/app.p12" --from-file="tls-password=$private/identity/https-password.txt"
-kubectl -n "$namespace" create secret generic fixture-credentials --from-file="ca.pem=$private/ca.pem" --from-file="material-digest=$private/material-digest"
+credential_args=(--from-file="ca.pem=$private/ca.pem" --from-file="material-digest=$private/material-digest")
+if [[ "$provider" == PostgreSql ]]; then credential_args+=(--from-file="postgres-connection=$private/postgres-connection"); fi
+kubectl -n "$namespace" create secret generic fixture-credentials "${credential_args[@]}"
 kubectl -n "$namespace" create configmap fixture-config --from-file="appsettings.Production.json=$private/settings.json"
-jq -n --arg repo "$registry_alias/kafdeck" --arg digest "$manifest_digest" --arg issuer "$issuer" --arg client "$client_id" --arg host "$host" \
-  '{image:{repository:$repo,digest:$digest},publicHost:"localhost",operatorConfigMap:"fixture-config",credentialsSecret:"fixture-credentials",tlsSecret:"fixture-tls",oidc:{issuer:$issuer,clientId:$client},kafka:{clusterId:"fixture",bootstrapServers:[($host+":19092")],protocol:"Ssl"},persistence:{provider:"Sqlite",existingClaim:"retained-state"},network:{ingressNamespaces:["w81-auth"],egress:[{cidr:($host+"/32"),port:18444},{cidr:($host+"/32"),port:19092}]}}' > "$scratch/values.json"
+jq -n --arg repo "$registry_alias/kafdeck" --arg digest "$manifest_digest" --arg issuer "$issuer" --arg client "$client_id" --arg host "$host" --arg provider "$provider" \
+  '{image:{repository:$repo,digest:$digest},publicHost:"localhost",operatorConfigMap:"fixture-config",credentialsSecret:"fixture-credentials",tlsSecret:"fixture-tls",oidc:{issuer:$issuer,clientId:$client},kafka:{clusterId:"fixture",bootstrapServers:[($host+":19092")],protocol:"Ssl"},persistence:{provider:$provider,existingClaim:"retained-state"},network:{ingressNamespaces:["w81-auth"],egress:[{cidr:($host+"/32"),port:18444},{cidr:($host+"/32"),port:19092},{cidr:($host+"/32"),port:15440}]}}' > "$scratch/values.json"
 mkdir "$private/state-probe"
 cp deploy/dev/w81-signed-helm/HelmState.cs "$private/state-probe/Program.cs"
 cat > "$private/state-probe/HelmState.csproj" <<EOF
@@ -120,8 +124,13 @@ resume() {
 }
 snapshot() {
   fence
-  docker cp "$node:$state/mutations.sqlite3" "$private/$1.sqlite3"
-  state_probe observe "$private/$1.sqlite3" > "$evidence/state-$1.json"
+  if [[ "$provider" == PostgreSql ]]; then
+    python3 -B deploy/dev/w81-signed-helm/postgres.py dump "$private" "$1"
+    state_probe observe "$private/host.pgconn" > "$evidence/state-$1.json"
+  else
+    docker cp "$node:$state/mutations.sqlite3" "$private/$1.sqlite3"
+    state_probe observe "$private/$1.sqlite3" > "$evidence/state-$1.json"
+  fi
   resume
 }
 probe() {
@@ -148,6 +157,16 @@ helm upgrade "$release" "$chart" "${helm_args[@]}" --set resources.requests.memo
 probe upgrade
 snapshot upgraded
 cmp "$evidence/state-initial.json" "$evidence/state-upgraded.json"
+if [[ "$provider" == PostgreSql ]]; then
+  fence
+  python3 -B deploy/dev/w81-signed-helm/postgres.py failover "$private"
+  cp "$private/pg/replication-evidence.json" "$evidence/pg-replication.json"
+  cp "$private/pg/old-primary-fence.json" "$evidence/pg-primary-fence.json"
+  resume
+  probe physical-db-failover
+  snapshot failover
+  cmp "$evidence/state-initial.json" "$evidence/state-failover.json"
+fi
 set +e
 helm upgrade "$release" "$chart" "${helm_args[@]}" --atomic --timeout 45s --set "image.digest=sha256:$(printf '1%.0s' {1..64})" > "$private/failed-rollout.log" 2>&1
 failed_rollout=$?
@@ -165,13 +184,21 @@ probe reinstall
 snapshot reinstalled
 cmp "$evidence/state-initial.json" "$evidence/state-reinstalled.json"
 fence
-cp "$private/initial.sqlite3" "$private/restored.sqlite3"
-restore_hash="$(sha256sum "$private/restored.sqlite3" | cut -d' ' -f1)"
+if [[ "$provider" == PostgreSql ]]; then
+  python3 -B deploy/dev/w81-signed-helm/postgres.py restore "$private"
+  restore_hash="$(sha256sum "$private/initial.dump" | cut -d' ' -f1)"
+  kubectl -n "$namespace" create secret generic fixture-credentials "${credential_args[@]}" --dry-run=client -o yaml | kubectl apply -f -
+else
+  cp "$private/initial.sqlite3" "$private/restored.sqlite3"
+  restore_hash="$(sha256sum "$private/restored.sqlite3" | cut -d' ' -f1)"
+fi
 jq -n --arg claim "$claim_uid" --arg restore "$restore_hash" '{apiPods:0,fenced:true,retainedClaimUid:$claim,restoredDatabaseSha256:$restore}' > "$evidence/restore-fence.json"
 fence_hash="$(sha256sum "$evidence/restore-fence.json" | cut -d' ' -f1)"
-docker exec "$node" rm -f "$state/mutations.sqlite3" "$state/mutations.sqlite3-wal" "$state/mutations.sqlite3-shm"
-docker cp "$private/restored.sqlite3" "$node:$state/mutations.sqlite3"
-docker exec "$node" chown 1654:1654 "$state/mutations.sqlite3"
+if [[ "$provider" == Sqlite ]]; then
+  docker exec "$node" rm -f "$state/mutations.sqlite3" "$state/mutations.sqlite3-wal" "$state/mutations.sqlite3-shm"
+  docker cp "$private/restored.sqlite3" "$node:$state/mutations.sqlite3"
+  docker exec "$node" chown 1654:1654 "$state/mutations.sqlite3"
+fi
 next_generation="$(cat /proc/sys/kernel/random/uuid)"
 jq --arg next "$next_generation" '."Kafdeck:Governance:DeploymentGeneration"=$next' "$private/settings.json" > "$private/restored-settings.json"
 kubectl -n "$namespace" create configmap fixture-config --from-file="appsettings.Production.json=$private/restored-settings.json" --dry-run=client -o yaml | kubectl apply -f -
@@ -180,15 +207,20 @@ if kubectl -n "$namespace" rollout status "deployment/$workload" --timeout=45s; 
   probe restored-unadmitted
 else
   kubectl -n "$namespace" logs "deployment/$workload" > "$private/unadmitted.log" 2>&1 || true
-  grep -q 'Governance deployment generation is not admitted' "$private/unadmitted.log"
-  printf '%s\n' '{"phase":"restored-unadmitted","httpReady":false,"governanceGenerationExceptionObserved":true}' >> "$evidence/journeys.ndjson"
+  grep -Eq 'Governance deployment generation is not admitted|read-only transaction|25006' "$private/unadmitted.log"
+  printf '%s\n' '{"phase":"restored-unadmitted","httpReady":false,"restoreQuarantineObserved":true}' >> "$evidence/journeys.ndjson"
 fi
 fence
-docker cp "$node:$state/mutations.sqlite3" "$private/quarantined.sqlite3"
-state_probe admit "$private/quarantined.sqlite3" "$generation" "$next_generation" "$fence_hash" "$restore_hash" > "$evidence/state-admitted.json"
-docker exec "$node" rm -f "$state/mutations.sqlite3" "$state/mutations.sqlite3-wal" "$state/mutations.sqlite3-shm"
-docker cp "$private/quarantined.sqlite3" "$node:$state/mutations.sqlite3"
-docker exec "$node" chown 1654:1654 "$state/mutations.sqlite3"
+if [[ "$provider" == PostgreSql ]]; then
+  python3 -B deploy/dev/w81-signed-helm/postgres.py unquarantine "$private"
+  state_probe admit "$private/host.pgconn" "$generation" "$next_generation" "$fence_hash" "$restore_hash" > "$evidence/state-admitted.json"
+else
+  docker cp "$node:$state/mutations.sqlite3" "$private/quarantined.sqlite3"
+  state_probe admit "$private/quarantined.sqlite3" "$generation" "$next_generation" "$fence_hash" "$restore_hash" > "$evidence/state-admitted.json"
+  docker exec "$node" rm -f "$state/mutations.sqlite3" "$state/mutations.sqlite3-wal" "$state/mutations.sqlite3-shm"
+  docker cp "$private/quarantined.sqlite3" "$node:$state/mutations.sqlite3"
+  docker exec "$node" chown 1654:1654 "$state/mutations.sqlite3"
+fi
 resume
 probe restored-admitted
 set +e
@@ -198,9 +230,9 @@ set -e
 [[ "$two_app_rejected" != 0 ]]
 jq -n --arg source "$source_sha" --arg driver "$(git rev-parse HEAD)" --arg config "$config_digest" --arg manifest "$manifest_digest" \
  --arg chart "$(sha256sum "$chart"|cut -d' ' -f1)" --arg helm "$(helm version --short)" --arg kube "$(kubectl version -o json|jq -r .serverVersion.gitVersion)" \
- --arg restore "$restore_hash" --arg fence "$fence_hash" \
- '{applicationSourceSha:$source,driverSha:$driver,signedChartSha256:$chart,imageConfigDigest:$config,runtimeImageManifestDigest:$manifest,helm:$helm,kubernetes:$kube,profile:"SQLite single API replica",actualIdentityAndKafkaTls:true,exactFixtureRecordEachStage:true,install:true,upgrade:true,failedRolloutRollback:true,uninstallReinstall:true,appOwnedGenerationAndSchemaStateRetained:true,restore:true,unadmittedGenerationDenied:true,owningGateAdmittedOffline:true,fencedApiPods:0,restoreSha256:$restore,fenceSha256:$fence,multiApiHaClaimed:false,networkPolicyEnforcementClaimed:false,published:false}' > "$evidence/sqlite-helm-lifecycle.json"
+ --arg restore "$restore_hash" --arg fence "$fence_hash" --arg provider "$provider" \
+ '{applicationSourceSha:$source,driverSha:$driver,signedChartSha256:$chart,imageConfigDigest:$config,runtimeImageManifestDigest:$manifest,helm:$helm,kubernetes:$kube,provider:$provider,apiReplicas:1,persistenceExecutionMode:"Standalone",externalDatabaseHa:($provider=="PostgreSql"),actualIdentityAndKafkaTls:true,exactFixtureRecordEachStage:true,install:true,upgrade:true,failedRolloutRollback:true,uninstallReinstall:true,appOwnedGenerationAndSchemaStateRetained:true,restore:true,restoredGenerationQuarantined:true,owningGateAdmittedOffline:true,fencedApiPods:0,restoreSha256:$restore,fenceSha256:$fence,multiApiHaClaimed:false,networkPolicyEnforcementClaimed:false,published:false}' > "$evidence/helm-lifecycle.json"
 cleanup
 trap - EXIT
-jq '.+{ownedKindRegistryFixturesRemoved:true}' "$evidence/sqlite-helm-lifecycle.json" > "$evidence/final.tmp"
-mv "$evidence/final.tmp" "$evidence/sqlite-helm-lifecycle.json"
+jq '.+{ownedKindRegistryFixturesRemoved:true}' "$evidence/helm-lifecycle.json" > "$evidence/final.tmp"
+mv "$evidence/final.tmp" "$evidence/helm-lifecycle.json"

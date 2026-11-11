@@ -1,10 +1,12 @@
 """Reuse the bounded physical recovery laboratory behind a local TLS endpoint."""
 import json
+import os
 from pathlib import Path
 import select
 import socket
 import subprocess
 import threading
+import sys
 
 
 class PostgresFixture:
@@ -67,3 +69,36 @@ class PostgresFixture:
             self.server.close()
         if (self.root / "lab.json").exists():
             self.action("Stop")
+
+
+if __name__ == "__main__":
+    action, private = sys.argv[1], Path(sys.argv[2])
+    fixture = PostgresFixture(private, "")
+    if action == "failover":
+        fixture.action("Failover")
+    else:
+        lab = json.loads((private / "pg/lab.json").read_text())
+        port = lab[lab.get("activeEndpoint", "primary")]["port"]
+        env = {**os.environ, "PGPASSWORD": Path(lab["adminPasswordFile"]).read_text().strip(),
+               "PGSSLMODE": "verify-full", "PGSSLROOTCERT": str(private / "ca.pem")}
+        base = ["-h", "127.0.0.1", "-p", str(port), "-U", "g2_recovery_owner"]
+        def tool(name, args):
+            result = subprocess.run([str(Path(fixture.bin) / name), *base, *args], env=env,
+                                    capture_output=True, text=True, timeout=90)
+            if result.returncode:
+                raise RuntimeError("Physical fixture command failed: " + name)
+        if action == "dump":
+            tool("pg_dump", ["-d", "postgres", "-Fc", "--file", str(private / (sys.argv[3] + ".dump"))])
+        elif action == "restore":
+            tool("createdb", ["helm_restored"])
+            tool("pg_restore", ["--no-owner", "-d", "helm_restored", str(private / "initial.dump")])
+            tool("psql", ["-X", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+                          "ALTER DATABASE helm_restored SET default_transaction_read_only=on"])
+            for name in ("postgres-connection", "host.pgconn"):
+                file = private / name
+                file.write_text(file.read_text().replace("Database=postgres;", "Database=helm_restored;"))
+        elif action == "unquarantine":
+            tool("psql", ["-X", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+                          "ALTER DATABASE helm_restored SET default_transaction_read_only=off"])
+        else:
+            raise ValueError("Unknown fixture action")
