@@ -58,7 +58,10 @@ python3 -B deploy/dev/w81-signed-helm/fixture.py serve "$private" "$host" > "$pr
 fixture_pid=$!
 for attempt in $(seq 1 180); do
   [[ ! -f "$private/fixture-ready.json" ]] || break
-  kill -0 "$fixture_pid"
+  if ! kill -0 "$fixture_pid" 2>/dev/null; then
+    tail -n20 "$private/fixture-driver.log"
+    exit 1
+  fi
   sleep 1
 done
 test -f "$private/fixture-ready.json"

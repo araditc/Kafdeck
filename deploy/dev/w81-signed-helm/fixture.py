@@ -28,7 +28,8 @@ def write(name, value):
 def run(args, data=None, check=True):
     result = subprocess.run(list(map(str, args)), input=data, capture_output=True, text=True, timeout=90)
     if check and result.returncode:
-        raise RuntimeError("Fixture command failed: " + Path(str(args[0])).name)
+        detail = result.stderr[-1200:] if Path(str(args[0])).name == "openssl" else ""
+        raise RuntimeError("Fixture command failed: " + Path(str(args[0])).name + " " + detail)
     return result
 
 
