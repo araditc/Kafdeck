@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import uuid
+import time
 from v09_offline_install import http_probe
 from v09_prepublication import digest, require, write
 
@@ -94,17 +95,22 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
         write(private / 'appsettings.json', settings)
         stale = create('d1-stale', private)
         owned.append(stale)
-        try:
-            subprocess.run(['docker', 'start', '--attach', stale], capture_output=True, text=True, timeout=90)
-        except subprocess.TimeoutExpired:
-            diagnostic = subprocess.run(['docker', 'logs', stale], capture_output=True, text=True, timeout=15)
-            print('Bounded stale-guard diagnostic: ' + (diagnostic.stdout + diagnostic.stderr)[-3000:], flush=True)
-            raise
-        details = json.loads(command('docker', 'inspect', stale))[0]
-        log_result = subprocess.run(['docker', 'logs', stale], capture_output=True, text=True, check=True, timeout=20)
-        logs = log_result.stdout + log_result.stderr
-        require(details['State']['ExitCode'] != 0 and 'GovernanceGenerationException' in logs,
-                'Actual image stale generation not specifically refused')
+        command('docker', 'start', stale)
+        deadline = time.monotonic() + 45
+        rejected = False
+        while time.monotonic() < deadline:
+            diagnostic = subprocess.run(['docker', 'logs', stale], capture_output=True, text=True, check=True, timeout=15)
+            if 'GovernanceGenerationException' in diagnostic.stdout + diagnostic.stderr:
+                rejected = True
+                break
+            time.sleep(.5)
+        require(rejected, 'Actual image did not specifically reject the stale generation')
+        probe = subprocess.run(['curl', '--silent', '--output', '/dev/null', '--max-time', '2', '--write-out', '%{http_code}', origin + '/healthz'], capture_output=True, text=True, timeout=5)
+        require(probe.returncode != 0, 'Stale-generation image opened an HTTP listener')
+        stale_state = json.loads(command('docker', 'inspect', stale))[0]['State']
+        forced_stale_cleanup = stale_state['Running']
+        command('docker', 'rm', '--force', stale)
+        owned.remove(stale)
         settings['Kafdeck:Governance:DeploymentGeneration'] = next_generation
         write(private / 'appsettings.json', settings)
         fresh = create('d1-fresh', private)
@@ -118,7 +124,9 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
         return {'actualOciRestart': True, 'authenticatedRecordAfterRestart': True,
                 'sqliteApplicationStatePersisted': True, 'backupIntegrityVerified': True,
                 'backupSha256': digest(backup), 'originalWriterFenced': True,
-                'quarantinedGenerationAdmission': True, 'staleGenerationRefused': True,
+                'quarantinedGenerationAdmission': True, 'staleGenerationRefused': True, 'staleHttpListenerAbsent': True,
+                'staleContainerRequiredForcedCleanup': forced_stale_cleanup,
+                'staleRefusalEvidence': 'actual GovernanceGenerationException before HTTP; stale container explicitly fenced before resume',
                 'restoredFreshGenerationReady': True, 'authenticatedRecordAfterRestore': True,
                 'before': before, 'after': after,
                 'scope': 'same signed OCI bytes; actual SQLite initialized app state; verified backup and fresh-generation restore; no unknown broker effect replay claimed'}
