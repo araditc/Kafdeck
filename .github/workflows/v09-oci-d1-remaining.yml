@@ -1,0 +1,103 @@
+name: v09-oci-d1-remaining
+on:
+  push:
+    branches: [codex/v09-oci-d1]
+    paths: ['deploy/dev/oci-d1-remaining/**', '.github/workflows/v09-oci-d1-remaining.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  packages: read
+jobs:
+  old-container-upgrade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with: {cosign-release: v3.0.6}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with: {dotnet-version: '10.0.403'}
+      - name: Authenticate signed new image and actual official old platform before isolation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          D1_RID: linux-x64
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/d1-remaining"
+          mkdir -m700 "$private"
+          python3 -B deploy/dev/oci-d1/stage.py "$private" "$GITHUB_WORKSPACE/artifacts/oci-remaining" \
+            0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          python3 -B deploy/dev/oci-d1-remaining/stage-old.py "$private" "$GITHUB_WORKSPACE/artifacts/oci-remaining"
+      - name: Actual old and signed new containers migrate the same volume and reopen old backup
+        run: bash deploy/dev/oci-d1-remaining/boot.sh "$RUNNER_TEMP/d1-remaining" "$GITHUB_WORKSPACE/artifacts/oci-remaining" amd64 sqlite-only
+      - name: Retain exact synthetic old-data fixture for native ARM cross-platform migration
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: oci-canonical-old-${{ github.run_id }}
+          path: artifacts/oci-remaining/canonical/
+          if-no-files-found: error
+      - name: Retain public upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: oci-upgrade-amd64-${{ github.run_id }}
+          path: |
+            artifacts/oci-remaining/*.json
+          if-no-files-found: warn
+
+  native-postgres-and-arm-upgrade:
+    needs: old-container-upgrade
+    name: remaining native OCI (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, rid: linux-x64, runner: ubuntu-24.04, mode: pg-only}
+          - {arch: arm64, rid: linux-arm64, runner: ubuntu-24.04-arm, mode: cross-pg}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with: {cosign-release: v3.0.6}
+      - name: Stage signed native OCI and authenticated canonical old data without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          D1_RID: ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/d1-remaining"
+          mkdir -m700 "$private"
+          python3 -B deploy/dev/oci-d1/stage.py "$private" "$GITHUB_WORKSPACE/artifacts/oci-remaining" \
+            0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724
+          python3 -B deploy/dev/oci-d1-remaining/canonical.py "$private" "$GITHUB_WORKSPACE/artifacts/oci-remaining"
+          docker pull postgres:18.6-alpine
+          image="$(docker image inspect --format '{{.Id}}' postgres:18.6-alpine)"
+          echo "$image" > "$private/postgres-image.txt"
+          PRIVATE="$private" IMAGE="$image" python3 -B - <<'PY'
+          import json,os,pathlib,secrets,subprocess
+          p=pathlib.Path(os.environ['PRIVATE']);password=secrets.token_hex(24)
+          (p/'postgres-password.txt').write_text(password)
+          (p/'postgres.env').write_text('POSTGRES_USER=offline_fixture\nPOSTGRES_DB=offline_fixture\nPOSTGRES_PASSWORD='+password+'\n')
+          image=json.loads(subprocess.check_output(['docker','image','inspect',os.environ['IMAGE']]))[0]
+          assert image['Architecture']==('amd64' if os.uname().machine=='x86_64' else 'arm64')
+          d={'imageConfigDigest':image['Id'],'repoDigests':image['RepoDigests'],'architecture':image['Architecture'],
+             'stagedBeforeIsolation':True,'downloadDuringRuntime':False,'scope':'native isolated single-node PostgreSQL fixture; physical PITR/HA separately proven'}
+          pathlib.Path('artifacts/oci-remaining/postgres-input.json').write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          PY
+      - name: Actual native OCI PostgreSQL restart backup restore generation and ARM cross-platform upgrade
+        env:
+          D1_ARCH: ${{ matrix.arch }}
+          D1_MODE: ${{ matrix.mode }}
+        run: bash deploy/dev/oci-d1-remaining/boot.sh "$RUNNER_TEMP/d1-remaining" "$GITHUB_WORKSPACE/artifacts/oci-remaining" "$D1_ARCH" "$D1_MODE"
+      - name: Retain precise remaining-cell evidence only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: oci-remaining-${{ matrix.arch }}-${{ github.run_id }}
+          path: artifacts/oci-remaining/*.json
+          if-no-files-found: warn

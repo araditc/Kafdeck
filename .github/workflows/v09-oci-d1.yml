@@ -1,7 +1,5 @@
 name: v09-oci-d1
 on:
-  push:
-    branches: [codex/v09-oci-d1]
   workflow_dispatch:
 permissions:
   contents: read
