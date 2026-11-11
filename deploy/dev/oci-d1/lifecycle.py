@@ -68,6 +68,7 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
     next_generation = str(uuid.uuid4())
     settings.update({'Kafdeck:Administration:Mutations:Persistence:SqliteDatabasePath': '/state/restored.db',
         'Kafdeck:Governance:DeploymentGeneration': next_generation,
+        'Logging:LogLevel:Default': 'Information',
         'Kafdeck:Governance:RestoreMaintenanceMode': 'true',
         'Kafdeck:Governance:PreviousDeploymentGeneration': generation,
         'Kafdeck:Governance:FencedWorkersEvidenceSha256': digest(fence_path),
@@ -77,7 +78,10 @@ def prove_lifecycle(private, evidence, settings, origin, cli, topic, query, mess
     try:
         admission = create('d1-admission', private, True)
         owned.append(admission)
-        logs = command('docker', 'start', '--attach', admission, timeout=45)
+        admission_result = subprocess.run(['docker', 'start', '--attach', admission], capture_output=True, text=True, timeout=45)
+        logs = admission_result.stdout + admission_result.stderr
+        if admission_result.returncode:
+            print('Bounded OCI admission diagnostic: ' + logs[-5000:], flush=True)
         details = json.loads(command('docker', 'inspect', admission))[0]
         require(details['State']['ExitCode'] == 0 and 'HTTP and workers were not started' in logs,
                 'Actual image quarantined admission failed')

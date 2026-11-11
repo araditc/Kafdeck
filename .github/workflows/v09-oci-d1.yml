@@ -83,6 +83,7 @@ jobs:
           path: |
             artifacts/oci-d1/signed-input.json
             artifacts/oci-d1/dependencies.json
+            artifacts/oci-d1/trust-root-observation.json
             artifacts/oci-d1/oci-identity.json
             artifacts/oci-d1/journey.json
             artifacts/oci-d1/writer-fence.json
