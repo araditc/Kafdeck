@@ -402,8 +402,7 @@ def registry_signatures(selection, decision, expected_hash, approval):
     for name, target in targets.items():
         authority(selection, expected_hash, approval, write_intent=True)
         ref = IMAGE + "@" + target
-        run("cosign", "sign", "--yes", "--new-bundle-format=true", "--oidc-provider=github-actions",
-            "--registry-referrers-mode=oci-1-1", *annotations, ref)
+        run("cosign", "sign", "--yes", "--new-bundle-format=true", "--oidc-provider=github-actions", *annotations, ref)
         path = OUT / ("registry-signature-" + name + ".json")
         path.write_text(run("cosign", "verify", *certificate, *annotations, ref) + "\n")
         proofs.append({"file": path.name, "sha256": digest(path), "subjectDigest": target, "publisherIdentity": identity})

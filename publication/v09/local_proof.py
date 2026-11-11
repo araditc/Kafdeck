@@ -23,7 +23,7 @@ def inner(private, reference, subject):
     cosign = os.environ["COSIGN"]
     common = ["--allow-http-registry", "--new-bundle-format=true"]
     signing = ["--key", str(private / "test.key"), "--yes", "--tlog-upload=false", "--use-signing-config=false", "--oidc-disable-ambient-providers=true"]
-    checked(cosign, "sign", *common, *signing, "--registry-referrers-mode=oci-1-1", reference, env=env)
+    checked(cosign, "sign", *common, *signing, reference, env=env)
     verifying = ["--key", str(private / "test.pub"), "--private-infrastructure=true", "--trusted-root", str(private / "root.json")]
     signature = checked(cosign, "verify", *common, *verifying, reference, env=env).decode()
     predicate = {"localOnly": True, "noOIDC": True, "noTransparencyLog": True}
