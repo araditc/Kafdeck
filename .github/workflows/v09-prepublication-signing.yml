@@ -8,6 +8,8 @@ on:
       - 'scripts/release/v09_prepublication.py'
       - 'scripts/release/test_v09_prepublication.py'
       - 'scripts/release/verify-v09-offline.sh'
+      - 'scripts/release/v09_offline_install.py'
+      - 'scripts/release/test_v09_offline_install.py'
   push:
     branches: [main]
     paths:
@@ -16,6 +18,8 @@ on:
       - 'scripts/release/v09_prepublication.py'
       - 'scripts/release/test_v09_prepublication.py'
       - 'scripts/release/verify-v09-offline.sh'
+      - 'scripts/release/v09_offline_install.py'
+      - 'scripts/release/test_v09_offline_install.py'
   workflow_dispatch:
     inputs:
       source_sha:
@@ -57,7 +61,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Test fail-closed identity, artifact and authorization gates
-        run: python3 -m unittest discover -s scripts/release -p test_v09_prepublication.py -v
+        run: python3 -m unittest discover -s scripts/release -p 'test_v09_*.py' -v
       - name: Check offline verifier shell syntax
         run: bash -n scripts/release/verify-v09-offline.sh
 
@@ -138,10 +142,10 @@ jobs:
           cosign trusted-root create --with-default-services --out staging/trusted-root.json
           cosign sign-blob --yes --new-bundle-format=true --oidc-provider=github-actions \
             --bundle staging/manifest.sigstore.json staging/manifest.json
-      - name: Verify signature and selected media in a fresh network namespace
+      - name: Verify signature then install signed native and OCI media without egress
         run: |
           root_hash="$(sha256sum staging/trusted-root.json | cut -d ' ' -f 1)"
-          sudo unshare --net env -i PATH=/usr/bin:/bin COSIGN="$(command -v cosign)" \
+          sudo unshare --net env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin COSIGN="$(command -v cosign)" \
             bash "$PWD/scripts/release/verify-v09-offline.sh" "$PWD/staging" "$GITHUB_SHA" "$root_hash"
           echo "Trusted root SHA256: \`$root_hash\`; distribute this and the manifest digest independently." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
