@@ -30,7 +30,12 @@ owned, logs = [], []
 def fixture(action, provider, location, *extra):
     result = subprocess.run([str(dotnet), str(probe), action, provider, str(location), *map(str, extra)],
         capture_output=True, text=True, env=environment, timeout=60)
-    require(result.returncode == 0, "Published-v0.8 dependency fixture probe failed: " + action)
+    if result.returncode:
+        diagnostic = result.stderr.replace(password, "[fixture-password]").replace(str(private), "[fixture-root]")
+        diagnostic = diagnostic.replace(key.read_text(), "[fixture-key]")
+        write(evidence / "fixture-diagnostic.json", {"provider": provider, "action": action, "exitCode": result.returncode,
+                                                    "redactedFixtureToolError": diagnostic[-4096:]})
+        raise ValueError("Published-v0.8 fixture tool failed: " + diagnostic[-2048:])
     return json.loads(result.stdout) if action != "backup" else None
 
 

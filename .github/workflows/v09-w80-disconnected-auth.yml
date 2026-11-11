@@ -148,4 +148,5 @@ jobs:
             artifacts/w80-offline-upgrade/upgrade-input.json
             artifacts/w80-offline-upgrade/postgres-fixture.json
             artifacts/w80-offline-upgrade/offline-upgrade.json
+            artifacts/w80-offline-upgrade/fixture-diagnostic.json
           if-no-files-found: warn
