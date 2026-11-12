@@ -20,7 +20,7 @@ export interface OperatorSession { authenticated: true; authenticationMode: 'oid
 export type SetupState = 'available' | 'recovery' | 'complete';
 export type ManagedUserAccess = { role: 'viewer' | 'operator' | 'manager'; clusterIds: string[]; enabled: boolean };
 export type ManagedUser = Omit<ManagedUserAccess, 'role'> & { id: string; email: string; role: 'owner' | ManagedUserAccess['role'] };
-export type ManagedUsers = { users: ManagedUser[]; clusterIds: string[]; clusterNames?: Record<string, string> };
+export type ManagedUsers = { users: ManagedUser[]; clusterIds: string[]; clusterNames?: Record<string, string>; pendingProvisionings?: { operationId: string; email: string; role: string; clusterIds: string[] }[] };
 export type AccessMode = 'local' | 'token' | 'oidc';
 type BrowserSession = OperatorSession | { authenticated: true; authenticationMode: 'local' | 'token' };
 
@@ -859,8 +859,11 @@ export const kafdeckApi = {
   listManagedUsers(signal?: AbortSignal) {
     return readJson<ManagedUsers>('/api/v1/identity/users', signal);
   },
-  createManagedUser(input: Omit<ManagedUserAccess, 'enabled'> & { email: string; password: string }) {
+  createManagedUser(input: Omit<ManagedUserAccess, 'enabled'> & { email: string; password: string; requestId?: string }) {
     return postJson<ManagedUser>('/api/v1/identity/users', input);
+  },
+  recoverManagedUser(operationId: string) {
+    return postJson<ManagedUser>(`/api/v1/identity/users/provisioning/${encodeURIComponent(operationId)}/recover`, {});
   },
   updateManagedUser(id: string, input: ManagedUserAccess) {
     return putJson<ManagedUser>(`/api/v1/identity/users/${encodeURIComponent(id)}`, input);

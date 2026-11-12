@@ -36,6 +36,7 @@ export function ManagedUsersPage({ onBack, onLogout }: { onBack: () => void; onL
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const creationRequest = useRef<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -60,20 +61,34 @@ export function ManagedUsersPage({ onBack, onLogout }: { onBack: () => void; onL
     try {
       const user = editing
         ? await kafdeckApi.updateManagedUser(editing.id, { ...access, enabled: fields.has('enabled') })
-        : await kafdeckApi.createManagedUser({ ...access, email: String(fields.get('email') ?? ''), password: String(fields.get('password') ?? '') });
+        : await kafdeckApi.createManagedUser({ ...access, requestId: creationRequest.current ?? (creationRequest.current = crypto.randomUUID()), email: String(fields.get('email') ?? ''), password: String(fields.get('password') ?? '') });
       setData(previous => previous && ({
         ...previous,
         users: editing ? previous.users.map(entry => entry.id === user.id ? user : entry) : [...previous.users, user],
       }));
+      creationRequest.current = null;
       form.reset();
       setEditing(null);
     } catch (error) {
       if (error instanceof ApiProblem && error.code?.endsWith(':identity-duplicate')) setProblem(t("A user with that email already exists."));
+      else if (error instanceof ApiProblem && error.code?.endsWith(':identity-provisioning-profile')) setProblem(t("Configure the admin-only provisioning attribute in Keycloak before creating or recovering users."));
+      else if (error instanceof ApiProblem && error.code?.endsWith(':identity-provisioning-pending')) setProblem(t("The result is uncertain. Recover the original request below; do not create the user again."));
       else setProblem(t("The user change could not be completed. Reload the list before retrying."));
       void kafdeckApi.listManagedUsers().then(setData).catch(() => {});
     } finally {
       setBusy(false);
     }
+  }
+
+  async function recover(operationId: string) {
+    if (busy) return;
+    setBusy(true); setProblem(null);
+    try {
+      await kafdeckApi.recoverManagedUser(operationId);
+      setData(await kafdeckApi.listManagedUsers());
+    } catch {
+      setProblem(t("Recovery has not confirmed the account. No creation was retried."));
+    } finally { setBusy(false); }
   }
 
   return <div className="kafdeck-sign-in">
@@ -92,6 +107,15 @@ export function ManagedUsersPage({ onBack, onLogout }: { onBack: () => void; onL
       {data && <div className="kafdeck-sign-in-grid">
         <section className="card"><div className="card-body">
           <h2 className="h3">{t("Users")}</h2>
+          {(data.pendingProvisionings?.length ?? 0) > 0 && <section className="alert alert-warning" aria-label={t("Pending user provisioning")}>
+            <h3 className="h4">{t("Pending user provisioning")}</h3>
+            <p>{t("Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.")}</p>
+            <ul>{data.pendingProvisionings?.map(intent => <li key={intent.operationId} className="mb-2">
+              <bdi>{intent.email}</bdi>{' '}
+              <button className="btn btn-sm btn-outline-primary" type="button" disabled={busy}
+                onClick={() => void recover(intent.operationId)}>{t("Recover user creation")}</button>
+            </li>)}</ul>
+          </section>}
           <ul className="list-group list-group-flush">
             {data.users.map(user => <li className="list-group-item px-0" key={user.id}>
               <strong><bdi>{user.email}</bdi></strong>
@@ -107,7 +131,7 @@ export function ManagedUsersPage({ onBack, onLogout }: { onBack: () => void; onL
         <section className="card"><div className="card-body">
           <h2 className="h3">{editing ? t("Edit user access") : t("Create user")}</h2>
           {editing ? <p><bdi>{editing.email}</bdi></p> : <p className="text-secondary">{t("The user must change the temporary password on first sign-in.")}</p>}
-          <form key={editing?.id ?? 'new'} onSubmit={event => void save(event)}>
+          <form key={editing?.id ?? 'new'} onChange={() => { creationRequest.current = null; }} onSubmit={event => void save(event)}>
             <fieldset disabled={busy}>
               {!editing && <>
                 <label className="form-label mb-3">{t("User email")}

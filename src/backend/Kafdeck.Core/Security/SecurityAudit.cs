@@ -16,6 +16,7 @@ public enum SecurityAuditEventType
     KsqlDbConfigurationChanged = 12,
     KsqlStreamCreation = 13,
     KsqlTableCreation = 14,
+    KafkaTargetRegistration = 15,
 }
 
 public enum SecurityAuditOutcome

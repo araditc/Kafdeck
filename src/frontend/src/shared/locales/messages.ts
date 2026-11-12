@@ -1491,5 +1491,11 @@ export const messages: Readonly<Record<string, string>> = {
   "Key type": "نوع کلید",
   "Value columns": "ستون‌های مقدار",
   "Creating table…": "در حال ساخت Table…",
-  "Table created.": "Table ساخته شد."
+  "Table created.": "Table ساخته شد.",
+  "Configure the admin-only provisioning attribute in Keycloak before creating or recovering users.": "پیش از ساخت یا بازیابی کاربر، ویژگی ثبت درخواست را در Keycloak فقط برای ادمین تنظیم کنید.",
+  "The result is uncertain. Recover the original request below; do not create the user again.": "نتیجه نامطمئن است. درخواست اصلی را از بخش زیر بازیابی کنید؛ کاربر را دوباره نسازید.",
+  "Recovery has not confirmed the account. No creation was retried.": "حساب هنوز در بازیابی تأیید نشده است. درخواست ساخت دوباره ارسال نشد.",
+  "Pending user provisioning": "درخواست‌های ساخت کاربر در انتظار بازیابی",
+  "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.": "بازیابی حساب اصلی را بررسی می‌کند و رمز موقت اولیه را نگه می‌دارد. حسابی ساخته یا بازنشانی نمی‌شود.",
+  "Recover user creation": "بازیابی ساخت کاربر"
 };

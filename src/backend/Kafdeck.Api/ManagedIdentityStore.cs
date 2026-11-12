@@ -11,7 +11,13 @@ internal sealed record ManagedUser(
 
 internal sealed record ManagedIdentityState(
     string Issuer, Guid? OwnerId, bool Provisioning, string? CodeHash, DateTimeOffset CodeExpires,
-    ManagedUser[] Users, RegisteredKafkaConnection[]? Connections = null);
+    ManagedUser[] Users, RegisteredKafkaConnection[]? Connections = null,
+    ManagedUserProvisioning[]? UserProvisionings = null);
+
+internal sealed record ManagedUserProvisioning(
+    Guid RequestId, Guid RequestedBy, string Email, string Role, string[] ClusterIds,
+    string Proof, DateTimeOffset CreatedAtUtc, Guid? UserId = null,
+    bool Completed = false, bool Audited = false, string? RejectionCode = null);
 
 internal sealed record RegisteredKafkaConnection(
     string Id, string Name, string[] BootstrapServers, string Protocol, string? Mechanism,
@@ -42,6 +48,11 @@ internal sealed class ManagedIdentityStore(string path, string issuer)
             if (state is null || state.Issuer != issuer || state.Users is null ||
                 (state.OwnerId is { } owner && !state.Users.Any(user => user.Id == owner && user.Role == "owner" && user.Enabled)))
                 throw new InvalidDataException("Managed identity state is invalid for this realm.");
+            if (state.UserProvisionings is { } intents && (intents.Length > 2048 ||
+                intents.Select(intent => intent.RequestId).Distinct().Count() != intents.Length ||
+                intents.Any(intent => intent.RequestId == Guid.Empty || intent.RequestedBy == Guid.Empty ||
+                    intent.Proof.Length != 64 || !intent.Proof.All(char.IsAsciiHexDigit))))
+                throw new InvalidDataException("Managed user provisioning state is invalid.");
             return state;
         }
         catch (FileNotFoundException) { return new(issuer, null, false, null, default, []); }

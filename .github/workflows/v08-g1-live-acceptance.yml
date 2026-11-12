@@ -48,6 +48,11 @@ jobs:
           $javaVersion = (& "$env:JAVA_HOME/bin/java" -version 2>&1 | Select-Object -First 1).ToString()
           ./deploy/dev/prepare-keycloak-g1.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g1/keycloak-26.8.1" -JavaVersion $javaVersion
 
+      - name: Prepare isolated managed-user provisioning realm
+        shell: pwsh
+        run: |
+          ./deploy/dev/prepare-managed-provisioning.ps1 -KeycloakHome "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g1/keycloak-26.8.1" -OutputDirectory "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g1/managed" -CaFile "$env:GITHUB_WORKSPACE/deploy/dev/.generated/g1/identity/ca.pem"
+
       - name: Start real Keycloak on verified loopback HTTPS
         shell: bash
         run: |
@@ -83,6 +88,20 @@ jobs:
             --filter 'FullyQualifiedName~V08W66HostedWebhookTlsTests|FullyQualifiedName~V08W66DispatchDeadlineTests|FullyQualifiedName~V08W67BearerReadTests|FullyQualifiedName~V08CandidateReadLaneTests' \
             --results-directory artifacts/g1-ci --logger 'trx;LogFileName=g1-live.trx'
           test -s "$GITHUB_WORKSPACE/deploy/dev/.generated/g1/identity/keycloak-evidence.json"
+          export KAFDECK_MANAGED_PROVISIONING_LAB="$GITHUB_WORKSPACE/deploy/dev/.generated/g1/managed/lab.json"
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-build --no-restore \
+            --filter 'FullyQualifiedName~V1ManagedProvisioningLiveTests' \
+            --results-directory artifacts/g1-ci --logger 'trx;LogFileName=g01-live.trx'
+
+
+      - name: Retain focused managed-provisioning results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: g01-managed-provisioning-results
+          path: artifacts/g1-ci/g01-live.trx
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Stop laboratory process
         if: always()

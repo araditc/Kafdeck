@@ -69,6 +69,26 @@ Open **Manage users** and create each user with their email, temporary password,
 
 New users change their temporary password on their first Keycloak sign-in. Disabling a user or changing access invalidates their older managed sessions. The first owner cannot be disabled or have its role changed through this page. A managed role never grants Kafka broker ACLs, bypasses masking, enables an unconfigured mutation family, or replaces distinct-person approval for a critical operation.
 
+## Safe ordinary-user provisioning and recovery (main after v0.9)
+
+Before creating additional users with this implementation, a Keycloak realm administrator must add the user-profile attribute below using the realm's User Profile settings. Keep its view/edit permissions **admin only**, single-valued, and optional. Do not mark it required for ordinary users or expose it through a token mapper. Merge this attribute into the existing profile; do not replace the other profile definitions.
+
+```json
+{
+  "name": "kafdeckProvisioningId",
+  "multivalued": false,
+  "permissions": { "view": ["admin"], "edit": ["admin"] }
+}
+```
+
+Kafdeck checks the profile before dispatch/recovery; a missing or user-editable proof attribute fails closed with `identity-provisioning-profile`. Its existing provisioning client needs `manage-users` and can read the profile; **do not grant it `manage-realm`**. Profile configuration remains an administrator task. This does not change initial-owner setup or require email verification.
+
+Creating an ordinary user writes a private durable request intent before contacting Keycloak. A response timeout or local storage failure leaves an explicit pending operation. In **Manage users**, use **Recover user creation** for that original request. Recovery checks the exact private request proof and account identity and does not send another create request or reset a password. A re-entered password on an exact retry does not replace the original temporary password. An unrelated existing email account is never adopted.
+
+The owner-only API exposes pending operation IDs in `GET /api/v1/identity/users` and requires CSRF for `POST /api/v1/identity/users/provisioning/{operationId}/recover`. No proof, password or provider token is returned. Changed material/current authority or uncertain/missing provider evidence fails closed. If recovery cannot prove an outcome, inspect/fence the installation with the Keycloak administrator; do not delete its request intent, adopt an account by email alone or blindly repeat dispatch.
+
+Preserve the managed state file and matching realm/key material together. New nullable receipt fields read legacy v0.9 state; do not run an older writer against the new state. Rollback uses the verified matching pre-change backup and binary. The receipt log is bounded to 2,048 retained requests, with capacity reserved within the existing 1,000-user limit. Audit delivery is at least once with a stable request correlation ID; a crash after audit delivery can repeat that same correlated event. No exactly-once logging claim is made.
+
 ## Troubleshooting
 
 | Symptom | Action |
