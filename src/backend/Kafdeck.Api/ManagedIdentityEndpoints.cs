@@ -31,7 +31,7 @@ internal static class ManagedIdentityEndpoints
             var state = SetupState(store.Read());
             var tokens = state == "available" ? antiforgery.GetAndStoreTokens(context) : null;
             return Results.Ok(new { state, csrf = tokens?.RequestToken });
-        });
+        }).WithManagedBrowserContract("managed-setup-state");
 
         app.MapPost("/api/v1/setup", async (SetupInput input, HttpContext context, ManagedKeycloakUsers provider, ISecurityAuditSink audit) =>
         {
@@ -72,6 +72,7 @@ internal static class ManagedIdentityEndpoints
             }
             catch (Exception error) when (ProviderFailed(error)) { return Problem(502, "identity-provider"); }
         })
+        .WithManagedBrowserContract("managed-setup-create", typeof(SetupInput))
         .WithMetadata(new RequestSizeLimitAttribute(8192))
         .RequireKafdeckAntiforgery();
 
@@ -84,7 +85,7 @@ internal static class ManagedIdentityEndpoints
             return Results.Ok(new { users = state.Users.Select(PublicUser), clusterIds = clusterNames.Keys, clusterNames,
                 pendingProvisionings = (state.UserProvisionings ?? []).Where(intent => intent.RejectionCode is null && (!intent.Completed || !intent.Audited))
                     .Select(intent => new { operationId = intent.RequestId, intent.Email, intent.Role, intent.ClusterIds }) });
-        });
+        }).WithManagedBrowserContract("managed-users-list");
 
         app.MapPost("/api/v1/identity/users", async (
             NewUserInput input, HttpContext context, ManagedKeycloakUsers provider, ISecurityAuditSink audit) =>
@@ -94,6 +95,7 @@ internal static class ManagedIdentityEndpoints
             var service = new ManagedUserProvisioningService(store, provider, audit, ClusterNames().Keys.ToArray());
             return ProvisioningResult(await service.Create(owner, input));
         })
+        .WithManagedBrowserContract("managed-users-create", typeof(NewUserInput))
         .WithMetadata(new RequestSizeLimitAttribute(16384))
         .RequireKafdeckAntiforgery();
 
@@ -105,7 +107,7 @@ internal static class ManagedIdentityEndpoints
             if (owner is null) return Problem(403, "identity-forbidden");
             var service = new ManagedUserProvisioningService(store, provider, audit, ClusterNames().Keys.ToArray());
             return ProvisioningResult(await service.Recover(owner, operationId));
-        }).WithMetadata(new RequestSizeLimitAttribute(1024)).RequireKafdeckAntiforgery();
+        }).WithManagedBrowserContract("managed-users-recover").WithMetadata(new RequestSizeLimitAttribute(1024)).RequireKafdeckAntiforgery();
 
         app.MapPut("/api/v1/identity/users/{id:guid}", async (
             Guid id, UpdateUserInput input, HttpContext context, ManagedKeycloakUsers provider, ISecurityAuditSink audit) =>
@@ -137,6 +139,7 @@ internal static class ManagedIdentityEndpoints
             }
             catch (Exception error) when (ProviderFailed(error)) { return Problem(502, "identity-provider"); }
         })
+        .WithManagedBrowserContract("managed-users-update", typeof(UpdateUserInput))
         .WithMetadata(new RequestSizeLimitAttribute(16384))
         .RequireKafdeckAntiforgery();
     }

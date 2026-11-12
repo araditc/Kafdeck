@@ -32,7 +32,7 @@ internal static class KafkaConnectionWorkspace
             var targets = configured.Concat(ReadRegistered(store).Select(WorkspaceTarget.FromRegistered))
                 .Where(profile => Allowed(context, authorization, AuthorizationAction.ClusterRead, profile.Id));
             return Results.Ok(targets.ToArray());
-        });
+        }).WithManagedBrowserContract("managed-targets-list");
 
         async Task<IResult> Probe(
             HttpContext context, ConnectionDraft draft, KafdeckAuthorizationService authorization,
@@ -162,6 +162,7 @@ internal static class KafkaConnectionWorkspace
         app.MapPost("/api/v1/connections/test", (
             HttpContext context, ConnectionDraft draft, KafdeckAuthorizationService authorization, CancellationToken cancellation) =>
             Probe(context, draft, authorization, cancellation, register: false))
+        .WithManagedBrowserContract("managed-connections-test", typeof(ConnectionDraft))
         .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(384 * 1024))
         .RequireKafdeckAntiforgery();
         app.MapPost("/api/v1/connections/targets", async (
@@ -178,6 +179,7 @@ internal static class KafkaConnectionWorkspace
                     session?.SessionId.Value.ToString("N"), attempt.TargetId, null, attempt.Outcome, attempt.Category));
             }
         })
+        .WithManagedBrowserContract("managed-targets-register", typeof(ConnectionDraft))
         .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(384 * 1024))
         .RequireKafdeckAntiforgery();
     }
