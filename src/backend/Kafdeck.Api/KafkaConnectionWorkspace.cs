@@ -16,7 +16,8 @@ internal static class KafkaConnectionWorkspace
     internal static string RecentScope(OperatorIdentityKey key) =>
         Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(key)));
 
-    internal static void MapKafkaConnectionWorkspace(this WebApplication app, KafdeckOptions options, ManagedIdentityStore? store)
+    internal static void MapKafkaConnectionWorkspace(this WebApplication app, KafdeckOptions options, ManagedIdentityStore? store,
+        Func<AdminClientConfig, CancellationToken, Task<Metadata>>? metadataProbe = null)
     {
         var networks = RegisteredKafkaRuntime.ReadNetworks(app.Configuration);
         var runtime = app.Services.GetService<RegisteredKafkaRuntime>();
@@ -35,63 +36,73 @@ internal static class KafkaConnectionWorkspace
 
         async Task<IResult> Probe(
             HttpContext context, ConnectionDraft draft, KafdeckAuthorizationService authorization,
-            CancellationToken cancellation, bool register)
+            CancellationToken cancellation, bool register, RegistrationAttempt? attempt = null)
         {
+            IResult Reject(int status, string code, string title)
+            {
+                if (attempt is not null && !attempt.Created)
+                {
+                    attempt.Outcome = status is 401 or 403 ? SecurityAuditOutcome.Denied : SecurityAuditOutcome.Failed;
+                    attempt.Category = code;
+                }
+                return Failure(status, code, title);
+            }
             context.Response.Headers.CacheControl = "no-store";
-            if (!IsOperator(context)) return Results.Unauthorized();
+            if (!IsOperator(context)) return Reject(401, "connection-authentication", "Operator authentication is required.");
             var owner = IsOwner(context, store);
-            if (register && !owner) return Failure(403, "connection-target", "Only the installation administrator can register Kafka targets.");
+            if (register && !owner) return Reject(403, "connection-target", "Only the installation administrator can register Kafka targets.");
 
             if (draft.BootstrapServers is not { Length: > 0 and <= 16 } ||
                 draft.BootstrapServers.Any(server => string.IsNullOrWhiteSpace(server) || server.Length > 300) ||
                 draft.BootstrapServers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != draft.BootstrapServers.Length ||
                 ParseProtocol(draft.Protocol) is not { } protocol)
-                return Failure(400, "connection-input", "Invalid Kafka connection settings.");
+                return Reject(400, "connection-input", "Invalid Kafka connection settings.");
 
             var candidates = configured.Concat(ReadRegistered(store).Select(WorkspaceTarget.FromRegistered));
             var profile = candidates.FirstOrDefault(candidate =>
                 Matches(candidate, draft) && Allowed(context, authorization, AuthorizationAction.ClusterRead, candidate.Id));
+            if (attempt is not null) attempt.TargetId = profile?.Id;
             var pending = profile is null;
             if (pending && !owner)
-                return Failure(403, "connection-target", "This Kafka target and protocol are not available to your account.");
+                return Reject(403, "connection-target", "This Kafka target and protocol are not available to your account.");
             if ((pending || profile!.Registered) && !IsRegistrationNetwork(draft.BootstrapServers, networks))
-                return Failure(403, "connection-network", "Enter broker IP addresses within the networks permitted by this installation.");
+                return Reject(403, "connection-network", "Enter broker IP addresses within the networks permitted by this installation.");
             var name = draft.Name?.Trim();
             if (pending && (!ValidName(name) ||
                 new[] { draft.Username, draft.Password, draft.ClientKeyPassword }.Any(value => !string.IsNullOrEmpty(value) && name!.Contains(value, StringComparison.Ordinal))))
-                return Failure(400, "connection-input", "Enter a valid connection name that does not contain credentials.");
+                return Reject(400, "connection-input", "Enter a valid connection name that does not contain credentials.");
             if (pending && register && configured.Any(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)))
-                return Failure(409, "connection-name", "This Kafka connection name is already in use.");
+                return Reject(409, "connection-name", "This Kafka connection name is already in use.");
 
             var config = CreateClientConfig(profile?.BootstrapServers ?? draft.BootstrapServers, protocol, draft);
-            if (config is null) return Failure(400, "connection-input", "Invalid Kafka connection settings.");
+            if (config is null) return Reject(400, "connection-input", "Invalid Kafka connection settings.");
 
-            if (!Probes.Wait(0)) return Failure(429, "connection-busy", "Too many Kafka connection tests are running.");
+            if (!Probes.Wait(0)) return Reject(429, "connection-busy", "Too many Kafka connection tests are running.");
 
             try
             {
-                var metadata = await Task.Run(() =>
+                var metadata = metadataProbe is not null ? await metadataProbe(config, cancellation) : await Task.Run(() =>
                 {
                     using var client = new AdminClientBuilder(config).SetLogHandler((_, _) => { }).Build();
                     return client.GetMetadata(ProbeTimeout);
                 }, cancellation).ConfigureAwait(false);
                 if (metadata.Brokers.Count == 0)
-                    return Failure(502, "connection-failed", "Kafka did not return broker metadata.");
+                    return Reject(502, "connection-failed", "Kafka did not return broker metadata.");
 
                 if ((pending || profile!.Registered) &&
                     !IsRegistrationNetwork(metadata.Brokers.Select(broker =>
                         IPAddress.TryParse(broker.Host, out var address) && broker.Port is > 0 and <= 65535
                             ? new IPEndPoint(address, broker.Port).ToString() : "").ToArray(), networks))
-                    return Failure(400, "connection-network", "Kafka advertised a broker outside the allowed registration networks.");
+                    return Reject(400, "connection-network", "Kafka advertised a broker outside the allowed registration networks.");
 
                 if (pending ? !IsOwner(context, store) :
                     !Allowed(context, authorization, AuthorizationAction.ClusterRead, profile!.Id))
-                    return Failure(403, "connection-target", "This Kafka target and protocol are not available to your account.");
+                    return Reject(403, "connection-target", "This Kafka target and protocol are not available to your account.");
 
                 if (pending && register)
                 {
                     using var lease = store!.TryLock();
-                    if (lease is null) return Failure(409, "connection-save-busy", "Try saving the connection again.");
+                    if (lease is null) return Reject(409, "connection-save-busy", "Try saving the connection again.");
                     var state = store.Read();
                     var registered = state.Connections ?? [];
                     var existing = registered.Select(WorkspaceTarget.FromRegistered).FirstOrDefault(candidate => Matches(candidate, draft));
@@ -102,17 +113,24 @@ internal static class KafkaConnectionWorkspace
                     else
                     {
                         if (registered.Any(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)))
-                            return Failure(409, "connection-name", "This Kafka connection name is already in use.");
+                            return Reject(409, "connection-name", "This Kafka connection name is already in use.");
                         if (registered.Length >= 256)
-                            return Failure(409, "connection-limit", "This installation has reached its saved connection limit.");
+                            return Reject(409, "connection-limit", "This installation has reached its saved connection limit.");
 
                         var saved = new RegisteredKafkaConnection(
                             "connection-" + Guid.NewGuid().ToString("N"), name!, draft.BootstrapServers, draft.Protocol!, draft.Mechanism);
                         store.Write(state with { Connections = [.. registered, saved] });
                         profile = WorkspaceTarget.FromRegistered(saved);
+                        if (attempt is not null) attempt.Created = true;
                     }
                 }
 
+                if (register && attempt is not null)
+                {
+                    attempt.TargetId = profile?.Id;
+                    attempt.Outcome = SecurityAuditOutcome.Succeeded;
+                    attempt.Category = attempt.Created ? "kafka_target_registered" : "kafka_target_registration_reused";
+                }
                 if (profile is { Registered: true }) runtime?.Remember(context, profile.Id, config);
                 var brokers = pending || Allowed(context, authorization, AuthorizationAction.BrokerRead, profile!.Id)
                     ? metadata.Brokers.OrderBy(broker => broker.BrokerId).Take(100)
@@ -132,7 +150,11 @@ internal static class KafkaConnectionWorkspace
             }
             catch (Exception exception) when (exception is KafkaException or ArgumentException or InvalidOperationException)
             {
-                return Failure(502, "connection-failed", "Kafka did not accept the connection. Check the broker, credentials, and TLS settings.");
+                return Reject(502, "connection-failed", "Kafka did not accept the connection. Check the broker, credentials, and TLS settings.");
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return Reject(503, "connection-save-failed", "The Kafka connection could not be saved.");
             }
             finally { Probes.Release(); }
         }
@@ -142,11 +164,30 @@ internal static class KafkaConnectionWorkspace
             Probe(context, draft, authorization, cancellation, register: false))
         .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(384 * 1024))
         .RequireKafdeckAntiforgery();
-        app.MapPost("/api/v1/connections/targets", (
-            HttpContext context, ConnectionDraft draft, KafdeckAuthorizationService authorization, CancellationToken cancellation) =>
-            Probe(context, draft, authorization, cancellation, register: true))
+        app.MapPost("/api/v1/connections/targets", async (
+            HttpContext context, ConnectionDraft draft, KafdeckAuthorizationService authorization,
+            ISecurityAuditSink audit, CancellationToken cancellation) =>
+        {
+            var attempt = new RegistrationAttempt();
+            try { return await Probe(context, draft, authorization, cancellation, register: true, attempt); }
+            finally
+            {
+                var session = OperatorSessionContextFactory.TryCreate(context.User, out var current) ? current : null;
+                await audit.WriteAsync(new SecurityAuditEvent(DateTimeOffset.UtcNow, SecurityAuditEventType.KafkaTargetRegistration,
+                    session is null ? SecurityAuditPrincipal.Anonymous : SecurityAuditPrincipal.FromOperator(session.Identity),
+                    session?.SessionId.Value.ToString("N"), attempt.TargetId, null, attempt.Outcome, attempt.Category));
+            }
+        })
         .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(384 * 1024))
         .RequireKafdeckAntiforgery();
+    }
+
+    private sealed class RegistrationAttempt
+    {
+        internal bool Created { get; set; }
+        internal string? TargetId { get; set; }
+        internal SecurityAuditOutcome Outcome { get; set; } = SecurityAuditOutcome.Failed;
+        internal string Category { get; set; } = "kafka_target_registration_failed";
     }
 
     internal static RegisteredKafkaConnection[] ReadRegistered(ManagedIdentityStore? store) =>

@@ -80,7 +80,10 @@ internal static class ManagedIdentityEndpoints
             context.Response.Headers.CacheControl = "no-store";
             if (Owner(context, store) is null) return Problem(403, "identity-forbidden");
             var clusterNames = ClusterNames();
-            return Results.Ok(new { users = store.Read().Users.Select(PublicUser), clusterIds = clusterNames.Keys, clusterNames });
+            var state = store.Read();
+            return Results.Ok(new { users = state.Users.Select(PublicUser), clusterIds = clusterNames.Keys, clusterNames,
+                pendingProvisionings = (state.UserProvisionings ?? []).Where(intent => intent.RejectionCode is null && (!intent.Completed || !intent.Audited))
+                    .Select(intent => new { operationId = intent.RequestId, intent.Email, intent.Role, intent.ClusterIds }) });
         });
 
         app.MapPost("/api/v1/identity/users", async (
@@ -88,28 +91,21 @@ internal static class ManagedIdentityEndpoints
         {
             var owner = Owner(context, store);
             if (owner is null) return Problem(403, "identity-forbidden");
-            using var lease = store.TryLock();
-            if (lease is null) return Problem(409, "identity-busy");
-            if (!TryCredentials(input.Email, input.Password, out var email) ||
-                !TryAccess(input.Role, input.ClusterIds, ClusterNames().Keys, out var assigned))
-                return Problem(400, "identity-input");
-            var state = store.Read();
-            if (state.Users.Length >= 1000) return Problem(409, "identity-limit");
-            if (state.Users.Any(user => string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase)))
-                return Problem(409, "identity-duplicate");
-            try
-            {
-                var (id, status) = await provider.Create(email, input.Password!, temporary: true);
-                if (id is null) return CreateProblem(status);
-                var user = new ManagedUser(id.Value, email, input.Role!, assigned, true, default);
-                store.Write(state with { Users = [.. state.Users, user] });
-                await Audit(audit, SecurityAuditPrincipal.FromOperator(owner.Identity), id.Value, "managed_user_created");
-                return Results.Json(PublicUser(user), statusCode: 201);
-            }
-            catch (Exception error) when (ProviderFailed(error)) { return Problem(502, "identity-provider"); }
+            var service = new ManagedUserProvisioningService(store, provider, audit, ClusterNames().Keys.ToArray());
+            return ProvisioningResult(await service.Create(owner, input));
         })
         .WithMetadata(new RequestSizeLimitAttribute(16384))
         .RequireKafdeckAntiforgery();
+
+        app.MapPost("/api/v1/identity/users/provisioning/{operationId:guid}/recover", async (
+            Guid operationId, HttpContext context, ManagedKeycloakUsers provider, ISecurityAuditSink audit) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var owner = Owner(context, store);
+            if (owner is null) return Problem(403, "identity-forbidden");
+            var service = new ManagedUserProvisioningService(store, provider, audit, ClusterNames().Keys.ToArray());
+            return ProvisioningResult(await service.Recover(owner, operationId));
+        }).WithMetadata(new RequestSizeLimitAttribute(1024)).RequireKafdeckAntiforgery();
 
         app.MapPut("/api/v1/identity/users/{id:guid}", async (
             Guid id, UpdateUserInput input, HttpContext context, ManagedKeycloakUsers provider, ISecurityAuditSink audit) =>
@@ -186,7 +182,7 @@ internal static class ManagedIdentityEndpoints
     private static object PublicUser(ManagedUser user) =>
         new { user.Id, user.Email, user.Role, user.ClusterIds, user.Enabled };
 
-    private static bool TryCredentials(string? address, string? password, out string email)
+    internal static bool TryCredentials(string? address, string? password, out string email)
     {
         email = address?.Trim().ToLowerInvariant() ?? "";
         return email.Length is > 0 and <= 254 && !email.Any(char.IsControl) &&
@@ -194,7 +190,7 @@ internal static class ManagedIdentityEndpoints
             password is { Length: >= 12 and <= 128 } && !string.IsNullOrWhiteSpace(password) && !password.Any(char.IsControl);
     }
 
-    private static bool TryAccess(string? role, string[]? clusters, ICollection<string> available, out string[] assigned)
+    internal static bool TryAccess(string? role, string[]? clusters, ICollection<string> available, out string[] assigned)
     {
         assigned = clusters?.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray() ?? [];
         return role is "viewer" or "operator" or "manager" && clusters is not null &&
@@ -211,6 +207,12 @@ internal static class ManagedIdentityEndpoints
         _ => Problem(502, "identity-provider"),
     };
 
+    private static IResult ProvisioningResult(ManagedUserProvisioningResult result) => result.User is { } user
+        ? Results.Json(PublicUser(user), statusCode: result.Status)
+        : Results.Problem(statusCode: result.Status, type: $"urn:kafdeck:problem:{result.Code}",
+            title: "Managed user provisioning could not be completed.",
+            extensions: result.OperationId is { } operation ? new Dictionary<string, object?> { ["operationId"] = operation } : null);
+
     private static IResult Problem(int status, string code) =>
         Results.Problem(statusCode: status, type: $"urn:kafdeck:problem:{code}", title: "Managed identity operation could not be completed.");
 
@@ -219,6 +221,6 @@ internal static class ManagedIdentityEndpoints
             principal, null, null, user.ToString("D"), SecurityAuditOutcome.Succeeded, category));
 
     internal sealed record SetupInput(string? Code, string? Email, string? Password);
-    internal sealed record NewUserInput(string? Email, string? Password, string? Role, string[]? ClusterIds);
+    internal sealed record NewUserInput(string? Email, string? Password, string? Role, string[]? ClusterIds, Guid? RequestId = null);
     internal sealed record UpdateUserInput(string? Role, string[]? ClusterIds, bool? Enabled);
 }

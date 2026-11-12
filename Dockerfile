@@ -12,7 +12,7 @@ COPY . .
 RUN dotnet restore Kafdeck.slnx --locked-mode
 RUN dotnet publish src/backend/Kafdeck.Api/Kafdeck.Api.csproj -c Release -o /app/publish --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble@sha256:1a48394b6f29d3a32c79d9edecd4abda0ecbe8776d567dbfc4590ed6979c740c AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.15-noble@sha256:bfd912c83295ce66d4b706ebb8541b9f14259b0e76fbb88b2751f58ce2399d2e AS runtime
 # Runtime never installs packages. Remove unused APT and libapt entirely
 # (CVE-2026-109518); purge performs no package download or upgrade.
 RUN apt-get -o Acquire::Retries=0 purge -y --allow-remove-essential apt libapt-pkg6.0t64 \

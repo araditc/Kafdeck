@@ -1490,5 +1490,11 @@
   "Key type": "Key type",
   "Value columns": "Value columns",
   "Creating table…": "Creating table…",
-  "Table created.": "Table created."
+  "Table created.": "Table created.",
+  "Configure the admin-only provisioning attribute in Keycloak before creating or recovering users.": "Configure the admin-only provisioning attribute in Keycloak before creating or recovering users.",
+  "The result is uncertain. Recover the original request below; do not create the user again.": "The result is uncertain. Recover the original request below; do not create the user again.",
+  "Recovery has not confirmed the account. No creation was retried.": "Recovery has not confirmed the account. No creation was retried.",
+  "Pending user provisioning": "Pending user provisioning",
+  "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.": "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.",
+  "Recover user creation": "Recover user creation"
 }
