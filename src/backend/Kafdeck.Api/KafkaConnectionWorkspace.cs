@@ -61,6 +61,7 @@ internal static class KafkaConnectionWorkspace
             var candidates = configured.Concat(ReadRegistered(store).Select(WorkspaceTarget.FromRegistered));
             var profile = candidates.FirstOrDefault(candidate =>
                 Matches(candidate, draft) && Allowed(context, authorization, AuthorizationAction.ClusterRead, candidate.Id));
+            if (attempt is not null) attempt.TargetId = profile?.Id;
             var pending = profile is null;
             if (pending && !owner)
                 return Reject(403, "connection-target", "This Kafka target and protocol are not available to your account.");

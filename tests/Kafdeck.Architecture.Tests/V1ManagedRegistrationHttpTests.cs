@@ -39,6 +39,27 @@ public sealed class V1ManagedRegistrationHttpTests
             Assert.DoesNotContain(secret, audit, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(false, 400)]
+    [InlineData(true, 502)]
+    public async Task Failed_existing_target_registration_retains_its_authorized_audit_identity(bool providerFailure, int status)
+    {
+        await using var f = await ManagedRegistrationHttpFixture.Start();
+        using var registered = await f.Client.PostAsJsonAsync("/api/v1/connections/targets", f.Draft());
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var target = Assert.Single(f.Identity.Store.Read().Connections!);
+        f.Identity.Audit.Events.Clear();
+        var draft = f.Draft();
+        if (providerFailure) f.ProbeError = new KafkaException(new Error(ErrorCode.Local_AllBrokersDown));
+        else draft = draft with { Password = null };
+        using var failed = await f.Client.PostAsJsonAsync("/api/v1/connections/targets", draft);
+        Assert.Equal(status, (int)failed.StatusCode);
+        var audit = Assert.Single(f.Identity.Audit.Events);
+        Assert.Equal(SecurityAuditOutcome.Failed, audit.Outcome);
+        Assert.Equal(target.Id, audit.ClusterId);
+        Assert.Single(f.Identity.Store.Read().Connections!);
+    }
+
     [Fact]
     public async Task Connection_test_does_not_claim_registration_or_emit_registration_success()
     {
