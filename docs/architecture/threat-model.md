@@ -2,6 +2,23 @@
 
 This is the root threat-model index. Feature-specific threat models may live beside the relevant architecture/RFC documents but must link back here.
 
+## Current security model index
+
+| Boundary | Released security reference |
+| --- | --- |
+| v0.1 deployment/configuration | [Security boundary](../security/v0.1-security-boundary.md), [release delta](../security/v0.1-release-threat-model-delta.md) |
+| v0.2 identity/OIDC/RBAC | [Identity boundary](../security/v0.2-identity-rbac-security-boundary.md) |
+| v0.3 record access/masking | [Record boundary](../security/v0.3-record-data-security-boundary.md) |
+| v0.4 consumer/schema/ecosystem reads | [Read-view boundary](../security/v0.4-read-view-security-boundary.md) |
+| v0.5 durable mutations | [Mutation boundary](../security/v0.5-mutation-security-boundary.md) |
+| v0.6 fleet | [Fleet boundary](../security/v0.6-fleet-security-boundary.md) |
+| v0.7 developer/streaming tools | [Ecosystem boundary](../security/v0.7-security-boundary.md) |
+| v0.8 automation/telemetry | [Automation boundary](../security/v0.8-security-boundary.md) |
+| v0.9 governance/distribution | [Probe contract](../security/v0.9-threat-validation.md), [independent review and accepted risks](../security/v0.9-w78-independent-review.md) |
+| Managed first owner, targets and users | [Current setup/persistence](../operator/managed-identity-setup.md), [dashboard network/credential boundaries](../operator/v0.9-dashboard-guide.md) |
+
+The final v0.9 review accepts KAF-02 only with **tested host/CNI egress in each deployment**. Kafka can advertise addresses outside the registration CIDRs later. The observed K3s/kube-router direct-IP result does not admit all CNIs or Service DNAT. [Published evidence](../implementation/evidence/v0.9-release-published-20261112.json) records final source and limits. The original v0.1 analysis below is historical; later controls are described by this index, not implied by the original token model.
+
 ## Assets
 
 Primary assets include:
@@ -42,9 +59,26 @@ For every new trust boundary or security-sensitive subsystem, document:
 
 STRIDE may be used as a checklist but is not mandatory notation.
 
-## v0.1 W02 implementation delta — configuration and deployment access
+## Historical v0.1 W02 implementation delta — configuration and deployment access
 
-### Assets and entry points
+### Current security model index
+
+| Boundary | Released security reference |
+| --- | --- |
+| v0.1 deployment/configuration | [Security boundary](../security/v0.1-security-boundary.md), [release delta](../security/v0.1-release-threat-model-delta.md) |
+| v0.2 identity/OIDC/RBAC | [Identity boundary](../security/v0.2-identity-rbac-security-boundary.md) |
+| v0.3 record access/masking | [Record boundary](../security/v0.3-record-data-security-boundary.md) |
+| v0.4 consumer/schema/ecosystem reads | [Read-view boundary](../security/v0.4-read-view-security-boundary.md) |
+| v0.5 durable mutations | [Mutation boundary](../security/v0.5-mutation-security-boundary.md) |
+| v0.6 fleet | [Fleet boundary](../security/v0.6-fleet-security-boundary.md) |
+| v0.7 developer/streaming tools | [Ecosystem boundary](../security/v0.7-security-boundary.md) |
+| v0.8 automation/telemetry | [Automation boundary](../security/v0.8-security-boundary.md) |
+| v0.9 governance/distribution | [Probe contract](../security/v0.9-threat-validation.md), [independent review and accepted risks](../security/v0.9-w78-independent-review.md) |
+| Managed first owner, targets and users | [Current setup/persistence](../operator/managed-identity-setup.md), [dashboard network/credential boundaries](../operator/v0.9-dashboard-guide.md) |
+
+The final v0.9 review accepts KAF-02 only with **tested host/CNI egress in each deployment**. Kafka can advertise addresses outside the registration CIDRs later. The observed K3s/kube-router direct-IP result does not admit all CNIs or Service DNAT. [Published evidence](../implementation/evidence/v0.9-release-published-20261112.json) records final source and limits. The original v0.1 analysis below is historical; later controls are described by this index, not implied by the original token model.
+
+## Assets and entry points
 
 W02 introduces immutable operator-defined cluster profiles, external secret references, process startup validation, and the minimum browser-to-Kafdeck deployment access-token boundary. The relevant entry points are application configuration, mounted secret files/environment variables, the HTTP listener, and the `X-Kafdeck-Access-Token` request header.
 

@@ -18,9 +18,9 @@ Ownership catalog, self-service/approvals, policy-as-code, measured attribution/
 
 Catalog, approvals, policies and model prompts never grant RBAC. Preserve original actor/current effect-time authority, critical distinct-human approval, idempotency, fencing, audit and honest unknown recovery. No arbitrary execution/proxy, payload/secret persistence, payments, production chaos, production deployment or blanket support claims. Public runtime plugins remain deferred under the Roadmap extension policy.
 
-## Admission
+## Original admission conditions (met)
 
-Owner scope authorization permits preparing W72. W73–W82 remain blocked until the complete planning package passes exact-head applicable CI, substantive architecture/security review, fresh required CODEOWNER approval, zero unresolved required threads, expected-head guarded protected-main merge, applicable main verification and tracker activation. RFC/ADR proposals become admitted only through that recorded gate. Preparation or passing documentation checks alone is not admission.
+At the original scope decision, owner authorization permitted preparing W72. The gate required W73-W82 to remain blocked until the complete planning package passes exact-head applicable CI, substantive architecture/security review, fresh required CODEOWNER approval, zero unresolved required threads, expected-head guarded protected-main merge, applicable main verification and tracker activation. RFC/ADR proposals become admitted only through that recorded gate. Preparation or passing documentation checks alone is not admission.
 
 ## Completed admission and publication
 

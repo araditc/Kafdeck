@@ -65,7 +65,7 @@ public sealed class ReleaseIdentityTests
     }
 
     [Fact]
-    public void Candidate_build_and_historical_published_baseline_are_explicit_and_consistent()
+    public void Historical_build_inputs_are_consistent_and_separate_from_publication_status()
     {
         var root = FindRepositoryRoot();
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".github", "release", "release.json")));
@@ -76,9 +76,19 @@ public sealed class ReleaseIdentityTests
         Assert.Equal("candidate", status); // Publication input, not a registry-status claim.
         Assert.NotEqual(selected, baseline);
         Assert.True(Version.Parse(ToPackageVersion(selected).Split('-')[0]) > Version.Parse(ToPackageVersion(baseline).Split('-')[0]));
+        // Candidate metadata is an immutable build input, not current landing-page prose.
+        using var publication = JsonDocument.Parse(File.ReadAllText(Path.Combine(root,
+            "docs", "implementation", "evidence", "v0.9-release-published-20261112.json")));
+        Assert.Equal(selected, publication.RootElement.GetProperty("version").GetString());
+        Assert.True(publication.RootElement.GetProperty("releaseReady").GetBoolean());
+        Assert.Empty(publication.RootElement.GetProperty("missing").EnumerateArray());
         var readme = File.ReadAllText(Path.Combine(root, "README.md"));
-        Assert.Contains($"**{baseline} is the historical published baseline at candidate preparation**", readme, StringComparison.Ordinal);
-        Assert.Contains($"**{selected} as the prepared build candidate**", readme, StringComparison.Ordinal);
+        foreach (var target in new[] { "ROADMAP.md", "docs/operator/v0.9-installation-guide.md",
+                     "docs/operator/managed-identity-setup.md", "docs/operator/v0.9-dashboard-guide.md" })
+        {
+            Assert.Contains($"]({target})", readme, StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(root, target)));
+        }
         var notes = manifest.GetProperty("notes").GetString()!;
         Assert.Equal($"docs/releases/{selected}.md", notes);
         Assert.True(File.Exists(Path.Combine(root, notes)));

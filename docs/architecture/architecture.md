@@ -1,10 +1,10 @@
-# Kafdeck Architecture Baseline
+# Kafdeck architecture
 
-Status: **Approved at Gate 0**
+Status: **Gate 0 baseline retained; current v0.9 overview below**. The [ADR index](../adr/README.md), [runtime contracts](v0.9-governance-contracts.md) and [release record](../implementation/evidence/v0.9-release-published-20261112.json) distinguish original decisions from released acceptance.
 
 ## 1. Architecture style
 
-Kafdeck starts as a **modular monolith** with strict internal boundaries. This optimizes OSS deployment simplicity (`docker run` / a small Compose deployment) while preserving the option to extract components later if operational evidence justifies it.
+Kafdeck is a **modular monolith** with strict internal boundaries. This optimizes OSS deployment simplicity (`docker run` / a small Compose deployment) while preserving the option to extract components later if operational evidence justifies it.
 
 Distributed/microservice architecture is not permitted without a future RFC/ADR demonstrating a concrete need.
 
@@ -32,23 +32,15 @@ Rules:
 - UI contracts are explicit API contracts, not direct database or Kafka representations.
 - Cross-module interaction must use module contracts; one module may not update another module's persistence directly.
 
-## 4. Initial logical modules
+## 4. Current runtime boundaries
 
-The precise source layout is established during Phase 0 implementation, but expected boundaries include:
-- Clusters / Connections
-- Kafka Metadata
-- Topics
-- Records
-- Consumers
-- Administration Operations
-- Identity & Access
-- Audit
-- Schema Registry
-- Kafka Connect
-- Observability
-- Application Settings
+`Kafdeck.Api` hosts HTTP, server-side OIDC sessions, managed identity/connection endpoints and composition. `Kafdeck.Core` owns shared contracts. Modules cover Clusters, Topics, Records, Consumers, Administration, Schemas, Connect and Generator. Infrastructure implements typed Kafka, ecosystem, persistence, configuration, security and SerDe adapters. Governance catalog/policy/requests/attribution retain the shared effect boundary; CLI, Terraform and MCP call authenticated backend contracts, not Kafka directly.
 
-Early releases may contain only a subset, but new capabilities must respect the module model.
+For managed installations, a host-issued one-time setup code creates the first owner through a dedicated Keycloak provisioning client. Subsequent sign-in uses Keycloak OIDC. Owner-registered Kafka definitions persist in private managed state; Kafka credentials use a bounded in-memory lease, while optional HTTP-service credentials are Data Protection-protected. Registration tests targets before adding them to dashboard cluster selection. See [identity setup](../operator/managed-identity-setup.md) and [dashboard](../operator/v0.9-dashboard-guide.md).
+
+Durable mutation/governance state uses SQLite standalone or the admitted PostgreSQL persistence. Managed identity state, the matching Keycloak realm, Data Protection keys, database backups and outside-database deployment generation/recovery anchors have separate persistence/recovery roles. Restoring a database does not silently readmit old effect authority. [Recovery contract](../operations/v0.9-distribution-recovery.md)
+
+OCI, native API/UI/CLI/MCP and Helm media are released. The shipped Helm topology has one application replica in Standalone mode; external PostgreSQL database HA does not establish multi-application Helm HA. Exact platform limits and accepted media are in the release record.
 
 ## 5. Provider boundaries
 
@@ -75,9 +67,7 @@ Compatibility policy:
 
 ## 7. Read/write posture
 
-v0.1 is intentionally read-only.
-
-Write operations arrive only after metadata, connection resilience, compatibility, authorization foundations, integration testing, and operational load controls are proven.
+Read-only remains the default. v0.5-v0.9 introduced explicitly enabled, typed and authorized mutation families backed by durable state and capability checks. Metadata read, record read/export, sign-in and ownership labels remain separate from effect authority. The [administration guide](../operator/v0.5-safe-administration-guide.md) describes the governed operation pipeline. Registered-target Stream/Table creation is a separate owner-only path and is blocked by an active governance generation or enabled policy; the SELECT editor never accepts arbitrary DDL/DML.
 
 ## 8. Operation model
 

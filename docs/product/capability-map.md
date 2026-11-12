@@ -6,7 +6,9 @@ Acceptance date: **2026-09-16**
 
 This document consolidates the requested feature inventory into a product-safe target model. It preserves the intended capabilities while explicitly marking features that require reframing, sequencing or exclusion.
 
-v0.9 ownership catalog and policy implementation is described in the [W73/W75 runtime contract](../api/v0.9-catalog-policy-runtime.md); canonical real acceptance is tracked in #427/#429. Catalog assignment grants no authority, business requests remain W74, measured attribution remains W76, and all hardening/distribution/readiness work remains W77–W82. This implementation does not promote a release or convert future target capabilities into blanket support claims.
+## Historical direction, current availability
+
+The Gate 2 inventory and acceptance date above are preserved. Its TARGET/DEFER labels describe the original long-term direction, not the current release. Use [released v0.9 availability](current-capabilities.md), [Roadmap](../../ROADMAP.md) and [final release evidence](../implementation/evidence/v0.9-release-published-20261112.json) for today's implementation and retained limits. Several originally deferred capabilities now ship: Terraform, bounded CBOR/XML/MessagePack, data-quality monitoring, catalog/policy/requests and measured attribution. Apicurio remains Unsupported despite appearing in this target inventory. The original list below is not rewritten to imply that every target shipped.
 
 Legend:
 - **TARGET** — accepted as a long-term Kafdeck capability.
@@ -174,4 +176,4 @@ A capability is not complete unless it has:
 - documented failure/partial-result states,
 - accessibility implications where UI is involved.
 
-W74 request workflows and W76 measured attribution use the [request/attribution implementation contract](../api/v0.9-requests-attribution-runtime.md). Exact runtime acceptance remains in #428/#430; registered measured-counter inputs do not imply Kafka billable throughput, and request approval does not grant execution rights.
+Released W74 requests and W76 measured attribution use the [runtime contract](../api/v0.9-requests-attribution-runtime.md). Final acceptance is recorded in the v0.9 closure ledger. Measured-counter inputs do not imply billable Kafka throughput, and request approval does not grant execution rights.

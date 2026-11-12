@@ -1,5 +1,7 @@
 # Guarded v0.9 publication driver
 
+Status: **official v0.9 publication completed on 2026-11-12**. This main-branch copy describes the historical driver; the locked publisher commit remains unchanged. [Final publication record](../../docs/implementation/evidence/v0.9-release-published-20261112.json) records actual owner acceptance, readiness and asset verification. For installation use the [operator guide](../../docs/operator/v0.9-installation-guide.md). For missing source links in the frozen W81 report, use the separate [errata/source supplement](../../docs/releases/v0.9-evidence-errata.md); signed payload bytes remain unchanged. Subsequent sections preserve original prepublication conditions, not pending gates.
+
 This branch contains a reviewed transport/publisher, not a new product build.
 Accepted product source remains `01c7553425fbc61ba4a7a21918265c562086ba02` and the
 official signed manifest remains `b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba`.

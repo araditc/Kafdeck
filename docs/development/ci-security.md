@@ -1,48 +1,19 @@
-# CI and Security Automation
+# CI and security automation
 
-## Principles
+## Current checks
 
-- Workflows run with least-privilege `GITHUB_TOKEN` permissions.
-- Third-party actions are pinned to immutable full commit SHAs.
-- Workflow concurrency cancels obsolete runs where safe.
-- CI validates the exact pull-request head, not an assumed local state.
-- A passing unit test suite never substitutes for security, dependency, or integration controls.
+The always-on [quality gate](../../.github/workflows/quality-gate.yml) validates repository structure, immutable action SHA pins, Conventional Commit subjects and DCO trailers. It builds/tests the .NET solution, locked Terraform provider and React frontend, and runs W82 budget-verifier negative cases. PR validation uses the exact head; branch protection and unresolved conversations remain authoritative for merge.
 
-## Quality gate
+Path-filtered workflows add [dependency review](../../.github/workflows/dependency-review.yml), [CodeQL](../../.github/workflows/codeql.yml) for C#, JavaScript/TypeScript and Go, [container builds](../../.github/workflows/container.yml), and [Kafka compatibility](../../.github/workflows/kafka-compatibility.yml). The workflow matrix defines tested Kafka/security cells; a smoke test or compatible wire protocol does not establish blanket provider support. See [compatibility](../../README.md#kafka-compatibility).
 
-`quality-gate` is the always-on baseline check. It validates:
+## Release and integration evidence
 
-- required governance/repository files,
-- immutable SHA pinning of external actions,
-- Conventional Commit subjects,
-- DCO `Signed-off-by` trailers,
-- backend build/tests once .NET projects exist,
-- frontend build/tests once the React application exists.
+[Release supply-chain checks](../../.github/workflows/release-supply-chain.yml) build one source-bound candidate, prove isolated startup, generate an SPDX SBOM and scan that exact image. Native/OCI/Helm and identity/recovery acceptance have separate producers. The final v0.9 full-distribution manifest was explicitly owner-authorized and Sigstore-signed; official readiness and publication verified the selected source, media and accepted evidence. See [release standards](release-standards.md) and the [published record](../implementation/evidence/v0.9-release-published-20261112.json).
 
-Implementation-specific commands become mandatory the same PR that introduces the relevant scaffold.
+These controls exist now; a workflow's presence is not a claim that every current optional run passes. Required failures block merge/publication. Diagnose other failures against their actual logs and applicable admission policy; do not infer a vulnerability solely from a failed job or silently remove a required check. Reuse successful source-bound acceptance evidence where the release procedure permits it; documentation edits do not justify another load/soak run.
 
-## Dependency review
+## Security posture
 
-Pull requests are reviewed for newly introduced vulnerable dependencies and prohibited strong-copyleft licenses. License exceptions require explicit governance review.
+Workflows use least-privilege permissions, immutable third-party action SHAs and concurrency cancellation where safe. Only explicitly guarded signing/publication jobs receive signing or registry-write authority. Dependency/license findings and SAST results require triage; passing unit tests do not replace those controls.
 
-## CodeQL
-
-CodeQL is configured for C# and JavaScript/TypeScript and activates when source paths exist/change. SAST findings are triaged as security findings, not ordinary lint warnings.
-
-## Kafka smoke environment
-
-The project uses the official Apache Kafka JVM image pinned to `apache/kafka:4.3.1` for the Phase 0 local/CI smoke environment. The smoke test validates startup and basic topic administration on a KRaft broker. The compatibility matrix expands in later phases.
-
-## Secret scanning
-
-GitHub native secret scanning and push protection are the preferred repository controls when available. Independent secret-scanning automation may be added if organization settings cannot provide equivalent coverage. No workflow may print secrets for debugging.
-
-## Future release controls
-
-Before the first distributable release, CI must add:
-
-- CycloneDX SBOM generation,
-- OCI image vulnerability scanning,
-- container/artifact signing with Sigstore/Cosign,
-- provenance generation aligned with the approved SLSA target,
-- release reproducibility and upgrade validation.
+Native GitHub secret scanning, push protection and private vulnerability reporting remain conditional on repository/organization availability and settings. Do not describe them as universally active without checking settings. No workflow may print credentials or Kafka payloads. Follow [repository enforcement](repository-enforcement.md) and [SECURITY.md](../../SECURITY.md).
