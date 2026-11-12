@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "officialSigningRunId": 42984770583,
+  "expectedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "trustedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724",
+  "cosignVersion": "3.0.6",
+  "cosignWindowsSha256": "9b85a88ebff2d9dd30ff4984a6f61f2cedc232dd87d81fa7f2ff3c0ed96c241c",
+  "fixtureOnly": true,
+  "productExecuted": false,
+  "publicationPerformed": false,
+  "cases": [
+    {
+      "case": "altered-manifest",
+      "returnCode": 1,
+      "rejected": true,
+      "manifestSha256": "a88c1a70964bf2cc7e5ac28a4d8febc03c12524a5f1b6719aa3487111bd123ed",
+      "claimedWorkflowSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+      "logSha256": "b20f4244446d6d8fc0c53f030599afb8399cf46d23f9fcdc367ea14613386b02"
+    },
+    {
+      "case": "wrong-workflow-source",
+      "returnCode": 1,
+      "rejected": true,
+      "manifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+      "claimedWorkflowSha": "ffffffffffffffffffffffffffffffffffffffff",
+      "logSha256": "080a4f041710d92bbc5a0d7543cc241d947e13246a555facd1cee08299d4d8fb"
+    }
+  ]
+}

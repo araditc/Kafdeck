@@ -1,0 +1,43 @@
+{
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "disconnectedAuthentication": {
+    "humanBusinessApprovalClaimed": false,
+    "identity": "real Keycloak HTTPS private_key_jwt",
+    "journey": "signed installed API/CLI/MCP service-authenticated reads, actual Kafka metadata and exact fixture record",
+    "productMutationClaimed": false,
+    "run": 42986123750
+  },
+  "officialReleasedBaselineUpgrade": {
+    "image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+    "oldOfficialApiSha256": "658250544809283d13aa8dc7c366fbb7851748fe061411127cc3c538c44db62d",
+    "preUpgradeRollbackVerifiedForBoth": true,
+    "productRebuilt": false,
+    "providers": [
+      "sqlite",
+      "postgres"
+    ],
+    "runs": [
+      42988318558,
+      42990085696
+    ]
+  },
+  "ownerAdoption": "pending; technical passes do not authorize release publication",
+  "schemaVersion": 1,
+  "signature": {
+    "cosignVersion": "3.0.6",
+    "cosignWindowsSha256": "9b85a88ebff2d9dd30ff4984a6f61f2cedc232dd87d81fa7f2ff3c0ed96c241c",
+    "independentVendorDefaultRootVerifiedInRun": 42986123750,
+    "locallyVerifiedBeforeWindowsExecution": true,
+    "trustedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724"
+  },
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "windowsRecovery": {
+    "baselineApiSha256": "078b4fb64264bfd69cc919d4bea6592b3c98c567712020e8260090e839e68583",
+    "baselineKind": "local build of immutable published v0.8 source tag; not the distributed OCI binary",
+    "postgresInterruptedAt": "after generation schema commit and before catalog migration",
+    "postgresVersion": "postgres (PostgreSQL) 17.11",
+    "signedCandidateApphostSha256": "50fdd22e00a4972be700c5352738953536293157a2289f03d2eff0d6d21b55a5",
+    "sqliteInterruptedAt": "real exclusive SQLite write lock during native initialization, before health and any new migration commit",
+    "unknownSemantics": "original ExecutionUnknown snapshot remains unknown after restore; no blind replay or Kafka sending is claimed"
+  }
+}

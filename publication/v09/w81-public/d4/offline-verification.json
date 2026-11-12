@@ -1,0 +1,44 @@
+{
+  "installation": {
+    "native": {
+      "apiUi": {
+        "health": true,
+        "staticFrontend": true
+      },
+      "authenticatedOperation": false,
+      "cliHelp": true,
+      "identityFixtureStaged": false,
+      "installedFromArchives": true,
+      "mcpInitialize": true,
+      "mcpToolCatalog": true,
+      "rid": "linux-x64",
+      "scope": "signed archive extraction and native startup only; fixture profile identifiers, no authenticated backend call",
+      "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02"
+    },
+    "oci": {
+      "architecture": "amd64",
+      "authenticatedOperation": false,
+      "configDigest": "sha256:8b87c333d701f77511de2745f7e22c4cd4519aac296d30db28e983bba8ea7624",
+      "daemonImageId": "sha256:8b87c333d701f77511de2745f7e22c4cd4519aac296d30db28e983bba8ea7624",
+      "health": true,
+      "loadedFromVerifiedArchive": true,
+      "network": "none",
+      "readOnlyRoot": true,
+      "scope": "signed OCI load and isolated startup; external identity/broker operations are separate",
+      "staticFrontend": true,
+      "uid": 1654
+    }
+  },
+  "ipv4DefaultRoute": false,
+  "ipv6DefaultRoute": false,
+  "manifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "mediaVerified": true,
+  "networkNamespace": "loopback-only",
+  "releaseReady": false,
+  "schemaVersion": 1,
+  "scope": "full-distribution",
+  "signatureVerified": true,
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "trustedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724",
+  "workflowSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02"
+}

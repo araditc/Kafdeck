@@ -1,0 +1,168 @@
+{
+  "actualSignedOciConfigDigest": "sha256:2128b2c2c1c08187fd4f0c3f64fdfa6e7847a1b8ed531967a655bbe12bc8b216",
+  "architecture": "arm64",
+  "authenticationRerun": false,
+  "completedUtc": "2026-11-11T11:45:12.661201+00:00",
+  "driverSha": "64dc90e6f6833eb2bc386edee9c63e5def6c9463",
+  "emulated": false,
+  "machine": "aarch64",
+  "manifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "postgres": {
+    "actualOciMaintenanceAdmission": true,
+    "after": {
+      "generation": "0d5c108e-deff-49f1-bf81-52ce6a732269|2",
+      "snapshots": [
+        {
+          "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+          "State": 9
+        }
+      ],
+      "tablesSha256": "83f920258cdfb7d2cb6d1084d85b00e8a1af04c2ff7605c244f296adabc3e2ba"
+    },
+    "backupSha256": "82053cbc4f69dce18314a69f3183a78e993e7f99dd0c84603717b95f4833f8f2",
+    "before": {
+      "generation": "beb092e0-44ee-4f2d-8830-5a360f8ed758|1",
+      "snapshots": [
+        {
+          "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+          "State": 9
+        }
+      ],
+      "tablesSha256": "83f920258cdfb7d2cb6d1084d85b00e8a1af04c2ff7605c244f296adabc3e2ba"
+    },
+    "customDumpRestoredAndCompared": true,
+    "freshGenerationActualOciReady": true,
+    "originalAppWritersFenced": true,
+    "provider": "PostgreSql",
+    "quarantineWriteDeniedSqlState": "25006",
+    "scope": "actual single-node PostgreSQL OCI app profile; verified custom backup restore and generation safety; physical PITR/HA remain separate accepted W80 proofs",
+    "serverVersion": "18.6",
+    "staleContainerRequiredForcedCleanup": true,
+    "staleGenerationRefused": true,
+    "statePreservedOnActualOciRestart": true,
+    "threeSyntheticSnapshotsPreserved": true
+  },
+  "previousAuthEvidenceReused": true,
+  "schemaVersion": 1,
+  "scope": "remaining actual OCI-container upgrade and PostgreSQL state/restart/restore only; official signed media unchanged",
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "sqliteUpgrade": {
+    "actualOldAndNewContainers": false,
+    "actualOldContainerBackupRollback": false,
+    "crossPlatformOldAmd64DataToNativeArmOci": true,
+    "newSchemaMigrated": true,
+    "oldArmContainerClaimed": false,
+    "original": {
+      "States": [
+        {
+          "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+          "State": 9
+        }
+      ],
+      "Tables": [
+        "kafdeck_connect_auto_restart_activations",
+        "kafdeck_connect_auto_restart_profile_slots",
+        "kafdeck_connect_auto_restart_target_claims",
+        "kafdeck_fleet_conflict_obligations",
+        "kafdeck_fleet_conflict_scope_bindings",
+        "kafdeck_fleet_conflict_scope_guards",
+        "kafdeck_fleet_progress",
+        "kafdeck_mutation_cluster_slots",
+        "kafdeck_mutation_conflict_guard_schema",
+        "kafdeck_mutation_conflict_guards",
+        "kafdeck_mutation_operations",
+        "kafdeck_mutation_resource_claims",
+        "kafdeck_schema_info"
+      ]
+    },
+    "productRebuilt": false,
+    "reopenSchemaStable": true,
+    "samePersistedSQLiteVolume": true,
+    "threeOldSnapshotsPreserved": true,
+    "upgraded": {
+      "States": [
+        {
+          "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+          "State": 9
+        }
+      ],
+      "Tables": [
+        "attribution_measurements",
+        "attribution_rate_audit",
+        "attribution_rate_bindings",
+        "attribution_rate_receipts",
+        "attribution_rate_state",
+        "attribution_rate_versions",
+        "attribution_schema",
+        "attribution_visibility_scopes",
+        "catalog_owned_entities",
+        "catalog_owned_history",
+        "catalog_owned_plans",
+        "catalog_owned_receipts",
+        "catalog_owned_references",
+        "catalog_owned_schema",
+        "governance_deployment_generation",
+        "governance_generation_admissions",
+        "governance_generation_schema",
+        "governance_policy_activations",
+        "governance_policy_commit_receipts",
+        "governance_policy_schema",
+        "governance_policy_state",
+        "governance_policy_versions",
+        "kafdeck_connect_auto_restart_activations",
+        "kafdeck_connect_auto_restart_profile_slots",
+        "kafdeck_connect_auto_restart_target_claims",
+        "kafdeck_fleet_conflict_obligations",
+        "kafdeck_fleet_conflict_scope_bindings",
+        "kafdeck_fleet_conflict_scope_guards",
+        "kafdeck_fleet_progress",
+        "kafdeck_mutation_cluster_slots",
+        "kafdeck_mutation_conflict_guard_schema",
+        "kafdeck_mutation_conflict_guards",
+        "kafdeck_mutation_operations",
+        "kafdeck_mutation_resource_claims",
+        "kafdeck_schema_info",
+        "service_request_decisions",
+        "service_request_events",
+        "service_request_heads",
+        "service_request_plans",
+        "service_request_receipts",
+        "service_request_revisions",
+        "service_request_schema"
+      ]
+    }
+  },
+  "unknownEffectReplayClaimed": false
+}

@@ -1,0 +1,65 @@
+{
+  "actualOfficialV08ToSignedV09OfflineUpgrade": true,
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "baseline": {
+    "baselineSourceSha": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+    "driverSourceFiles": {
+      "UpgradeProbe.cs": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+      "offline-upgrade.sh": "108cb258fa0e7b0c998f5e8d2150b485cf14bd4dbc176774c85ecbcd845500b3",
+      "offline.sh": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a",
+      "run.py": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d",
+      "stage-upgrade.py": "0c36e49cd194b42228779dea599e65adfbd6c8731cbe15bb6ff08155797901fc",
+      "stage.py": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0",
+      "upgrade.py": "e43849154ec00896917a426c193d7d7a57fa01b0186db468580d55aeb24e5e86"
+    },
+    "fixtureOnlyCompiled": true,
+    "fixtureProbeAssemblySha256": "22955ba6c0547436d8846837ac05b2cdb51ebc2f5ac5076cf6a5ff2db5a529af",
+    "fixtureProbeSourceSha256": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+    "newProductRebuilt": false,
+    "officialPublishedV08Image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+    "officialPublishedV08SignatureVerified": true,
+    "oldApiAssemblySha256": "658250544809283d13aa8dc7c366fbb7851748fe061411127cc3c538c44db62d",
+    "oldProductRebuilt": false,
+    "oldRuntimeHostSha256": "634efbf2414144d140d6f59d167342c8b3b53b4c34346ed786dd0470ddc9a3cb",
+    "schemaVersion": 1
+  },
+  "ipv4DefaultRoute": false,
+  "ipv6DefaultRoute": false,
+  "namespaceInterfaces": [
+    "lo"
+  ],
+  "postgresVerifiedPreUpgradeCustomDumpRestoreToSeparateDatabase": true,
+  "productMutationDispatched": false,
+  "providerSelection": "postgres-preupgrade-backup-rollback-only",
+  "providers": {
+    "postgres": {
+      "actualPhysicalPitrClaimed": false,
+      "interruptionClaimed": false,
+      "legacySnapshotHashes": [
+        {
+          "SnapshotSha256": "e9824d096a333fefbd7ea57a226e116b2a25b8f56905cb3c54bcba0824bbb17a",
+          "State": 3
+        },
+        {
+          "SnapshotSha256": "16a50cc81cc11deb213dde4044ea81bdcedacb102ce090ebd76ea73669a516c8",
+          "State": 4
+        },
+        {
+          "SnapshotSha256": "4d2cb3127ea4ac50dba74a2f26053c51bd048eb4b5b6c1dc0be50f0ed9391c56",
+          "State": 9
+        }
+      ],
+      "officialReleasedV08OpenedActualDatabase": true,
+      "schemaStableOnReentry": true,
+      "signedCandidateMigratedSchema": true,
+      "signedCandidateReopened": true,
+      "syntheticApprovalFixture": true,
+      "threeLegacySnapshotsPreserved": true,
+      "verifiedPreUpgradeBackupRollback": true,
+      "verifiedPreUpgradeBackupSha256": "ff604056ad3292fb7e85af8581d4edf78b03be7cfa848a1f898bb13c6ee162b3"
+    }
+  },
+  "schemaVersion": 1,
+  "scope": "actual official v0.8 PostgreSQL database and verified preupgrade custom dump; signed candidate upgrade; dump restored into separate database and opened by official old binary with exact schema and all three snapshot hashes; no SQLite/auth/PITR rerun",
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba"
+}

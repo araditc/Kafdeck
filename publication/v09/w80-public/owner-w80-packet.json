@@ -1,0 +1,236 @@
+{
+  "authority": "owner-reviewed-local",
+  "baselineSourceSha": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+  "candidateWindowsApiArchiveSha256": "9dd556375a96dd7f8f7315fc02c83f87a30ee2a500d6b9a4199bd47a5e517f8f",
+  "checks": {
+    "disconnectedAuthenticatedJourney": true,
+    "generationFenceUnknownResume": true,
+    "postgresInterruptedMigration": true,
+    "postgresPhysicalPitr": true,
+    "postgresReleasedV08Upgrade": true,
+    "sqliteBackupRestoreRollback": true,
+    "sqliteInterruptedMigration": true,
+    "sqliteReleasedV08Upgrade": true
+  },
+  "disconnectedFixtureOnly": true,
+  "evidence": [
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/w80-recovery/sqlite-039ca942f03b471aafcff78385674424/evidence.json",
+      "sha256": "aa2a293fed6aeb25ea428634bd90c2dca4fdadcc7a7265e3b1e4bbf8b814c250"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/w80-recovery/sqlite-039ca942f03b471aafcff78385674424/sqlite-interruption.json",
+      "sha256": "859602b459bf359535b977951fd2ccf805ad889f93a166465c6ad75178ce9c0e"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/w80-recovery/postgres-pitr-1b3782cb85a241818b5f3dec1fb8ebd9/evidence.json",
+      "sha256": "bef2e3ead89e7b6d0081f1962ba322adadf0afd8492d7e3e12ee87ba88f528b2"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/w80-recovery/postgres-pitr-1b3782cb85a241818b5f3dec1fb8ebd9/pitr-evidence.json",
+      "sha256": "febbb1764fa7d070cd9a95ef099ac0ba0b6bb4db3f9df6fbbdac5d26dced1fc0"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/combined-evidence.json",
+      "sha256": "a52fa0d030ea1db9dcbaa3dbd698fc5da2beebed595936add9fe889a5341bd60"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/combined-evidence-final.json",
+      "sha256": "76a1288013191fc7c260d705f235782aeae5f939a5ff14c3f6db9f48f9b2001b"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/dependencies.json",
+      "sha256": "c2a2f3d166abbf759349e86fdb9bca91c11709bc02ef9b574b4c3a5fb31c95eb"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/independent-root-proof.json",
+      "sha256": "675f596b9c3ff5037bd5f20417600e7696fd3542ad6a02f529f9083b58074788"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/journey.json",
+      "sha256": "d5e1f48b711e0a7f00455b520dd5fcfa126df02685361ccf40b3b65b6a661153"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/run-metadata.json",
+      "sha256": "bcce96a2c9a715abd8cab1c4781f46fafa7c01f997d1381315d76bf28e716ba6"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/signed-input.json",
+      "sha256": "914ff7d0d1a0ebbb1181dee7dc3c90a9957284a3425df6b56ee80d102a62a4f7"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/offline-upgrade.json",
+      "sha256": "81aa1a10d72fafa0b86b7090dc3cb9dd43f44a1f08c55ca89b952390b05eba6f"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/postgres-fixture.json",
+      "sha256": "acd6916fd0169a360b4a244ebd8d49381267494e2487a7420735113b23b6c7ce"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/run-metadata.json",
+      "sha256": "9387d1bba26ad38d690402e7c6f4a7628e580da95ed0771737a54b2b5d5a384c"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/signed-input.json",
+      "sha256": "62a4e6764249222ba3028bd19d1da1505c3008b8ff2df4217089f6f1808d65c0"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/upgrade-input.json",
+      "sha256": "9e9fc6fcb317145bcc087b7f983a6629b8809f19d3bd679d8481c7daac49ceb0"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42990085696/offline-pg-rollback.json",
+      "sha256": "e32767bcd22fa855d095f2ec7e59e5638ea5637ebc1862e1c36cf57253fce6d9"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42990085696/postgres-fixture.json",
+      "sha256": "acd6916fd0169a360b4a244ebd8d49381267494e2487a7420735113b23b6c7ce"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42990085696/run-metadata.json",
+      "sha256": "4add9e10b5a63b603bc1726b98edaa7afad4512aa0a8700f8784b210a429c72a"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42990085696/signed-input.json",
+      "sha256": "faa5e2f4f015dd586ddb04f3151a4755bd3b1d5f8c715a72f30170475d721dd8"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/evidence/artifacts/v09-w82-next/w80-disconnected-evidence/42990085696/upgrade-input.json",
+      "sha256": "bb92684386853149da05ca3492ce9f98423b2656f770d6afd5642b5ac8009f13"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/acceptance-scope.json",
+      "sha256": "ba312786613270d1f5541a0cd643d1a622be6cbb90bf79b0ff225f93ef8b0cd4"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/README.md",
+      "sha256": "8ee21484923b2538301b8dcde6d2912490b3d2cf48111b613990532658498508"
+    }
+  ],
+  "schemaVersion": 1,
+  "scripts": [
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/invoke-signed-w80.ps1",
+      "sha256": "e9ba81294768f2f647d972585565543e8b35356f6ac8bd5d490c49f6836da241"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/run-signed-provider.ps1",
+      "sha256": "3c05e4534b0d733687afea1282ec687070bd9026691fe0299456d3ecef12b942"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/hold-signed-sqlite.py",
+      "sha256": "85664a334d03150859f18c1ca520e53358047256a7d02a5969974d5af926ace9"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/run-signed-physical-pitr.ps1",
+      "sha256": "73f60791dccddc08eb1714e04ae94f49ce90987154b91136f775bded9a61dcfd"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/prepare-signed-physical.ps1",
+      "sha256": "2d01a552619347a969c5b8b0faf342e31ceb0a541abcf0b9a198414dd6f7bdd8"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/physical-signed-lab-control.ps1",
+      "sha256": "3c69fec394457fdb0879ce1fb06ba14a76ff3f4bd144d2037d94581f6680cdaa"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/wal-transfer.py",
+      "sha256": "e3c40a0e841a10b56a29c5f74919edb0c7b868658a8bcfd999eaa0077751f102"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/probe/Program.cs",
+      "sha256": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/windows/probe/W80.Probe.csproj",
+      "sha256": "d007b3e307a71e95ec5f2f0ca21377b0badafca185ef9abe1cd683202a5af5a8"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/a4d781866f3df0773e7ccad5ca1cc33dbde9e5fe/.github/workflows/v09-w80-disconnected-auth.yml",
+      "sha256": "3e85f64dea981209847b45a1fbb884654cf49021e1ad078fb1b37947d4863dd6"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/a4d781866f3df0773e7ccad5ca1cc33dbde9e5fe/deploy/dev/w80-signed-disconnected/offline.sh",
+      "sha256": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/a4d781866f3df0773e7ccad5ca1cc33dbde9e5fe/deploy/dev/w80-signed-disconnected/run.py",
+      "sha256": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/a4d781866f3df0773e7ccad5ca1cc33dbde9e5fe/deploy/dev/w80-signed-disconnected/stage.py",
+      "sha256": "ae927a84e3315cbb2672734b26172c568b7b0064399afb1418108c870ae4d59b"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/.github/workflows/v09-w80-disconnected-auth.yml",
+      "sha256": "0f2d2f9b39d48b47a0192432ae52ed9750a5cc6d718e717ccb462c99c9b3c8ef"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/UpgradeProbe.cs",
+      "sha256": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/offline-upgrade.sh",
+      "sha256": "18c13341a18aad2626e8cff3da4088fc0fc8b75ae54af7168b36625b3eca398a"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/offline.sh",
+      "sha256": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/run.py",
+      "sha256": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/stage-upgrade.py",
+      "sha256": "0c36e49cd194b42228779dea599e65adfbd6c8731cbe15bb6ff08155797901fc"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/stage.py",
+      "sha256": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/882628d9a94928a8958af57a1430fc2592bfc434/deploy/dev/w80-signed-disconnected/upgrade.py",
+      "sha256": "eb702641be41a68107c9765e62f9260a81e21f36d0a3353e916c1fb43d4c63c4"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/.github/workflows/v09-w80-disconnected-auth.yml",
+      "sha256": "1214e0fcef2af0c22a353548276266c59a7dcce9843a42bfa56f83a603b43617"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/UpgradeProbe.cs",
+      "sha256": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/offline-upgrade.sh",
+      "sha256": "108cb258fa0e7b0c998f5e8d2150b485cf14bd4dbc176774c85ecbcd845500b3"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/offline.sh",
+      "sha256": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/run.py",
+      "sha256": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/stage-upgrade.py",
+      "sha256": "0c36e49cd194b42228779dea599e65adfbd6c8731cbe15bb6ff08155797901fc"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/stage.py",
+      "sha256": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0"
+    },
+    {
+      "path": "artifacts/v09-w82-next/w80-final-01c7553/scripts/2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab/deploy/dev/w80-signed-disconnected/upgrade.py",
+      "sha256": "e43849154ec00896917a426c193d7d7a57fa01b0186db468580d55aeb24e5e86"
+    }
+  ],
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "testHost": {
+    "architecture": "win-x64 and linux-x64",
+    "id": "local-win-4eb650df9522; GitHubActions42986123750/42988318558/42990085696",
+    "os": "Windows-11-10.0.26300-SP0; Ubuntu24.04 isolated namespaces"
+  }
+}
