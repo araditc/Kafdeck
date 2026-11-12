@@ -101,3 +101,7 @@ Preserve the managed state file and matching realm/key material together. New nu
 | New target is rejected | Configure approved CIDRs and runtime egress; use reachable broker IPs/ports, not arbitrary unapproved destinations |
 | Saved integration cannot decrypt after restart | Restore the matching Data Protection key ring or re-enter its credentials; preserve keys and state on future restarts |
 | Owner lost password and SMTP is absent | Use the secured Keycloak administration recovery procedure; do not delete Kafdeck's identity state |
+
+## Browser API reference
+
+See the [experimental managed-browser contract](../api/managed-browser-contract.md) for exact user/connection request and response shapes, CSRF, conditional availability, recovery and revision semantics. Authenticated discovery is `/api/v1/openapi/managed-browser.json`; this is not a separate Bearer/CLI management surface.

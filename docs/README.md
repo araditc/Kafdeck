@@ -24,3 +24,7 @@ Development scaffolds/laboratories under `deploy/dev` are isolated fixtures. The
 ## Reading historical documents
 
 Versioned RFCs/ADRs, Gate decisions and intermediate test reports retain original dates, statuses and observed results. Use the [final closure ledger](implementation/v0.9-full-scope-delivery-execution-plan.md#final-closure-ledger) for completed v0.9 acceptance. Signed W80/W81 evidence is immutable; corrections are additive in the [errata/source supplement](releases/v0.9-evidence-errata.md). A versioned API/runbook filename can remain v0.8 while applying to current 0.9 packages; do not change wire versions or the independently versioned Terraform provider to match the app.
+
+## Managed browser API reference
+
+The [experimental managed-browser contract](api/managed-browser-contract.md) and [OpenAPI catalog](api/openapi-managed-browser.json) document first-owner setup, ordinary users, Kafka targets and registered service settings without changing the retained versioned public API families.

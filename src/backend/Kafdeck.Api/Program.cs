@@ -1045,6 +1045,7 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
     app.MapKafdeckOidcSessionEndpoints(connectionWorkspace);
     app.MapKafdeckAntiforgeryEndpoint();
     if (connectionWorkspace) app.MapKafkaConnectionWorkspace(kafdeckOptions, managedIdentity);
+    if (connectionWorkspace || managedIdentity is not null) app.MapManagedBrowserOpenApi();
     if (managedIdentity is not null)
     {
         _ = app.Services.GetRequiredService<ManagedKeycloakUsers>();

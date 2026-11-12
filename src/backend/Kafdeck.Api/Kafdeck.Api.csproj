@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup><Compile Include="../../shared/KafdeckReadContracts.cs" Link="Contracts/KafdeckReadContracts.cs" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../../docs/api/openapi-managed-browser.json" LogicalName="Kafdeck.ManagedBrowser.OpenApi" /></ItemGroup>
   <PropertyGroup>
     <AssemblyName>Kafdeck.Api</AssemblyName>
     <RootNamespace>Kafdeck.Api</RootNamespace>

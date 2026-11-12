@@ -1,0 +1,3446 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kafdeck experimental managed-browser API",
+    "version": "1.0.0-experimental.1",
+    "description": "G03 contract revision, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "x-stability": "experimental",
+  "x-compatibility-policy": "Source-coupled to the shipped dashboard; review contract changes together with handlers. No independent stable-client or CLI parity guarantee. Existing versioned public contracts are retained.",
+  "paths": {
+    "/api/v1/setup": {
+      "get": {
+        "operationId": "managed-setup-state",
+        "summary": "Read first-owner setup state",
+        "description": "Read-only. Does not return the one-use setup code. available may also mean the host-issued code is absent/expired; recovery never opens automatic first-owner retry.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "anonymous; setup enabled",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Read first-owner setup state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "managed-setup-create",
+        "summary": "Create the first installation owner",
+        "description": "Dedicated empty realm only. Reservation is persisted before Keycloak creation; unknown outcome remains recovery. No email verification. Success requires a separate browser sign-in; this is not a login/token endpoint.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "valid one-use host code plus CSRF",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Create the first installation owner"
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 8192,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SetupInput",
+        "parameters": [
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "identity-busy",
+          "setup-closed",
+          "setup-code",
+          "identity-input",
+          "setup-realm-in-use",
+          "identity-provider",
+          "identity-duplicate"
+        ]
+      }
+    },
+    "/api/v1/identity/users": {
+      "get": {
+        "operationId": "managed-users-list",
+        "summary": "List managed users and pending provisionings",
+        "description": "No passwords, private proof or protected service credentials are returned. Pending entries include completed membership awaiting audit delivery.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List managed users and pending provisionings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUsers"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "managed-users-create",
+        "summary": "Create or reconcile an ordinary managed user",
+        "description": "Only viewer/operator/manager grants. Requires the admin-only Keycloak provisioning attribute. Unknown outcomes return 409 identity-provisioning-pending with operationId; retain the same request/material or use recovery. At-least-once audit uses stable request correlation. Exact retry does not reset/reuse the submitted password. No Idempotency-Key header.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create or reconcile an ordinary managed user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 16384,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewUserInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "NewUserInput",
+        "parameters": [
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ]
+      }
+    },
+    "/api/v1/identity/users/provisioning/{operationId}/recover": {
+      "post": {
+        "operationId": "managed-users-recover",
+        "summary": "Recover the original ordinary-user provisioning",
+        "description": "No request DTO/body required. Original requester and current owner authority are required. Does not create a new account, adopt an unrelated email or reset a password. Missing or uncertain provider evidence remains pending.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Recover the original ordinary-user provisioning",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 1024,
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-provisioning-missing",
+          "identity-provisioning-conflict",
+          "identity-provisioning-profile",
+          "identity-provisioning-pending"
+        ]
+      }
+    },
+    "/api/v1/identity/users/{id}": {
+      "put": {
+        "operationId": "managed-users-update",
+        "summary": "Change ordinary-user role, cluster access and enabled state",
+        "description": "The first owner cannot be changed. Disabling revokes locally before the provider call; a 502 can therefore mean the local revocation already took effect. Enabling commits locally after provider success. Reload current state after uncertainty.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Change ordinary-user role, cluster access and enabled state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 16384,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "UpdateUserInput",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-owner",
+          "identity-missing",
+          "identity-input",
+          "identity-provider"
+        ]
+      }
+    },
+    "/api/v1/connections/targets": {
+      "get": {
+        "operationId": "managed-targets-list",
+        "summary": "List currently authorized configured and registered targets",
+        "description": "Saved connection names and bootstrap settings are returned; credentials are not. A configured target is not a registered target.",
+        "x-stability": "experimental",
+        "x-availability": "OIDC and ConnectionWorkspace.Enabled",
+        "x-authority": "browser operator; ClusterRead filters each target",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List currently authorized configured and registered targets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceTarget"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "managed-targets-register",
+        "summary": "Register or reuse a Kafka target",
+        "description": "SASL requires mechanism, nonblank username/password without controls; non-SASL rejects all three. TLS allows optional CA plus paired client certificate/key, and optional key password; plaintext rejects TLS fields. TLS certificate and hostname verification stay enabled. Registered/new targets must satisfy configured CIDRs for bootstrap and returned broker metadata. Up to four simultaneous probes, five-second Kafka metadata deadline. Snapshot is not a promise of an active credential lease; the existing bounded lease/cache contract still applies. A new registered target returns HTTP 200, not 201, and a stable connection-* ID. Deduplication matches protocol and case-insensitive bootstrap set, not display name or SASL mechanism. Registration limit 256, name collision yields 409. Secrets are retained only in the existing per-session in-memory lease, not target JSON; reconnect after expiry/restart. Audit records actual outcome without broker/name/credential data. No Idempotency-Key header.",
+        "x-stability": "experimental",
+        "x-availability": "OIDC and ConnectionWorkspace.Enabled and managed owner for registration",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Register or reuse a Kafka target",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionObservation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 393216,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionDraft"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "ConnectionDraft",
+        "parameters": [
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "connection-authentication",
+          "connection-target",
+          "connection-input",
+          "connection-network",
+          "connection-name",
+          "connection-busy",
+          "connection-failed",
+          "connection-save-busy",
+          "connection-limit",
+          "connection-save-failed"
+        ]
+      }
+    },
+    "/api/v1/connections/test": {
+      "post": {
+        "operationId": "managed-connections-test",
+        "summary": "Test a Kafka connection without registering it",
+        "description": "SASL requires mechanism, nonblank username/password without controls; non-SASL rejects all three. TLS allows optional CA plus paired client certificate/key, and optional key password; plaintext rejects TLS fields. TLS certificate and hostname verification stay enabled. Registered/new targets must satisfy configured CIDRs for bootstrap and returned broker metadata. Up to four simultaneous probes, five-second Kafka metadata deadline. Snapshot is not a promise of an active credential lease; the existing bounded lease/cache contract still applies. A new target has null clusterId/savedTarget and requiresRegistration=true. Successful testing does not save a target or emit registration audit.",
+        "x-stability": "experimental",
+        "x-availability": "OIDC and ConnectionWorkspace.Enabled",
+        "x-authority": "browser operator for an authorized target; owner for a new target",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test a Kafka connection without registering it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionObservation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 393216,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionDraft"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "ConnectionDraft",
+        "parameters": [
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "connection-authentication",
+          "connection-target",
+          "connection-input",
+          "connection-network",
+          "connection-busy",
+          "connection-failed"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/schema-registry": {
+      "get": {
+        "operationId": "managed-schema-registry-settings-get",
+        "summary": "Read redacted schema-registry settings",
+        "description": "Registered Kafka target only. An unconfigured service returns url/revision null and authentication none. No username/secret/protectedCredential is returned.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read redacted schema-registry settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-handler-problem-codes": [
+          "registry-connection-missing",
+          "registry-settings-denied"
+        ]
+      },
+      "put": {
+        "operationId": "managed-schema-registry-settings-save",
+        "summary": "Save validated schema-registry settings",
+        "description": "Registered Kafka target only. Compare-and-set revision is checked before provider IO and again under the file lease before save. A stale revision yields 409 without saving. Credentials require HTTPS except for loopback; URLs resolve only onto permitted networks and redirects remain disabled. Basic requires nonempty username without colon/controls and secret; bearer secret has no whitespace or non-ASCII characters. Empty/omitted credentials can retain the prior protected value only for unchanged normalized URL/auth. Changing URL/auth requires credentials again; none clears the credential. Provider probes use an eight-second operation deadline and four shared slots. Success returns only the public normalized URL, authentication mode and new opaque revision. Do not blindly repeat after a lost save response; reload revision first.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Save validated schema-registry settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SettingsInput",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "registry-connection-missing",
+          "registry-settings-denied",
+          "registry-settings-conflict",
+          "registry-settings-invalid",
+          "registry-settings-busy",
+          "registry-credential-unavailable"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/schema-registry/test": {
+      "post": {
+        "operationId": "managed-schema-registry-settings-test",
+        "summary": "Test schema-registry settings without saving",
+        "description": "Registered Kafka target only. Compare-and-set revision is checked before provider IO and again under the file lease before save. A stale revision yields 409 without saving. Credentials require HTTPS except for loopback; URLs resolve only onto permitted networks and redirects remain disabled. Basic requires nonempty username without colon/controls and secret; bearer secret has no whitespace or non-ASCII characters. Empty/omitted credentials can retain the prior protected value only for unchanged normalized URL/auth. Changing URL/auth requires credentials again; none clears the credential. Provider probes use an eight-second operation deadline and four shared slots. No revision or credential is persisted by a test.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test schema-registry settings without saving",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connected"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SettingsInput",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "registry-connection-missing",
+          "registry-settings-denied",
+          "registry-settings-conflict",
+          "registry-settings-invalid",
+          "registry-settings-busy",
+          "registry-credential-unavailable"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/kafka-connect": {
+      "get": {
+        "operationId": "managed-kafka-connect-settings-get",
+        "summary": "Read redacted kafka-connect settings",
+        "description": "Registered Kafka target only. An unconfigured service returns url/revision null and authentication none. No username/secret/protectedCredential is returned.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read redacted kafka-connect settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-handler-problem-codes": [
+          "connect-connection-missing",
+          "connect-settings-denied"
+        ]
+      },
+      "put": {
+        "operationId": "managed-kafka-connect-settings-save",
+        "summary": "Save validated kafka-connect settings",
+        "description": "Registered Kafka target only. Compare-and-set revision is checked before provider IO and again under the file lease before save. A stale revision yields 409 without saving. Credentials require HTTPS except for loopback; URLs resolve only onto permitted networks and redirects remain disabled. Basic requires nonempty username without colon/controls and secret; bearer secret has no whitespace or non-ASCII characters. Empty/omitted credentials can retain the prior protected value only for unchanged normalized URL/auth. Changing URL/auth requires credentials again; none clears the credential. Provider probes use an eight-second operation deadline and four shared slots. Success returns only the public normalized URL, authentication mode and new opaque revision. Do not blindly repeat after a lost save response; reload revision first.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Save validated kafka-connect settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SettingsInput",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "connect-connection-missing",
+          "connect-settings-denied",
+          "connect-settings-conflict",
+          "connect-settings-invalid",
+          "connect-settings-busy",
+          "connect-credential-unavailable"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/kafka-connect/test": {
+      "post": {
+        "operationId": "managed-kafka-connect-settings-test",
+        "summary": "Test kafka-connect settings without saving",
+        "description": "Registered Kafka target only. Compare-and-set revision is checked before provider IO and again under the file lease before save. A stale revision yields 409 without saving. Credentials require HTTPS except for loopback; URLs resolve only onto permitted networks and redirects remain disabled. Basic requires nonempty username without colon/controls and secret; bearer secret has no whitespace or non-ASCII characters. Empty/omitted credentials can retain the prior protected value only for unchanged normalized URL/auth. Changing URL/auth requires credentials again; none clears the credential. Provider probes use an eight-second operation deadline and four shared slots. No revision or credential is persisted by a test.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test kafka-connect settings without saving",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connected"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SettingsInput",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "connect-connection-missing",
+          "connect-settings-denied",
+          "connect-settings-conflict",
+          "connect-settings-invalid",
+          "connect-settings-busy",
+          "connect-credential-unavailable"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/ksqldb": {
+      "get": {
+        "operationId": "managed-ksqldb-settings-get",
+        "summary": "Read redacted ksqldb settings",
+        "description": "Registered Kafka target only. An unconfigured service returns url/revision null and authentication none. No username/secret/protectedCredential is returned.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read redacted ksqldb settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-handler-problem-codes": [
+          "ksql-connection-missing",
+          "ksql-settings-denied"
+        ]
+      },
+      "put": {
+        "operationId": "managed-ksqldb-settings-save",
+        "summary": "Save validated ksqldb settings",
+        "description": "Registered Kafka target only. Compare-and-set revision is checked before provider IO and again under the file lease before save. A stale revision yields 409 without saving. Credentials require HTTPS except for loopback; URLs resolve only onto permitted networks and redirects remain disabled. Basic requires nonempty username without colon/controls and secret; bearer secret has no whitespace or non-ASCII characters. Empty/omitted credentials can retain the prior protected value only for unchanged normalized URL/auth. Changing URL/auth requires credentials again; none clears the credential. Provider probes use an eight-second operation deadline and four shared slots. Success returns only the public normalized URL, authentication mode and new opaque revision. Do not blindly repeat after a lost save response; reload revision first.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Save validated ksqldb settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SettingsInput",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "ksql-connection-missing",
+          "ksql-settings-denied",
+          "ksql-settings-conflict",
+          "ksql-settings-invalid",
+          "ksql-settings-busy",
+          "ksql-credential-unavailable"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/ksqldb/test": {
+      "post": {
+        "operationId": "managed-ksqldb-settings-test",
+        "summary": "Test ksqldb settings without saving",
+        "description": "Registered Kafka target only. Compare-and-set revision is checked before provider IO and again under the file lease before save. A stale revision yields 409 without saving. Credentials require HTTPS except for loopback; URLs resolve only onto permitted networks and redirects remain disabled. Basic requires nonempty username without colon/controls and secret; bearer secret has no whitespace or non-ASCII characters. Empty/omitted credentials can retain the prior protected value only for unchanged normalized URL/auth. Changing URL/auth requires credentials again; none clears the credential. Provider probes use an eight-second operation deadline and four shared slots. No revision or credential is persisted by a test.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test ksqldb settings without saving",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connected"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "SettingsInput",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "ksql-connection-missing",
+          "ksql-settings-denied",
+          "ksql-settings-conflict",
+          "ksql-settings-invalid",
+          "ksql-settings-busy",
+          "ksql-credential-unavailable"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/ksqldb/streams": {
+      "post": {
+        "operationId": "managed-ksqldb-streams-create",
+        "summary": "Create a bounded ksqlDB stream",
+        "description": "Owner only, configured service required, no active policy or governed deployment. Provider Kafka cluster ID must match a fresh Kafka observation. This typed request is not unrestricted SQL. Names are case-normalized. Partitions and replicas must both be set or both null/omitted. A table requires a primary key; a stream forbids one. HTTP 202 unconfirmed means the external effect may already exist; inspect the actual catalog before retrying. No request-id/idempotency-header contract.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a bounded ksqlDB stream",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Provider effect is unconfirmed, not a failed/no-effect result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogUnconfirmed"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KsqlStreamInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "KsqlCatalogDefinition",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "ksql_stream_create_denied",
+          "ksql_stream_invalid",
+          "ksql_catalog_governed",
+          "ksql_not_configured",
+          "ksql_stream_create_busy",
+          "ksql_catalog_policy_unavailable",
+          "ksql_catalog_cluster_unavailable",
+          "ksql_catalog_cluster_mismatch",
+          "ksql_stream_provider_denied",
+          "ksql_stream_rejected"
+        ]
+      }
+    },
+    "/api/v1/connections/{clusterId}/ksqldb/tables": {
+      "post": {
+        "operationId": "managed-ksqldb-tables-create",
+        "summary": "Create a bounded ksqlDB table",
+        "description": "Owner only, configured service required, no active policy or governed deployment. Provider Kafka cluster ID must match a fresh Kafka observation. This typed request is not unrestricted SQL. Names are case-normalized. Partitions and replicas must both be set or both null/omitted. A table requires a primary key; a stream forbids one. HTTP 202 unconfirmed means the external effect may already exist; inspect the actual catalog before retrying. No request-id/idempotency-header contract.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a bounded ksqlDB table",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Provider effect is unconfirmed, not a failed/no-effect result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogUnconfirmed"
+                }
+              }
+            }
+          }
+        },
+        "x-declared-body-limit-bytes": 32768,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KsqlTableInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "KsqlCatalogDefinition",
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Kafdeck-CSRF",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Requires the matching antiforgery cookie."
+          }
+        ],
+        "x-handler-problem-codes": [
+          "ksql_table_create_denied",
+          "ksql_table_invalid",
+          "ksql_catalog_governed",
+          "ksql_not_configured",
+          "ksql_table_create_busy",
+          "ksql_catalog_policy_unavailable",
+          "ksql_catalog_cluster_unavailable",
+          "ksql_catalog_cluster_mismatch",
+          "ksql_table_provider_denied",
+          "ksql_table_rejected"
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BrowserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "Kafdeck.Session",
+        "description": "Established through the configured Keycloak/OIDC browser flow; managed routes reject NonBrowserReadIdentity."
+      },
+      "Antiforgery": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Kafdeck-CSRF",
+        "description": "Use token from GET /api/v1/auth/csrf (setup also returns csrf) with matching HttpOnly Kafdeck.Antiforgery cookie; reacquire after principal changes."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "additionalProperties": true
+      },
+      "SetupInput": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "32 hexadecimal characters; whitespace trimmed. One-use host-issued code, normally expires after 15 minutes.",
+            "writeOnly": true
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Trimmed, lowercased exact mailbox address; no controls."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "code",
+          "email",
+          "password"
+        ],
+        "additionalProperties": true
+      },
+      "SetupState": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "recovery",
+              "complete"
+            ]
+          },
+          "csrf": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Request token only while available; not the setup code."
+          }
+        },
+        "required": [
+          "state",
+          "csrf"
+        ],
+        "additionalProperties": true
+      },
+      "NewUserInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "writeOnly": true
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "operator",
+              "manager"
+            ]
+          },
+          "clusterIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "All IDs must currently exist; duplicates are collapsed and IDs sorted. Empty grants no cluster access."
+          },
+          "requestId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional nonempty GUID. Reuse the same ID and access material to reconcile; password is not replayed/reset."
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "role",
+          "clusterIds"
+        ],
+        "additionalProperties": true
+      },
+      "UpdateUserInput": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "operator",
+              "manager"
+            ]
+          },
+          "clusterIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "All IDs must currently exist; duplicates are collapsed and IDs sorted. Empty grants no cluster access."
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "role",
+          "clusterIds",
+          "enabled"
+        ],
+        "additionalProperties": true
+      },
+      "ManagedUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "viewer",
+              "operator",
+              "manager"
+            ]
+          },
+          "clusterIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "clusterIds",
+          "enabled"
+        ],
+        "additionalProperties": true
+      },
+      "PendingProvisioning": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "operator",
+              "manager"
+            ]
+          },
+          "clusterIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "All IDs must currently exist; duplicates are collapsed and IDs sorted. Empty grants no cluster access."
+          }
+        },
+        "required": [
+          "operationId",
+          "email",
+          "role",
+          "clusterIds"
+        ],
+        "additionalProperties": true
+      },
+      "ManagedUsers": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManagedUser"
+            }
+          },
+          "clusterIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clusterNames": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "pendingProvisionings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingProvisioning"
+            }
+          }
+        },
+        "required": [
+          "users",
+          "clusterIds",
+          "clusterNames",
+          "pendingProvisionings"
+        ],
+        "additionalProperties": true
+      },
+      "ConnectionDraft": {
+        "type": "object",
+        "properties": {
+          "bootstrapServers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "description": "Also rejects case-insensitive duplicates. New/registered targets require canonical IP:port entries in an allowed CIDR; configured targets may use their configured names."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "PLAINTEXT",
+              "SSL",
+              "SASL_PLAINTEXT",
+              "SASL_SSL"
+            ]
+          },
+          "mechanism": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "PLAIN",
+              "SCRAM-SHA-256",
+              "SCRAM-SHA-512",
+              null
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096,
+            "writeOnly": true
+          },
+          "caCertificate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 65536,
+            "description": "PEM CERTIFICATE."
+          },
+          "clientCertificate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 65536,
+            "description": "PEM CERTIFICATE; pair with clientKey."
+          },
+          "clientKey": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 65536,
+            "writeOnly": true
+          },
+          "clientKeyPassword": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096,
+            "writeOnly": true
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 60,
+            "description": "Trimmed, nonempty name required for a new target. Controls, bidi overrides/isolates and supplied credential substrings are rejected."
+          }
+        },
+        "required": [
+          "bootstrapServers",
+          "protocol"
+        ],
+        "additionalProperties": true
+      },
+      "WorkspaceTarget": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "bootstrapServers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "PLAINTEXT",
+              "SSL",
+              "SASL_PLAINTEXT",
+              "SASL_SSL"
+            ]
+          },
+          "mechanism": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "bootstrapServers",
+          "protocol",
+          "mechanism",
+          "registered"
+        ],
+        "additionalProperties": true
+      },
+      "Broker": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "host",
+          "port"
+        ],
+        "additionalProperties": true
+      },
+      "Topic": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "partitions": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "partitions"
+        ],
+        "additionalProperties": true
+      },
+      "ConnectionObservation": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brokers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Broker"
+            },
+            "maxItems": 100
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            },
+            "maxItems": 250
+          },
+          "topicsTruncated": {
+            "type": "boolean"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requiresRegistration": {
+            "type": "boolean"
+          },
+          "savedTarget": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "clusterId",
+          "brokers",
+          "topics",
+          "topicsTruncated",
+          "observedAt",
+          "requiresRegistration",
+          "savedTarget"
+        ],
+        "additionalProperties": true
+      },
+      "SettingsInput": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "HTTP(S) absolute URL, no userinfo/query/fragment/backslash/controls; resolved service IPs must pass allowed-network checks."
+          },
+          "authentication": {
+            "type": "string",
+            "enum": [
+              "none",
+              "basic",
+              "bearer"
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "secret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096,
+            "writeOnly": true,
+            "description": "Omitted/empty with omitted/empty username retains a protected credential only for unchanged normalized URL and auth type. New credentials otherwise required."
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Expected revision; null/omitted only for an unconfigured service."
+          }
+        },
+        "required": [
+          "url",
+          "authentication"
+        ],
+        "additionalProperties": true
+      },
+      "PublicSettings": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "authentication": {
+            "type": "string",
+            "enum": [
+              "none",
+              "basic",
+              "bearer"
+            ]
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "url",
+          "authentication",
+          "revision"
+        ],
+        "additionalProperties": true
+      },
+      "Connected": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connected"
+        ],
+        "additionalProperties": true
+      },
+      "KsqlCatalogField": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "VARCHAR",
+              "INTEGER",
+              "BIGINT",
+              "DOUBLE",
+              "BOOLEAN"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": true
+      },
+      "KsqlCatalogDefinition": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 249,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "description": "A single dot or double dot is rejected."
+          },
+          "valueFormat": {
+            "type": "string",
+            "enum": [
+              "JSON",
+              "JSON_SR",
+              "AVRO",
+              "PROTOBUF",
+              "DELIMITED"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KsqlCatalogField"
+            },
+            "minItems": 1,
+            "maxItems": 64,
+            "description": "Unique names case-insensitively, including the primary key."
+          },
+          "partitions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 256
+          },
+          "replicas": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 16
+          },
+          "primaryKey": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KsqlCatalogField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "topic",
+          "valueFormat",
+          "fields"
+        ],
+        "additionalProperties": true
+      },
+      "KsqlStreamInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/KsqlCatalogDefinition"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "primaryKey": {
+                "type": "null"
+              }
+            },
+            "required": [],
+            "additionalProperties": true
+          }
+        ]
+      },
+      "KsqlTableInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/KsqlCatalogDefinition"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "primaryKey": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "VARCHAR",
+                      "INTEGER",
+                      "BIGINT",
+                      "DOUBLE"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "primaryKey"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      },
+      "CatalogCreated": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "created"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "additionalProperties": true
+      },
+      "CatalogUnconfirmed": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconfirmed"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    }
+  }
+}

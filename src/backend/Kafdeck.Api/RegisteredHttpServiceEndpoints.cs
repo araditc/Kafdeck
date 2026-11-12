@@ -113,6 +113,7 @@ internal static class RegisteredHttpServiceEndpoints
                     _ => Problem(422, $"ksql_{resource}_rejected", $"ksqlDB rejected the {resource}. Check for an existing name and verify the topic and format."),
                 };
             })
+            .WithManagedBrowserContract($"managed-ksqldb-{resource}s-create", typeof(KsqlCatalogDefinition))
             .WithMetadata(new RequestSizeLimitAttribute(32768)).RequireKafdeckAntiforgery();
     }
 
@@ -140,7 +141,7 @@ internal static class RegisteredHttpServiceEndpoints
             if (Owner(context, store) is null) return Denied();
             var target = Find(store.Read(), clusterId);
             return target is null ? Missing() : Results.Ok(PublicSettings(target.GetService(service)));
-        });
+        }).WithManagedBrowserContract($"managed-{slug}-settings-get");
 
         async Task<IResult> Probe(string clusterId, RegisteredHttpServiceRuntime.SettingsInput input,
             HttpContext context, ISecurityAuditSink audit, CancellationToken cancellation, bool save)
@@ -225,9 +226,11 @@ internal static class RegisteredHttpServiceEndpoints
 
         app.MapPost(path + "/test", (string clusterId, RegisteredHttpServiceRuntime.SettingsInput input,
             HttpContext context, ISecurityAuditSink audit, CancellationToken token) => Probe(clusterId, input, context, audit, token, false))
+            .WithManagedBrowserContract($"managed-{slug}-settings-test", typeof(RegisteredHttpServiceRuntime.SettingsInput))
             .WithMetadata(new RequestSizeLimitAttribute(32768)).RequireKafdeckAntiforgery();
         app.MapPut(path, (string clusterId, RegisteredHttpServiceRuntime.SettingsInput input,
             HttpContext context, ISecurityAuditSink audit, CancellationToken token) => Probe(clusterId, input, context, audit, token, true))
+            .WithManagedBrowserContract($"managed-{slug}-settings-save", typeof(RegisteredHttpServiceRuntime.SettingsInput))
             .WithMetadata(new RequestSizeLimitAttribute(32768)).RequireKafdeckAntiforgery();
     }
 
