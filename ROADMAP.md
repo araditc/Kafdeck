@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gate 0–Gate 8 scope accepted; v0.1-v0.7 released; v0.7 is the active release line; v0.8 planning active**  
+Status: **Gates 0–9 accepted; v0.1–v0.9 released; v0.9 is the active release line**
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -239,9 +239,9 @@ Capabilities:
 
 Scope authority: **Issue #208 / Gate 8 — owner accepted 2026-09-27**. W61–W71 and tracker **#209** are complete. G5 was accepted at protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce` after all 14 producer workflows and the 124-file strict Main packet passed; PR #422 removed unused vulnerable APT components. The owner separately authorized publication of this exact source/archive on 2026-11-05. [v0.8](https://github.com/araditc/Kafdeck/releases/tag/v0.8) and its signed GHCR digest `sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45` were published through [run41986146327](https://github.com/araditc/Kafdeck/actions/runs/41986146327). GHCR access remains private and requires an authorized `read:packages` token. See [accepted evidence](docs/implementation/evidence/v0.8-g5-accepted-20261105.json).
 
-## v0.9 — Governance, Enterprise Operations & Hardening — W72 ADMITTED / W73–W75 DELIVERY
+## v0.9 — Governance, Enterprise Operations & Hardening — RELEASED
 
-The owner accepted the complete scope in [#424](https://github.com/araditc/Kafdeck/issues/424) on 2026-11-05. [W72 #426](https://github.com/araditc/Kafdeck/issues/426) was admitted through PR #437 at protected main `d8d9e6319b536760993d840ce084dfc832c543de`, after exact-head CODEOWNER approval and seven successful main workflows. [Tracker #425](https://github.com/araditc/Kafdeck/issues/425) retains every W72–W82 theme; W73 catalog and W75 policy are accepted; W74 requests and W76 attribution proceed in parallel under the [full execution plan](docs/implementation/v0.9-full-scope-delivery-execution-plan.md). [Runtime contracts and operations](docs/api/v0.9-catalog-policy-runtime.md) describe their additive, default-off implementation and evidence producers. [Request/attribution runtime contracts](docs/api/v0.9-requests-attribution-runtime.md) describe W74/W76; W77–W82 retain their full scope, dependencies and acceptance gates. Released v0.8 remains the baseline; publication requires separate exact-SHA owner approval.
+The owner accepted the full scope in [#424](https://github.com/araditc/Kafdeck/issues/424). W72–W82 acceptance is complete, including the final signed-media recovery/platform matrix and enforced W82 bounds. The owner authorized publication on 2026-11-12; [v0.9](https://github.com/araditc/Kafdeck/releases/tag/v0.9) was published from `01c7553425fbc61ba4a7a21918265c562086ba02` through [run 43232262853](https://github.com/araditc/Kafdeck/actions/runs/43232262853). [Release evidence](docs/implementation/evidence/v0.9-release-published-20261112.json) preserves source/artifact hashes and explicit KAF-02/Helm/ARM limits. [Install and onboard](docs/operator/v0.9-installation-guide.md).
 
 Governance:
 - Application/team/topic ownership catalog

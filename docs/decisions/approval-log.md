@@ -391,3 +391,10 @@ The project owner explicitly accepted the complete measured proposal with SHA256
 > این حدود و هم‌ارزی را می‌پذیرم
 
 The [versioned limits](../performance/v0.9-budget-candidate.json) retain the accepted numbers and identities. The baseline default-build fingerprint is `30188143a7d6dd579ed518ee356a7854f9570be2fb6e057a86f9f98b80b96238`. The explicitly equivalent native-only input fingerprint is `8e5bba002f1e620bff82d1d1d2fe88b8a26eb81b21a6be2455f382c26ebc010a`. Their delta adds the conditional native restore target and 95 RID lockfiles, with no change to existing default build configuration or portable dependency graphs. A different source, binary, CPU or build-input snapshot requires its own admitted evidence. This acceptance grants no signature, registry push, tag or release authorization.
+
+
+## v0.9 official publication — 2026-11-12
+
+The owner explicitly authorized official v0.9 publication after final CI, adopting the final W80/W81 acceptance and locked publisher proposal `0d4efb89cb4db0d44b33d3e046e811678d6b5674621465e846f8b950bf0c923a` for selection `96725a495baaf3e29aac0dd1788b291c45777459218f37a3bdead9328dcdcebf`. Publisher head `1abb0a89b37ab80630766a2188828cdbfe1d378f` had fresh CODEOWNER approval and 16 successful checks.
+
+Protected-main readiness [43230886146](https://github.com/araditc/Kafdeck/actions/runs/43230886146) admitted the exact source, manifest, trust root and W80 bytes with `releaseReady: true` and no missing gate. Publication [43232262853](https://github.com/araditc/Kafdeck/actions/runs/43232262853) published [v0.9](https://github.com/araditc/Kafdeck/releases/tag/v0.9) at source `01c7553425fbc61ba4a7a21918265c562086ba02`, independently downloaded/hash-checked all 51 remote assets and verified the exact registry signatures/attestations. Private GHCR access, original offline media/signature and the KAF-02 deployment-tested-egress condition remain. [Public release evidence](../implementation/evidence/v0.9-release-published-20261112.json)

@@ -1,5 +1,10 @@
 # Local Development Baseline
 
+## v0.9 managed onboarding
+
+For the released packages, use [installation](../operator/v0.9-installation-guide.md). To reproduce first-owner setup from source, use the SDK/Node versions below, then the [managed configuration example](../operator/examples/v0.9-managed-appsettings.json), a dedicated HTTPS Keycloak realm and writable private identity state. Run the built API with that content root; issue `--issue-setup-code` using the same configuration, create the first owner, then sign in and [test/save a Kafka connection](../operator/v0.9-dashboard-guide.md). The code expires after 15 minutes. Source/default Local mode and the older Token-mode laboratory are separate evaluation paths; they do not enable the managed setup wizard. Never reuse production identity files or business topics for development fixtures.
+
+
 ## Prerequisites
 
 - Git

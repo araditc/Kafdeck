@@ -30,7 +30,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **v0.8 was released on 2026-11-05.** See the [release](https://github.com/araditc/Kafdeck/releases/tag/v0.8) and [accepted evidence](docs/implementation/evidence/v0.8-g5-accepted-20261105.json) for exact source, image, packages and tested boundaries. Read-only remains the default; governed mutations and automation are opt-in and retain current authorization, risk, independent critical approval, durable recovery and audit.
+> **v0.9 was released on 2026-11-12.** See the [official release](https://github.com/araditc/Kafdeck/releases/tag/v0.9), [installation guide](docs/operator/v0.9-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [Exact release evidence](docs/implementation/evidence/v0.9-release-published-20261112.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
 
 ## Why Kafdeck?
 
@@ -45,9 +45,9 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Project status
 
-Stable release **v0.8** is published from protected main `cbedd025ab97db10fb21407ea5188c08d6a4d8ce`. [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest) is authoritative for the latest stable release. All W61–W71 workstreams and tracker [#209](https://github.com/araditc/Kafdeck/issues/209) are complete; [G5/W71](https://github.com/araditc/Kafdeck/issues/220) and the separate G6 publication gate are closed.
+Stable release **v0.9** is published from `01c7553425fbc61ba4a7a21918265c562086ba02`. [GitHub Releases](https://github.com/araditc/Kafdeck/releases/latest) records the current stable version. W72–W82 technical acceptance, owner acceptance and official publication are complete; KAF-02 retains its deployment-tested-egress condition. Main may advance for maintenance without changing the immutable release tag.
 
-The release-input snapshot records **v0.9 as the prepared build candidate**. **v0.8 is the historical published baseline at candidate preparation**. The candidate runtime and package version is `0.9.0`. GitHub Releases records publication status.
+The immutable publication-input snapshot (a historical build record, not current release status) records **v0.9 as the prepared build candidate**. **v0.8 is the historical published baseline at candidate preparation**. The released runtime and package version is `0.9.0`. GitHub Releases records publication status.
 
 | Capability | Introduced | Released capability posture |
 | --- | --- | --- |
@@ -57,9 +57,16 @@ The release-input snapshot records **v0.9 as the prepared build candidate**. **v
 | Consumers / Schemas / Ecosystem observations | v0.4 | Available and extended by later releases |
 | Governed Kafka administration | v0.5 | Available when mutation mode and durable prerequisites are explicitly enabled |
 | Fleet capability boundary / secure remote UI | v0.6 | Capability-driven; unsupported or unsafe operations remain explicit Blocked/Unsupported |
-| Developer & Streaming Ecosystem Platform | v0.7 | Published baseline; governed Schema/Connect/data tooling, bounded streaming integrations, Command Palette and evidence-driven status truth |
+| Developer & Streaming Ecosystem Platform | v0.7 | Extended in v0.9; governed Schema/Connect/data tooling, bounded streaming integrations, Command Palette and evidence-driven status truth |
 
 See [ROADMAP.md](ROADMAP.md) for the capability roadmap and [docs/releases/](docs/releases/) for exact release evidence.
+
+## v0.9 onboarding and dashboard
+
+- [Install the released container, native packages or Helm chart](docs/operator/v0.9-installation-guide.md).
+- [Issue a local one-time setup code and create the first administrator without email verification](docs/operator/managed-identity-setup.md), then sign in with Keycloak and manage users.
+- [Test/save Kafka connections and manage their topics, consumer groups and integrations](docs/operator/v0.9-dashboard-guide.md).
+- Use the [documentation index](docs/README.md) for recovery, governance, CLI/Terraform/MCP and measured operating limits.
 
 ## v0.8 operational additions
 
@@ -72,7 +79,7 @@ Provider-dependent metrics remain Unknown/Unsupported when trustworthy evidence 
 
 ## Feature matrix
 
-The release table above records when capability families first appeared. The sections below describe the **published v0.7 baseline behavior**.
+The release table above records when capability families first appeared. The sections below describe the **v0.9 capabilities**, retaining explicit provider and authorization boundaries.
 
 ### Cluster and broker operations
 
@@ -242,24 +249,24 @@ A typical request flows like this:
 
 ## Getting started
 
-To evaluate 0.9.0, see the [v0.9 installation and operator guide](docs/operator/v0.9-installation-guide.md). The examples below use the published v0.8 image.
+For a new installation, follow the [v0.9 installation and operator guide](docs/operator/v0.9-installation-guide.md), then [first administrator setup](docs/operator/managed-identity-setup.md) and the [Kafka/dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). The Token-mode example below is an optional static-cluster evaluation, not the managed Keycloak onboarding flow.
 
 ### Recommended path: OCI / Docker
 
-Kafdeck v0.8 is distributed as a non-root OCI image. Pin the verified immutable digest:
+Kafdeck v0.9 is distributed as a non-root OCI image. Pin the verified immutable digest:
 
 ~~~text
-ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
+ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
 ~~~
 
 GHCR access is **private under the existing package policy**. Authenticate with a GitHub identity allowed to read the package and a token with `read:packages` when Docker prompts for its password:
 
 ~~~sh
 docker login ghcr.io --username YOUR_GITHUB_LOGIN
-docker pull ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
+docker pull ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
 ~~~
 
-The v0.8 application image is published by digest. Use the digest recorded above for Docker/Podman commands. [Release assets](https://github.com/araditc/Kafdeck/releases/tag/v0.8) contain the five Terraform ZIPs, MCP package and SHA256SUMS. The runtime image contains no APT package manager. Any customized image must be built and verified before deployment.
+The v0.9 application image is published by digest. Use the digest recorded above for Docker/Podman commands. [Release assets](https://github.com/araditc/Kafdeck/releases/tag/v0.9) contain the signed offline mirror, native API/UI/CLI/MCP archives, two OCI architectures, Helm, five Terraform ZIPs, SBOM/scan reports, final acceptance evidence and SHA256SUMS. The runtime image contains no APT package manager. Any customized image must be built and verified before deployment.
 
 ### 1. Start a container-reachable Kafka for evaluation
 
@@ -309,13 +316,13 @@ Create <code>appsettings.Production.json</code>:
 
 ### 3. Run the released image
 
-The examples below use the exact verified v0.8 image digest. Complete the registry login above before running them.
+The examples below use the exact verified v0.9 image index digest. Complete the registry login above before running them.
 
 #### Windows / Docker Desktop
 
 ~~~powershell
 $env:KAFDECK_DEPLOYMENT_TOKEN = "change-this-local-token"
-docker run --rm --name kafdeck --network kafdeck-demo -p 8080:8080 -e KAFDECK_DEPLOYMENT_TOKEN=$env:KAFDECK_DEPLOYMENT_TOKEN -v "$PWD\appsettings.Production.json:/app/appsettings.Production.json:ro" ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
+docker run --rm --name kafdeck --network kafdeck-demo -p 8080:8080 -e KAFDECK_DEPLOYMENT_TOKEN=$env:KAFDECK_DEPLOYMENT_TOKEN -v "$PWD\appsettings.Production.json:/app/appsettings.Production.json:ro" ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
 ~~~
 
 #### Linux / Docker Engine
@@ -329,7 +336,7 @@ docker run --rm \
   -p 8080:8080 \
   -e KAFDECK_DEPLOYMENT_TOKEN \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro" \
-  ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
+  ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
 ~~~
 
 Then open Kafdeck from another machine by using the server's reachable address, for example:
@@ -353,7 +360,7 @@ podman run --rm \
   -p 8080:8080 \
   -e KAFDECK_DEPLOYMENT_TOKEN \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro,Z" \
-  ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
+  ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
 ~~~
 
 For Podman, create a Podman network and ensure Kafka advertises a broker hostname reachable on that network. The Docker-specific <code>kafdeck-demo</code> recipe above is not automatically shared with Podman.
@@ -684,7 +691,7 @@ docker run --rm \
   -e KAFDECK_OIDC_CLIENT_SECRET \
   -v "$PWD/kafdeck-https.pfx:/run/secrets/kafdeck-https.pfx:ro" \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro" \
-  ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45
+  ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
 ~~~
 
 Inject <code>KAFDECK_HTTPS_CERT_PASSWORD</code> through your orchestrator/secret manager; it is an ASP.NET/Kestrel setting and does not use Kafdeck's <code>env:</code> secret-reference syntax. In production, use a certificate whose SAN matches the hostname operators use.
@@ -800,7 +807,7 @@ Earlier versioned API documents remain in [docs/api/](docs/api/) as historical r
 
 Compatibility is evidence-based rather than assumed from a Kafka-compatible endpoint.
 
-The verified v0.8 release matrix retains:
+The v0.9 release retains the admitted Kafka compatibility matrix:
 
 | Kafka | Tier |
 | --- | --- |
@@ -992,7 +999,7 @@ The roadmap is public and capability-driven:
 
 [**View the Kafdeck Roadmap →**](ROADMAP.md)
 
-v0.8 is [released](https://github.com/araditc/Kafdeck/releases/tag/v0.8) with accepted observability, governed automation and platform APIs. The next roadmap phase is v0.9 governance/enterprise hardening, followed by v1.0 stability. Detailed v0.9 scope and implementation admission remain future owner-governed decisions.
+v0.9 is [released](https://github.com/araditc/Kafdeck/releases/tag/v0.9) with governance, managed onboarding, dashboard workflows, hardening and verified distribution/recovery. Future scope remains owner-governed; v1.0 stability is a roadmap theme, not an automatically authorized implementation plan.
 
 Nothing in the roadmap should be interpreted as currently available until it is implemented, validated, and released.
 

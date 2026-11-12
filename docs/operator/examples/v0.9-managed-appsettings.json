@@ -1,0 +1,34 @@
+{
+  "Kafdeck": {
+    "Deployment": {
+      "ListenUrls": [
+        "https://0.0.0.0:8080"
+      ],
+      "AccessMode": "Oidc",
+      "Oidc": {
+        "Issuer": "https://idp.example.test/realms/kafdeck",
+        "ClientId": "kafdeck-browser",
+        "ClientSecret": "file:/run/secrets/kafdeck-browser-secret",
+        "GroupClaim": "groups",
+        "Scopes": [
+          "openid",
+          "profile",
+          "email"
+        ]
+      }
+    },
+    "ManagedIdentity": {
+      "Enabled": true,
+      "StateFile": "/var/lib/kafdeck/identity-state.json",
+      "ServiceClientId": "kafdeck-user-management",
+      "ServiceSecretFile": "/run/secrets/kafdeck-management-secret"
+    },
+    "ConnectionWorkspace": {
+      "Enabled": true,
+      "RegistrationNetworks": [
+        "192.0.2.0/24"
+      ]
+    },
+    "Clusters": []
+  }
+}
