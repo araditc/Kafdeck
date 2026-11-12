@@ -1,0 +1,54 @@
+{
+  "allIndependentRequestedJourneysPassed": true,
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "officialPgPreupgradeRollback": {
+    "artifactId": 13841816209,
+    "artifactZipSha256": "0bce13581c6662d68f10e990456850cf32191266b2fc4194d835ba8abdab297d",
+    "driverSha": "2b2b0c63040fd63b38dc3dd4d59a8d26a4810bab",
+    "evidence": [
+      {
+        "path": "42990085696\\offline-pg-rollback.json",
+        "sha256": "e32767bcd22fa855d095f2ec7e59e5638ea5637ebc1862e1c36cf57253fce6d9"
+      },
+      {
+        "path": "42990085696\\postgres-fixture.json",
+        "sha256": "acd6916fd0169a360b4a244ebd8d49381267494e2487a7420735113b23b6c7ce"
+      },
+      {
+        "path": "42990085696\\run-metadata.json",
+        "sha256": "4add9e10b5a63b603bc1726b98edaa7afad4512aa0a8700f8784b210a429c72a"
+      },
+      {
+        "path": "42990085696\\signed-input.json",
+        "sha256": "faa5e2f4f015dd586ddb04f3151a4755bd3b1d5f8c715a72f30170475d721dd8"
+      },
+      {
+        "path": "42990085696\\upgrade-input.json",
+        "sha256": "bb92684386853149da05ca3492ce9f98423b2656f770d6afd5642b5ac8009f13"
+      }
+    ],
+    "officialReleasedV08Image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+    "preupgradeDumpSha256": "ff604056ad3292fb7e85af8581d4edf78b03be7cfa848a1f898bb13c6ee162b3",
+    "runId": 42990085696,
+    "scripts": {
+      ".github/workflows/v09-w80-disconnected-auth.yml": "1214e0fcef2af0c22a353548276266c59a7dcce9843a42bfa56f83a603b43617",
+      "deploy/dev/w80-signed-disconnected/UpgradeProbe.cs": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+      "deploy/dev/w80-signed-disconnected/offline-upgrade.sh": "108cb258fa0e7b0c998f5e8d2150b485cf14bd4dbc176774c85ecbcd845500b3",
+      "deploy/dev/w80-signed-disconnected/offline.sh": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a",
+      "deploy/dev/w80-signed-disconnected/run.py": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d",
+      "deploy/dev/w80-signed-disconnected/stage-upgrade.py": "0c36e49cd194b42228779dea599e65adfbd6c8731cbe15bb6ff08155797901fc",
+      "deploy/dev/w80-signed-disconnected/stage.py": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0",
+      "deploy/dev/w80-signed-disconnected/upgrade.py": "e43849154ec00896917a426c193d7d7a57fa01b0186db468580d55aeb24e5e86"
+    },
+    "url": "https://github.com/araditc/Kafdeck/actions/runs/42990085696",
+    "verifiedPreUpgradeBackupRollback": true
+  },
+  "priorCombinedEvidence": {
+    "path": "combined-evidence.json",
+    "sha256": "a52fa0d030ea1db9dcbaa3dbd698fc5da2beebed595936add9fe889a5341bd60"
+  },
+  "releaseReadyClaimed": false,
+  "schemaVersion": 1,
+  "scope": "prior auth+bothprovider offlineupgrade+SQLitebackuprollback, plus bounded official-old PostgreSQL preupgrade dump/restore/oldbinary rollback; local deep recovery belongs to root separately",
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba"
+}

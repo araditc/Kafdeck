@@ -1,0 +1,20 @@
+{
+  "baselineSourceSha": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+  "driverSourceFiles": {
+    "UpgradeProbe.cs": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+    "boot.sh": "b08d6aab53f34cfc41b9d58eadd51d3d98b54927c11391f02acd9db5c97791cd",
+    "canonical.py": "8201bd466529151c03540cfcec5cb6f590a7daa34dc8cca3d2a4b01523d0751e",
+    "run.py": "e48d8b091dcfaa0f4ba885f99311bc4b240c30a8319c5503abd3599d43563632",
+    "stage-old.py": "01f9d0cb024f3c34f42a6091fcdf4e69b3d62fa35d9cdfdb95ddc657b0bfe282"
+  },
+  "fixtureOnlyCompiled": true,
+  "fixtureProbeAssemblySha256": "f1c8983d4ac27dedc06c781a5fb78d223a3f2dd0db40974e34d93503e28b6dac",
+  "fixtureProbeSourceSha256": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+  "newProductRebuilt": false,
+  "officialPublishedV08Image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+  "officialPublishedV08SignatureVerified": true,
+  "oldApiAssemblySha256": "658250544809283d13aa8dc7c366fbb7851748fe061411127cc3c538c44db62d",
+  "oldProductRebuilt": false,
+  "oldRuntimeHostSha256": "634efbf2414144d140d6f59d167342c8b3b53b4c34346ed786dd0470ddc9a3cb",
+  "schemaVersion": 1
+}

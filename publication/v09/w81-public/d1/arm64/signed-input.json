@@ -1,0 +1,20 @@
+{
+  "allMediaHashesVerified": true,
+  "apphosts": {
+    "api-ui": "6681acb7a0cbb7d752aa6942ba9a3760d86de8a87bb6e58bdfcd3eae5bb0c545",
+    "cli": "a3145856631e46e7bdaa9df869451cb72e918f3ce7bca8442c7dbe45e8482786",
+    "mcp": "9f04ec9fb8f38deb6b49a5370c4f8e19c452e0edf88dd4c312839c86e720576f"
+  },
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "driverFiles": {},
+  "driverSha": "31cfa25ce6178843230073a12ff4939a1e02fdc7",
+  "independentDefaultSigstoreRootCompared": true,
+  "installedFromOfficialSignedArchives": true,
+  "officialArtifactId": 13839715488,
+  "officialArtifactZipSha256": "7100754a28ebc405a8ca9739412341a3e13587f6e9514882ab547f2e62b8c295",
+  "officialSignedRunId": 42984770583,
+  "schemaVersion": 1,
+  "signatureVerified": true,
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "trustedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724"
+}

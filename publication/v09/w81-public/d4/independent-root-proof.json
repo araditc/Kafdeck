@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "derived-from-successful-immutable-driver-and-stage-receipt",
+  "runId": 42986123750,
+  "driverSha": "a4d781866f3df0773e7ccad5ca1cc33dbde9e5fe",
+  "officialArtifactId": 13839397830,
+  "officialArtifactZipSha256": "9877a8bc6ab8c518b41f97fa3dd8cf3ad83d2e8827a611e7797ad0b99cbdebb7",
+  "trustedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724",
+  "independentDefaultRootComparedBySuccessfulStage": true,
+  "stageScript": "deploy/dev/w80-signed-disconnected/stage.py",
+  "stageScriptSha256": "ae927a84e3315cbb2672734b26172c568b7b0064399afb1418108c870ae4d59b",
+  "mechanism": "Cosign3.0.6 trusted-root create --with-default-services followed by exact SHA256 equality before official signature verification",
+  "localTufNetworkRequired": false
+}

@@ -1,0 +1,11 @@
+{
+  "javaExecutableSha256": "2e4c2fdce6f45af4e637564128a66a03ceeb539971df3ffec791a9588552de67",
+  "javaVersion": "openjdk version \"21.0.13\" 2026-10-20 LTS",
+  "kafkaDistributionSha256": "bb9252a55830eb8296d7d74dd55fed6ad56512535dea79de9b8ec4c646f1bfce",
+  "kafkaImageConfigDigest": "sha256:33241f6eae1f4e20cd5c01dd3e38656201f7eaca675664276a87e8f440fcbaa4",
+  "kafkaVersion": "4.3.1",
+  "keycloakVersion": "26.8.1",
+  "keycloakZipSha256": "4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4",
+  "runtimeDependencyDownloads": false,
+  "stagedBeforeNetworkIsolation": true
+}

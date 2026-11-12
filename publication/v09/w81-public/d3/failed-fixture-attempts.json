@@ -1,0 +1,30 @@
+{
+  "fixtureFailures": [
+    {
+      "runId": 43015929325,
+      "driverSha": "f6cc44660ad1fd83e1794db7ab2968bcc72dd3cd",
+      "phase": "before chart installation",
+      "cause": "Empty Docker IPAM gateway produced invalid certificate SAN; diagnosed in next run"
+    },
+    {
+      "runId": 43016559452,
+      "driverSha": "a6ea09c370060e123184968b24312bf01dc23614",
+      "phase": "before chart installation",
+      "cause": "OpenSSL rejected empty IP subjectAltName; actual Kind node-route gateway fixed"
+    },
+    {
+      "runId": 43017426062,
+      "driverSha": "7e631108d9ea407eb5bd3d979ed09db785c9db51",
+      "provider": "Sqlite",
+      "phase": "Helm install path resolution",
+      "cause": "Driver guessed incorrect signed chart folder; corrected to verified manifest path"
+    },
+    {
+      "runId": 43017575955,
+      "driverSha": "7e631108d9ea407eb5bd3d979ed09db785c9db51",
+      "provider": "PostgreSql",
+      "phase": "Helm install path resolution",
+      "cause": "Same incorrect signed chart folder; no product Pod started"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "architecture": "amd64",
+  "downloadDuringRuntime": false,
+  "imageConfigDigest": "sha256:38b9ffe2d4c13d7c445b66306be6763dfa6f503689ea0c5b9f84544ccf3ca8e4",
+  "repoDigests": [
+    "postgres@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395"
+  ],
+  "scope": "native isolated single-node PostgreSQL fixture; physical PITR/HA separately proven",
+  "stagedBeforeIsolation": true
+}

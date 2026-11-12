@@ -1,0 +1,91 @@
+{
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "creationTimestamp": "2026-11-08T19:54:40Z",
+    "generation": 2,
+    "labels": {
+      "app.kubernetes.io/instance": "kaf02",
+      "app.kubernetes.io/managed-by": "Helm",
+      "app.kubernetes.io/name": "kafdeck"
+    },
+    "name": "kaf02-kafdeck",
+    "namespace": "kaf02-fixture",
+    "resourceVersion": "788",
+    "uid": "2d3919e5-9757-4549-bddd-400be7278a12"
+  },
+  "spec": {
+    "egress": [
+      {
+        "ports": [
+          {
+            "port": 53,
+            "protocol": "UDP"
+          },
+          {
+            "port": 53,
+            "protocol": "TCP"
+          }
+        ],
+        "to": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "kube-system"
+              }
+            },
+            "podSelector": {
+              "matchLabels": {
+                "k8s-app": "kube-dns"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 9092,
+            "protocol": "TCP"
+          }
+        ],
+        "to": [
+          {
+            "ipBlock": {
+              "cidr": "172.30.71.20/32"
+            }
+          }
+        ]
+      }
+    ],
+    "ingress": [
+      {
+        "from": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "kaf02-fixture"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "port": 8443,
+            "protocol": "TCP"
+          }
+        ]
+      }
+    ],
+    "podSelector": {
+      "matchLabels": {
+        "app.kubernetes.io/instance": "kaf02",
+        "app.kubernetes.io/name": "kafdeck"
+      }
+    },
+    "policyTypes": [
+      "Ingress",
+      "Egress"
+    ]
+  }
+}

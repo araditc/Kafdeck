@@ -1,0 +1,41 @@
+{
+  "baselineImage": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+  "databaseSha256": "62216d2eb6df46671e9dca6ad9f92f6c773f797be66adace153f81c6625841ba",
+  "driverSha": "0ea689c61be521c9ba12a971579b424c64e37e9f",
+  "oldPlatform": "linux/amd64",
+  "original": {
+    "States": [
+      {
+        "SnapshotSha256": "5d9ea849c7e7e1c266e375c49bcfc049d0aac4dfd7b97fa5ab6c38b5769fa11e",
+        "State": 3
+      },
+      {
+        "SnapshotSha256": "11b87c49053e98db1aa77f57a3527442818dadc84c9257bd1861fab49e5f0894",
+        "State": 4
+      },
+      {
+        "SnapshotSha256": "78db2ebea52d57fb606be150faf3fb3adf502a83820078d145fc9010ab75d8de",
+        "State": 9
+      }
+    ],
+    "Tables": [
+      "kafdeck_connect_auto_restart_activations",
+      "kafdeck_connect_auto_restart_profile_slots",
+      "kafdeck_connect_auto_restart_target_claims",
+      "kafdeck_fleet_conflict_obligations",
+      "kafdeck_fleet_conflict_scope_bindings",
+      "kafdeck_fleet_conflict_scope_guards",
+      "kafdeck_fleet_progress",
+      "kafdeck_mutation_cluster_slots",
+      "kafdeck_mutation_conflict_guard_schema",
+      "kafdeck_mutation_conflict_guards",
+      "kafdeck_mutation_operations",
+      "kafdeck_mutation_resource_claims",
+      "kafdeck_schema_info"
+    ]
+  },
+  "runId": "43013654037",
+  "schemaVersion": 1,
+  "scope": "synthetic pending/approved/unknown snapshots initialized and reopened by actual official amd64 old OCI; no real user data",
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02"
+}

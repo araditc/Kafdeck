@@ -1,0 +1,5 @@
+time="2026-11-08T19:45:27Z" level=info msg="Running flannel backend"
+I1108 19:45:33.046899      11 npc_nftables.go:1586] Successfully cleaned the NetworkPolicyController nftables configurations done by kube-router
+time="2026-11-08T19:45:33Z" level=info msg="Starting network policy controller version v2.11.1-k3s2, built on 2026-11-03T17:21:35Z, go1.26.10"
+I1108 19:45:33.046956      11 npc_iptables.go:43] Starting network policy controller
+I1108 19:45:33.120242      11 npc_iptables.go:63] Starting network policy controller full sync goroutine
