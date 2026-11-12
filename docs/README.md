@@ -15,6 +15,11 @@ Current stable release: [v0.9](releases/v0.9.md), published 2026-11-12. Start wi
 | Security findings and deployment-tested egress limits | [W78 disposition](security/v0.9-w78-independent-review.md) |
 | Measured load/soak methodology and accepted limits | [W82 budgets](performance/v0.9-budget-protocol.md) |
 | Exact released source, signatures and asset hashes | [Release evidence](implementation/evidence/v0.9-release-published-20261112.json) |
+| Current capability availability | [Released v0.9 matrix](product/current-capabilities.md) |
 | Architecture and project direction | [Architecture](architecture/), [ADRs](adr/), [RFCs](rfcs/), [Roadmap](../ROADMAP.md) |
 
 Development scaffolds/laboratories under `deploy/dev` are isolated fixtures. They are not turnkey production deployments, and historical candidate reports are not replacements for the final v0.9 release evidence.
+
+## Reading historical documents
+
+Versioned RFCs/ADRs, Gate decisions and intermediate test reports retain original dates, statuses and observed results. Use the [final closure ledger](implementation/v0.9-full-scope-delivery-execution-plan.md#final-closure-ledger) for completed v0.9 acceptance. Signed W80/W81 evidence is immutable; corrections are additive in the [errata/source supplement](releases/v0.9-evidence-errata.md). A versioned API/runbook filename can remain v0.8 while applying to current 0.9 packages; do not change wire versions or the independently versioned Terraform provider to match the app.

@@ -1,5 +1,7 @@
 # ADR-0008 — Governed Ecosystem Execution and Stable Provider Profiles
 
+> Historical design/admission record: original status and baseline below are preserved. For current delivered scope, see the [RFC index](../rfcs/README.md), [released availability](../product/current-capabilities.md) and [v0.9 closure ledger](../implementation/v0.9-full-scope-delivery-execution-plan.md#final-closure-ledger).
+
 - **Status:** PROPOSED
 - **Date:** 2026-09-26
 - **Scope:** v0.7 / Issues #178, #180, #181

@@ -27,10 +27,12 @@ The solution is intentionally structured as a modular monolith. Project referenc
 For local API startup:
 
 ```bash
-ASPNETCORE_URLS=http://127.0.0.1:8080 dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
+dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj -- --Kafdeck:Deployment:ListenUrls:0=http://127.0.0.1:8080
 ```
 
-The W01 development example is loopback-only and contains no credentials. W02 defines the full cluster/security configuration contract.
+The default `appsettings.json` has an empty cluster list and a loopback listener. Add a disposable static profile through `Kafdeck:Clusters` for Local-mode development, or use the managed setup above for registered targets. `Kafdeck:Deployment:ListenUrls` is authoritative; changing only `ASPNETCORE_URLS` does not override it. Never expose Local mode on a remote listener.
+
+For a built API/UI with a separate configuration directory, run `dotnet /absolute/path/to/Kafdeck.Api.dll --contentRoot /absolute/path/to/config --webroot /absolute/path/to/wwwroot`. The web root must contain the built frontend. Use absolute Windows paths with PowerShell. Keep setup-code issuance and normal execution on the same content root, environment and service identity. See [native installation](../operator/v0.9-installation-guide.md#native-windows-linux-and-macos).
 
 ## Frontend
 
@@ -45,7 +47,7 @@ npm test
 npm run build
 ```
 
-The W01 frontend is a strict TypeScript/React application scaffold. Feature behavior is added by later workstreams; no browser-to-Kafka access is permitted.
+The frontend is the released React/TypeScript dashboard. Run `npm run dev -- --host 127.0.0.1` for Vite development; API requests use same-origin relative paths, so configure a local development proxy to the API when using a separate frontend origin. For an integrated same-origin check, build the frontend and serve its `dist` as the API's explicit web root. No browser-to-Kafka access is permitted.
 
 ## Kafka development broker
 

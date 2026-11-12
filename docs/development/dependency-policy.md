@@ -25,11 +25,11 @@ Not accepted without explicit project-owner approval: GPL/AGPL strong-copyleft d
 
 ## Versioning and lock files
 
-- NuGet dependencies must participate in deterministic restore and a committed lock strategy once the backend scaffold is added.
-- Frontend dependencies require a committed lockfile and reproducible install command.
-- Container base images use explicit version tags; release hardening may additionally pin digests.
+- NuGet dependencies use committed `packages.lock.json` files and `dotnet restore Kafdeck.slnx --locked-mode`; native RID-specific locks remain explicit build inputs.
+- Frontend dependencies use the committed `package-lock.json` and `npm ci`; Go uses the committed `go.mod`/`go.sum` and the pinned provider toolchain.
+- Application build/runtime base images are digest-pinned in the [Dockerfile](../../Dockerfile). Changes must preserve reproducible image inputs; an upstream tag alone is not a release identity.
 - GitHub Actions use immutable 40-character commit SHAs.
 
 ## Update automation
 
-Dependabot initially tracks GitHub Actions. NuGet and frontend package ecosystems are enabled in the same PR that introduces their authoritative manifests so update jobs never point at nonexistent package roots.
+[Dependabot](../../.github/dependabot.yml) tracks GitHub Actions, NuGet, frontend npm and the Terraform provider Go modules. Related CodeQL actions, release supply-chain actions and React dependencies have explicit groups. Lockfile regeneration, relevant tests, scans and required review still apply to bot PRs; an automated update is not automatically admitted. Deferred updates are recorded in the [maintenance disposition](maintenance-pr-disposition-20261112.md).

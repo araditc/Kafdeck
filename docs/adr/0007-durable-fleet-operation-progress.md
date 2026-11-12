@@ -1,5 +1,7 @@
 # ADR-0007 — Durable Fleet Progress under One Mutation Authority
 
+> Historical design/admission record: original status and baseline below are preserved. For current delivered scope, see the [RFC index](../rfcs/README.md), [released availability](../product/current-capabilities.md) and [v0.9 closure ledger](../implementation/v0.9-full-scope-delivery-execution-plan.md#final-closure-ledger).
+
 - Status: **PROPOSED FOR GOVERNED PLANNING ADMISSION**
 - Date: 2026-09-23
 - Extends: [ADR-0006](0006-durable-mutation-operations.md)

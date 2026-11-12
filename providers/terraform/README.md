@@ -1,10 +1,8 @@
-# Kafdeck Terraform provider 0.8.0 candidate
+# Kafdeck Terraform provider 0.8.0
 
 This is an executable Terraform Plugin Framework **v1.19.0**, protocol **6**
 provider for the admitted `kafdeck.io/v0.8` NotificationSubscription API. The
-provider address is `registry.terraform.io/araditc/kafdeck`. Registry publication
-and signing are separate owner publication gates; this repository builds local
-installable packages without publishing a tag or release.
+provider address is `registry.terraform.io/araditc/kafdeck`. The official [Kafdeck v0.9 release](https://github.com/araditc/Kafdeck/releases/tag/v0.9) includes five platform ZIPs and provider checksums in its signed distribution. Provider version **0.8.0** is independent of application 0.9.0 and retains the admitted v0.8 declarative API. Public Terraform Registry publication is not claimed: the canonical address also identifies packages installed through the filesystem mirror below.
 
 Build with pinned Go **1.27.3** and test with Terraform **1.14.9**. Protocol 6
 requires Terraform 1.0 or later; only versions actually exercised by acceptance
@@ -18,7 +16,9 @@ define the SDK and protocol choice.
 
 ## Install and operate offline
 
-Run `pwsh scripts/build.ps1 -Go /absolute/path/to/go`. This tests and builds
+For released installation, follow [signed-media verification](../../docs/operator/v0.9-installation-guide.md), select `terraform-provider-kafdeck_0.8.0_<os>_<arch>.zip`, and validate its hash against the signed manifest/provider checksums before extraction. GitHub flattened assets have the `media__integrations__terraform__` prefix; the signed mirror preserves original paths.
+
+For contributor builds from `providers/terraform`, run `pwsh scripts/build.ps1 -Go /absolute/path/to/go`. This tests and builds
 Linux amd64/arm64, Windows amd64 and macOS amd64/arm64 binaries, distribution ZIPs,
 SHA256SUMS and module build information in ignored `dist/`. Cross compilation
 alone is not proof that acceptance ran on every platform. Verify the ZIP hash

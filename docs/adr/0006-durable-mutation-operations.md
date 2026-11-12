@@ -1,5 +1,7 @@
 # ADR-0006: Durable Mutation Operation State
 
+> Historical design/admission record: original status and baseline below are preserved. For current delivered scope, see the [RFC index](../rfcs/README.md), [released availability](../product/current-capabilities.md) and [v0.9 closure ledger](../implementation/v0.9-full-scope-delivery-execution-plan.md#final-closure-ledger).
+
 - Status: Proposed for governed admission
 - Date: 2026-09-21
 - Related: RFC-0005 / Issue #121 / Issue #122
