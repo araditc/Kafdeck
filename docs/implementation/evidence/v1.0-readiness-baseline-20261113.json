@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-13",
+  "status": "planning-baseline-not-v1-release-acceptance",
+  "auditedMainSha": "195736056573dc21bd565f7ad4a75de09157a458",
+  "releasedV09SourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "srcGitTree": "d641a67c6f1c4dfa1baff5248d62719100bd0c74",
+  "srcEqualsReleasedV09": true,
+  "defaultBuildInputSnapshot": {
+    "algorithm": "git-path-mode-blob-sha256-v1",
+    "sha256": "8e5bba002f1e620bff82d1d1d2fe88b8a26eb81b21a6be2455f382c26ebc010a",
+    "entries": 103,
+    "equalsReleasedV09": true
+  },
+  "method": "Targeted static code/control-flow review, committed test/contract inventory and reuse of actual release/CI records. No new runtime, load, recovery, independent-security, signature or publication result. Not an exhaustive whole-codebase security review.",
+  "inspectedFiles": [
+    {
+      "path": "src/backend/Kafdeck.Api/ManagedIdentityStore.cs",
+      "gitBlob": "f6a0488bf14d4b7452a03057c72773021dbdeb32"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/ManagedIdentityEndpoints.cs",
+      "gitBlob": "31eb96e10d51a9a8fa14a89eec5d35cdbed556ec"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/ManagedKeycloakUsers.cs",
+      "gitBlob": "294a3a52787a58da02db411d411176e09bc1a925"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/KafkaConnectionWorkspace.cs",
+      "gitBlob": "6e30261ae11fc9e7d5ea2d6d7c667f5d979bd046"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs",
+      "gitBlob": "f2a4d5bd123526cf4996f3ee3dcc02efeee2f940"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/RegisteredHttpServiceEndpoints.cs",
+      "gitBlob": "20ee2ff40b8a3a25654b30c3a905c8a2b28ceca2"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/AuthorizationEnforcement.cs",
+      "gitBlob": "54cc189692867483611390937cf0b850adf2ec43"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/Program.cs",
+      "gitBlob": "e63265d4b7714750cdc0c1a58b3182b2d8d5247b"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/GovernanceOpenApi.cs",
+      "gitBlob": "1f7e8add5e3c6d5f0d89e13c699a30be4f86fd08"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/KafdeckApiEndpoints.cs",
+      "gitBlob": "d8b235f6b145335a6eb49543d4da0b6d20d33096"
+    },
+    {
+      "path": "src/frontend/src/app/AppShell.tsx",
+      "gitBlob": "22906598fa53c74f4ce00d19b8c7549cc01a7820"
+    },
+    {
+      "path": "src/frontend/src/app/KafkaConnectionPage.tsx",
+      "gitBlob": "23186bd3e218c3ed83fb1157f1bea1f2238b7f8e"
+    },
+    {
+      "path": "src/frontend/src/shared/api.ts",
+      "gitBlob": "b80a54adaba383cd328c4613f23c63d7f3b43a71"
+    },
+    {
+      "path": "src/frontend/src/features/readviews/ReadViewsExplorer.tsx",
+      "gitBlob": "65303ee8cf03ff8e74515d0bef2f47d8d90ca4ca"
+    },
+    {
+      "path": "src/backend/Kafdeck.Core/Kafka/KafkaSnapshotCoordinator.cs",
+      "gitBlob": "2cb30db200f51146b32387ac47acab9087edda58"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/ReleaseIdentityTests.cs",
+      "gitBlob": "df040a962e6485dd650f60595dec8856408a1e54"
+    },
+    {
+      "path": "scripts/ci/w82_build_inputs.py",
+      "gitBlob": "90a4fee0bb5a516dee964c5de1815534cfe5bffb"
+    },
+    {
+      "path": "publication/v09/driver.py",
+      "gitBlob": "467bb6b278398417e101e8502e8372282501d2b8"
+    }
+  ],
+  "managedRegressionInventory": {
+    "command": [
+      "rg",
+      "-n",
+      "ManagedIdentityStore|ManagedIdentityEndpoints|KafkaConnectionWorkspace|RegisteredKafkaRuntime|/api/v1/(setup|identity/users|connections)|issue-setup-code|initial_owner_created",
+      "tests",
+      "src/frontend/tests",
+      "scripts",
+      "deploy/dev",
+      "-g",
+      "*.cs",
+      "-g",
+      "*.mjs",
+      "-g",
+      "*.py",
+      "-g",
+      "*.ps1",
+      "-g",
+      "*.sh",
+      "-g",
+      "!**/.generated/**"
+    ],
+    "exitCode": 1,
+    "matches": [],
+    "meaning": "No matching committed route/symbol tests found in the searched roots; this does not erase historical manual/live evidence or prove all indirect coverage absent."
+  },
+  "reusedV09": {
+    "record": "v0.9-release-published-20261112.json",
+    "readinessRunId": 43230886146,
+    "publicationRunId": 43232262853,
+    "releaseReady": true,
+    "missing": [],
+    "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+    "w80PacketSha256": "5e86572f5983aca73cbdd28136194267db6ef323c8e95907d4fdeb45f7a1b01f",
+    "w81SupplementIndexSha256": "e9e6510c2f170773f9cb6e81ceb9525eba0d0ff5426e813b048591a34867064c",
+    "w82Bounds": {
+      "sqlite": 59,
+      "postgres": 77
+    },
+    "limits": [
+      "KAF-02 requires deployment-tested egress; no blanket CNI or Service DNAT admission",
+      "Helm admits one application replica in Standalone mode; external PostgreSQL database HA is separate",
+      "ARM upgrade uses verified old amd64 data; old v0.8 ARM image execution is not claimed"
+    ]
+  },
+  "reusedMainWorkflows": [
+    {
+      "runId": 43308724422,
+      "name": "v08-g2-keycloak-upgrade",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724503,
+      "name": "kafka-smoke",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724876,
+      "name": "codeql",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724423,
+      "name": "v04-benchmark",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724702,
+      "name": "v08-g1-live-acceptance",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724588,
+      "name": "v03-benchmark",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724516,
+      "name": "v08-g2-identity-lifecycle",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724682,
+      "name": "quality-gate",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724692,
+      "name": "v09-w77-hardening",
+      "conclusion": "success"
+    },
+    {
+      "runId": 43308724700,
+      "name": "v08-g2-live-acceptance",
+      "conclusion": "success"
+    }
+  ],
+  "v09IssuesClosed": [
+    {
+      "number": 432,
+      "state": "closed",
+      "stateReason": "completed",
+      "historicalBodyPreserved": true
+    },
+    {
+      "number": 434,
+      "state": "closed",
+      "stateReason": "completed",
+      "historicalBodyPreserved": true
+    },
+    {
+      "number": 435,
+      "state": "closed",
+      "stateReason": "completed",
+      "historicalBodyPreserved": true
+    },
+    {
+      "number": 436,
+      "state": "closed",
+      "stateReason": "completed",
+      "historicalBodyPreserved": true
+    },
+    {
+      "number": 425,
+      "state": "closed",
+      "stateReason": "completed",
+      "historicalBodyPreserved": true
+    }
+  ],
+  "newRuntimeTestsRun": false,
+  "v1PublicationAuthorized": false,
+  "trackerIssue": 469,
+  "staticGapIds": [
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "G05",
+    "G06"
+  ],
+  "qualifiedProbeIds": [
+    "Q01"
+  ],
+  "newEvidenceWorkIds": [
+    "E01",
+    "E02"
+  ]
+}

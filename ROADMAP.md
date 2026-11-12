@@ -268,6 +268,8 @@ Extension model:
 
 ## v1.0 — Stable Release
 
+The owner requested the [bounded v1.0 checklist](docs/releases/v1.0-readiness-checklist.md) and [targeted code-gap audit](docs/implementation/v1.0-code-gap-audit.md) on 2026-11-13; tracker [#469](https://github.com/araditc/Kafdeck/issues/469). This is stabilization planning against the existing criteria below, not new feature scope or publication authorization.
+
 v1.0 requires:
 - Stable public contracts or an explicit compatibility policy
 - Reliable persistence migrations
