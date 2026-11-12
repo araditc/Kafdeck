@@ -74,6 +74,7 @@ New users change their temporary password on their first Keycloak sign-in. Disab
 | Symptom | Action |
 | --- | --- |
 | Setup code expired | Run the issuance command again for the same uninitialized state; use the newest code within 15 minutes |
+| API is healthy but setup/dashboard HTML is missing | For native execution with a separate configuration directory, pass `--webroot` pointing at the extracted application's `wwwroot` |
 | Setup page absent | Check `ManagedIdentity.Enabled`, OIDC mode, HTTPS and whether the installation is already initialized |
 | `identity-provider` / provisioning failure | Check the dedicated realm, service client secret, `manage-users`, TLS trust, connectivity and realm password policy |
 | Login succeeds but users/clusters are absent | Use the matching issuer/state/realm; confirm the current role and cluster assignments |
