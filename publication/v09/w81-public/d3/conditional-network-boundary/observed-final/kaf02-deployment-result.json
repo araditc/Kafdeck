@@ -1,0 +1,36 @@
+{
+  "sourceSha": "8f4f8b228f91ef6b51e9d679b09a47463a40154c",
+  "imageArchiveSha256": "0ae4046314e33e1763e30db0a4a1e1eb859dfd0494623e75d8180e3ec0b64528",
+  "imageDigest": "sha256:0e60fd15beea160d8323a7f57c4f3728ee1af222b17ce755dd6c6746a01748e2",
+  "podUid": "57babea0-5e70-4896-b3c0-f65d887325c0",
+  "podIp": "10.197.0.4",
+  "approvedCidr": "172.30.71.20/32",
+  "cni": "K3s flannel host-gw with embedded kube-router NetworkPolicy controller",
+  "initialMetadata": {
+    "bootstrap": "172.30.71.20:9092",
+    "advertised": "172.30.71.20:9092",
+    "tlsVerified": true
+  },
+  "positiveControl": {
+    "bootstrap": "172.30.71.20:9092",
+    "advertised": "172.30.72.20:9092",
+    "persisted": true,
+    "offset": 0
+  },
+  "restrictedMetadata": {
+    "bootstrap": "172.30.71.20:9092",
+    "advertised": "172.30.72.20:9092",
+    "tlsVerified": true
+  },
+  "restrictedProduce": {
+    "bootstrap": "172.30.71.20:9092",
+    "advertised": "172.30.72.20:9092",
+    "persisted": false,
+    "error": "Local_MsgTimedOut"
+  },
+  "positiveOutsideSyn": 2,
+  "restrictedOutsideSyn": 0,
+  "beforeOffset": 1,
+  "finalOffset": 1,
+  "passed": true
+}

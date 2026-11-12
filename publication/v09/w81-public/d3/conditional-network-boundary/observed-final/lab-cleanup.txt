@@ -1,0 +1,1 @@
+Unregistered owned WSL 2 lab Kafdeck-KAF02-Deploy-8f4f8b2 at D:\MyDocuments\SourceCode\Kafdeck\artifacts\v09-admission-kaf02\wsl

@@ -1,0 +1,8 @@
+{
+  "architecture": "amd64",
+  "configDigest": "sha256:281c8c1114fb8e3396abf6d7e2ef246d5d75fe3ee54179fcc65c3be07c618010",
+  "image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+  "oldArmRuntimeClaimed": false,
+  "os": "linux",
+  "rawManifestSha256": "60979bc6deb3672a8da5791c8a1ea76db3e477376dfb1abcab036b47892a0721"
+}

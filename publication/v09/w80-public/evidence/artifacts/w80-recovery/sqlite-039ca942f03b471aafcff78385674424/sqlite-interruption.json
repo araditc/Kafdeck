@@ -1,0 +1,7 @@
+{
+  "candidateKilledBeforeHealth": true,
+  "phase": "startup migration blocked by a real SQLite exclusive write lock",
+  "exclusiveLockHeld": true,
+  "legacySnapshotsUnchanged": true,
+  "nativeSqliteLoaded": true
+}

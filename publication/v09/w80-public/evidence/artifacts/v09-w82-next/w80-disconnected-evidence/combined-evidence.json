@@ -1,0 +1,134 @@
+{
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "ciRuns": [
+    {
+      "artifactId": 13839397830,
+      "artifactZipSha256": "9877a8bc6ab8c518b41f97fa3dd8cf3ad83d2e8827a611e7797ad0b99cbdebb7",
+      "conclusion": "success",
+      "driverBranch": "codex/w80-disconnected-auth",
+      "driverSha": "a4d781866f3df0773e7ccad5ca1cc33dbde9e5fe",
+      "evidence": [
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/dependencies.json",
+          "sha256": "c2a2f3d166abbf759349e86fdb9bca91c11709bc02ef9b574b4c3a5fb31c95eb"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/independent-root-proof.json",
+          "sha256": "675f596b9c3ff5037bd5f20417600e7696fd3542ad6a02f529f9083b58074788"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/journey.json",
+          "sha256": "d5e1f48b711e0a7f00455b520dd5fcfa126df02685361ccf40b3b65b6a661153"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/run-metadata.json",
+          "sha256": "bcce96a2c9a715abd8cab1c4781f46fafa7c01f997d1381315d76bf28e716ba6"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42986123750/signed-input.json",
+          "sha256": "914ff7d0d1a0ebbb1181dee7dc3c90a9957284a3425df6b56ee80d102a62a4f7"
+        }
+      ],
+      "runId": 42986123750,
+      "scripts": {
+        ".github/workflows/v09-w80-disconnected-auth.yml": "3e85f64dea981209847b45a1fbb884654cf49021e1ad078fb1b37947d4863dd6",
+        "deploy/dev/w80-signed-disconnected/offline.sh": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a",
+        "deploy/dev/w80-signed-disconnected/run.py": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d",
+        "deploy/dev/w80-signed-disconnected/stage.py": "ae927a84e3315cbb2672734b26172c568b7b0064399afb1418108c870ae4d59b"
+      },
+      "url": "https://github.com/araditc/Kafdeck/actions/runs/42986123750",
+      "workflow": "v09-w80-disconnected-auth"
+    },
+    {
+      "artifactId": 13840576918,
+      "artifactZipSha256": "73eb9a36fbdc1301b269495abb4c6192a75a178fa1a6cb8cf2ac08eee5820bdd",
+      "conclusion": "success",
+      "driverBranch": "codex/w80-disconnected-auth",
+      "driverSha": "882628d9a94928a8958af57a1430fc2592bfc434",
+      "evidence": [
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/offline-upgrade.json",
+          "sha256": "81aa1a10d72fafa0b86b7090dc3cb9dd43f44a1f08c55ca89b952390b05eba6f"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/postgres-fixture.json",
+          "sha256": "acd6916fd0169a360b4a244ebd8d49381267494e2487a7420735113b23b6c7ce"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/run-metadata.json",
+          "sha256": "9387d1bba26ad38d690402e7c6f4a7628e580da95ed0771737a54b2b5d5a384c"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/signed-input.json",
+          "sha256": "62a4e6764249222ba3028bd19d1da1505c3008b8ff2df4217089f6f1808d65c0"
+        },
+        {
+          "path": "artifacts/v09-w82-next/w80-disconnected-evidence/42988318558/upgrade-input.json",
+          "sha256": "9e9fc6fcb317145bcc087b7f983a6629b8809f19d3bd679d8481c7daac49ceb0"
+        }
+      ],
+      "runId": 42988318558,
+      "scripts": {
+        ".github/workflows/v09-w80-disconnected-auth.yml": "0f2d2f9b39d48b47a0192432ae52ed9750a5cc6d718e717ccb462c99c9b3c8ef",
+        "deploy/dev/w80-signed-disconnected/UpgradeProbe.cs": "96095e2dec4b35d12c6dee4e52af3f1538337aefe52b23a91b3da17f5a9a1d57",
+        "deploy/dev/w80-signed-disconnected/offline-upgrade.sh": "18c13341a18aad2626e8cff3da4088fc0fc8b75ae54af7168b36625b3eca398a",
+        "deploy/dev/w80-signed-disconnected/offline.sh": "e376c68506574eb22f1a1d524271c2128ff667176883c954d484e9a2da0dc42a",
+        "deploy/dev/w80-signed-disconnected/run.py": "ea307ddd2c29d1639f441adbbd664818bd90410b7931d0b09ec3ec39c980de5d",
+        "deploy/dev/w80-signed-disconnected/stage-upgrade.py": "0c36e49cd194b42228779dea599e65adfbd6c8731cbe15bb6ff08155797901fc",
+        "deploy/dev/w80-signed-disconnected/stage.py": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0",
+        "deploy/dev/w80-signed-disconnected/upgrade.py": "eb702641be41a68107c9765e62f9260a81e21f36d0a3353e916c1fb43d4c63c4"
+      },
+      "url": "https://github.com/araditc/Kafdeck/actions/runs/42988318558",
+      "workflow": "v09-w80-disconnected-auth"
+    }
+  ],
+  "independentLanePasses": {
+    "actualKafkaTopicAndExactMessageRead": true,
+    "disconnectedGenuineKeycloakServiceAuthentication": true,
+    "officialV08ToSignedV09SqliteAndPostgresOfflineUpgrade": true,
+    "schemaStableOnReentry": true,
+    "signedInstalledApiCliMcpReads": true,
+    "sqliteVerifiedBackupRollback": true,
+    "threeLegacySnapshotsPreservedPerProvider": true
+  },
+  "newProductRebuilt": false,
+  "officialReleasedV08Image": "ghcr.io/araditc/kafdeck@sha256:7b64f67b7f050b3c8cb5c2678b6ce94f6886e854cebfca6d6730170164fedb45",
+  "officialSignedArtifactId": 13839715488,
+  "officialSignedArtifactZipSha256": "7100754a28ebc405a8ca9739412341a3e13587f6e9514882ab547f2e62b8c295",
+  "officialSignedProducerRunId": 42984770583,
+  "oldOfficialApiAssemblySha256": "658250544809283d13aa8dc7c366fbb7851748fe061411127cc3c538c44db62d",
+  "oldProductRebuilt": false,
+  "releaseReadyClaimed": false,
+  "rootLocalDeepRecoveryEvidenceHashes": [
+    {
+      "authority": "root-agent-executed-local-proof; execution inputs and semantics reviewed separately by root",
+      "path": "artifacts/w80-recovery/sqlite-039ca942f03b471aafcff78385674424/evidence.json",
+      "sha256": "aa2a293fed6aeb25ea428634bd90c2dca4fdadcc7a7265e3b1e4bbf8b814c250"
+    },
+    {
+      "authority": "root-agent-executed-local-proof; execution inputs and semantics reviewed separately by root",
+      "path": "artifacts/w80-recovery/sqlite-039ca942f03b471aafcff78385674424/sqlite-interruption.json",
+      "sha256": "859602b459bf359535b977951fd2ccf805ad889f93a166465c6ad75178ce9c0e"
+    },
+    {
+      "authority": "root-agent-executed-local-proof; execution inputs and semantics reviewed separately by root",
+      "path": "artifacts/w80-recovery/postgres-pitr-1b3782cb85a241818b5f3dec1fb8ebd9/evidence.json",
+      "sha256": "bef2e3ead89e7b6d0081f1962ba322adadf0afd8492d7e3e12ee87ba88f528b2"
+    },
+    {
+      "authority": "root-agent-executed-local-proof; execution inputs and semantics reviewed separately by root",
+      "path": "artifacts/w80-recovery/postgres-pitr-1b3782cb85a241818b5f3dec1fb8ebd9/pitr-evidence.json",
+      "sha256": "febbb1764fa7d070cd9a95ef099ac0ba0b6bb4db3f9df6fbbdac5d26dced1fc0"
+    }
+  ],
+  "schemaVersion": 1,
+  "scopeLimits": [
+    "Only fixture probe was compiled; products ran immutable official released/signed bytes.",
+    "Historical migration approvals/snapshots are synthetic fixtures; no genuine product mutation or two-human business approval was claimed.",
+    "Service private_key_jwt authenticated operator reads were proven; no browser-human session was claimed.",
+    "This independent CI lane does not claim physical PITR, interrupted migration or generation-fence execution; separate root local raw files are inventoried without replacing their authority.",
+    "Feature-branch driver SHAs are distinct from the protected signed application source; no protected-main update or publication occurred."
+  ],
+  "signedManifestSha256": "b63864259a8a5e1c3c9d8dc3312d35a56e82749d62e2f6a05b88112f98af29ba",
+  "trustedRootSha256": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724"
+}

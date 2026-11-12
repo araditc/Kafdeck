@@ -1,0 +1,30 @@
+{
+  "installedFromArchives": true,
+  "scope": "native archive install, API/frontend startup and service-authenticated reads; effect and restore acceptance is separate",
+  "schemaVersion": 1,
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "runtime": "macOS 15.7.9",
+  "rid": "osx-x64",
+  "components": {
+    "api-ui": {
+      "sha256": "b3c711d73621f40f30eea1a23dbd82cfc8604afe5108c723d31aadc06dce4306",
+      "authenticatedOperation": true,
+      "started": true,
+      "archive": "kafdeck-api-ui-osx-x64.tar.gz"
+    },
+    "cli": {
+      "sha256": "653be7aae4ecc12f626374a6477c1a3b0ffc4c60e73ec0ed46deef28b3b954de",
+      "authenticatedOperation": true,
+      "started": true,
+      "archive": "kafdeck-cli-osx-x64.tar.gz"
+    },
+    "mcp": {
+      "sha256": "71ac6d2e098fc326c4369a9f2234370ba889cf2bae3e41fd80a0551b96619d8c",
+      "authenticatedOperation": true,
+      "started": true,
+      "archive": "kafdeck-mcp-osx-x64.tar.gz"
+    }
+  },
+  "version": "0.9.0",
+  "identity": "Keycloak 26.8.1 HTTPS private_key_jwt"
+}

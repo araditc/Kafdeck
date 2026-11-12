@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "fixtureDriverSha": "da6bfbd17084526f917e0f05a2eb5025d96c00cc",
+  "chartSha256": "3e403f55c185ca0eb855ee96347d52b27e15e7729f2f139a4aee3702b3d851d1",
+  "imageConfigDigest": "sha256:8b87c333d701f77511de2745f7e22c4cd4519aac296d30db28e983bba8ea7624",
+  "runtimeImageManifestDigest": "sha256:a5379cd7eb20bdbf0ad3ec7e12bba3071d939155dc98ae7b9a587e206f3b1049",
+  "profiles": {
+    "Sqlite": {
+      "status": "passed",
+      "producer": {
+        "runId": 43018140685,
+        "jobId": 130514285643,
+        "runConclusion": "success",
+        "artifactId": 13853493227,
+        "artifactZipSha256": "9b4b599782c6dc20a9350eaf79fea681f23b75ff5bb3f32c0189b1ad7c6923f3",
+        "artifactPayloadVerified": true,
+        "driverSha": "da6bfbd17084526f917e0f05a2eb5025d96c00cc"
+      },
+      "reportSha256": "cf20a97a77b00bc1dc7403e498183699b964a63f276ae18d3a636286050ec816",
+      "readyAuthenticatedMessageStages": 5,
+      "runtimePods": 5,
+      "restoreQuarantineProved": true,
+      "owningGenerationReceiptVerified": true,
+      "schemaAndGenerationStateEqualityVerified": true
+    },
+    "PostgreSql": {
+      "status": "passed",
+      "producer": {
+        "runId": 43018144998,
+        "jobId": 130514307560,
+        "runConclusion": "success",
+        "artifactId": 13853404784,
+        "artifactZipSha256": "f29b5ab720a230601b431a77ebd98be136bea0b8623e965877768aef0896b17a",
+        "artifactPayloadVerified": true,
+        "driverSha": "da6bfbd17084526f917e0f05a2eb5025d96c00cc"
+      },
+      "reportSha256": "e991ab81c1ba570abf53444384aa7a488b03cbe8cb0c251e1e0a0f47393c2976",
+      "readyAuthenticatedMessageStages": 6,
+      "runtimePods": 6,
+      "restoreQuarantineProved": true,
+      "owningGenerationReceiptVerified": true,
+      "schemaAndGenerationStateEqualityVerified": true
+    }
+  },
+  "conditionalNetworkBoundary": {
+    "testedSourceSha": "8f4f8b228f91ef6b51e9d679b09a47463a40154c",
+    "testedRuntime": "K3s1.34.13+k3s1 flannel-host-gw / kube-router2.11.1-k3s2",
+    "unchangedPolicySha256": "b4f57d1cfbe5e606bd318fffc9e4e3748dc62192dc3ace788906e23e2712b021",
+    "scope": "Transferred unchanged chart ipBlock boundary on direct-IP external routes only. Kind functional tests provide no new CNI enforcement certification; Service DNAT and other CNIs require separate admission."
+  },
+  "newProductBuilds": 0,
+  "publicationPerformed": false
+}

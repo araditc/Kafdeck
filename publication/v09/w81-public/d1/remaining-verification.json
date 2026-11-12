@@ -1,0 +1,9 @@
+{
+  "allSourceManifestBindings": true,
+  "upgradeSnapshotsPreserved": true,
+  "bothPgRestoreSnapshotsPreserved": true,
+  "canonicalDb": "62216d2eb6df46671e9dca6ad9f92f6c773f797be66adace153f81c6625841ba",
+  "oldImagePlatform": "linux/amd64",
+  "armPath": "canonical old amd64-container data copied to separate native ARM volume; no old ARM execution",
+  "productDefectObserved": false
+}

@@ -1,0 +1,12 @@
+{
+  "physicalBackupVerified": true,
+  "backupManifestSha256": "8f45c273a6342a63c58368df4a3e39c84510fbaef844a18bc11060d9e2b60d08",
+  "targetLsn": "0/50001E0",
+  "targetName": "w80_40109bf35e3a4c79b8d958b845a33605",
+  "archivedWalSegment": "000000010000000000000005",
+  "archivedWalSha256": "76f58615f0fbb2dafb1ccfb4999f627d1e17c07c8644870fcead9333bd1690f9",
+  "targetMarkerPresent": true,
+  "postTargetMarkerAbsent": true,
+  "sameSystemIdentifier": true,
+  "quarantinedWriteDeniedSqlState": "25006"
+}

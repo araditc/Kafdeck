@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "components": {
+    "api-ui": {
+      "archive": "kafdeck-api-ui-linux-x64.tar.gz",
+      "started": true,
+      "sha256": "a6804b6fadf6b491434ac66eae477073be08574756032826d3a58fc370273681",
+      "authenticatedOperation": true
+    },
+    "cli": {
+      "archive": "kafdeck-cli-linux-x64.tar.gz",
+      "started": true,
+      "sha256": "12a4b259b97af91be7a8faa7f2dfb69d5e61c67fd2dbbd423a8dd1387c128587",
+      "authenticatedOperation": true
+    },
+    "mcp": {
+      "archive": "kafdeck-mcp-linux-x64.tar.gz",
+      "started": true,
+      "sha256": "ff0f4084a4140da51d1ee1444a58d8f3e1a83f87c883ac276ccd4c137a7bed19",
+      "authenticatedOperation": true
+    }
+  },
+  "runtime": "Ubuntu 24.04.5 LTS",
+  "sourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "installedFromArchives": true,
+  "identity": "Keycloak 26.8.1 HTTPS private_key_jwt",
+  "scope": "native archive install, API/frontend startup and service-authenticated reads; effect and restore acceptance is separate",
+  "rid": "linux-x64",
+  "version": "0.9.0"
+}

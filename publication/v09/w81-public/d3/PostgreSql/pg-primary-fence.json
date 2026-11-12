@@ -1,0 +1,9 @@
+{
+  "oldPrimaryPortClosed": true,
+  "observedAtUtc": "2026-11-11T12:16:10.4099041+00:00",
+  "oldPrimaryDataDirectory": "/home/runner/work/_temp/w81-signed-helm/pg/primary",
+  "oldPrimaryPort": 15433,
+  "oldPrimaryStopped": true,
+  "stopMode": "fast",
+  "replayedBarrier": "0/3182CD0"
+}

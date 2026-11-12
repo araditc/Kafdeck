@@ -1,0 +1,8 @@
+[4:240] -A KUBE-POD-FW-QQ3BPTNOQV656H5W -d 10.197.0.4/32 -m comment --comment "from local node" -m addrtype --src-type LOCAL -j ACCEPT
+[84:32368] -A KUBE-ROUTER-FORWARD -d 10.197.0.4/32 -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs in" -j KUBE-POD-FW-QQ3BPTNOQV656H5W
+[0:0] -A KUBE-ROUTER-FORWARD -d 10.197.0.4/32 -m physdev --physdev-is-bridged -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs in" -j KUBE-POD-FW-QQ3BPTNOQV656H5W
+[121:20860] -A KUBE-ROUTER-FORWARD -s 10.197.0.4/32 -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs out" -j KUBE-POD-FW-QQ3BPTNOQV656H5W
+[0:0] -A KUBE-ROUTER-FORWARD -s 10.197.0.4/32 -m physdev --physdev-is-bridged -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs out" -j KUBE-POD-FW-QQ3BPTNOQV656H5W
+[36:10915] -A KUBE-ROUTER-INPUT -s 10.197.0.4/32 -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs out" -j KUBE-POD-FW-QQ3BPTNOQV656H5W
+[58:10588] -A KUBE-ROUTER-OUTPUT -d 10.197.0.4/32 -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs in" -j KUBE-POD-FW-QQ3BPTNOQV656H5W
+[0:0] -A KUBE-ROUTER-OUTPUT -s 10.197.0.4/32 -m comment --comment "kaf02-fixture/kaf02-kafdeck-ccd6867cd-cmszs out" -j KUBE-POD-FW-QQ3BPTNOQV656H5W

@@ -1,0 +1,7 @@
+{"phase": "install", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "b69e65eacf35f255cec66a1b2186da1edc9a49e9913998ac9cebe20f63209f9d", "catalogGenerationReadAllowed": true}
+{"phase": "upgrade", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "b69e65eacf35f255cec66a1b2186da1edc9a49e9913998ac9cebe20f63209f9d", "catalogGenerationReadAllowed": true}
+{"phase": "physical-db-failover", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "b69e65eacf35f255cec66a1b2186da1edc9a49e9913998ac9cebe20f63209f9d", "catalogGenerationReadAllowed": true}
+{"phase": "rollback", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "b69e65eacf35f255cec66a1b2186da1edc9a49e9913998ac9cebe20f63209f9d", "catalogGenerationReadAllowed": true}
+{"phase": "reinstall", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "b69e65eacf35f255cec66a1b2186da1edc9a49e9913998ac9cebe20f63209f9d", "catalogGenerationReadAllowed": true}
+{"phase":"restored-unadmitted","httpReady":false,"restoreQuarantineObserved":true}
+{"phase": "restored-admitted", "realKeycloakHttpsPrivateKeyJwt": true, "realKafkaTlsMetadata": true, "exactFixtureMessageSha256": "b69e65eacf35f255cec66a1b2186da1edc9a49e9913998ac9cebe20f63209f9d", "catalogGenerationReadAllowed": true}

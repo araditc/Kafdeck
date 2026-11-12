@@ -1,0 +1,111 @@
+{
+  "provider": "sqlite",
+  "originalSource": "cbedd025ab97db10fb21407ea5188c08d6a4d8ce",
+  "candidateSource": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "originalAssemblySha256": "078b4fb64264bfd69cc919d4bea6592b3c98c567712020e8260090e839e68583",
+  "candidateAssemblySha256": "50fdd22e00a4972be700c5352738953536293157a2289f03d2eff0d6d21b55a5",
+  "candidateArchiveSha256": "9dd556375a96dd7f8f7315fc02c83f87a30ee2a500d6b9a4199bd47a5e517f8f",
+  "originalApiHealthy": true,
+  "candidateApiHealthy": true,
+  "replayApiHealthy": true,
+  "oldSnapshotHashesUnchanged": true,
+  "original": {
+    "States": [
+      {
+        "State": 3,
+        "SnapshotSha256": "df18245efbaca0d168373d4dfae25de30205a5dfd0933883f41c7d03916c97b6"
+      },
+      {
+        "State": 4,
+        "SnapshotSha256": "8ca09ca7811ca8343ad10a39967ff43940a320913e6af3cdc2a6886245382f7a"
+      },
+      {
+        "State": 9,
+        "SnapshotSha256": "6be24711a1fb31f0b81866e4bd1d906b7860a2e1779165110a4ac2c925ed66f6"
+      }
+    ],
+    "Tables": [
+      "kafdeck_connect_auto_restart_activations",
+      "kafdeck_connect_auto_restart_profile_slots",
+      "kafdeck_connect_auto_restart_target_claims",
+      "kafdeck_fleet_conflict_obligations",
+      "kafdeck_fleet_conflict_scope_bindings",
+      "kafdeck_fleet_conflict_scope_guards",
+      "kafdeck_fleet_progress",
+      "kafdeck_mutation_cluster_slots",
+      "kafdeck_mutation_conflict_guard_schema",
+      "kafdeck_mutation_conflict_guards",
+      "kafdeck_mutation_operations",
+      "kafdeck_mutation_resource_claims",
+      "kafdeck_schema_info"
+    ]
+  },
+  "upgraded": {
+    "States": [
+      {
+        "State": 3,
+        "SnapshotSha256": "df18245efbaca0d168373d4dfae25de30205a5dfd0933883f41c7d03916c97b6"
+      },
+      {
+        "State": 4,
+        "SnapshotSha256": "8ca09ca7811ca8343ad10a39967ff43940a320913e6af3cdc2a6886245382f7a"
+      },
+      {
+        "State": 9,
+        "SnapshotSha256": "6be24711a1fb31f0b81866e4bd1d906b7860a2e1779165110a4ac2c925ed66f6"
+      }
+    ],
+    "Tables": [
+      "attribution_measurements",
+      "attribution_rate_audit",
+      "attribution_rate_bindings",
+      "attribution_rate_receipts",
+      "attribution_rate_state",
+      "attribution_rate_versions",
+      "attribution_schema",
+      "attribution_visibility_scopes",
+      "catalog_owned_entities",
+      "catalog_owned_history",
+      "catalog_owned_plans",
+      "catalog_owned_receipts",
+      "catalog_owned_references",
+      "catalog_owned_schema",
+      "governance_deployment_generation",
+      "governance_generation_admissions",
+      "governance_generation_schema",
+      "governance_policy_activations",
+      "governance_policy_commit_receipts",
+      "governance_policy_schema",
+      "governance_policy_state",
+      "governance_policy_versions",
+      "kafdeck_connect_auto_restart_activations",
+      "kafdeck_connect_auto_restart_profile_slots",
+      "kafdeck_connect_auto_restart_target_claims",
+      "kafdeck_fleet_conflict_obligations",
+      "kafdeck_fleet_conflict_scope_bindings",
+      "kafdeck_fleet_conflict_scope_guards",
+      "kafdeck_fleet_progress",
+      "kafdeck_mutation_cluster_slots",
+      "kafdeck_mutation_conflict_guard_schema",
+      "kafdeck_mutation_conflict_guards",
+      "kafdeck_mutation_operations",
+      "kafdeck_mutation_resource_claims",
+      "kafdeck_schema_info",
+      "service_request_decisions",
+      "service_request_events",
+      "service_request_heads",
+      "service_request_plans",
+      "service_request_receipts",
+      "service_request_revisions",
+      "service_request_schema"
+    ]
+  },
+  "preUpgradeBackupSha256": "28549348a2e6d3532e33d24ed51ffb02888d0a0e7617f7356e4902838932c0e1",
+  "sqliteVerifiedPreUpgradeRestore": true,
+  "postgresVerifiedLogicalPreUpgradeRestore": false,
+  "interruptedPostgresBetweenStoresAndRetried": false,
+  "sqliteInterruptedMigrationAndRetried": true,
+  "sqliteOfflineNewGenerationAdmittedAndStaleRefused": true,
+  "fixtureApprovalSynthetic": true,
+  "noKafkaDispatched": true
+}

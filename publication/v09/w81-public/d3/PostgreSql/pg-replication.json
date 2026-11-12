@@ -1,0 +1,12 @@
+{
+  "primaryPort": 15433,
+  "observedAtUtc": "2026-11-11T12:14:45.0009640+00:00",
+  "standbyPort": 15434,
+  "syncState": "sync",
+  "standbyReplayedBarrier": true,
+  "streaming": true,
+  "synchronousCommit": "remote_apply",
+  "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)",
+  "physicalBasebackupVerified": true,
+  "barrierLsn": "0/30001A0"
+}

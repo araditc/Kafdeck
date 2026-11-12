@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 1,
+  "applicationSourceSha": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "driverSha": "da6bfbd17084526f917e0f05a2eb5025d96c00cc",
+  "scope": "W81 D3 actual signed Helm SQLite and external PostgreSQL HA profiles plus separately transferred conditional policy boundary",
+  "files": [
+    {
+      "path": "conditional-network-boundary/kaf02-deployment-retest.md",
+      "size": 4365,
+      "sha256": "c0fc9419167fb8c0c837e15bf5078af1ecaa1547af3de4b2c2e0f600e8ca6e8f"
+    },
+    {
+      "path": "conditional-network-boundary/network-policy.yaml",
+      "size": 1001,
+      "sha256": "b4f57d1cfbe5e606bd318fffc9e4e3748dc62192dc3ace788906e23e2712b021"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/cni-pod-rules.txt",
+      "size": 1256,
+      "sha256": "1555b3b8cec984bdc1cd4a74d297296017b8d68837c78f0d9e5fae1581605f53"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/k3s-network-controller.txt",
+      "size": 552,
+      "sha256": "85258cbe85d14ad5e89b0a78a83f9299e360934a60aacd4de38bbaa6fc55cbe5"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/kaf02-deployment-result.json",
+      "size": 1127,
+      "sha256": "dc07ba6a6114b570b4a222a87115309586cf4e519a9c821d79c5cee4fdd02220"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/lab-cleanup.txt",
+      "size": 130,
+      "sha256": "c731de94805da707164a1ee1776727170443d1381e17c6a24f9bf8838caf645c"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/positive-syn.txt",
+      "size": 344,
+      "sha256": "e5f11e214227b632ba53613ced5f424184a89407230865714d1d49ce7b0e3f7a"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/restricted-policy.json",
+      "size": 1865,
+      "sha256": "8428761f6bef068b5364b9d45dde5bcbdf7c5d609d2b1397c33a18d2648af0ff"
+    },
+    {
+      "path": "conditional-network-boundary/observed-final/restricted-syn.txt",
+      "size": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "driver/.github/workflows/v09-w81-signed-helm-auth.yml",
+      "size": 3283,
+      "sha256": "02a3aa256d055051628fcae5a39421c45079a3cc276e12fbd704ff52733c5977"
+    },
+    {
+      "path": "driver/deploy/dev/prepare-keycloak-g2.ps1",
+      "size": 11218,
+      "sha256": "4b2596db11db1e1f9642a1cdf68c7b6296cd2a5b45c8860371fb3de9c5e65bf8"
+    },
+    {
+      "path": "driver/deploy/dev/prepare-postgres-g2-recovery.ps1",
+      "size": 32965,
+      "sha256": "0005e8491aa6d6aaebeb4fa22cfd465312b4a9574183a08ab25dda28da876bd3"
+    },
+    {
+      "path": "driver/deploy/dev/w80-signed-disconnected/stage.py",
+      "size": 3434,
+      "sha256": "7d427c1553ca98ee9fff34eef05dd41a7b38d7cc5e097cb6d200abe7d443d5b0"
+    },
+    {
+      "path": "driver/deploy/dev/w81-signed-helm/fixture.py",
+      "size": 10780,
+      "sha256": "37f404f4648251cd26c43e71114df2246750bb7aefa8823ba07fe865ad7e4f19"
+    },
+    {
+      "path": "driver/deploy/dev/w81-signed-helm/HelmState.cs",
+      "size": 2280,
+      "sha256": "9600b15c8d87f5fa0149412182771bcbc02da7bb9aa73c93a19c42f9df0656c0"
+    },
+    {
+      "path": "driver/deploy/dev/w81-signed-helm/postgres.py",
+      "size": 5293,
+      "sha256": "fd36b533fcb783e86a908887f10a886e5e6ea12bef46057d8a5662fb0ff61874"
+    },
+    {
+      "path": "driver/deploy/dev/w81-signed-helm/run.sh",
+      "size": 15540,
+      "sha256": "118fa3fe31ac9c8de90d5d56fa4aba13cebf8c1e522571488e3bb1b71ab67039"
+    },
+    {
+      "path": "failed-fixture-attempts.json",
+      "size": 1058,
+      "sha256": "05b01f1284fe59a05c987241df2eafe137f3e38eeebb20942d1711af7416d010"
+    },
+    {
+      "path": "PostgreSql/helm-history.json",
+      "size": 667,
+      "sha256": "962a038ad3df478cbefdaa9536f63350ac8b3b0d2a8a25c447135a06aa7859b4"
+    },
+    {
+      "path": "PostgreSql/helm-lifecycle.json",
+      "size": 1267,
+      "sha256": "e991ab81c1ba570abf53444384aa7a488b03cbe8cb0c251e1e0a0f47393c2976"
+    },
+    {
+      "path": "PostgreSql/journeys.ndjson",
+      "size": 1465,
+      "sha256": "fd0b52d0835633e9d253f3f5d480b45bf611921a893dc73a35aca8e66960437c"
+    },
+    {
+      "path": "PostgreSql/kafka-image-digests.json",
+      "size": 89,
+      "sha256": "bcdfe45df33bb8271386479d7418ed4dba101b31244fd893e3b1e05a745e46de"
+    },
+    {
+      "path": "PostgreSql/pg-primary-fence.json",
+      "size": 285,
+      "sha256": "1a77c1aa48d86206db434359e706b28cf7e218e6113dde7b7413e44ba52d0041"
+    },
+    {
+      "path": "PostgreSql/pg-replication.json",
+      "size": 371,
+      "sha256": "77b67d250517235f3fb1f43bdf010562ac3a4092c615ee4ac436a8eaff1425f4"
+    },
+    {
+      "path": "PostgreSql/producer.json",
+      "size": 296,
+      "sha256": "ac99ab8a88c49f9a8fcd1f5665b607ffe996607ead77105ca3ccc27d5f46d09f"
+    },
+    {
+      "path": "PostgreSql/restore-fence.json",
+      "size": 195,
+      "sha256": "d0e8e629afa4cf39edd6b1e49f3fee514c8350608611a33fb931976d9f072947"
+    },
+    {
+      "path": "PostgreSql/runtime-pods.ndjson",
+      "size": 1784,
+      "sha256": "326a21e96d37c8798877288e6e95818a3a6354ccdb42955db775344c8a467abd"
+    },
+    {
+      "path": "PostgreSql/signed-input.json",
+      "size": 1440,
+      "sha256": "8fc44e78f3cf1864991c1121fc130a8a322e380945216ae4e18350aba36a3be7"
+    },
+    {
+      "path": "PostgreSql/state-admitted.json",
+      "size": 1658,
+      "sha256": "a8062f8b59322cb964eb6629babee282c8ce76baa81f521c8d4634de7bf3b433"
+    },
+    {
+      "path": "PostgreSql/state-failover.json",
+      "size": 1351,
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550"
+    },
+    {
+      "path": "PostgreSql/state-initial.json",
+      "size": 1351,
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550"
+    },
+    {
+      "path": "PostgreSql/state-reinstalled.json",
+      "size": 1351,
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550"
+    },
+    {
+      "path": "PostgreSql/state-rollback.json",
+      "size": 1351,
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550"
+    },
+    {
+      "path": "PostgreSql/state-upgraded.json",
+      "size": 1351,
+      "sha256": "aa9242f79ded5f09763ac254e7f2a7cc36c0e1409c39fe666822f6712ef76550"
+    },
+    {
+      "path": "PostgreSql-producer.zip",
+      "size": 9004,
+      "sha256": "f29b5ab720a230601b431a77ebd98be136bea0b8623e965877768aef0896b17a"
+    },
+    {
+      "path": "Sqlite/helm-history.json",
+      "size": 666,
+      "sha256": "5756c458250cd778d7912f9ccde3b92ecc254a8212f555f054198473734dcf4d"
+    },
+    {
+      "path": "Sqlite/helm-lifecycle.json",
+      "size": 1264,
+      "sha256": "cf20a97a77b00bc1dc7403e498183699b964a63f276ae18d3a636286050ec816"
+    },
+    {
+      "path": "Sqlite/journeys.ndjson",
+      "size": 1226,
+      "sha256": "5c604f491e3fd28c1fe3f2a00807db947fcedeb9cff800c53280a5ecbeb3c9a7"
+    },
+    {
+      "path": "Sqlite/kafka-image-digests.json",
+      "size": 89,
+      "sha256": "bcdfe45df33bb8271386479d7418ed4dba101b31244fd893e3b1e05a745e46de"
+    },
+    {
+      "path": "Sqlite/producer.json",
+      "size": 296,
+      "sha256": "9ca0fa310ddb7294c97d19b9aadd9edd547020e5d339caeb98e4904f08537a11"
+    },
+    {
+      "path": "Sqlite/restore-fence.json",
+      "size": 195,
+      "sha256": "1728451e61952fa2f18246c813f47bde202364845fe559d38f4940f156896d61"
+    },
+    {
+      "path": "Sqlite/runtime-pods.ndjson",
+      "size": 1478,
+      "sha256": "4d73e8897b7c927d9087eb73b1e6b030aac0bad834c763ef34ae83e00cf7180e"
+    },
+    {
+      "path": "Sqlite/signed-input.json",
+      "size": 1440,
+      "sha256": "8fc44e78f3cf1864991c1121fc130a8a322e380945216ae4e18350aba36a3be7"
+    },
+    {
+      "path": "Sqlite/state-admitted.json",
+      "size": 1839,
+      "sha256": "554e62e9af54aa5d49a20626b31186d61cc08ef76423e10859baa61afa034c77"
+    },
+    {
+      "path": "Sqlite/state-initial.json",
+      "size": 1532,
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097"
+    },
+    {
+      "path": "Sqlite/state-reinstalled.json",
+      "size": 1532,
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097"
+    },
+    {
+      "path": "Sqlite/state-rollback.json",
+      "size": 1532,
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097"
+    },
+    {
+      "path": "Sqlite/state-upgraded.json",
+      "size": 1532,
+      "sha256": "681b481a2ac67502aafa02a359cbb7cec36ff06d17511beca2e7553bf694d097"
+    },
+    {
+      "path": "Sqlite-producer.zip",
+      "size": 7905,
+      "sha256": "9b4b599782c6dc20a9350eaf79fea681f23b75ff5bb3f32c0189b1ad7c6923f3"
+    },
+    {
+      "path": "verification.json",
+      "size": 2458,
+      "sha256": "074487c375e90fdfbba6d275da61dd1f1ea88892fa3c07c62a5001da8affdcf7"
+    },
+    {
+      "path": "verify-and-index.py",
+      "size": 6638,
+      "sha256": "3277ea5ef61afb0a2c4a0669f29b76d468268518a95e4340fbaa907e3c79962a"
+    },
+    {
+      "path": "W81-D3-complete-ledger.md",
+      "size": 8095,
+      "sha256": "2f39bb59974be04f218d7191220a8ac9a6d52e582e0cde163ff8236c49f4388b"
+    }
+  ]
+}
