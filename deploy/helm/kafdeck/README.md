@@ -1,8 +1,8 @@
-# Kafdeck Helm candidate
+# Kafdeck Helm v0.9
 
 This chart packages the Kafdeck API and bundled UI as one TLS-serving
-workload. Native Kubernetes lifecycle acceptance is pending. The current
-candidate uses one replica for both SQLite and PostgreSQL because the browser
+workload. Real signed-chart lifecycle acceptance passed on Kubernetes 1.34.3 / Helm 3.21.4 with real Keycloak and Kafka. See the [released installation guide](../../../docs/operator/v0.9-installation-guide.md) and [final evidence](../../../docs/implementation/evidence/v0.9-release-published-20261112.json). The current
+release uses one replica for both SQLite and PostgreSQL because the browser
 OIDC ticket store lives in process memory. A restarted pod requires a fresh
 login. PostgreSQL multi-replica admission is separate work.
 
@@ -44,7 +44,7 @@ CNI and permits cluster DNS using the default `kube-dns` pod label in
 omit unused destinations. The workload has no Kubernetes API credentials.
 
 Render before install. Use a values file containing resource references and
-the candidate digest. Neither of these commands contacts the cluster.
+the exact released digest. Neither of these commands contacts the cluster.
 
 ```sh
 helm lint deploy/helm/kafdeck --strict -f operator-values.yaml

@@ -16,6 +16,9 @@ updates:
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
     groups:
+      codeql-actions:
+        patterns:
+          - "github/codeql-action/*"
       release-supply-chain:
         patterns:
           - "docker/login-action"
