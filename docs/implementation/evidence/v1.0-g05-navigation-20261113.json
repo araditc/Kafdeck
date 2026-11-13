@@ -5,7 +5,7 @@
   "status": "prepared; closure effective after exact-head CI/review and PR admission",
   "sourceFingerprint": "SHA256 of staged LF Git blobs; local browser run identified dirty baseline, bound here to these source inputs",
   "sourceSha256": {
-    "src/backend/Kafdeck.Api/BrowserNavigationEndpoints.cs": "cb4b22fb2b0d99cf4ef733a362aa96bab1e3050b697497476b7846fd50bc1718",
+    "src/backend/Kafdeck.Api/BrowserNavigationEndpoints.cs": "e4577241a77f51096090bfbd9f0896d89fd4c5fb3693dffbaff9d3d771950c65",
     "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs": "f51c6a3517e3038da45065c403fc0996af8f47c92df6e90981c2ff759e356250",
     "src/frontend/scripts/v09-governance-browser.cjs": "b4881d270e2c08787e5d2631f41ee6acb72cf79e295c6cfd2e307d4f44eb2906",
     "src/frontend/scripts/v09-workflows-browser.cjs": "a900c2a4069b14a192bdbab4d1de7735c6d7dedc0903ec54b11b52b9aaf69191",
@@ -46,7 +46,34 @@
     "realLoopbackHttp": true,
     "realPolicyEvaluator": true,
     "controlledNormalizedOidcPrincipals": true,
-    "genuineKeycloakLoginClaimed": false
+    "genuineKeycloakLoginClaimed": false,
+    "navigationEndpointHashAt16CaseRun": "cb4b22fb2b0d99cf4ef733a362aa96bab1e3050b697497476b7846fd50bc1718",
+    "bindingRegressionFollowup": {
+      "cause": "CI metadata-only logout fixture does not register the newly added GET dependency; implicit DI inference treated it as an invalid body.",
+      "fix": "Explicit FromServices annotation; no authorization behavior change.",
+      "filter": "FullyQualifiedName~V05AntiforgeryTests.Oidc_logout_carries_framework_antiforgery_metadata",
+      "counts": {
+        "total": "1",
+        "executed": "1",
+        "passed": "1",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "trxPath": "artifacts/g05-results/g05-route-metadata.trx",
+      "trxSha256": "0072894398c544495d07a302b6dcf6abf702130adee4d6bf4411918718fc3430",
+      "reuse": "Original 16 successful loopback cases were not manually repeated; final changed-source CI is authoritative for final-head regression."
+    }
   },
   "frontend": {
     "newCasesPassed": 4,

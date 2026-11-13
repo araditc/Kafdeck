@@ -8,7 +8,7 @@ internal static class BrowserNavigationEndpoints
 {
     internal static WebApplication MapBrowserNavigation(this WebApplication app)
     {
-        app.MapGet("/api/v1/auth/navigation", (HttpContext context, string clusterId, KafdeckAuthorizationService auth) =>
+        app.MapGet("/api/v1/auth/navigation", (HttpContext context, string clusterId, [Microsoft.AspNetCore.Mvc.FromServices] KafdeckAuthorizationService auth) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             if (context.User.Identity is NonBrowserReadIdentity ||
