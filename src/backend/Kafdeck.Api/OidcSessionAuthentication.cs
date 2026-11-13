@@ -505,6 +505,8 @@ public static class KafdeckOidcEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        app.MapBrowserNavigation();
+
         app.MapGet("/api/v1/auth/login", (string? returnUrl) =>
             Results.Challenge(
                 new AuthenticationProperties

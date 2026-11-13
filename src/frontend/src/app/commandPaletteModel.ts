@@ -1,4 +1,5 @@
 import { t } from '../shared/i18n.js';
+import { dashboardPageFor } from './dashboardPage.js';
 export type CommandAvailability = 'available' | 'unavailable';
 
 export type ProductCommand = {
@@ -35,11 +36,16 @@ export const productCommands: readonly ProductCommand[] = [
   { id: 'fleet', label: "Fleet Operations", description: "Navigate to runtime capability status.", keywords: ['fleet', 'acl', 'scram', 'quota', 'maintenance'], targetId: 'fleet', availability: 'available' },
 ] as const;
 
-export function filterProductCommands(query: string): ProductCommand[] {
+export function filterProductCommands(query: string, availablePages?: readonly string[]): ProductCommand[] {
   const normalized = query.trim().toLocaleLowerCase();
-  if (!normalized) return [...productCommands];
+  const commands = productCommands.map(command => {
+    const page = dashboardPageFor(command.targetId);
+    return availablePages && page && !availablePages.includes(page)
+      ? { ...command, availability: 'unavailable' as const } : command;
+  });
+  if (!normalized) return commands;
 
-  return productCommands.filter(command => {
+  return commands.filter(command => {
     const haystack = [
       command.label,
       command.description,

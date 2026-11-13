@@ -1496,5 +1496,6 @@
   "Recovery has not confirmed the account. No creation was retried.": "Recovery has not confirmed the account. No creation was retried.",
   "Pending user provisioning": "Pending user provisioning",
   "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.": "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.",
-  "Recover user creation": "Recover user creation"
+  "Recover user creation": "Recover user creation",
+  "This page is unavailable for the current account or cluster.": "This page is unavailable for the current account or cluster."
 }
