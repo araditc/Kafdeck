@@ -120,5 +120,11 @@
     "V1-6",
     "V1-7"
   ],
-  "publicationOrDeploymentClaimed": false
+  "publicationOrDeploymentClaimed": false,
+  "ciIntegration": {
+    "workflow": ".github/workflows/v08-g2-live-acceptance.yml",
+    "sha256OfLFContent": "2a45aadd96acfd7ea6db172e772b96302218cbbbcb96cccab113825bd8996655",
+    "runsNewBrowserCase": true,
+    "sanitizedEvidenceUploadConfigured": true
+  }
 }
