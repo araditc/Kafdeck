@@ -49,6 +49,8 @@ Every defect fix should add a regression test when the failure can be reproduced
 
 Flaky tests are defects. Quarantining a test requires a tracked issue, explicit reason, and owner; quarantine may not become a permanent substitute for fixing it.
 
+PostgreSQL schema isolation does not isolate database-wide advisory locks. A test that deliberately holds such a lock while awaiting competing transactions must use an owned private database for each competing fixture; otherwise another schema's queued writer can block readers and manufacture a deadlock in the harness. Keep product lock keys, negative assertions and deadlines intact. The opt-in `G2CliPostgreSqlDatabase.CreateAsync(isolatedDatabase: true)` requires `CREATEDB` on the explicit test role, generates its own database name and cleans it up without forced backend termination; ordinary tests and production roles retain their existing behavior. See the [bounded catalog isolation correction](../implementation/v1.0-postmerge-catalog-lock-isolation.md).
+
 ## Merge gate
 
 Required checks must pass on the exact PR head intended for merge. If the head changes, stale validation is not considered evidence for the new head.
