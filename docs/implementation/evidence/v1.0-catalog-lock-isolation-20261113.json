@@ -1,0 +1,72 @@
+{
+  "baselineMain": "27dce53ddaeca3c6b0d40a6d798a1a6ca06ec6fa",
+  "observedFailedRun": "https://github.com/araditc/Kafdeck/actions/runs/43421391826",
+  "failure": {
+    "case": "V09W73CatalogPersistenceTests.PostgreSql_parallel_catalog_previews_keep_plan_identity_and_exclude_commits",
+    "passedOtherCases": 135,
+    "failed": 1,
+    "skipped": 0,
+    "stage": "StageAsync shared PostgreSQL advisory lock",
+    "exception": "NpgsqlException / TimeoutException",
+    "logSha256": "099296ff3e0be82415359d1a46a91a810e7627191f253b91939bdb1559feedfb"
+  },
+  "physicalScopeProbe": {
+    "actualPostgreSql": true,
+    "postgresVersion": "17.11",
+    "database": "owned loopback fixture",
+    "sameDatabaseDifferentSchemaSharedLockRejected": true,
+    "sameDatabaseSqlState": "55P03",
+    "differentDatabaseSameKeySharedLockSucceeds": true,
+    "productAdvisoryKeyUnchanged": 64964007301,
+    "probeTimeoutMs": 500,
+    "noProductionCodeChange": true
+  },
+  "correctedTest": {
+    "trxSha256": "1499775d615335ac3a3c959efa5f53aece2a6e694e153cafd18c2c236604dcc1",
+    "counters": {
+      "total": "1",
+      "executed": "1",
+      "passed": "1",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "realPostgreSql": true,
+    "bothCompetingFixturesOwnPrivateDatabases": true,
+    "concurrentPreviews": 8,
+    "samePlanDifferentMaterialConflictRetained": true,
+    "localCommitBlockedBySharedHolder": true,
+    "localCommitSucceedsAfterRelease": true,
+    "commandTimeoutSeconds": 3,
+    "caseDeadlineSeconds": 45,
+    "noRetrySkipOrDeadlineIncrease": true
+  },
+  "srcTreeUnchanged": "78139e944ecab09c4d4178a0c9691d86ed931c99",
+  "defaultSchemaFixtureBehaviorRetained": true,
+  "requiredPrivilege": "CREATEDB only on explicitly owned advisory-test laboratory role; no production requirement",
+  "sourceFingerprints": [
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/G2CliPostgreSqlDatabase.cs",
+      "sha256": "7566431a4e88490350586f9b77232562dcf884e6478fa8b7773f5ab64ce2fcde"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V09W73CatalogPersistenceTests.cs",
+      "sha256": "6767193a32ca7b98f413b98e55bdb855e634999a9a24c415cf25a5a083177ea4"
+    }
+  ],
+  "reused": [
+    "G06/E01/Q01 accepted exact-head evidence",
+    "v0.9 W80/W81/W82 original evidence"
+  ],
+  "publicationAuthorized": false
+}

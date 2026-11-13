@@ -2,12 +2,14 @@ using Npgsql;
 
 namespace Kafdeck.Architecture.Tests;
 
-// Each real API child gets its own database schema, never a shared operation set.
-internal sealed class G2CliPostgreSqlDatabase(NpgsqlConnection admin, string schema, string connectionString) : IAsyncDisposable
+// Ordinary fixtures own a schema; advisory-lock tests need their own database
+// because PostgreSQL advisory lock identity is not scoped by search_path.
+internal sealed class G2CliPostgreSqlDatabase(NpgsqlConnection admin, string schema, string connectionString,
+    bool isolatedDatabase = false) : IAsyncDisposable
 {
     internal string ConnectionString { get; } = connectionString;
 
-    internal static async Task<G2CliPostgreSqlDatabase> CreateAsync()
+    internal static async Task<G2CliPostgreSqlDatabase> CreateAsync(bool isolatedDatabase = false)
     {
         var configured = Environment.GetEnvironmentVariable("KAFDECK_TEST_POSTGRES")
             ?? throw new InvalidOperationException("The genuine PostgreSQL CLI fixture is required.");
@@ -19,10 +21,11 @@ internal sealed class G2CliPostgreSqlDatabase(NpgsqlConnection admin, string sch
             await admin.OpenAsync(deadline.Token);
             var schema = "g2_cli_" + Guid.NewGuid().ToString("N");
             await using var command = admin.CreateCommand();
-            command.CommandText = $"CREATE SCHEMA \"{schema}\"";
+            command.CommandText = isolatedDatabase ? $"CREATE DATABASE \"{schema}\"" : $"CREATE SCHEMA \"{schema}\"";
             await command.ExecuteNonQueryAsync(deadline.Token);
-            settings.SearchPath = schema;
-            return new(admin, schema, settings.ConnectionString);
+            if (isolatedDatabase) { settings.Database = schema; settings.SearchPath = "public"; }
+            else settings.SearchPath = schema;
+            return new(admin, schema, settings.ConnectionString, isolatedDatabase);
         }
         catch { await admin.DisposeAsync(); throw; }
     }
@@ -33,7 +36,7 @@ internal sealed class G2CliPostgreSqlDatabase(NpgsqlConnection admin, string sch
         try
         {
             await using var command = admin.CreateCommand();
-            command.CommandText = $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
+            command.CommandText = isolatedDatabase ? $"DROP DATABASE IF EXISTS \"{schema}\"" : $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
             await command.ExecuteNonQueryAsync(deadline.Token);
         }
         finally { await admin.DisposeAsync(); }

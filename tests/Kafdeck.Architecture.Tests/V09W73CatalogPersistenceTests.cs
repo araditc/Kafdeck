@@ -32,7 +32,18 @@ public sealed class V09W73CatalogPersistenceTests
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         var token = deadline.Token;
-        await using var database = await G2CliPostgreSqlDatabase.CreateAsync();
+        // Deliberately hold another fixture's catalog writer lock. A separate
+        // schema cannot isolate this database-wide advisory key; a private
+        // database must let our readers progress while preserving local fences.
+        await using var unrelated = await G2CliPostgreSqlDatabase.CreateAsync(isolatedDatabase: true);
+        await using var foreign = new Npgsql.NpgsqlConnection(unrelated.ConnectionString);
+        await foreign.OpenAsync(token);
+        await using var foreignWriter = await foreign.BeginTransactionAsync(token);
+        await using var foreignLock = foreign.CreateCommand();
+        foreignLock.Transaction = foreignWriter;
+        foreignLock.CommandText = "SELECT pg_advisory_xact_lock(64964007301)";
+        await foreignLock.ExecuteNonQueryAsync(token);
+        await using var database = await G2CliPostgreSqlDatabase.CreateAsync(isolatedDatabase: true);
         var settings = new Npgsql.NpgsqlConnectionStringBuilder(database.ConnectionString) { CommandTimeout = 3 };
         var connections = new PostgreSqlMutationDbConnectionFactory(settings.ConnectionString);
         var generation = Guid.NewGuid();
