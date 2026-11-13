@@ -124,6 +124,28 @@
         "inProgress": "0",
         "pending": "0"
       }
+    },
+    {
+      "name": "registration-fixture-corrected",
+      "sha256": "107c16ea094fecfc86295996e9ed30a5b20ce912a851dfabffcfce60ddb72a74",
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "3",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
     }
   ],
   "frontend": {
@@ -228,8 +250,16 @@
       "sha256": "a3eb952a4d6b6e94f376d965f4cfd607949813ee6eef1cbae84dc7b63c900661"
     },
     {
+      "path": "src/frontend/scripts/v1-connection-capacity-browser.cjs",
+      "sha256": "ddbec3bbace9e842faf8bafd782bc1a5585ae7e4a692456355100cd5a6c6d60e"
+    },
+    {
       "path": "src/frontend/src/app/AppShell.tsx",
       "sha256": "f28bceb22b130d62bd444d7a13656262f59d81495e7becd596888f96dad57823"
+    },
+    {
+      "path": "src/frontend/src/app/KafkaConnectionPage.tsx",
+      "sha256": "87d91f85418d86fc8a844db25ff7ac1a26f3dedfcebf886dcf92c394ad9c427e"
     },
     {
       "path": "src/frontend/src/shared/api.ts",
@@ -241,15 +271,15 @@
     },
     {
       "path": "src/frontend/src/shared/locales/en.json",
-      "sha256": "1ca11c913c3d2723d43230bb2edee4fc82fc9fad434956e5f3772b8e479347d7"
+      "sha256": "219536b93f9213ca5c027425d2e6cb54f7565971046fbfa4bd56b8996fe29c6a"
     },
     {
       "path": "src/frontend/src/shared/locales/fa.json",
-      "sha256": "e88861d8e8d8cf2c3049df036df50b0ba6f541423a7c7066707cc0a7915a30ac"
+      "sha256": "a869e1fa98699b8f134e45ae8bba05fbb3c9c18a414423758ba5a1884c3620e4"
     },
     {
       "path": "src/frontend/src/shared/locales/messages.ts",
-      "sha256": "28cb6bb53085a9cd05e6028f7188b09e5a94e9ecfc1d0678738d241c90a3a284"
+      "sha256": "4553a85b39cef4df2155e42611d758d7541d5e6203fdbfcc050212875f0fcfef"
     },
     {
       "path": "src/frontend/src/shared/presentationProblem.ts",
@@ -266,6 +296,10 @@
     {
       "path": "tests/Kafdeck.Architecture.Tests/V1DataProtectionConfigurationTests.cs",
       "sha256": "dbdd539451d934a871a1f2b09ac3348c587c3dc2d76ed5f3b3e9e3b2ebdf24ae"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V1ManagedRegistrationHttpTests.cs",
+      "sha256": "87818a3b73071b67241c385b754226e528b1e09f13461a2e74ed07a0da4d7704"
     },
     {
       "path": "tests/Kafdeck.Architecture.Tests/V1ManagedSessionScopeTests.cs",
@@ -289,5 +323,50 @@
     "E02 / V1-6 release media and version-specific publisher",
     "V1-7 exact owner signing/publication decisions"
   ],
-  "historicalAndSignedEvidenceUnchanged": true
+  "historicalAndSignedEvidenceUnchanged": true,
+  "capacityUiFollowUp": {
+    "result": {
+      "actualCompiledUi": true,
+      "browserVersion": "156.0.8078.80",
+      "controlledApiFixtures": true,
+      "correctCapacityRemediation": true,
+      "savedTargetRefreshed": true,
+      "noAutomaticRetryOrDashboardOpen": true,
+      "noSecretInLocalStorage": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/auth/mode"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/auth/session"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/connections/targets"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/auth/csrf"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/connections/test"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/connections/targets"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/connections/targets"
+        }
+      ],
+      "pageErrors": []
+    },
+    "rawSha256": "af515e3f0d769a996a189f421efd861f574dec7fbcdd86d4581cf9ff88265b26",
+    "source": "src/frontend/scripts/v1-connection-capacity-browser.cjs",
+    "ciWorkflow": "v08-g2-live-acceptance"
+  }
 }

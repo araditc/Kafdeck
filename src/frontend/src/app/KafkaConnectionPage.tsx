@@ -100,7 +100,19 @@ export function KafkaConnectionPage({ scope, onLogout, onManaged, onOpenCluster,
         setTested(result);
       }
     } catch (reason) {
-      if (!controller.signal.aborted) setError(reason instanceof ApiProblem ? reason.code ?? 'connection-failed' : 'connection-failed');
+      if (!controller.signal.aborted) {
+        const code = reason instanceof ApiProblem ? reason.code ?? 'connection-failed' : 'connection-failed';
+        setError(code);
+        if (code.endsWith('connection-credential-capacity')) {
+          setTested(null);
+          // Definition persistence can succeed before lease admission. Refresh
+          // metadata only; do not repeat registration or open an unusable lease.
+          try {
+            const items = await kafdeckApi.listKafkaConnectionTargets(controller.signal);
+            if (!controller.signal.aborted) { setTargets(items); setTargetsFailed(false); }
+          } catch { if (!controller.signal.aborted) setTargetsFailed(true); }
+        }
+      }
     } finally {
       request.current = null;
       if (!controller.signal.aborted) setBusy(false);
@@ -115,6 +127,7 @@ export function KafkaConnectionPage({ scope, onLogout, onManaged, onOpenCluster,
   }
 
   function errorMessage(code: string) {
+    if (code.endsWith('connection-credential-capacity')) return t("This connection is saved, but credential capacity is full. Reuse the saved target after a credential lease expires.");
     if (code.endsWith('connection-input')) return t("Check the Kafka connection settings.");
     if (code.endsWith('connection-target')) return t("This broker list and protocol are not enabled for your account.");
     if (code.endsWith('connection-network')) return t("Enter broker IP addresses within the networks permitted by this installation.");

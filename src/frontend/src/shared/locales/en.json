@@ -1498,5 +1498,6 @@
   "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.": "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.",
   "Recover user creation": "Recover user creation",
   "This page is unavailable for the current account or cluster.": "This page is unavailable for the current account or cluster.",
-  "The read timed out. Retry the read or check the connection.": "The read timed out. Retry the read or check the connection."
+  "The read timed out. Retry the read or check the connection.": "The read timed out. Retry the read or check the connection.",
+  "This connection is saved, but credential capacity is full. Reuse the saved target after a credential lease expires.": "This connection is saved, but credential capacity is full. Reuse the saved target after a credential lease expires."
 }
