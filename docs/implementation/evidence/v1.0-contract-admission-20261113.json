@@ -14,10 +14,10 @@
     "signingOrPublicationAuthorized": false
   },
   "baselineSha256": {
-    "api.json": "ba4b194e1c47e1bab183b4c73244872859b4964c1978a6d2184c38b54935f8d9",
-    "cli.json": "4a66b9b51fe6721c10addb4e576d61c7c0311da0500a81c7e22cf46ac774f791",
-    "mcp.json": "20220f42a718f64650c6dac05fbe8c7eb7be76f8149d633b357a8caa622f2d4b",
-    "operator.json": "9efa715aeec03ae63d8d3c806c8446bce1d18ad19e72eda67ff3464382216662"
+    "api.json": "a92cfcc627f1961af5d51ab6acd952c70796afa76013b58d56dad2d55dc4c897",
+    "cli.json": "a8327b22522518c9ad1a50d9ca0048bad1e0db6a71ff98b097188719443b48ea",
+    "mcp.json": "965f4bd7dbc1959e1def2c6c6d522feb9ac5fffa29cf7c7b4920fbede8854dae",
+    "operator.json": "4353ecce84f8b69682bc726ea608752651849ac7e3e45ccf6d045f43bddc805c"
   },
   "compiledInventory": {
     "mappingMethods": 43,
@@ -80,5 +80,6 @@
     "Conditional authorization, CSRF, CLI, provider, G01-G04 and G06 runtime evidence retain original source and limits.",
     "Earlier declaration/discovery record and signed v0.9 evidence are retained unchanged.",
     "V1-4 final RC/media, V1-5 supported cells/scans, V1-6 media and V1-7 signing/publication remain separate."
-  ]
+  ],
+  "baselineHashEncoding": "SHA256 of UTF-8 file with CRLF normalized to LF; matches committed Git blob bytes"
 }
