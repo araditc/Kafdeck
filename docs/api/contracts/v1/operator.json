@@ -1,0 +1,1940 @@
+{
+  "keys": [
+    "Kafdeck:Administration",
+    "Kafdeck:Administration:Mutations:BackgroundDataWorkersEnabled",
+    "Kafdeck:Authorization",
+    "Kafdeck:Authorization:GroupBindings",
+    "Kafdeck:Authorization:SubjectBindings",
+    "Kafdeck:Catalog",
+    "Kafdeck:Clusters",
+    "Kafdeck:ConnectionWorkspace:Enabled",
+    "Kafdeck:ConnectionWorkspace:RegistrationNetworks",
+    "Kafdeck:DataQuality",
+    "Kafdeck:Declarative",
+    "Kafdeck:Declarative:AdoptionEvidenceSha256",
+    "Kafdeck:Declarative:DeploymentGeneration",
+    "Kafdeck:Declarative:DeploymentId",
+    "Kafdeck:Declarative:Enabled",
+    "Kafdeck:Declarative:GenerationFenceEvidenceSha256",
+    "Kafdeck:Declarative:PreviousDeploymentGeneration",
+    "Kafdeck:Deployment",
+    "Kafdeck:Generator",
+    "Kafdeck:Governance",
+    "Kafdeck:Governance:Attribution",
+    "Kafdeck:Governance:FencedWorkersEvidenceSha256",
+    "Kafdeck:Governance:PreviousDeploymentGeneration",
+    "Kafdeck:Governance:RestoreEvidenceSha256",
+    "Kafdeck:ManagedIdentity",
+    "Kafdeck:NonBrowserRead",
+    "Kafdeck:Notifications",
+    "Kafdeck:Notifications:Governance",
+    "Kafdeck:Notifications:ProductEventsEnabled",
+    "Kafdeck:Notifications:Recovery",
+    "Kafdeck:Observability",
+    "Kafdeck:Records"
+  ],
+  "sectionAccesses": [
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/AttributionMeasurementSource.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/AuthorizationPolicyConfigurationLoader.cs",
+      "accesses": [
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Authorization"
+        },
+        {
+          "receiver": "section",
+          "key": "Action"
+        },
+        {
+          "receiver": "section",
+          "key": "ClusterIds"
+        },
+        {
+          "receiver": "section",
+          "key": "ExternalGroup"
+        },
+        {
+          "receiver": "section",
+          "key": "GroupBindings"
+        },
+        {
+          "receiver": "section",
+          "key": "Id"
+        },
+        {
+          "receiver": "section",
+          "key": "Issuer"
+        },
+        {
+          "receiver": "section",
+          "key": "Permissions"
+        },
+        {
+          "receiver": "section",
+          "key": "ResourcePatterns"
+        },
+        {
+          "receiver": "section",
+          "key": "RoleIds"
+        },
+        {
+          "receiver": "section",
+          "key": "Roles"
+        },
+        {
+          "receiver": "section",
+          "key": "Subject"
+        },
+        {
+          "receiver": "section",
+          "key": "SubjectBindings"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfigurationInfrastructureMarker.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfigurationModels.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfigurationTopicCatalogProvider.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfiguredNotificationCredentialResolver.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfiguredNotificationDeliveryInterlock.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/DeploymentHostPolicy.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/GovernedNotificationCatalog.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/KafdeckConfigurationLoader.cs",
+      "accesses": [
+        {
+          "receiver": "autoRestartSection",
+          "key": "ActivationLifetimeSeconds"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "InitialBackoffSeconds"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "JitterBasisPoints"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "MaxActivePoliciesPerProfile"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "MaxAttempts"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "MaxBackoffSeconds"
+        },
+        {
+          "receiver": "autoRestartSection",
+          "key": "PolicyVersion"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Administration"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Catalog"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Clusters"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:DataQuality"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Deployment"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Generator"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Notifications"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Observability"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Records"
+        },
+        {
+          "receiver": "connectSection",
+          "key": "MutationProviderProfile"
+        },
+        {
+          "receiver": "connectSection",
+          "key": "Password"
+        },
+        {
+          "receiver": "connectSection",
+          "key": "Url"
+        },
+        {
+          "receiver": "connectSection",
+          "key": "Username"
+        },
+        {
+          "receiver": "deploymentSection",
+          "key": "AccessMode"
+        },
+        {
+          "receiver": "deploymentSection",
+          "key": "AccessToken"
+        },
+        {
+          "receiver": "deploymentSection",
+          "key": "ListenUrl"
+        },
+        {
+          "receiver": "deploymentSection",
+          "key": "ListenUrls"
+        },
+        {
+          "receiver": "deploymentSection",
+          "key": "Oidc"
+        },
+        {
+          "receiver": "entry",
+          "key": "BindingId"
+        },
+        {
+          "receiver": "entry",
+          "key": "DestinationId"
+        },
+        {
+          "receiver": "entry",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "entry",
+          "key": "SecretReference"
+        },
+        {
+          "receiver": "item",
+          "key": "Classification"
+        },
+        {
+          "receiver": "item",
+          "key": "ClusterId"
+        },
+        {
+          "receiver": "item",
+          "key": "ConfiguredEndpoint"
+        },
+        {
+          "receiver": "item",
+          "key": "CredentialBindingId"
+        },
+        {
+          "receiver": "item",
+          "key": "Description"
+        },
+        {
+          "receiver": "item",
+          "key": "DestinationId"
+        },
+        {
+          "receiver": "item",
+          "key": "DisplayName"
+        },
+        {
+          "receiver": "item",
+          "key": "DocumentationReference"
+        },
+        {
+          "receiver": "item",
+          "key": "Domain"
+        },
+        {
+          "receiver": "item",
+          "key": "EmailRecipientAddress"
+        },
+        {
+          "receiver": "item",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "item",
+          "key": "EnabledEvents"
+        },
+        {
+          "receiver": "item",
+          "key": "Owner"
+        },
+        {
+          "receiver": "item",
+          "key": "Provider"
+        },
+        {
+          "receiver": "item",
+          "key": "ProviderResourceId"
+        },
+        {
+          "receiver": "item",
+          "key": "ProviderSecondaryResourceId"
+        },
+        {
+          "receiver": "item",
+          "key": "Smtp"
+        },
+        {
+          "receiver": "item",
+          "key": "Tags"
+        },
+        {
+          "receiver": "item",
+          "key": "TopicName"
+        },
+        {
+          "receiver": "item",
+          "key": "WebhookAuthentication"
+        },
+        {
+          "receiver": "ksqlSection",
+          "key": "Password"
+        },
+        {
+          "receiver": "ksqlSection",
+          "key": "Url"
+        },
+        {
+          "receiver": "ksqlSection",
+          "key": "Username"
+        },
+        {
+          "receiver": "masking",
+          "key": "HeaderRules"
+        },
+        {
+          "receiver": "masking",
+          "key": "KeyReplacement"
+        },
+        {
+          "receiver": "masking",
+          "key": "MaskKey"
+        },
+        {
+          "receiver": "masking",
+          "key": "PolicyId"
+        },
+        {
+          "receiver": "masking",
+          "key": "StructuredRules"
+        },
+        {
+          "receiver": "masking",
+          "key": "Version"
+        },
+        {
+          "receiver": "mutations",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "mutations",
+          "key": "MaterialDigestKey"
+        },
+        {
+          "receiver": "mutations",
+          "key": "MaxConcurrentPerCluster"
+        },
+        {
+          "receiver": "mutations",
+          "key": "Persistence"
+        },
+        {
+          "receiver": "mutations",
+          "key": "PreviewTtlSeconds"
+        },
+        {
+          "receiver": "otlpSection",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "otlpSection",
+          "key": "Endpoint"
+        },
+        {
+          "receiver": "otlpSection",
+          "key": "Headers"
+        },
+        {
+          "receiver": "otlpSection",
+          "key": "Protocol"
+        },
+        {
+          "receiver": "persistenceSection",
+          "key": "ConnectionString"
+        },
+        {
+          "receiver": "persistenceSection",
+          "key": "ExecutionMode"
+        },
+        {
+          "receiver": "persistenceSection",
+          "key": "Provider"
+        },
+        {
+          "receiver": "persistenceSection",
+          "key": "SqliteDatabasePath"
+        },
+        {
+          "receiver": "profile",
+          "key": "Id"
+        },
+        {
+          "receiver": "profile",
+          "key": "MutationProviderProfile"
+        },
+        {
+          "receiver": "profile",
+          "key": "Password"
+        },
+        {
+          "receiver": "profile",
+          "key": "Url"
+        },
+        {
+          "receiver": "profile",
+          "key": "Username"
+        },
+        {
+          "receiver": "prometheusSection",
+          "key": "AccessToken"
+        },
+        {
+          "receiver": "prometheusSection",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "registrySection",
+          "key": "Password"
+        },
+        {
+          "receiver": "registrySection",
+          "key": "ProviderProfile"
+        },
+        {
+          "receiver": "registrySection",
+          "key": "Url"
+        },
+        {
+          "receiver": "registrySection",
+          "key": "Username"
+        },
+        {
+          "receiver": "rule",
+          "key": "Name"
+        },
+        {
+          "receiver": "rule",
+          "key": "Path"
+        },
+        {
+          "receiver": "rule",
+          "key": "Replacement"
+        },
+        {
+          "receiver": "saslSection",
+          "key": "Mechanism"
+        },
+        {
+          "receiver": "saslSection",
+          "key": "Password"
+        },
+        {
+          "receiver": "saslSection",
+          "key": "Username"
+        },
+        {
+          "receiver": "section",
+          "key": "BootstrapServers"
+        },
+        {
+          "receiver": "section",
+          "key": "ClientId"
+        },
+        {
+          "receiver": "section",
+          "key": "ClientSecret"
+        },
+        {
+          "receiver": "section",
+          "key": "Connect"
+        },
+        {
+          "receiver": "section",
+          "key": "ConnectAutoRestart"
+        },
+        {
+          "receiver": "section",
+          "key": "ConnectProfiles"
+        },
+        {
+          "receiver": "section",
+          "key": "ConnectionString"
+        },
+        {
+          "receiver": "section",
+          "key": "CredentialBindings"
+        },
+        {
+          "receiver": "section",
+          "key": "DeliveryInterlockPath"
+        },
+        {
+          "receiver": "section",
+          "key": "DeliveryInterlockSha256"
+        },
+        {
+          "receiver": "section",
+          "key": "Destinations"
+        },
+        {
+          "receiver": "section",
+          "key": "EmailDeliveryEnabled"
+        },
+        {
+          "receiver": "section",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "section",
+          "key": "EnabledClusterIds"
+        },
+        {
+          "receiver": "section",
+          "key": "ExecutionMode"
+        },
+        {
+          "receiver": "section",
+          "key": "GroupClaim"
+        },
+        {
+          "receiver": "section",
+          "key": "History"
+        },
+        {
+          "receiver": "section",
+          "key": "Host"
+        },
+        {
+          "receiver": "section",
+          "key": "HttpProviderDeliveryEnabled"
+        },
+        {
+          "receiver": "section",
+          "key": "Id"
+        },
+        {
+          "receiver": "section",
+          "key": "Issuer"
+        },
+        {
+          "receiver": "section",
+          "key": "KsqlDb"
+        },
+        {
+          "receiver": "section",
+          "key": "ManagementEnabled"
+        },
+        {
+          "receiver": "section",
+          "key": "Masking"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxActiveSeries"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxConcurrentQueries"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxDiagnosticStringBytes"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxLogAttributes"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxMetricLabelValueBytes"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxMetricLabelsPerSeries"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxPointsPerQuery"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxQueryDurationSeconds"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxQueryRangeHours"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxSeriesPerQuery"
+        },
+        {
+          "receiver": "section",
+          "key": "MaxTraceAttributes"
+        },
+        {
+          "receiver": "section",
+          "key": "Mutations"
+        },
+        {
+          "receiver": "section",
+          "key": "Otlp"
+        },
+        {
+          "receiver": "section",
+          "key": "Port"
+        },
+        {
+          "receiver": "section",
+          "key": "Prometheus"
+        },
+        {
+          "receiver": "section",
+          "key": "Provider"
+        },
+        {
+          "receiver": "section",
+          "key": "RawRetentionHours"
+        },
+        {
+          "receiver": "section",
+          "key": "RollupRetentionDays"
+        },
+        {
+          "receiver": "section",
+          "key": "Sasl"
+        },
+        {
+          "receiver": "section",
+          "key": "SchemaRegistry"
+        },
+        {
+          "receiver": "section",
+          "key": "Scopes"
+        },
+        {
+          "receiver": "section",
+          "key": "SecurityProtocol"
+        },
+        {
+          "receiver": "section",
+          "key": "SenderAddress"
+        },
+        {
+          "receiver": "section",
+          "key": "SqliteDatabasePath"
+        },
+        {
+          "receiver": "section",
+          "key": "StreamsTelemetry"
+        },
+        {
+          "receiver": "section",
+          "key": "Tls"
+        },
+        {
+          "receiver": "section",
+          "key": "Topics"
+        },
+        {
+          "receiver": "section",
+          "key": "TrustedCaPemFile"
+        },
+        {
+          "receiver": "section",
+          "key": "Username"
+        },
+        {
+          "receiver": "section",
+          "key": "WebhookDeliveryEnabled"
+        },
+        {
+          "receiver": "streamsSection",
+          "key": "Password"
+        },
+        {
+          "receiver": "streamsSection",
+          "key": "ProviderProfile"
+        },
+        {
+          "receiver": "streamsSection",
+          "key": "Url"
+        },
+        {
+          "receiver": "streamsSection",
+          "key": "Username"
+        },
+        {
+          "receiver": "tlsSection",
+          "key": "CaCertificate"
+        },
+        {
+          "receiver": "tlsSection",
+          "key": "ClientCertificate"
+        },
+        {
+          "receiver": "tlsSection",
+          "key": "ClientKey"
+        },
+        {
+          "receiver": "tlsSection",
+          "key": "VerifyServerCertificate"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/KafdeckConfigurationValidator.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/KafkaConnectProfileIdentityFingerprint.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationDnsEndpointResolver.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationGovernanceConfiguration.cs",
+      "accesses": [
+        {
+          "receiver": "child",
+          "key": "CandidateId"
+        },
+        {
+          "receiver": "child",
+          "key": "DestinationId"
+        },
+        {
+          "receiver": "child",
+          "key": "ProfileId"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Notifications:Governance"
+        },
+        {
+          "receiver": "section",
+          "key": "Candidates"
+        },
+        {
+          "receiver": "section",
+          "key": "Enabled"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPhysicalDeliveryAdmission.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedHttpHandlerFactory.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedProviderHttpTransport.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedRequestGuardHandler.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedSmtpTransport.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedWebhookHttpTransport.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPrivateHttpWire.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationRecoveryAuthority.cs",
+      "accesses": [
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Notifications:Recovery"
+        },
+        {
+          "receiver": "section",
+          "key": "Enabled"
+        },
+        {
+          "receiver": "section",
+          "key": "TargetGeneration"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationWebhookHttpRequestFactory.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SafeConfigurationDiagnostics.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SchemaRegistryProviderPolicy.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SecretReference.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SecretResolver.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/ApiTelemetry.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/BearerFamilyRoutes.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/ConnectAutoRestartHostedService.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/ConsumerLagHistorySamplingHostedService.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/DeclarativeRuntimeAuthorizer.cs",
+      "accesses": [
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Declarative"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Declarative:DeploymentId"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:NonBrowserRead"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/GovernanceRuntimeOptions.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/KafdeckCompensationEndpoints.cs",
+      "accesses": [
+        {
+          "receiver": "config",
+          "key": "Kafdeck:Declarative:DeploymentId"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/KafdeckDataQualityEndpoints.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/KafdeckDeclarativeEndpoints.cs",
+      "accesses": [
+        {
+          "receiver": "Headers",
+          "key": "Idempotency-Key"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Declarative:DeploymentId"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/KafdeckDeclarativeSourceEndpoints.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/KafdeckNotificationReadEndpoints.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/ManagedBrowserOpenApi.cs",
+      "accesses": [
+        {
+          "receiver": "document",
+          "key": "paths"
+        },
+        {
+          "receiver": "operation",
+          "key": "operationId"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/NonBrowserReadAuthentication.cs",
+      "accesses": [
+        {
+          "receiver": "RouteValues",
+          "key": "clusterId"
+        },
+        {
+          "receiver": "_configuration",
+          "key": "Kafdeck:NonBrowserRead"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/NotificationProductEventHosting.cs",
+      "accesses": [
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Notifications:ProductEventsEnabled"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/Program.cs",
+      "accesses": [
+        {
+          "receiver": "Configuration",
+          "key": "AllowedHosts"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Authorization:GroupBindings"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Authorization:SubjectBindings"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Declarative"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Declarative:AdoptionEvidenceSha256"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Declarative:GenerationFenceEvidenceSha256"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Declarative:PreviousDeploymentGeneration"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Governance"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Governance:Attribution"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Governance:FencedWorkersEvidenceSha256"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Governance:PreviousDeploymentGeneration"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Governance:RestoreEvidenceSha256"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:ManagedIdentity"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs",
+      "accesses": [
+        {
+          "receiver": "settings",
+          "key": "Kafdeck:ConnectionWorkspace:RegistrationNetworks"
+        }
+      ]
+    }
+  ],
+  "models": [
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.AdministrationOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ConnectAutoRestart",
+          "type": "Kafdeck.Infrastructure.Configuration.ConnectAutoRestartOptions"
+        },
+        {
+          "Name": "Mutations",
+          "type": "Kafdeck.Infrastructure.Configuration.MutationOptions"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.AttributionRuntimeOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "PollSeconds",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "RetentionDays",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "Sources",
+          "type": "System.Collections.Generic.List\u00601[Kafdeck.Infrastructure.Configuration.AttributionSourceRegistration]"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.ClusterProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "BootstrapServers",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[System.String]"
+        },
+        {
+          "Name": "Connect",
+          "type": "Kafdeck.Infrastructure.Configuration.KafkaConnectProfile"
+        },
+        {
+          "Name": "ConnectProfiles",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[Kafdeck.Infrastructure.Configuration.KafkaConnectProfile]"
+        },
+        {
+          "Name": "DisplayName",
+          "type": "System.String"
+        },
+        {
+          "Name": "Id",
+          "type": "System.String"
+        },
+        {
+          "Name": "KsqlDb",
+          "type": "Kafdeck.Infrastructure.Configuration.KsqlDbProfile"
+        },
+        {
+          "Name": "Sasl",
+          "type": "Kafdeck.Infrastructure.Configuration.SaslProfile"
+        },
+        {
+          "Name": "SchemaRegistry",
+          "type": "Kafdeck.Infrastructure.Configuration.SchemaRegistryProfile"
+        },
+        {
+          "Name": "SecurityProtocol",
+          "type": "Kafdeck.Infrastructure.Configuration.KafkaSecurityProtocol"
+        },
+        {
+          "Name": "StreamsTelemetry",
+          "type": "Kafdeck.Infrastructure.Configuration.StreamsTelemetryProfile"
+        },
+        {
+          "Name": "Tls",
+          "type": "Kafdeck.Infrastructure.Configuration.TlsProfile"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.ConnectAutoRestartOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ActivationLifetimeSeconds",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "InitialBackoffSeconds",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "JitterBasisPoints",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxActivePoliciesPerProfile",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxAttempts",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxBackoffSeconds",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "PolicyVersion",
+          "type": "System.String"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.DataGeneratorOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "EnabledClusterIds",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[System.String]"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.DataQualityExecutionMode",
+      "values": [
+        "Standalone",
+        "HighAvailability"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.DataQualityOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ConnectionString",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "ExecutionMode",
+          "type": "Kafdeck.Infrastructure.Configuration.DataQualityExecutionMode"
+        },
+        {
+          "Name": "ManagementEnabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "Provider",
+          "type": "Kafdeck.Infrastructure.Configuration.DataQualityPersistenceProvider"
+        },
+        {
+          "Name": "SqliteDatabasePath",
+          "type": "System.String"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.DataQualityPersistenceProvider",
+      "values": [
+        "Sqlite",
+        "PostgreSql"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.DeploymentOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "AccessToken",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "AdditionalListenUrls",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[System.String]"
+        },
+        {
+          "Name": "ListenUrl",
+          "type": "System.String"
+        },
+        {
+          "Name": "ListenUrls",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[System.String]"
+        },
+        {
+          "Name": "Mode",
+          "type": "Kafdeck.Core.Security.AccessMode"
+        },
+        {
+          "Name": "Oidc",
+          "type": "Kafdeck.Infrastructure.Configuration.OidcProfile"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.HistoricalMetricsExecutionMode",
+      "values": [
+        "Standalone",
+        "HighAvailability"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.HistoricalMetricsOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ConnectionString",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "ExecutionMode",
+          "type": "Kafdeck.Infrastructure.Configuration.HistoricalMetricsExecutionMode"
+        },
+        {
+          "Name": "MaxConcurrentQueries",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxPointsPerQuery",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxQueryDurationSeconds",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxQueryRangeHours",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxSeriesPerQuery",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "Provider",
+          "type": "Kafdeck.Infrastructure.Configuration.HistoricalMetricsProvider"
+        },
+        {
+          "Name": "RawRetentionHours",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "RollupRetentionDays",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "SqliteDatabasePath",
+          "type": "System.String"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.HistoricalMetricsProvider",
+      "values": [
+        "Sqlite",
+        "PostgreSql"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.KafdeckOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Administration",
+          "type": "Kafdeck.Infrastructure.Configuration.AdministrationOptions"
+        },
+        {
+          "Name": "Catalog",
+          "type": "Kafdeck.Infrastructure.Configuration.TopicCatalogOptions"
+        },
+        {
+          "Name": "Clusters",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[Kafdeck.Infrastructure.Configuration.ClusterProfile]"
+        },
+        {
+          "Name": "DataQuality",
+          "type": "Kafdeck.Infrastructure.Configuration.DataQualityOptions"
+        },
+        {
+          "Name": "Deployment",
+          "type": "Kafdeck.Infrastructure.Configuration.DeploymentOptions"
+        },
+        {
+          "Name": "Generator",
+          "type": "Kafdeck.Infrastructure.Configuration.DataGeneratorOptions"
+        },
+        {
+          "Name": "Notifications",
+          "type": "Kafdeck.Infrastructure.Configuration.NotificationReadOptions"
+        },
+        {
+          "Name": "Observability",
+          "type": "Kafdeck.Infrastructure.Configuration.ObservabilityOptions"
+        },
+        {
+          "Name": "Records",
+          "type": "Kafdeck.Infrastructure.Configuration.RecordDataOptions"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.KafkaConnectMutationProviderProfile",
+      "values": [
+        "None",
+        "ConfluentCompatibleV1"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.KafkaConnectProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Id",
+          "type": "System.String"
+        },
+        {
+          "Name": "MutationProviderProfile",
+          "type": "Kafdeck.Infrastructure.Configuration.KafkaConnectMutationProviderProfile"
+        },
+        {
+          "Name": "Password",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Url",
+          "type": "System.String"
+        },
+        {
+          "Name": "Username",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.KafkaSecurityProtocol",
+      "values": [
+        "Plaintext",
+        "Ssl",
+        "SaslPlaintext",
+        "SaslSsl"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.KsqlDbProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Password",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Url",
+          "type": "System.String"
+        },
+        {
+          "Name": "Username",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.MutationExecutionMode",
+      "values": [
+        "Standalone",
+        "HighAvailability"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.MutationOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "MaterialDigestKey",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "MaxConcurrentPerCluster",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "Persistence",
+          "type": "Kafdeck.Infrastructure.Configuration.MutationPersistenceOptions"
+        },
+        {
+          "Name": "PreviewTtl",
+          "type": "System.TimeSpan"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.MutationPersistenceOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ConnectionString",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "ExecutionMode",
+          "type": "Kafdeck.Infrastructure.Configuration.MutationExecutionMode"
+        },
+        {
+          "Name": "Provider",
+          "type": "Kafdeck.Infrastructure.Configuration.MutationPersistenceProvider"
+        },
+        {
+          "Name": "SqliteDatabasePath",
+          "type": "System.String"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.MutationPersistenceProvider",
+      "values": [
+        "Sqlite",
+        "PostgreSql"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.NotificationCredentialReferenceOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "BindingId",
+          "type": "Kafdeck.Core.Notifications.NotificationCredentialBindingId"
+        },
+        {
+          "Name": "DestinationId",
+          "type": "System.String"
+        },
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "Secret",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.NotificationExecutionMode",
+      "values": [
+        "Standalone",
+        "HighAvailability"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.NotificationGovernanceOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Candidates",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[Kafdeck.Infrastructure.Configuration.NotificationGovernanceCandidate]"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.NotificationPersistenceProvider",
+      "values": [
+        "Sqlite",
+        "PostgreSql"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.NotificationReadOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ConnectionString",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "CredentialBindings",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[Kafdeck.Infrastructure.Configuration.NotificationCredentialReferenceOptions]"
+        },
+        {
+          "Name": "DeliveryInterlockPath",
+          "type": "System.String"
+        },
+        {
+          "Name": "DeliveryInterlockSha256",
+          "type": "System.String"
+        },
+        {
+          "Name": "DestinationProfiles",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[Kafdeck.Core.Notifications.NotificationDestinationProfile]"
+        },
+        {
+          "Name": "EmailDeliveryEnabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "ExecutionMode",
+          "type": "Kafdeck.Infrastructure.Configuration.NotificationExecutionMode"
+        },
+        {
+          "Name": "HttpProviderDeliveryEnabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "ManagementEnabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "Provider",
+          "type": "Kafdeck.Infrastructure.Configuration.NotificationPersistenceProvider"
+        },
+        {
+          "Name": "SqliteDatabasePath",
+          "type": "System.String"
+        },
+        {
+          "Name": "WebhookDeliveryEnabled",
+          "type": "System.Boolean"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.NotificationRecoveryOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "AnchorPath",
+          "type": "System.String"
+        },
+        {
+          "Name": "AnchorSha256",
+          "type": "System.String"
+        },
+        {
+          "Name": "TargetGeneration",
+          "type": "System.Guid"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.ObservabilityOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "History",
+          "type": "Kafdeck.Infrastructure.Configuration.HistoricalMetricsOptions"
+        },
+        {
+          "Name": "MaxActiveSeries",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxDiagnosticStringBytes",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxLogAttributes",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxMetricLabelValueBytes",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxMetricLabelsPerSeries",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "MaxTraceAttributes",
+          "type": "System.Int32"
+        },
+        {
+          "Name": "Otlp",
+          "type": "Kafdeck.Infrastructure.Configuration.OtlpObservabilityOptions"
+        },
+        {
+          "Name": "Prometheus",
+          "type": "Kafdeck.Infrastructure.Configuration.PrometheusObservabilityOptions"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.OidcProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "ClientId",
+          "type": "System.String"
+        },
+        {
+          "Name": "ClientSecret",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "GroupClaim",
+          "type": "System.String"
+        },
+        {
+          "Name": "Issuer",
+          "type": "System.String"
+        },
+        {
+          "Name": "Scopes",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[System.String]"
+        },
+        {
+          "Name": "TrustedCaPemFile",
+          "type": "System.String"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.OtlpObservabilityOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        },
+        {
+          "Name": "Endpoint",
+          "type": "System.String"
+        },
+        {
+          "Name": "Headers",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Protocol",
+          "type": "Kafdeck.Infrastructure.Configuration.OtlpObservabilityProtocol"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.OtlpObservabilityProtocol",
+      "values": [
+        "Grpc",
+        "HttpProtobuf"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.PrometheusObservabilityOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "AccessToken",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Enabled",
+          "type": "System.Boolean"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.RecordDataOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "MaskingPolicy",
+          "type": "Kafdeck.Core.Records.RecordMaskingPolicyDefinition"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.SaslMechanism",
+      "values": [
+        "Plain",
+        "ScramSha256",
+        "ScramSha512"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.SaslProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Mechanism",
+          "type": "Kafdeck.Infrastructure.Configuration.SaslMechanism"
+        },
+        {
+          "Name": "Password",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "Username",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.SchemaRegistryProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Password",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "ProviderProfile",
+          "type": "Kafdeck.Infrastructure.Configuration.SchemaRegistryProviderProfile"
+        },
+        {
+          "Name": "Url",
+          "type": "System.String"
+        },
+        {
+          "Name": "Username",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.SchemaRegistryProviderProfile",
+      "values": [
+        "ConfluentCompatibleV1",
+        "KarapaceCompatibleV1",
+        "ApicurioV3"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.SecretReferenceKind",
+      "values": [
+        "Environment",
+        "File"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.StreamsTelemetryProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Password",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "ProviderProfile",
+          "type": "Kafdeck.Infrastructure.Configuration.StreamsTelemetryProviderProfile"
+        },
+        {
+          "Name": "Url",
+          "type": "System.String"
+        },
+        {
+          "Name": "Username",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.StreamsTelemetryProviderProfile",
+      "values": [
+        "KafdeckTelemetryV1"
+      ],
+      "properties": []
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.TlsProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "CaCertificate",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "ClientCertificate",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "ClientKey",
+          "type": "Kafdeck.Infrastructure.Configuration.SecretReference"
+        },
+        {
+          "Name": "VerifyServerCertificate",
+          "type": "System.Boolean"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.TopicCatalogEntryProfile",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Classification",
+          "type": "System.String"
+        },
+        {
+          "Name": "ClusterId",
+          "type": "System.String"
+        },
+        {
+          "Name": "Description",
+          "type": "System.String"
+        },
+        {
+          "Name": "DocumentationReference",
+          "type": "System.String"
+        },
+        {
+          "Name": "Domain",
+          "type": "System.String"
+        },
+        {
+          "Name": "Owner",
+          "type": "System.String"
+        },
+        {
+          "Name": "Tags",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[System.String]"
+        },
+        {
+          "Name": "TopicName",
+          "type": "System.String"
+        }
+      ]
+    },
+    {
+      "name": "Kafdeck.Infrastructure.Configuration.TopicCatalogOptions",
+      "values": [],
+      "properties": [
+        {
+          "Name": "Topics",
+          "type": "System.Collections.Generic.IReadOnlyList\u00601[Kafdeck.Infrastructure.Configuration.TopicCatalogEntryProfile]"
+        }
+      ]
+    }
+  ],
+  "producers": {
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/AttributionMeasurementSource.cs": "43b86f3c2324e593ec37b871dabcf4509fb5c150b950a60c0de22fcd93d55b44",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/AuthorizationPolicyConfigurationLoader.cs": "27f6029d0c0d8e8921085df0765bde30711e21a3a6afb4c5ecd444797a10b211",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfigurationInfrastructureMarker.cs": "0cb463734dd1f22fe8bee139ba365bb255e597185786d4e3e30d19be3337eb95",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfigurationModels.cs": "87f9cceffd4bdc7eb4336136fb2dcac6e969a74c98e42481deedc5f0d110fcae",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfigurationTopicCatalogProvider.cs": "03702ad8f50974f5d59395c8d22b82697f77b480462671bde629910a799888b1",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfiguredNotificationCredentialResolver.cs": "58dcb524791f6d2a12993f154f59b92154d57f4396dd5a3a6d96756d9360413f",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/ConfiguredNotificationDeliveryInterlock.cs": "9445742b099057a007a4a14615ba243a829e9d921b2095b8be8de7177464f230",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/DeploymentHostPolicy.cs": "a5e6b3365e72be6391e8e0af538ccfa711e9d7242e46f035f72592a155326e74",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/GovernedNotificationCatalog.cs": "a8940bc8baca3ca8d3ea8d95a269d072a6674163447214830194aea4ce6cf4cc",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/KafdeckConfigurationLoader.cs": "29a15c631be0b56be4528f250decb1baa22591d1a2c826e345874057313aff24",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/KafdeckConfigurationValidator.cs": "921359886e3bfa40eb8d65f09ef3562f02e8c667c8327abe5330eb58819c0945",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/KafkaConnectProfileIdentityFingerprint.cs": "c7635318835a4fa7425c7b9475168326ce2c9a748f4abca40c86e5c2304f0364",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationDnsEndpointResolver.cs": "26a26352775b7a005a63ef13279c2ead83328a123e0d54b3d9a41e5d368fe50e",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationGovernanceConfiguration.cs": "ff107d805234ac2c49f751037b44e2808329f83b32e1943cc08a51142217f887",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPhysicalDeliveryAdmission.cs": "0dde8eb7c66152f5f493e47041b101308dfa46dd3a002bf9c331cfb8b25b1d44",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedHttpHandlerFactory.cs": "eee773a6da8e7dcab04f2925cff8c103de311945b2b46d3156c1532f13ad1840",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedProviderHttpTransport.cs": "ac97101a965159abf4d47ff6ccae29fb2355036fe6a2edd2dc318d2dc8b1584d",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedRequestGuardHandler.cs": "8d8a381c472301dd8eea2b20c89b7aee37695b98fb92c46605cc16e733d0081c",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedSmtpTransport.cs": "b05797279414e7b4f5ed6186ad9404f5b868048d3c03d9b08454166f8c732ee1",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPinnedWebhookHttpTransport.cs": "dd0b97a2dca82187f98bebbb14574e5251a6f74d7b7976d0b5a744f0f9b7e1dc",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationPrivateHttpWire.cs": "f83adfed5de4a5cd9c85ea376b315f240b74d3b951cb05959af04791837e317a",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationRecoveryAuthority.cs": "484a96d72d5c7a39ca155dceed28766244c11cbc281b711e575e8c00a84298aa",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/NotificationWebhookHttpRequestFactory.cs": "f568b35cdf4de64953faa9e73cfabf2250ed479d8eb477643f2afbcdc88749c3",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SafeConfigurationDiagnostics.cs": "c61ae53f7259cd88d75e3c4335df6f4a423119210b4219fa006400c29f6b7c4d",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SchemaRegistryProviderPolicy.cs": "fd3f7cc0d94f4faecfccbc5c334dd1bc410425f872691632fa54a901eb1323fb",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SecretReference.cs": "570a2c1ed32cf0d24fffc7d59afe55e05c55890afd39ddb85ed7e3c7dbc09eee",
+    "src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/SecretResolver.cs": "910d4aeedacddb75fb379fb2d45e2c43c804194e9aed191029c2642edeb713c2",
+    "src/backend/Kafdeck.Api/ApiTelemetry.cs": "517480191669cdc9480230fc53c880cb4be530c1585d7472c4377c13bd28029b",
+    "src/backend/Kafdeck.Api/BearerFamilyRoutes.cs": "69f028a7826f45c0eb61e87e3f1315f7bba482f4507d5b210c616c21d69a5cad",
+    "src/backend/Kafdeck.Api/ConnectAutoRestartHostedService.cs": "310a6b52c59a7cff1df94c73e6f57c61977ef47cc69771bf2d5a53d55a5da362",
+    "src/backend/Kafdeck.Api/ConsumerLagHistorySamplingHostedService.cs": "b3ad4840b063ec8a32ffef9983679c92c77dced797e97c77d7827c6e4623e0e1",
+    "src/backend/Kafdeck.Api/DeclarativeRuntimeAuthorizer.cs": "b9ad8048b4bbadcbc5502c386f046f4a290cf6345f977fb48e0b24dc9d70c064",
+    "src/backend/Kafdeck.Api/GovernanceRuntimeOptions.cs": "3914994d87a9403cfc623884f6a024ab86129ce530d6096a787e7dfe8b44bf35",
+    "src/backend/Kafdeck.Api/KafdeckCompensationEndpoints.cs": "f06026587628ae99848f6f73e2726b9aca994b5af0b0fc8e0ba3c99904639e72",
+    "src/backend/Kafdeck.Api/KafdeckDataQualityEndpoints.cs": "ac9a54bae6509d85039904f4e94ed5fcd695d381bade7b4e2d820767d2d2e711",
+    "src/backend/Kafdeck.Api/KafdeckDeclarativeEndpoints.cs": "f20270f449ef45ada703c50c116b2ca3894bcb6933b6f1ad36cca68fd43682ce",
+    "src/backend/Kafdeck.Api/KafdeckDeclarativeSourceEndpoints.cs": "59440a5985d1661e9d9557b72c1bbc534c0f87b0021d934f793e9d2469622036",
+    "src/backend/Kafdeck.Api/KafdeckNotificationReadEndpoints.cs": "5907f72f4a9e352bc88d36a3faafbf87260706729988e0b9bd13234d78a10075",
+    "src/backend/Kafdeck.Api/ManagedBrowserOpenApi.cs": "3b26054b84eebbc03add8cba83e4f7f84f264237e42446bd42792f8359fc683f",
+    "src/backend/Kafdeck.Api/NonBrowserReadAuthentication.cs": "d5c843d96e3dc641d0b006a7b88361de39a1807fcf306b7a6b89c1e002bf7963",
+    "src/backend/Kafdeck.Api/NotificationProductEventHosting.cs": "706317233b7aa68c7a55e19379bd14c0aea8f46b4453ea38af33f770388c611a",
+    "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs": "15f1d50ce6e3c0124dd862571ddecfca1db3e56a735ac3f0364eda664efaef7a",
+    "src/backend/Kafdeck.Api/Program.cs": "12703ff53f1e0585de1701950afa3c7288662e9ff48d88695ebff8d4c8013d40",
+    "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",
+    "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs": "a3eb952a4d6b6e94f376d965f4cfd607949813ee6eef1cbae84dc7b63c900661",
+    "deploy/helm/kafdeck/Chart.yaml": "ca9b06277579d7f86ae14b9deb4c2d978ddda2286551a9dbf8012ff91e37d356",
+    "deploy/helm/kafdeck/templates/_helpers.tpl": "fe5f97cfd9b6d4d5c30002a0504d480423f7ec92c2c36d07a19e6fa2947f913c",
+    "deploy/helm/kafdeck/templates/deployment.yaml": "e9378dd98b80404bf1be859add74fd1eee5eb9ea28fd4cba45f1effe9b7ad27e",
+    "deploy/helm/kafdeck/templates/network-policy.yaml": "b4f57d1cfbe5e606bd318fffc9e4e3748dc62192dc3ace788906e23e2712b021",
+    "deploy/helm/kafdeck/templates/service.yaml": "8811e46deea5fb219c6d6d7972a0e17cf23903315cf5f2169d63a8270d87e8e8",
+    "deploy/helm/kafdeck/values.schema.json": "af9036e46a0ac435431758158f2f01b4417482935dabeda8bac82dd3bb81b336",
+    "deploy/helm/kafdeck/values.yaml": "871b91297bf7ad50c3273015f48f41dd167d63fafbea581c073c4d2b4780e401",
+    "providers/terraform/internal/provider/data_source.go": "290eba9212e477f6961552bbdfde743a3762aa26a9d73b80c3b1d68bc0d78525",
+    "providers/terraform/internal/provider/provider.go": "f3806c191d6c349857763d7eb787f84f0c7b01055a032c7830f2f1b12633113b",
+    "providers/terraform/internal/provider/subscription.go": "7ce3685ddef6a7703e99885f8e94cdf84ca1acf634b42a89a0933c36acc2f59b"
+  }
+}

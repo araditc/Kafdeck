@@ -15,7 +15,7 @@ Current stable release: [v0.9](releases/v0.9.md), published 2026-11-12. Start wi
 | Security findings and deployment-tested egress limits | [W78 disposition](security/v0.9-w78-independent-review.md) |
 | Measured load/soak methodology and accepted limits | [W82 budgets](performance/v0.9-budget-protocol.md) |
 | Exact released source, signatures and asset hashes | [Release evidence](implementation/evidence/v0.9-release-published-20261112.json) |
-| v1.0 stabilization planning | [Bounded checklist](releases/v1.0-readiness-checklist.md), [code-gap audit](implementation/v1.0-code-gap-audit.md) |
+| v1.0 stabilization | [Bounded checklist](releases/v1.0-readiness-checklist.md), [code-gap audit](implementation/v1.0-code-gap-audit.md), [accepted compatibility/support policy](operator/v1.0-compatibility-support.md), [contract inventory](implementation/v1.0-contract-inventory.md) |
 | Current capability availability | [Released v0.9 matrix](product/current-capabilities.md) |
 | Architecture and project direction | [Architecture](architecture/), [ADRs](adr/), [RFCs](rfcs/), [Roadmap](../ROADMAP.md) |
 

@@ -39,3 +39,5 @@ The original RFC headers preserve status at drafting/admission time. The release
 | [RFC-0009 — v0.9 Governance, Enterprise Operations & Hardening](0009-v0.9-governance-enterprise-hardening.md) | [v0.9 release](../releases/v0.9.md); original design/admission record retained |
 
 v0.9 W72 admission: #437 at `d8d9e6319b536760993d840ce084dfc832c543de`. Full W72-W82 acceptance and publication are closed in the [execution ledger](../implementation/v0.9-full-scope-delivery-execution-plan.md#final-closure-ledger).
+
+[RFC-0010 — accepted v1.0 contract stability/support](0010-v1.0-contract-stability-support.md) records the owner decision of 2026-11-13. It applies to explicitly selected contracts at v1.0 publication; released v0.9 guarantees remain unchanged.
