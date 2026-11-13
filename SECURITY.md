@@ -4,7 +4,7 @@ Security is a core product property of Kafdeck because the application can obser
 
 ## Supported versions
 
-Before v1.0, security fixes are guaranteed only for the latest development line unless a release note states otherwise. The current published release is [v0.9](docs/releases/v0.9.md); main may advance for maintenance. This does not add an LTS/backport or response-time promise. A formal supported-version table will be established before v1.0.
+Before v1.0, security fixes are guaranteed only for the latest development line unless a release note states otherwise. The current published release is [v0.9](docs/releases/v0.9.md); main may advance for maintenance. This does not add an LTS/backport or response-time promise. The owner-accepted [v1.0 policy](docs/rfcs/0010-v1.0-contract-stability-support.md) targets the latest supported released minor and current patch, without automatic LTS/backports or SLA. It takes effect at v1.0 publication; exact deployment cells and candidate scans remain V1-5 admission work. See the [compatibility/support guide](docs/operator/v1.0-compatibility-support.md).
 
 ## Reporting a vulnerability
 

@@ -1,0 +1,84 @@
+{
+  "gate": "V1-1",
+  "date": "2026-11-13",
+  "status": "complete on PR #477 admission",
+  "baseMain": "8f506d1c2c9e5e534b51ce9a4bf1269c25bd52fa",
+  "sourceCommitAtPreparation": "e5749dfb24afa982eaa27ad3e740c17f10edfca3",
+  "productSrcTree": "78139e944ecab09c4d4178a0c9691d86ed931c99",
+  "productSourceChanged": false,
+  "ownerDecision": {
+    "rfc": "RFC-0010",
+    "accepted": true,
+    "date": "2026-11-13",
+    "record": "docs/decisions/approval-log.md",
+    "signingOrPublicationAuthorized": false
+  },
+  "baselineSha256": {
+    "api.json": "ba4b194e1c47e1bab183b4c73244872859b4964c1978a6d2184c38b54935f8d9",
+    "cli.json": "4a66b9b51fe6721c10addb4e576d61c7c0311da0500a81c7e22cf46ac774f791",
+    "mcp.json": "20220f42a718f64650c6dac05fbe8c7eb7be76f8149d633b357a8caa622f2d4b",
+    "operator.json": "9efa715aeec03ae63d8d3c806c8446bce1d18ad19e72eda67ff3464382216662"
+  },
+  "compiledInventory": {
+    "mappingMethods": 43,
+    "mappedOperations": 270,
+    "additionalInlineUniqueOperations": 2,
+    "inlineConditionalSessionVariant": true,
+    "stableRestOperations": 203,
+    "experimentalMappedOperations": 67,
+    "managedBrowserOperations": 20,
+    "requestAndGovernanceResponseSchemas": 119,
+    "openApiProducers": 9,
+    "namedCliReads": 67,
+    "mcpTools": 79,
+    "mcpDefaultReadOnlyTools": 70,
+    "mcpEffectTools": 9,
+    "mcpProtocol": "2025-06-18",
+    "explicitRootAndEnvironmentKeys": 32,
+    "operatorAccessSourceFiles": 45,
+    "configurationModelsAndEnums": 43
+  },
+  "tests": {
+    "cleanBaseline": {
+      "trxSha256": "4f82448f5ac6c8f0c4be9e57a3458e00988fd715dd7a5386e762efdd8c6198a3",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "deliberateDrift": {
+      "trxSha256": "252607d8a9a57427e3b2f78bb708ca8162968662001db74898aeab91f6226e02",
+      "passed": 0,
+      "failed": 4,
+      "skipped": 0
+    },
+    "deliberateChanges": [
+      "REST stable selection removal",
+      "CLI exit reassignment",
+      "MCP effect reclassification",
+      "operator key removal"
+    ],
+    "originalBaselineBytesRestored": true,
+    "lockedRestoreFromExistingLocalCache": true
+  },
+  "reusedMainCi": {
+    "source": "8f506d1c2c9e5e534b51ce9a4bf1269c25bd52fa",
+    "successfulPushRuns": [
+      43432294467,
+      43432293975,
+      43432294216,
+      43432294027,
+      43432293971,
+      43432294211,
+      43432293976,
+      43432294090
+    ]
+  },
+  "limits": [
+    "Metadata mapping never starts a listener, provider, worker or database and never invokes application handlers.",
+    "Maximal mapping is not a simultaneously admitted deployment topology.",
+    "Producer hashes conservatively require review; changing expected bytes does not establish compatibility.",
+    "Conditional authorization, CSRF, CLI, provider, G01-G04 and G06 runtime evidence retain original source and limits.",
+    "Earlier declaration/discovery record and signed v0.9 evidence are retained unchanged.",
+    "V1-4 final RC/media, V1-5 supported cells/scans, V1-6 media and V1-7 signing/publication remain separate."
+  ]
+}

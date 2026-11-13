@@ -1,0 +1,1795 @@
+{
+  "protocol": "2025-06-18",
+  "tools": [
+    {
+      "Name": "compensation_catalog",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "compensation_inspect",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "planId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "compensation_preview",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "sourcePlanId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision",
+          "idempotencyKey",
+          "sourcePlanId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_apply",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "planFingerprint": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "planId",
+          "planFingerprint"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_drift",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_import_check",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_import_preview",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_observe",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_plan",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_recover",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "planFingerprint": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "planId",
+          "planFingerprint"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_show",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "planId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "declarative_validate",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 4,
+            "enum": [
+              "json",
+              "yaml"
+            ]
+          },
+          "sourceRef": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sourceRevision": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expectedOwnershipRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          }
+        },
+        "required": [
+          "manifest",
+          "format",
+          "sourceRef",
+          "sourceRevision",
+          "expectedOwnershipRevision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "mutation_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "operation_approval",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "operationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "operation_approve",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "previewHash": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "operationId",
+          "previewHash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "operation_cancel",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "previewHash": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "operationId",
+          "previewHash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "operation_confirm",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "previewHash": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "typedTargetChallenge": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "operationId",
+          "previewHash",
+          "typedTargetChallenge"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "operation_reject",
+      "Effect": true,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "previewHash": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "operationId",
+          "previewHash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "operation_status",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "operationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_brokers_configuration",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "brokerId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "brokerId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_brokers_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "brokerId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "brokerId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_brokers_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_clusters_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_clusters_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_clusters_health",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_clusters_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_system_health",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_system_info",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_topics_configuration",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "topicName": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "topicName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_topics_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "topicName": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "topicName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_topics_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "q": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v01_topics_partitions",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "topicName": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "topicName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_connect_connectors_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "connectorName": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "connectorName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_connect_connectors_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_connect_info",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_consumer_groups_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "groupId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "groupId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_consumer_groups_diagnostics",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "groupId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "groupId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_consumer_groups_lag",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "groupId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "groupId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_consumer_groups_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_ksql_info",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_ksql_metadata",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_schema_compatibility",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "subject"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_schema_diff",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "leftVersion": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "rightVersion": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "subject"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_schema_subjects_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_schema_version_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "subject",
+          "version"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_schema_versions_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "subject"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v04_topic_catalog_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "topicName": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "topicName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v06_fleet_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_connect_profile_connectors_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "connectProfileId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "connectorName": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "connectProfileId",
+          "connectorName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_connect_profile_connectors_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "connectProfileId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "connectProfileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_connect_profile_info",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "connectProfileId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "connectProfileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_connect_profile_plugins_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "connectProfileId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "connectProfileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_connect_profiles_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_lineage",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_schema_compatibility_explanation",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "subject"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_schema_reference_graph",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "subject"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_schema_registry_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_serde_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_streams_applications",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_streams_state_stores",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "applicationId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "applicationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v07_streams_topology",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "applicationId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "applicationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_bearer_read_capabilities",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_consumer_operational_analytics_live",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "groupId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "groupId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_consumer_operational_analytics_trend",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "groupId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "from": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxPoints": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "groupId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_consumer_operational_slo",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "groupId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "from": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxPoints": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "threshold": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "target": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "groupId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_data_quality_evidence",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "policyId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "from": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxPoints": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "policyId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_data_quality_policy_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "policyId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId",
+          "policyId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_data_quality_policy_list",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxResults": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterPolicyId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "clusterId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_delivery_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "destinationId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "notificationId",
+          "destinationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_delivery_evidence_query_read",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "destinationId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "notificationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_destination_deliveries_query_read",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxResults": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterCreatedAtUtc": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterNotificationId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_destination_deliveries_read",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxResults": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterCreatedAtUtc": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterNotificationId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "destinationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_governance_audit",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "maxResults": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterRevision": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "destinationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_governance_destinations",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_management_capability",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_product_event_status",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_subscription_detail",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "subscriptionId": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "subscriptionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "Name": "read_v08_notification_subscriptions_read",
+      "Effect": false,
+      "InputSchema": {
+        "type": "object",
+        "properties": {
+          "maxResults": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "afterSubscriptionId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "eventClass": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "producers": {
+    "src/mcp/Kafdeck.Mcp/McpApiBackend.cs": "d9e54426b0d4eec4a7446aebd34e508fb24a89d4407216dd4aca15625e1db08f",
+    "src/mcp/Kafdeck.Mcp/McpServer.cs": "3f56fcb327b50293d2489c6cc7beb663d4c54407b186f27bd697a0376c46aa03",
+    "src/mcp/Kafdeck.Mcp/McpTools.cs": "b588d75d4c6673c18227377e308c9cfd363d2f0c5e0d408b89ee3e224e74b400",
+    "src/mcp/Kafdeck.Mcp/Program.cs": "7993a7fb78295e7f51f75837507fddaae8ba662e426e5e2aac1249d7e0d4e73a"
+  }
+}

@@ -402,3 +402,15 @@ The [versioned limits](../performance/v0.9-budget-candidate.json) retain the acc
 The owner explicitly authorized official v0.9 publication after final CI, adopting the final W80/W81 acceptance and locked publisher proposal `0d4efb89cb4db0d44b33d3e046e811678d6b5674621465e846f8b950bf0c923a` for selection `96725a495baaf3e29aac0dd1788b291c45777459218f37a3bdead9328dcdcebf`. Publisher head `1abb0a89b37ab80630766a2188828cdbfe1d378f` had fresh CODEOWNER approval and 16 successful checks.
 
 Protected-main readiness [43230886146](https://github.com/araditc/Kafdeck/actions/runs/43230886146) admitted the exact source, manifest, trust root and W80 bytes with `releaseReady: true` and no missing gate. Publication [43232262853](https://github.com/araditc/Kafdeck/actions/runs/43232262853) published [v0.9](https://github.com/araditc/Kafdeck/releases/tag/v0.9) at source `01c7553425fbc61ba4a7a21918265c562086ba02`, independently downloaded/hash-checked all 51 remote assets and verified the exact registry signatures/attestations. Private GHCR access, original offline media/signature and the KAF-02 deployment-tested-egress condition remain. [Public release evidence](../implementation/evidence/v0.9-release-published-20261112.json)
+
+
+## V1-1 — contract stability and bounded support policy — 2026-11-13
+
+- Gate: V1-1 and the policy portion of V1-5, bounded tracker [#469](https://github.com/araditc/Kafdeck/issues/469).
+- Status: **OWNER POLICY ACCEPTED**; implementation/CI/normal protected-main admission remain required. Final release gates remain open.
+- Authority: explicit product-owner answer in Codex chat to the exact RFC-0010 policy question for draft [#477](https://github.com/araditc/Kafdeck/pull/477).
+- Accepted: [RFC-0010](../rfcs/0010-v1.0-contract-stability-support.md), Stable only for enumerated contracts; Experimental managed dashboard APIs; incompatible Stable changes require the applicable major; planned removal needs at least one released minor and 90 days notice; security fixes target the latest supported released minor/current patch, without LTS/backport/SLA entitlement.
+
+> سیاست پیشنهادی را می‌پذیرم؛ V1-1 را تکمیل کن
+
+This accepts policy and authorizes its finite inventory/compatibility implementation. It does not authorize v1.0 signing/publication, expand deployment/provider support or remove the KAF-02 tested-egress condition. Independently versioned components retain their explicit selection. Historical/signed v0.9 evidence is unchanged.
