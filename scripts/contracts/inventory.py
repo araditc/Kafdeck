@@ -1,5 +1,5 @@
 """Read-only declared-contract index. Not a runtime route-completeness claim."""
-import argparse, hashlib, json, pathlib, re, subprocess
+import argparse, hashlib, json, pathlib, re, subprocess, textwrap
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -42,20 +42,61 @@ def collect():
         if name.startswith("providers/terraform/internal/provider/") and name.endswith(".go") and not name.endswith("_test.go"):
             terraform.append({"file": name, "stateAndConfigurationFields": sorted(set(re.findall(r'tfsdk:"([^"]+)"', (ROOT / name).read_text())))})
     return {"sourceCommit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+            "productSrcTree": subprocess.check_output(["git", "rev-parse", "HEAD:src"], cwd=ROOT, text=True).strip(),
             "classificationStatus": "proposal; no new stability guarantee", "kind": "declared source inventory",
             "limits": ["Literal Map registrations only; dynamic builders, group prefixes and conditionally mapped routes require their existing runtime inventory tests.",
                        "Static JSON catalogs are versioned artifacts, not proof that every runtime endpoint is published there.",
                        "C# generated OpenAPI, CLI named reads, MCP generated tool schemas and configuration loader remain source-bound references; not omitted stable promises."],
             "jsonCatalogs": catalogs, "literalRegistrations": routes, "cliExitCodes": exit_codes,
-            "cliDeclaredUsage": help_text.strip(), "terraformDeclaredFields": terraform,
+            "cliDeclaredUsage": textwrap.dedent(help_text).strip(), "terraformDeclaredFields": terraform,
             "sourceFingerprints": sources}
+
+def observe_compiled(directory, expected_usage):
+    """Only local help and MCP discovery; never calls a backend tool."""
+    cli = directory / "bin/Kafdeck.Cli/release/kafdeck.dll"
+    mcp = directory / "bin/Kafdeck.Mcp/release/kafdeck-mcp.dll"
+    help_run = subprocess.run(["dotnet", str(cli), "--help"], capture_output=True, text=True, encoding="utf-8", timeout=20, check=True)
+    assert help_run.stdout.strip() == expected_usage, "Compiled CLI help does not match the selected source."
+    result = {"cliHelpExit": help_run.returncode, "cliHelpSha256": hashlib.sha256(help_run.stdout.encode()).hexdigest(),
+              "cliDllSha256": digest(cli), "mcpDllSha256": digest(mcp), "cliHelpMatchesDeclaredSource": True,
+              "noBackendToolCall": True, "binaryProvenanceLimit": "Explicit local binaries; a release build attestation is not inferred.", "mcpModes": []}
+    for effects in (False, True):
+        requests = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "inventory", "version": "1"}}},
+                    {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}]
+        requests += [{"jsonrpc": "2.0", "id": n + 2, "method": "tools/list", "params": {} if n == 0 else {"cursor": str(n * 20)}} for n in range(26)]
+        invocation = ["dotnet", str(mcp), "--base-url", "http://127.0.0.1:1", "--oidc-profile", str(directory / "nonexistent-inventory-profile.json")]
+        if effects:
+            invocation.append("--enable-effects")
+        run = subprocess.run(invocation, input="\n".join(json.dumps(r) for r in requests) + "\n", capture_output=True, text=True, encoding="utf-8", timeout=20, check=True)
+        responses = {r["id"]: r for r in map(json.loads, run.stdout.splitlines())}
+        protocol = responses[1]["result"]["protocolVersion"]
+        tools = []
+        page = 0
+        while True:
+            value = responses[page + 2]["result"]
+            tools.extend(value["tools"])
+            cursor = value.get("nextCursor")
+            if cursor is None:
+                break
+            page = int(cursor) // 20
+        assert len({t["name"] for t in tools}) == len(tools)
+        result["mcpModes"].append({"effectsEnabled": effects, "protocolVersion": protocol, "toolCount": len(tools),
+                                  "schemaSetSha256": hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest(),
+                                  "tools": [{"name": t["name"], "effect": not t["annotations"]["readOnlyHint"],
+                                             "required": t["inputSchema"].get("required", []),
+                                             "properties": sorted(t["inputSchema"].get("properties", {})),
+                                             "schemaSha256": hashlib.sha256(json.dumps(t["inputSchema"], sort_keys=True).encode()).hexdigest()} for t in tools]})
+    return result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=pathlib.Path, required=True)
+    parser.add_argument("--compiled-directory", type=pathlib.Path, help="Optional explicitly built matching source outputs; local help/tools-list only.")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result = collect()
+    if args.compiled_directory:
+        result["compiledDiscovery"] = observe_compiled(args.compiled_directory.resolve(), result["cliDeclaredUsage"])
     args.output.write_bytes((json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode())
     print(json.dumps({"catalogs": len(result["jsonCatalogs"]), "literalRegistrations": len(result["literalRegistrations"]),
                       "sourceFiles": len(result["sourceFingerprints"]), "exitCodes": result["cliExitCodes"]}))

@@ -1,5 +1,6 @@
 {
-  "sourceCommit": "27dce53ddaeca3c6b0d40a6d798a1a6ca06ec6fa",
+  "sourceCommit": "c4dc356bb07f8aacdd442b141c79e50bc4dc1949",
+  "productSrcTree": "78139e944ecab09c4d4178a0c9691d86ed931c99",
   "classificationStatus": "proposal; no new stability guarantee",
   "kind": "declared source inventory",
   "limits": [
@@ -1685,7 +1686,7 @@
     "Expired": 9,
     "PartialOrUnverified": 10
   },
-  "cliDeclaredUsage": "Kafdeck CLI\n\n        Usage:\n          kafdeck [global-options] system info\n          kafdeck [global-options] clusters list\n          kafdeck [global-options] clusters get <cluster-id>\n          kafdeck [global-options] topics list <cluster-id> [--search <text>] [--cursor <opaque>] [--limit <1..200>]\n          kafdeck [global-options] topics get <cluster-id> <topic-name>\n          kafdeck [global-options] consumer-groups list <cluster-id>\n          kafdeck [global-options] consumer-groups get <cluster-id> <group-id>\n          kafdeck [global-options] consumer-groups lag <cluster-id> <group-id>\n          kafdeck [global-options] consumer-groups diagnostics <cluster-id> <group-id>\n          kafdeck [global-options] schemas subjects <cluster-id>\n          kafdeck [global-options] schemas versions <cluster-id> <subject>\n          kafdeck [global-options] schemas version <cluster-id> <subject> <version>\n          kafdeck [global-options] schemas compatibility <cluster-id> <subject>\n          kafdeck [global-options] schemas diff <cluster-id> <subject> <left-version> <right-version>\n          kafdeck --oidc-profile <profile> [global-options] topics create-preview <cluster-id> <topic-name> <partitions> <replication-factor> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> [global-options] operations status <operation-id>\n          kafdeck --oidc-profile <profile> [global-options] operations confirm <operation-id> <preview-hash> [--challenge <typed-target>]\n          kafdeck --oidc-profile <profile> [global-options] operations execute <operation-id>\n          kafdeck --oidc-profile <profile> [global-options] topics delete-preview <cluster-id> <topic-name> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> [global-options] topics alter-preview <cluster-id> <topic-name> --config <key=value> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> [global-options] topics increase-partitions-preview <cluster-id> <topic-name> <target-count> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> [global-options] operations approval <operation-id>\n          kafdeck --oidc-profile <profile> [global-options] operations approve <operation-id> <preview-hash>\n          kafdeck --oidc-profile <profile> [global-options] operations reject <operation-id> <preview-hash>\n          kafdeck --oidc-profile <profile> [global-options] operations cancel <operation-id> <preview-hash>\n          kafdeck --oidc-profile <profile> catalog <teams|applications|topics> <cluster-id> [--cursor <opaque>] [--limit <1..200>]\n          kafdeck --oidc-profile <profile> catalog <get|history> <cluster-id> <teams|applications|topics> <record-id>\n          kafdeck --oidc-profile <profile> catalog change-preview <cluster-id> <teams|applications|topics> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> catalog import-preview <cluster-id> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> catalog plan <operation-id>\n          kafdeck --oidc-profile <profile> catalog recover <operation-id> --request-file <preview-hash.json>\n          kafdeck --oidc-profile <profile> policies <versions|state> <cluster-id>\n          kafdeck --oidc-profile <profile> policies version <cluster-id> <version-id>\n          kafdeck --oidc-profile <profile> policies <validate|explain|dry-run> --request-file <closed.json>\n            Validation input is {\"clusterId\":\"exact-scope\",\"document\":\"closed policy JSON\"}; validation never grants global read or execution rights.\n          kafdeck --oidc-profile <profile> policies <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> policies plan <operation-id>\n          kafdeck --oidc-profile <profile> policies reconcile <operation-id>\n          kafdeck --oidc-profile <profile> requests list <cluster-id> [--cursor <opaque>] [--limit <1..200>]\n          kafdeck --oidc-profile <profile> requests <get|history> <cluster-id> <request-id>\n          kafdeck --oidc-profile <profile> requests change-preview <cluster-id> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> requests <plan|recover> <operation-id>\n          kafdeck --oidc-profile <profile> measurements list <cluster-id> <from-utc> <to-utc> [resource-id]\n          kafdeck --oidc-profile <profile> attribution windows <cluster-id> <from-utc> <to-utc> [resource-id]\n          kafdeck --oidc-profile <profile> dashboards show <cluster-id> <from-utc> <to-utc> [resource-id]\n          kafdeck --oidc-profile <profile> rate-cards <versions|state> <cluster-id>\n          kafdeck --oidc-profile <profile> rate-cards <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> rate-cards <plan|recover> <operation-id>\n          kafdeck --oidc-profile <profile> records produce-preview <cluster-id> <topic-name> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> records produce-execute <operation-id> --request-file <closed.json>\n          kafdeck --oidc-profile <profile> consumer-groups offsets-preview <cluster-id> <group-id> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> schemas register-preview <cluster-id> <subject> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> connect create-preview <cluster-id> <connector> --request-file <closed.json> --idempotency-key <key>\n          kafdeck --oidc-profile <profile> notifications recovery status\n          kafdeck --oidc-profile <profile> notifications recovery preview --request-file <closed.json>\n          kafdeck --oidc-profile <profile> notifications recovery approve <operation-id> --request-file <revision-hash.json>\n          kafdeck --oidc-profile <profile> notifications recovery apply <operation-id> --request-file <revision-hash.json>\n          kafdeck [global-options] capabilities mutations\n          kafdeck declarative validate --manifest-file <closed.json|yaml> --source <registered-source> --source-revision <sha256> --ownership-revision <number>\n          kafdeck --service-profile <profile> declarative observe|drift|import|plan|reconcile --manifest-file <closed.json|yaml> --source <registered-source> --source-revision <sha256> --ownership-revision <number> [--idempotency-key <key>] [--yes]\n          kafdeck --service-profile <profile> declarative apply <plan-id> <plan-fingerprint>\n          kafdeck --service-profile <profile> declarative recover <plan-id> <plan-fingerprint>\n          kafdeck --service-profile <profile> declarative show <plan-id>\n          kafdeck --service-profile <profile> declarative capabilities\n          kafdeck --service-profile <profile> declarative source-show <source> --resource <resource-id>\n          kafdeck --service-profile <profile> declarative source-advance <source> <expected-generation> <expected-revision> <expected-hash> --manifest-file <closed.json|yaml>\n          kafdeck --oidc-profile <profile> views v08-bearer-read-capabilities\n          kafdeck --service-profile <profile> views <exact-versioned-view-name> <path-identities...> [--request-file <closed-query-or-body.json>]\n          kafdeck --help\n\n        Global options:\n          --url <base-url>\n          --token-file <path>\n          --oidc-profile <public-profile.json>  Sign in using browser PKCE; memory-only bearer for this command.\n          --service-profile <public-profile.json>  Sign in with a referenced RSA private key; memory-only service bearer.\n          --output json\n          --idempotency-key <key>  Required for a named mutation preview; recovery has its own revision/hash CAS.\n          --request-file <path>   Bounded closed payload for a named family command; no generic JSON or provider route.\n          --challenge <target>    Admitted only for operation confirmation.\n          --config <key=value>   Repeat unique allowed keys for topic create/alter preview.\n          --reset-config <key>   Reset a unique allowed topic key; alter preview only.\n\n        Environment:\n          KAFDECK_URL\n          KAFDECK_ACCESS_TOKEN\n\n        Security:\n          Access tokens are intentionally not accepted as command-line arguments.\n          Use KAFDECK_ACCESS_TOKEN or --token-file.\n          The CLI exposes only typed governed API routes; there is no arbitrary HTTP path passthrough.\n          Governed commands require non-browser OIDC and explicit backend family admission.\n          Approval and recovery commands require eligible human identities. Missing runtime families remain unavailable.",
+  "cliDeclaredUsage": "Kafdeck CLI\n\nUsage:\n  kafdeck [global-options] system info\n  kafdeck [global-options] clusters list\n  kafdeck [global-options] clusters get <cluster-id>\n  kafdeck [global-options] topics list <cluster-id> [--search <text>] [--cursor <opaque>] [--limit <1..200>]\n  kafdeck [global-options] topics get <cluster-id> <topic-name>\n  kafdeck [global-options] consumer-groups list <cluster-id>\n  kafdeck [global-options] consumer-groups get <cluster-id> <group-id>\n  kafdeck [global-options] consumer-groups lag <cluster-id> <group-id>\n  kafdeck [global-options] consumer-groups diagnostics <cluster-id> <group-id>\n  kafdeck [global-options] schemas subjects <cluster-id>\n  kafdeck [global-options] schemas versions <cluster-id> <subject>\n  kafdeck [global-options] schemas version <cluster-id> <subject> <version>\n  kafdeck [global-options] schemas compatibility <cluster-id> <subject>\n  kafdeck [global-options] schemas diff <cluster-id> <subject> <left-version> <right-version>\n  kafdeck --oidc-profile <profile> [global-options] topics create-preview <cluster-id> <topic-name> <partitions> <replication-factor> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> [global-options] operations status <operation-id>\n  kafdeck --oidc-profile <profile> [global-options] operations confirm <operation-id> <preview-hash> [--challenge <typed-target>]\n  kafdeck --oidc-profile <profile> [global-options] operations execute <operation-id>\n  kafdeck --oidc-profile <profile> [global-options] topics delete-preview <cluster-id> <topic-name> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> [global-options] topics alter-preview <cluster-id> <topic-name> --config <key=value> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> [global-options] topics increase-partitions-preview <cluster-id> <topic-name> <target-count> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> [global-options] operations approval <operation-id>\n  kafdeck --oidc-profile <profile> [global-options] operations approve <operation-id> <preview-hash>\n  kafdeck --oidc-profile <profile> [global-options] operations reject <operation-id> <preview-hash>\n  kafdeck --oidc-profile <profile> [global-options] operations cancel <operation-id> <preview-hash>\n  kafdeck --oidc-profile <profile> catalog <teams|applications|topics> <cluster-id> [--cursor <opaque>] [--limit <1..200>]\n  kafdeck --oidc-profile <profile> catalog <get|history> <cluster-id> <teams|applications|topics> <record-id>\n  kafdeck --oidc-profile <profile> catalog change-preview <cluster-id> <teams|applications|topics> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> catalog import-preview <cluster-id> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> catalog plan <operation-id>\n  kafdeck --oidc-profile <profile> catalog recover <operation-id> --request-file <preview-hash.json>\n  kafdeck --oidc-profile <profile> policies <versions|state> <cluster-id>\n  kafdeck --oidc-profile <profile> policies version <cluster-id> <version-id>\n  kafdeck --oidc-profile <profile> policies <validate|explain|dry-run> --request-file <closed.json>\n    Validation input is {\"clusterId\":\"exact-scope\",\"document\":\"closed policy JSON\"}; validation never grants global read or execution rights.\n  kafdeck --oidc-profile <profile> policies <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> policies plan <operation-id>\n  kafdeck --oidc-profile <profile> policies reconcile <operation-id>\n  kafdeck --oidc-profile <profile> requests list <cluster-id> [--cursor <opaque>] [--limit <1..200>]\n  kafdeck --oidc-profile <profile> requests <get|history> <cluster-id> <request-id>\n  kafdeck --oidc-profile <profile> requests change-preview <cluster-id> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> requests <plan|recover> <operation-id>\n  kafdeck --oidc-profile <profile> measurements list <cluster-id> <from-utc> <to-utc> [resource-id]\n  kafdeck --oidc-profile <profile> attribution windows <cluster-id> <from-utc> <to-utc> [resource-id]\n  kafdeck --oidc-profile <profile> dashboards show <cluster-id> <from-utc> <to-utc> [resource-id]\n  kafdeck --oidc-profile <profile> rate-cards <versions|state> <cluster-id>\n  kafdeck --oidc-profile <profile> rate-cards <version-preview|activate-preview> <cluster-id> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> rate-cards <plan|recover> <operation-id>\n  kafdeck --oidc-profile <profile> records produce-preview <cluster-id> <topic-name> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> records produce-execute <operation-id> --request-file <closed.json>\n  kafdeck --oidc-profile <profile> consumer-groups offsets-preview <cluster-id> <group-id> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> schemas register-preview <cluster-id> <subject> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> connect create-preview <cluster-id> <connector> --request-file <closed.json> --idempotency-key <key>\n  kafdeck --oidc-profile <profile> notifications recovery status\n  kafdeck --oidc-profile <profile> notifications recovery preview --request-file <closed.json>\n  kafdeck --oidc-profile <profile> notifications recovery approve <operation-id> --request-file <revision-hash.json>\n  kafdeck --oidc-profile <profile> notifications recovery apply <operation-id> --request-file <revision-hash.json>\n  kafdeck [global-options] capabilities mutations\n  kafdeck declarative validate --manifest-file <closed.json|yaml> --source <registered-source> --source-revision <sha256> --ownership-revision <number>\n  kafdeck --service-profile <profile> declarative observe|drift|import|plan|reconcile --manifest-file <closed.json|yaml> --source <registered-source> --source-revision <sha256> --ownership-revision <number> [--idempotency-key <key>] [--yes]\n  kafdeck --service-profile <profile> declarative apply <plan-id> <plan-fingerprint>\n  kafdeck --service-profile <profile> declarative recover <plan-id> <plan-fingerprint>\n  kafdeck --service-profile <profile> declarative show <plan-id>\n  kafdeck --service-profile <profile> declarative capabilities\n  kafdeck --service-profile <profile> declarative source-show <source> --resource <resource-id>\n  kafdeck --service-profile <profile> declarative source-advance <source> <expected-generation> <expected-revision> <expected-hash> --manifest-file <closed.json|yaml>\n  kafdeck --oidc-profile <profile> views v08-bearer-read-capabilities\n  kafdeck --service-profile <profile> views <exact-versioned-view-name> <path-identities...> [--request-file <closed-query-or-body.json>]\n  kafdeck --help\n\nGlobal options:\n  --url <base-url>\n  --token-file <path>\n  --oidc-profile <public-profile.json>  Sign in using browser PKCE; memory-only bearer for this command.\n  --service-profile <public-profile.json>  Sign in with a referenced RSA private key; memory-only service bearer.\n  --output json\n  --idempotency-key <key>  Required for a named mutation preview; recovery has its own revision/hash CAS.\n  --request-file <path>   Bounded closed payload for a named family command; no generic JSON or provider route.\n  --challenge <target>    Admitted only for operation confirmation.\n  --config <key=value>   Repeat unique allowed keys for topic create/alter preview.\n  --reset-config <key>   Reset a unique allowed topic key; alter preview only.\n\nEnvironment:\n  KAFDECK_URL\n  KAFDECK_ACCESS_TOKEN\n\nSecurity:\n  Access tokens are intentionally not accepted as command-line arguments.\n  Use KAFDECK_ACCESS_TOKEN or --token-file.\n  The CLI exposes only typed governed API routes; there is no arbitrary HTTP path passthrough.\n  Governed commands require non-browser OIDC and explicit backend family admission.\n  Approval and recovery commands require eligible human identities. Missing runtime families remain unavailable.",
   "terraformDeclaredFields": [
     {
       "file": "providers/terraform/internal/provider/data_source.go",
@@ -3729,5 +3730,1859 @@
       "path": "src/shared/KafdeckReadContracts.cs",
       "sha256": "812dcc52cce3f6d69e2b36904b96c9401649cac7af529c22dcd0bd1142383165"
     }
-  ]
+  ],
+  "compiledDiscovery": {
+    "cliHelpExit": 0,
+    "cliHelpSha256": "962e987252ae4718061ef236b7f971f8cfa20a2c75bf3d150d93ce844b838217",
+    "cliDllSha256": "7b7906478557ae52349589d1537c50abbe739f34c22b638ae6cae2bc5780ca2f",
+    "mcpDllSha256": "220d2d25739e0f5bb5ae4c0621e81cb162bd3742bccf8b4217d3fd1a5e053dc5",
+    "cliHelpMatchesDeclaredSource": true,
+    "noBackendToolCall": true,
+    "binaryProvenanceLimit": "Explicit local binaries; a release build attestation is not inferred.",
+    "mcpModes": [
+      {
+        "effectsEnabled": false,
+        "protocolVersion": "2025-06-18",
+        "toolCount": 70,
+        "schemaSetSha256": "b4d0cc4c131b6876c5f6fe08ef993c5b6ebcb3d72becdfc50aa3dc8e20d63485",
+        "tools": [
+          {
+            "name": "declarative_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "mutation_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_system_info",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_system_health",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_clusters_list",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_clusters_detail",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_clusters_health",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_clusters_capabilities",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_brokers_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_brokers_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "brokerId"
+            ],
+            "properties": [
+              "brokerId",
+              "clusterId"
+            ],
+            "schemaSha256": "3ade13e40252340b255c159c7b9482e6e6e6ca448631c923eb7683aba9ae3ad5"
+          },
+          {
+            "name": "read_v01_brokers_configuration",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "brokerId"
+            ],
+            "properties": [
+              "brokerId",
+              "clusterId"
+            ],
+            "schemaSha256": "3ade13e40252340b255c159c7b9482e6e6e6ca448631c923eb7683aba9ae3ad5"
+          },
+          {
+            "name": "read_v01_topics_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId",
+              "cursor",
+              "pageSize",
+              "q"
+            ],
+            "schemaSha256": "04a88f53fcbc0c42bd64535d562544d9b3e406ce6944c3ff249aa1e098d90d8e"
+          },
+          {
+            "name": "read_v01_topics_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v01_topics_partitions",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v01_topics_configuration",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v04_consumer_groups_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_consumer_groups_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v04_consumer_groups_lag",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v04_consumer_groups_diagnostics",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v04_schema_subjects_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_schema_versions_list",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v04_schema_version_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject",
+              "version"
+            ],
+            "properties": [
+              "clusterId",
+              "subject",
+              "version"
+            ],
+            "schemaSha256": "592c1ae1ef594f7505aac4503019cb13462f8f12641506937979ebce09853b67"
+          },
+          {
+            "name": "read_v04_schema_compatibility",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v04_schema_diff",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "leftVersion",
+              "rightVersion",
+              "subject"
+            ],
+            "schemaSha256": "2df6d8c52c1160863cf55805fa76a914d6911180b01045445dec6b87114913cf"
+          },
+          {
+            "name": "read_v07_connect_profiles_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_connect_profile_info",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "schemaSha256": "cb0f8eb9575cbbb852338da8d4648bb27fb939c99aadd5b93c316556b27fbe66"
+          },
+          {
+            "name": "read_v07_connect_profile_plugins_list",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "schemaSha256": "cb0f8eb9575cbbb852338da8d4648bb27fb939c99aadd5b93c316556b27fbe66"
+          },
+          {
+            "name": "read_v07_connect_profile_connectors_list",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "schemaSha256": "cb0f8eb9575cbbb852338da8d4648bb27fb939c99aadd5b93c316556b27fbe66"
+          },
+          {
+            "name": "read_v07_connect_profile_connectors_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId",
+              "connectorName"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId",
+              "connectorName"
+            ],
+            "schemaSha256": "debb5aa6b423e7993ece8ba3423e77628aae2dea02fbb3b2f9c99d1737dc25d0"
+          },
+          {
+            "name": "read_v04_connect_info",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_connect_connectors_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_connect_connectors_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectorName"
+            ],
+            "properties": [
+              "clusterId",
+              "connectorName"
+            ],
+            "schemaSha256": "3f297e233acf601aca28fb04d8b3c8f72cd4bb30cf1b085dd528566e6d274b62"
+          },
+          {
+            "name": "read_v04_ksql_info",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_ksql_metadata",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_topic_catalog_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v07_streams_applications",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_streams_topology",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "applicationId"
+            ],
+            "properties": [
+              "applicationId",
+              "clusterId"
+            ],
+            "schemaSha256": "6f6e8e3de2c6331b255b625904ceb75872358070e106a3b6e91d7c245b4f2598"
+          },
+          {
+            "name": "read_v07_streams_state_stores",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "applicationId"
+            ],
+            "properties": [
+              "applicationId",
+              "clusterId"
+            ],
+            "schemaSha256": "6f6e8e3de2c6331b255b625904ceb75872358070e106a3b6e91d7c245b4f2598"
+          },
+          {
+            "name": "read_v07_lineage",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_schema_reference_graph",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v07_schema_compatibility_explanation",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v07_schema_registry_capabilities",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_serde_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_consumer_operational_analytics_live",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v08_consumer_operational_analytics_trend",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "from",
+              "groupId",
+              "maxPoints",
+              "to"
+            ],
+            "schemaSha256": "378217b0e8456c2e6782c8cf970eb0b0682643249a1b61555ed23f28f9d0294e"
+          },
+          {
+            "name": "read_v08_consumer_operational_slo",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "from",
+              "groupId",
+              "maxPoints",
+              "target",
+              "threshold",
+              "to"
+            ],
+            "schemaSha256": "ecfe74dd0c4dd580dc734764affa72dc196e031750c08936eedd4ab3b3a1ff60"
+          },
+          {
+            "name": "read_v08_data_quality_policy_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "afterPolicyId",
+              "clusterId",
+              "maxResults",
+              "state"
+            ],
+            "schemaSha256": "74305c80c359d41565c5ca185903a4141914015f53a5a4ce0b93e0d4f25187e8"
+          },
+          {
+            "name": "read_v08_data_quality_policy_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "policyId"
+            ],
+            "properties": [
+              "clusterId",
+              "policyId"
+            ],
+            "schemaSha256": "c2eb138579fc98b7755f6a05b3133f5858534569f1e02c43dc6a1d801da3b13f"
+          },
+          {
+            "name": "read_v08_data_quality_evidence",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "policyId"
+            ],
+            "properties": [
+              "clusterId",
+              "from",
+              "maxPoints",
+              "policyId",
+              "to"
+            ],
+            "schemaSha256": "5a9830baf041a9bafc9fb2f970d685266ca543d2fabdb25cfcce6abc8c759053"
+          },
+          {
+            "name": "read_v08_notification_subscriptions_read",
+            "effect": false,
+            "required": [],
+            "properties": [
+              "afterSubscriptionId",
+              "eventClass",
+              "maxResults",
+              "state"
+            ],
+            "schemaSha256": "d8fadbe551b30e211b4ae8b5525a264e107f6704efa596dc64b40ba8ec76b9dc"
+          },
+          {
+            "name": "read_v08_notification_subscription_detail",
+            "effect": false,
+            "required": [
+              "subscriptionId"
+            ],
+            "properties": [
+              "subscriptionId"
+            ],
+            "schemaSha256": "665fab275972ec56e9fe82b50c0ba239511304e34dbe57391f1bc82ec03f8379"
+          },
+          {
+            "name": "read_v08_notification_destination_deliveries_read",
+            "effect": false,
+            "required": [
+              "destinationId"
+            ],
+            "properties": [
+              "afterCreatedAtUtc",
+              "afterNotificationId",
+              "destinationId",
+              "maxResults"
+            ],
+            "schemaSha256": "7344182a2bc3eb25b7560edec6a2585549e8880cab176b66078f20d7fce5719d"
+          },
+          {
+            "name": "read_v08_notification_delivery_detail",
+            "effect": false,
+            "required": [
+              "notificationId",
+              "destinationId"
+            ],
+            "properties": [
+              "destinationId",
+              "notificationId"
+            ],
+            "schemaSha256": "05f9e0a58eb8db547edd7e663075145133a4d75a71f231403ca21e7483d5de23"
+          },
+          {
+            "name": "read_v08_notification_destination_deliveries_query_read",
+            "effect": false,
+            "required": [],
+            "properties": [
+              "afterCreatedAtUtc",
+              "afterNotificationId",
+              "destinationId",
+              "maxResults"
+            ],
+            "schemaSha256": "35930c9e0a207d5cbc76c3a997322e4c8e399c18a61f7eec0a5056d708efb523"
+          },
+          {
+            "name": "read_v08_notification_delivery_evidence_query_read",
+            "effect": false,
+            "required": [
+              "notificationId"
+            ],
+            "properties": [
+              "destinationId",
+              "notificationId"
+            ],
+            "schemaSha256": "a0f5009f7506d7b5a5b79634fab4305f0dd6adb8e714ed59f29ba94e5a8da9fd"
+          },
+          {
+            "name": "read_v08_notification_governance_destinations",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_notification_governance_audit",
+            "effect": false,
+            "required": [
+              "destinationId"
+            ],
+            "properties": [
+              "afterRevision",
+              "destinationId",
+              "maxResults"
+            ],
+            "schemaSha256": "727fa486bcc93a52b9d5e4d111a4ec70f9c6925b84809fa137ba3fc572554afd"
+          },
+          {
+            "name": "read_v08_notification_management_capability",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_notification_product_event_status",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v06_fleet_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_bearer_read_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "declarative_validate",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_observe",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_drift",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_import_check",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_show",
+            "effect": false,
+            "required": [
+              "planId"
+            ],
+            "properties": [
+              "planId"
+            ],
+            "schemaSha256": "f9f621ba6227d1ebea22f800f565f566be6b34491a2038a6f584de32cdabad80"
+          },
+          {
+            "name": "operation_status",
+            "effect": false,
+            "required": [
+              "operationId"
+            ],
+            "properties": [
+              "operationId"
+            ],
+            "schemaSha256": "dea0ad1fc4a9925a7b79cb302201ab4b5ebd6f07f83f06dfdb021b4815f4ccfc"
+          },
+          {
+            "name": "operation_approval",
+            "effect": false,
+            "required": [
+              "operationId"
+            ],
+            "properties": [
+              "operationId"
+            ],
+            "schemaSha256": "dea0ad1fc4a9925a7b79cb302201ab4b5ebd6f07f83f06dfdb021b4815f4ccfc"
+          },
+          {
+            "name": "compensation_catalog",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "compensation_inspect",
+            "effect": false,
+            "required": [
+              "planId"
+            ],
+            "properties": [
+              "planId"
+            ],
+            "schemaSha256": "f9f621ba6227d1ebea22f800f565f566be6b34491a2038a6f584de32cdabad80"
+          }
+        ]
+      },
+      {
+        "effectsEnabled": true,
+        "protocolVersion": "2025-06-18",
+        "toolCount": 79,
+        "schemaSetSha256": "3f23bf2f76a1b5921180fa843830a850a4414b3b5f9bada717140f22c9998a09",
+        "tools": [
+          {
+            "name": "declarative_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "mutation_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_system_info",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_system_health",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_clusters_list",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v01_clusters_detail",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_clusters_health",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_clusters_capabilities",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_brokers_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v01_brokers_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "brokerId"
+            ],
+            "properties": [
+              "brokerId",
+              "clusterId"
+            ],
+            "schemaSha256": "3ade13e40252340b255c159c7b9482e6e6e6ca448631c923eb7683aba9ae3ad5"
+          },
+          {
+            "name": "read_v01_brokers_configuration",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "brokerId"
+            ],
+            "properties": [
+              "brokerId",
+              "clusterId"
+            ],
+            "schemaSha256": "3ade13e40252340b255c159c7b9482e6e6e6ca448631c923eb7683aba9ae3ad5"
+          },
+          {
+            "name": "read_v01_topics_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId",
+              "cursor",
+              "pageSize",
+              "q"
+            ],
+            "schemaSha256": "04a88f53fcbc0c42bd64535d562544d9b3e406ce6944c3ff249aa1e098d90d8e"
+          },
+          {
+            "name": "read_v01_topics_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v01_topics_partitions",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v01_topics_configuration",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v04_consumer_groups_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_consumer_groups_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v04_consumer_groups_lag",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v04_consumer_groups_diagnostics",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v04_schema_subjects_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_schema_versions_list",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v04_schema_version_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject",
+              "version"
+            ],
+            "properties": [
+              "clusterId",
+              "subject",
+              "version"
+            ],
+            "schemaSha256": "592c1ae1ef594f7505aac4503019cb13462f8f12641506937979ebce09853b67"
+          },
+          {
+            "name": "read_v04_schema_compatibility",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v04_schema_diff",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "leftVersion",
+              "rightVersion",
+              "subject"
+            ],
+            "schemaSha256": "2df6d8c52c1160863cf55805fa76a914d6911180b01045445dec6b87114913cf"
+          },
+          {
+            "name": "read_v07_connect_profiles_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_connect_profile_info",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "schemaSha256": "cb0f8eb9575cbbb852338da8d4648bb27fb939c99aadd5b93c316556b27fbe66"
+          },
+          {
+            "name": "read_v07_connect_profile_plugins_list",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "schemaSha256": "cb0f8eb9575cbbb852338da8d4648bb27fb939c99aadd5b93c316556b27fbe66"
+          },
+          {
+            "name": "read_v07_connect_profile_connectors_list",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId"
+            ],
+            "schemaSha256": "cb0f8eb9575cbbb852338da8d4648bb27fb939c99aadd5b93c316556b27fbe66"
+          },
+          {
+            "name": "read_v07_connect_profile_connectors_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectProfileId",
+              "connectorName"
+            ],
+            "properties": [
+              "clusterId",
+              "connectProfileId",
+              "connectorName"
+            ],
+            "schemaSha256": "debb5aa6b423e7993ece8ba3423e77628aae2dea02fbb3b2f9c99d1737dc25d0"
+          },
+          {
+            "name": "read_v04_connect_info",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_connect_connectors_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_connect_connectors_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "connectorName"
+            ],
+            "properties": [
+              "clusterId",
+              "connectorName"
+            ],
+            "schemaSha256": "3f297e233acf601aca28fb04d8b3c8f72cd4bb30cf1b085dd528566e6d274b62"
+          },
+          {
+            "name": "read_v04_ksql_info",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_ksql_metadata",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v04_topic_catalog_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "topicName"
+            ],
+            "properties": [
+              "clusterId",
+              "topicName"
+            ],
+            "schemaSha256": "1b6da8378700048f4c761a6e4f99062e71f7bd081273ef09baf5ec913ea004ca"
+          },
+          {
+            "name": "read_v07_streams_applications",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_streams_topology",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "applicationId"
+            ],
+            "properties": [
+              "applicationId",
+              "clusterId"
+            ],
+            "schemaSha256": "6f6e8e3de2c6331b255b625904ceb75872358070e106a3b6e91d7c245b4f2598"
+          },
+          {
+            "name": "read_v07_streams_state_stores",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "applicationId"
+            ],
+            "properties": [
+              "applicationId",
+              "clusterId"
+            ],
+            "schemaSha256": "6f6e8e3de2c6331b255b625904ceb75872358070e106a3b6e91d7c245b4f2598"
+          },
+          {
+            "name": "read_v07_lineage",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_schema_reference_graph",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v07_schema_compatibility_explanation",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "subject"
+            ],
+            "properties": [
+              "clusterId",
+              "subject"
+            ],
+            "schemaSha256": "2cfc88d87100780e17d7a1f055ee92b0c47aaa80984e5f494222bd8132360a76"
+          },
+          {
+            "name": "read_v07_schema_registry_capabilities",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "clusterId"
+            ],
+            "schemaSha256": "50cfaf62699c2e39b378a54131b8e8166b4575d4f0e972135b867e0f66fb67a0"
+          },
+          {
+            "name": "read_v07_serde_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_consumer_operational_analytics_live",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "groupId"
+            ],
+            "schemaSha256": "0c791bfd76154bfabd5c22ced18f8eeae3b61e179b4b6383abe3801ba9a7e986"
+          },
+          {
+            "name": "read_v08_consumer_operational_analytics_trend",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "from",
+              "groupId",
+              "maxPoints",
+              "to"
+            ],
+            "schemaSha256": "378217b0e8456c2e6782c8cf970eb0b0682643249a1b61555ed23f28f9d0294e"
+          },
+          {
+            "name": "read_v08_consumer_operational_slo",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "groupId"
+            ],
+            "properties": [
+              "clusterId",
+              "from",
+              "groupId",
+              "maxPoints",
+              "target",
+              "threshold",
+              "to"
+            ],
+            "schemaSha256": "ecfe74dd0c4dd580dc734764affa72dc196e031750c08936eedd4ab3b3a1ff60"
+          },
+          {
+            "name": "read_v08_data_quality_policy_list",
+            "effect": false,
+            "required": [
+              "clusterId"
+            ],
+            "properties": [
+              "afterPolicyId",
+              "clusterId",
+              "maxResults",
+              "state"
+            ],
+            "schemaSha256": "74305c80c359d41565c5ca185903a4141914015f53a5a4ce0b93e0d4f25187e8"
+          },
+          {
+            "name": "read_v08_data_quality_policy_detail",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "policyId"
+            ],
+            "properties": [
+              "clusterId",
+              "policyId"
+            ],
+            "schemaSha256": "c2eb138579fc98b7755f6a05b3133f5858534569f1e02c43dc6a1d801da3b13f"
+          },
+          {
+            "name": "read_v08_data_quality_evidence",
+            "effect": false,
+            "required": [
+              "clusterId",
+              "policyId"
+            ],
+            "properties": [
+              "clusterId",
+              "from",
+              "maxPoints",
+              "policyId",
+              "to"
+            ],
+            "schemaSha256": "5a9830baf041a9bafc9fb2f970d685266ca543d2fabdb25cfcce6abc8c759053"
+          },
+          {
+            "name": "read_v08_notification_subscriptions_read",
+            "effect": false,
+            "required": [],
+            "properties": [
+              "afterSubscriptionId",
+              "eventClass",
+              "maxResults",
+              "state"
+            ],
+            "schemaSha256": "d8fadbe551b30e211b4ae8b5525a264e107f6704efa596dc64b40ba8ec76b9dc"
+          },
+          {
+            "name": "read_v08_notification_subscription_detail",
+            "effect": false,
+            "required": [
+              "subscriptionId"
+            ],
+            "properties": [
+              "subscriptionId"
+            ],
+            "schemaSha256": "665fab275972ec56e9fe82b50c0ba239511304e34dbe57391f1bc82ec03f8379"
+          },
+          {
+            "name": "read_v08_notification_destination_deliveries_read",
+            "effect": false,
+            "required": [
+              "destinationId"
+            ],
+            "properties": [
+              "afterCreatedAtUtc",
+              "afterNotificationId",
+              "destinationId",
+              "maxResults"
+            ],
+            "schemaSha256": "7344182a2bc3eb25b7560edec6a2585549e8880cab176b66078f20d7fce5719d"
+          },
+          {
+            "name": "read_v08_notification_delivery_detail",
+            "effect": false,
+            "required": [
+              "notificationId",
+              "destinationId"
+            ],
+            "properties": [
+              "destinationId",
+              "notificationId"
+            ],
+            "schemaSha256": "05f9e0a58eb8db547edd7e663075145133a4d75a71f231403ca21e7483d5de23"
+          },
+          {
+            "name": "read_v08_notification_destination_deliveries_query_read",
+            "effect": false,
+            "required": [],
+            "properties": [
+              "afterCreatedAtUtc",
+              "afterNotificationId",
+              "destinationId",
+              "maxResults"
+            ],
+            "schemaSha256": "35930c9e0a207d5cbc76c3a997322e4c8e399c18a61f7eec0a5056d708efb523"
+          },
+          {
+            "name": "read_v08_notification_delivery_evidence_query_read",
+            "effect": false,
+            "required": [
+              "notificationId"
+            ],
+            "properties": [
+              "destinationId",
+              "notificationId"
+            ],
+            "schemaSha256": "a0f5009f7506d7b5a5b79634fab4305f0dd6adb8e714ed59f29ba94e5a8da9fd"
+          },
+          {
+            "name": "read_v08_notification_governance_destinations",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_notification_governance_audit",
+            "effect": false,
+            "required": [
+              "destinationId"
+            ],
+            "properties": [
+              "afterRevision",
+              "destinationId",
+              "maxResults"
+            ],
+            "schemaSha256": "727fa486bcc93a52b9d5e4d111a4ec70f9c6925b84809fa137ba3fc572554afd"
+          },
+          {
+            "name": "read_v08_notification_management_capability",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_notification_product_event_status",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v06_fleet_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "read_v08_bearer_read_capabilities",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "declarative_validate",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_observe",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_drift",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_import_check",
+            "effect": false,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "76eded9cdf3bfecbd0814f6fbe0e631b17388d96396eff6ae2b5f54095a209d3"
+          },
+          {
+            "name": "declarative_plan",
+            "effect": true,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision",
+              "idempotencyKey"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "idempotencyKey",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "e053e68be57296e4282f55a0d05e4dac37f8e9225a002722017f736f5613690e"
+          },
+          {
+            "name": "declarative_import_preview",
+            "effect": true,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision",
+              "idempotencyKey"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "idempotencyKey",
+              "manifest",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "e053e68be57296e4282f55a0d05e4dac37f8e9225a002722017f736f5613690e"
+          },
+          {
+            "name": "declarative_show",
+            "effect": false,
+            "required": [
+              "planId"
+            ],
+            "properties": [
+              "planId"
+            ],
+            "schemaSha256": "f9f621ba6227d1ebea22f800f565f566be6b34491a2038a6f584de32cdabad80"
+          },
+          {
+            "name": "operation_status",
+            "effect": false,
+            "required": [
+              "operationId"
+            ],
+            "properties": [
+              "operationId"
+            ],
+            "schemaSha256": "dea0ad1fc4a9925a7b79cb302201ab4b5ebd6f07f83f06dfdb021b4815f4ccfc"
+          },
+          {
+            "name": "operation_approval",
+            "effect": false,
+            "required": [
+              "operationId"
+            ],
+            "properties": [
+              "operationId"
+            ],
+            "schemaSha256": "dea0ad1fc4a9925a7b79cb302201ab4b5ebd6f07f83f06dfdb021b4815f4ccfc"
+          },
+          {
+            "name": "operation_confirm",
+            "effect": true,
+            "required": [
+              "operationId",
+              "previewHash",
+              "typedTargetChallenge"
+            ],
+            "properties": [
+              "operationId",
+              "previewHash",
+              "typedTargetChallenge"
+            ],
+            "schemaSha256": "684ba8c8b38e2c958f516df2e7f385a7f05c5305c73806c6dc4c2de39c50effa"
+          },
+          {
+            "name": "operation_approve",
+            "effect": true,
+            "required": [
+              "operationId",
+              "previewHash"
+            ],
+            "properties": [
+              "operationId",
+              "previewHash"
+            ],
+            "schemaSha256": "e93bd369ba5a3cc941dae529797246c3f19506db9ecb87c0d510f28f60b573ce"
+          },
+          {
+            "name": "operation_reject",
+            "effect": true,
+            "required": [
+              "operationId",
+              "previewHash"
+            ],
+            "properties": [
+              "operationId",
+              "previewHash"
+            ],
+            "schemaSha256": "e93bd369ba5a3cc941dae529797246c3f19506db9ecb87c0d510f28f60b573ce"
+          },
+          {
+            "name": "operation_cancel",
+            "effect": true,
+            "required": [
+              "operationId",
+              "previewHash"
+            ],
+            "properties": [
+              "operationId",
+              "previewHash"
+            ],
+            "schemaSha256": "e93bd369ba5a3cc941dae529797246c3f19506db9ecb87c0d510f28f60b573ce"
+          },
+          {
+            "name": "declarative_apply",
+            "effect": true,
+            "required": [
+              "planId",
+              "planFingerprint"
+            ],
+            "properties": [
+              "planFingerprint",
+              "planId"
+            ],
+            "schemaSha256": "db38657ea8c3cd77028e12aa4c233d7a064a2f3cad49848ba0422e2ec4ca61b3"
+          },
+          {
+            "name": "declarative_recover",
+            "effect": true,
+            "required": [
+              "planId",
+              "planFingerprint"
+            ],
+            "properties": [
+              "planFingerprint",
+              "planId"
+            ],
+            "schemaSha256": "db38657ea8c3cd77028e12aa4c233d7a064a2f3cad49848ba0422e2ec4ca61b3"
+          },
+          {
+            "name": "compensation_catalog",
+            "effect": false,
+            "required": [],
+            "properties": [],
+            "schemaSha256": "9284f72895b68d5da186e57484e6016aaea4ebb94234017590759919bde51cc4"
+          },
+          {
+            "name": "compensation_inspect",
+            "effect": false,
+            "required": [
+              "planId"
+            ],
+            "properties": [
+              "planId"
+            ],
+            "schemaSha256": "f9f621ba6227d1ebea22f800f565f566be6b34491a2038a6f584de32cdabad80"
+          },
+          {
+            "name": "compensation_preview",
+            "effect": true,
+            "required": [
+              "manifest",
+              "format",
+              "sourceRef",
+              "sourceRevision",
+              "expectedOwnershipRevision",
+              "idempotencyKey",
+              "sourcePlanId"
+            ],
+            "properties": [
+              "expectedOwnershipRevision",
+              "format",
+              "idempotencyKey",
+              "manifest",
+              "sourcePlanId",
+              "sourceRef",
+              "sourceRevision"
+            ],
+            "schemaSha256": "d9d0c3ccc71d3b8a07f00ca30214477aef539ad920374d7fe9a5bda8378ef72b"
+          }
+        ]
+      }
+    ]
+  }
 }
