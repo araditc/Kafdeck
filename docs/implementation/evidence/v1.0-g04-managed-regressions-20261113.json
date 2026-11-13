@@ -1,0 +1,38 @@
+{
+  "scope": "G04 only; source-bound local focused validation, not v1 release acceptance",
+  "baselineMain": "d96277c510dfea1208ec7ecb727e2f71ee346a08",
+  "sdk": "10.0.404",
+  "configuration": "Release; locked restore; no dependency/version/build-flag change; temporary output path on authorized C workspace",
+  "results": {
+    "passed": 36,
+    "failed": 0,
+    "skipped": 0,
+    "trxFile": "ammar_AMMARPC_2026-11-13_10_00_36_net10.0.trx",
+    "trxSha256": "60748f370cbf98cd9913df07fe626bc19a8698ab8c8395fc6a9c22dce469f315"
+  },
+  "sourceFilesSha256": {
+    "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs": "dd59fe80f9ca084176d40289be8ddafe3092940dad69ea7f96f4227a7e5ef80d",
+    "tests/Kafdeck.Architecture.Tests/V1ManagedWorkflowLab.cs": "5b0ba250cbc0ea309bdcf53b76d8aede52265a852482975e1c8186cfdd920071",
+    "tests/Kafdeck.Architecture.Tests/V1ManagedSetupRegressionTests.cs": "710ca12007c4a3dc815970ba9c8dd4f940e93e94f315d92578f39d671a377c5f",
+    "tests/Kafdeck.Architecture.Tests/V1ManagedAccessRegressionTests.cs": "ab07f5aa0a8064cb914fec2b2a728d6dfad667ccedd79bef1606c61945761337",
+    "tests/Kafdeck.Architecture.Tests/V1ManagedCredentialRegressionTests.cs": "389dd916f1e4d0516d8e2e3349766cae955bfce3f165d9c76cd5dd39493c63bb",
+    "tests/Kafdeck.Architecture.Tests/V1ManagedServiceRegressionTests.cs": "e934f70a19475dfabc27d11a82c57b3c5af5c156a2cb60f8b927d0d24c4f543c"
+  },
+  "reused": [
+    "G01/G02 #471 focused/provider evidence",
+    "G03 #472 contracts and HTTP retention/CAS evidence",
+    "all 11 previous-PR and all 10 base-main workflows succeeded before this slice"
+  ],
+  "provenance": [
+    "real ASP.NET loopback routing/CSRF",
+    "real state files/exclusive leases",
+    "actual MemoryCache with controlled clock",
+    "actual ASP.NET Data Protection and key-ring reopening",
+    "controlled Keycloak transport, synthetic normalized principals and controlled Kafka metadata",
+    "configuration opening only; not real Kafka IO or human-login evidence"
+  ],
+  "remaining": [
+    "G05/G06/Q01/E01/E02 and V1-1/V1-3 through V1-7 stay open"
+  ],
+  "sourceFingerprintEncoding": "Canonical staged Git blob bytes (LF), independent of Windows checkout line endings"
+}
