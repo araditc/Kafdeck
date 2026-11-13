@@ -1497,5 +1497,6 @@ export const messages: Readonly<Record<string, string>> = {
   "Recovery has not confirmed the account. No creation was retried.": "حساب هنوز در بازیابی تأیید نشده است. درخواست ساخت دوباره ارسال نشد.",
   "Pending user provisioning": "درخواست‌های ساخت کاربر در انتظار بازیابی",
   "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.": "بازیابی حساب اصلی را بررسی می‌کند و رمز موقت اولیه را نگه می‌دارد. حسابی ساخته یا بازنشانی نمی‌شود.",
-  "Recover user creation": "بازیابی ساخت کاربر"
+  "Recover user creation": "بازیابی ساخت کاربر",
+  "This page is unavailable for the current account or cluster.": "این صفحه برای حساب یا کلاستر فعلی در دسترس نیست."
 };

@@ -11,7 +11,7 @@ function focusElement(id: string | undefined) {
   }
 }
 
-export function CommandPalette({ navigate }: { navigate?: (target: string, focus?: string) => void }) {
+export function CommandPalette({ navigate, availablePages }: { navigate?: (target: string, focus?: string) => void; availablePages?: readonly string[] }) {
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -19,7 +19,7 @@ export function CommandPalette({ navigate }: { navigate?: (target: string, focus
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const commands = useMemo(() => filterProductCommands(query), [query, locale]);
+  const commands = useMemo(() => filterProductCommands(query, availablePages), [query, locale, availablePages]);
 
   const close = (restoreFocus = true) => {
     setOpen(false);

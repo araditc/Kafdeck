@@ -834,6 +834,10 @@ function recordParams(query: RecordQuery): URLSearchParams {
 export const kafdeckApi = {
   getAccessMode(signal?: AbortSignal) { return readJson<{ authenticationMode: AccessMode; connectionWorkspace?: boolean; setupState?: SetupState | null }>('/api/v1/auth/mode', signal, false); },
   getOperatorSession(signal?: AbortSignal) { return readJson<BrowserSession>('/api/v1/auth/session', signal, false); },
+  getGovernanceNavigation(clusterId: string, signal?: AbortSignal) {
+    return readJson<import('../app/governanceNavigation.js').GovernanceNavigation>(
+      `/api/v1/auth/navigation?${new URLSearchParams({ clusterId })}`, signal, false);
+  },
   listKafkaConnectionTargets(signal?: AbortSignal) {
     return readJson<KafkaConnectionTarget[]>('/api/v1/connections/targets', signal);
   },

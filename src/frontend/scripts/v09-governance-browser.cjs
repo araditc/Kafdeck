@@ -39,6 +39,7 @@ const server=createServer((req,res)=>{
       if(url.origin!==origin){outside.push(url.origin);return route.abort();}
       if(!p.startsWith('/api/v1/'))return route.continue();
       const send=(value,code=200)=>route.fulfill({status:code,contentType:'application/json',body:JSON.stringify(value)});
+      if(p==='/api/v1/auth/navigation')return send({clusterId:url.searchParams.get('clusterId'),ownershipCatalog:true,governancePolicy:true,serviceRequests:true,governanceAttribution:true});
       if(p==='/api/v1/auth/mode')return send({authenticationMode:'oidc'});
       if(p==='/api/v1/auth/session')return send(authenticated?{authenticated:true,authenticationMode:'oidc',displayName:'UI fixture',email:'fixture@example.invalid',authenticatedAt:now}:{title:'Authentication required'},authenticated?200:401);
       if(p==='/api/v1/auth/csrf')return send({headerName:'X-Kafdeck-CSRF',requestToken:'fixture-csrf'});

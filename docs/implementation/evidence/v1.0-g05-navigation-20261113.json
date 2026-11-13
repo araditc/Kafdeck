@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "slice": "G05",
+  "baselineMain": "f71008933d4972e2d5dee2dc3a11cd94d2a4bce1",
+  "status": "prepared; closure effective after exact-head CI/review and PR admission",
+  "sourceFingerprint": "SHA256 of staged LF Git blobs; local browser run identified dirty baseline, bound here to these source inputs",
+  "sourceSha256": {
+    "src/backend/Kafdeck.Api/BrowserNavigationEndpoints.cs": "cb4b22fb2b0d99cf4ef733a362aa96bab1e3050b697497476b7846fd50bc1718",
+    "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs": "f51c6a3517e3038da45065c403fc0996af8f47c92df6e90981c2ff759e356250",
+    "src/frontend/scripts/v09-governance-browser.cjs": "b4881d270e2c08787e5d2631f41ee6acb72cf79e295c6cfd2e307d4f44eb2906",
+    "src/frontend/scripts/v09-workflows-browser.cjs": "a900c2a4069b14a192bdbab4d1de7735c6d7dedc0903ec54b11b52b9aaf69191",
+    "src/frontend/scripts/v1-g05-navigation-browser.cjs": "4655fc52703b2c82b491a3fe8a7e24a9fe0bd1d360f991324d6172ea87db2038",
+    "src/frontend/src/app/AppShell.tsx": "0d3b3f3e37fcdd2770a0781e322ed2d174267b074eaf9cbb86801c1e521272fe",
+    "src/frontend/src/app/CommandPalette.tsx": "a9489fb2a153d9981680a7fa8949bd33c63f0516ef3e6118ab2126777e25e825",
+    "src/frontend/src/app/commandPaletteModel.ts": "0755f22711355413ba60c3fe7d3cd3a3751749dd8050166e8fa3285f04c25d33",
+    "src/frontend/src/app/governanceNavigation.ts": "ca5565bef0f4b12c15480a439c79c85464806d2edaaaa3a5a580bb2d6a724ea7",
+    "src/frontend/src/shared/api.ts": "f2ed04b76ff9e9f7a45fd5f20498be63078f177dbb07c5311f58ad4279fcd2b2",
+    "src/frontend/src/shared/locales/en.json": "0dc322dd68f4e9523fc0606d66fb7a3b4344a3f3104b5bc267a12873ed4b71c7",
+    "src/frontend/src/shared/locales/fa.json": "4df26fb571bf12575cd9136365d372c564bf6f9307f68366c4df91e7585ab107",
+    "src/frontend/src/shared/locales/messages.ts": "44e54cee6ac59b3b781469b7e1fc35d9d7da684cff0a3bbc73328432f7b4d176",
+    "src/frontend/tests/governance-navigation.test.mjs": "7b64723d7df517a3eb0d44f490f7c47b98a3605dd5a752ae3cc0be55644e3605",
+    "tests/Kafdeck.Architecture.Tests/V1BrowserNavigationTests.cs": "b318492723b7049268ff40737d863cdf5a2d59c7671e9911aec73e4b4ae1f61d"
+  },
+  "backend": {
+    "filter": "FullyQualifiedName~V1BrowserNavigationTests",
+    "counts": {
+      "total": "16",
+      "executed": "16",
+      "passed": "16",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "trxPath": "artifacts/g05-results/ammar_AMMARPC_2026-11-13_11_53_16_net10.0.trx",
+    "trxSha256": "ea03bbe492335e560760a73aee7c2961c82d55fe2b3bc2328472943700cb42e1",
+    "realLoopbackHttp": true,
+    "realPolicyEvaluator": true,
+    "controlledNormalizedOidcPrincipals": true,
+    "genuineKeycloakLoginClaimed": false
+  },
+  "frontend": {
+    "newCasesPassed": 4,
+    "changedCommandFilterExistingCasesPassed": 3,
+    "failed": 0,
+    "provenance": "Tool-observed split runs: first run passed six cases and failed the new preflight due to absent Node window fixture; corrected preflight alone passed. No successful case manually repeated.",
+    "typescriptTestCompilation": "passed",
+    "productionViteBuild": "passed",
+    "localeGeneration": "passed"
+  },
+  "browser": {
+    "reportPath": "artifacts/g05-results/browser.json",
+    "reportSha256": "1c5e9e60b237e343b6010eb9e150359774a7cee304aed742137e5bc20e338a32",
+    "report": {
+      "sourceSha": "f71008933d4972e2d5dee2dc3a11cd94d2a4bce1",
+      "sourceWorktreeDirty": true,
+      "compiledAssets": [
+        {
+          "file": "index-BG6P0C2k.css",
+          "sha256": "f909c3ad323df42f8ef1458faf727ec5ff844e179ef25268e379b6b2285faa48"
+        },
+        {
+          "file": "index-D_X_crK-.js",
+          "sha256": "0739110aa84cffb3a4abd2bdf7adc95ded24176a33367ba05fd9f7f43751436e"
+        }
+      ],
+      "actualCompiledUi": true,
+      "actualChromium": true,
+      "browserVersion": "156.0.8078.80",
+      "apiFixtures": true,
+      "genuineIdentityOrProviderEffectsClaimed": false,
+      "deniedDeepLinkNoGovernanceReads": true,
+      "deniedPaletteDisabled": true,
+      "clusterScopedAllowedCatalog": true,
+      "newSessionRevokesMountedPage": true,
+      "mobileNoOverflow": true,
+      "navigationRequests": [
+        {
+          "clusterId": "a",
+          "method": "GET"
+        },
+        {
+          "clusterId": "b",
+          "method": "GET"
+        },
+        {
+          "clusterId": "a",
+          "method": "GET"
+        }
+      ],
+      "governanceReads": [
+        {
+          "path": "/api/v1/governance/catalog/teams",
+          "cluster": "b"
+        }
+      ],
+      "noExternalRequests": true,
+      "pageErrors": []
+    }
+  },
+  "reused": {
+    "baselineMainPushWorkflows": "10/10 success",
+    "G01throughG04": "admitted PRs #471/#472/#473; not manually rerun",
+    "v09SignedMedia": "unchanged"
+  },
+  "stillOpen": [
+    "V1-1",
+    "V1-3 E01/Q01",
+    "V1-4 G06",
+    "V1-5",
+    "V1-6",
+    "V1-7"
+  ],
+  "publicationOrDeploymentClaimed": false
+}

@@ -37,6 +37,7 @@ import { productDescription, productName } from '../shared/product.js';
 import { describeObservation, shouldAutoRefresh, visibleRefreshIntervalMs } from './operatorState.js';
 import { CommandPalette } from './CommandPalette.js';
 import { dashboardPageFor, dashboardPages, type DashboardPage } from './dashboardPage.js';
+import { governancePageAvailable, isGovernancePage, type GovernanceNavigation } from './governanceNavigation.js';
 import { MutationOperationsPanel } from '../features/mutations/MutationOperationsPanel.js';
 import { StatusBadge } from './StatusBadge.js';
 import { AutomationPanel } from '../features/automation/AutomationPanel.js';
@@ -190,6 +191,7 @@ export function AppShell() {
   const [fleetError, setFleetError] = useState<PresentationProblem | null>(null);
   const [notificationView, setNotificationView] = useState<{ sessionKey: string; page: NotificationSubscriptionListData } | null>(null);
   const [notificationManagement, setNotificationManagement] = useState<{ sessionKey: string; destinationGovernanceAvailable: boolean } | null>(null);
+  const [governanceNavigation, setGovernanceNavigation] = useState<{ sessionKey: string; value: GovernanceNavigation } | null>(null);
   const sessionCheckAbort = useRef<AbortController | null>(null);
   const recentConnectionScope = operator?.recentConnectionScope;
   const showManagedWorkspace = !recentConnectionScope || dashboardLocation;
@@ -216,6 +218,7 @@ export function AppShell() {
     setTopics([]); setTopicCursor(null); setTopicsLoading(false); setTopicsError(null); setTopicDetail(null);
     setTopicConfiguration(null); setTopicDetailError(null); setTopicCatalog(null);
     setFleetCapabilities([]); setFleetError(null);
+    setGovernanceNavigation(null);
   }, []);
 
   const invalidateOperatorSession = useCallback(() => {
@@ -476,14 +479,32 @@ export function AppShell() {
     notificationManagement?.sessionKey === notificationSessionKey,
   );
 
+  useEffect(() => {
+    if (!operator || !operatorScope || !selectedClusterId || !showManagedWorkspace) return;
+    const controller = new AbortController();
+    const sessionKey = operatorScope;
+    void kafdeckApi.getGovernanceNavigation(selectedClusterId, controller.signal)
+      .then(value => {
+        if (!controller.signal.aborted && verifiedSession.current?.key === sessionKey &&
+            selectedClusterRef.current === selectedClusterId && value.clusterId === selectedClusterId)
+          setGovernanceNavigation({ sessionKey, value });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && verifiedSession.current?.key === sessionKey)
+          setGovernanceNavigation(null);
+      });
+    return () => controller.abort();
+  }, [operatorScope, selectedClusterId, showManagedWorkspace]);
+
+  const governanceAvailable = (page: DashboardPage) => !!operator &&
+    governancePageAvailable(page, selectedClusterId, operatorScope, governanceNavigation);
   const menu = dashboardPages.filter(([id]) => {
     if (id === 'notifications') return managementSurfaces.navigation;
     if (id === 'automation') return !!operator;
-    if (id === 'ownership-catalog' || id === 'governance-policy' || id === 'service-requests' || id === 'governance-attribution')
-      return !!operator && !!selectedClusterId;
+    if (isGovernancePage(id)) return governanceAvailable(id);
     return true;
   });
-  const activePage = menu.some(([id]) => id === requestedPage) ? requestedPage : 'overview';
+  const activePage = isGovernancePage(requestedPage) || menu.some(([id]) => id === requestedPage) ? requestedPage : 'overview';
   const [clusterRefresh, setClusterRefresh] = useState(0);
   const wantsClusterObservation = activePage === 'overview' || activePage === 'brokers';
   useEffect(() => {
@@ -546,6 +567,7 @@ export function AppShell() {
   }, [loadClusters, loadTopics, selectedClusterId, topicQuery, showManagedWorkspace, requestedPage, activeTopic, operatorScope, wantsClusterObservation]);
 
   const selectCluster = (clusterId: string) => {
+    setGovernanceNavigation(null);
     topicDetailRequest.current?.abort();
     setActiveTopic(null);
     ++topicListGeneration.current;
@@ -690,7 +712,7 @@ export function AppShell() {
         </h1>
         <div className="kafdeck-toolbar">
           <LanguageSelector />
-          <CommandPalette navigate={navigateDashboard} />
+          <CommandPalette navigate={navigateDashboard} availablePages={menu.map(([id]) => id)} />
           {openUserManagement && <button className="btn btn-sm btn-outline-primary" type="button" onClick={openUserManagement}>{t("Manage users")}</button>}
           {recentConnectionScope && <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => {
             window.history.pushState(null, '', '#connections');
@@ -748,10 +770,12 @@ export function AppShell() {
             <AutomationPanel key={`automation:${operatorScope}`} notificationsAvailable={managementSurfaces.navigation} />
             {selectedClusterId && <MutationOperationsPanel key={`mutations:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           </>}
-          {activePage === 'ownership-catalog' && <CatalogPanel key={`catalog:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
-          {activePage === 'governance-policy' && <PolicyPanel key={`policy:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
-          {activePage === 'service-requests' && <RequestPanel key={`requests:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
-          {activePage === 'governance-attribution' && <AttributionPanel key={`attribution:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
+          {isGovernancePage(activePage) && !governanceAvailable(activePage) &&
+            <div className="alert alert-info" role="status">{t("This page is unavailable for the current account or cluster.")}</div>}
+          {activePage === 'ownership-catalog' && governanceAvailable(activePage) && <CatalogPanel key={`catalog:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
+          {activePage === 'governance-policy' && governanceAvailable(activePage) && <PolicyPanel key={`policy:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
+          {activePage === 'service-requests' && governanceAvailable(activePage) && <RequestPanel key={`requests:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
+          {activePage === 'governance-attribution' && governanceAvailable(activePage) && <AttributionPanel key={`attribution:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {error && <div className="alert alert-danger kafdeck-status" role="alert">{problemPresentation(error)}</div>}
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">{t("No authorized clusters are available.")}</div>}
           {activePage === 'fleet' && <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
