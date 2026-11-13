@@ -1,0 +1,1477 @@
+{
+  "foreground": {
+    "developmentCandidate": true,
+    "publicationClaimed": false,
+    "providers": [
+      {
+        "provider": "sqlite",
+        "baseline": {
+          "baseline": true,
+          "sessionScopeValid": false,
+          "focusReturn": {
+            "before": {
+              "scroll": 0,
+              "value": "g06-reference"
+            },
+            "after": {
+              "value": "",
+              "focused": false,
+              "scroll": 0
+            }
+          },
+          "requests": 15
+        },
+        "loginMs": [
+          1935.0983999999953,
+          607.2827000000034,
+          592.5120000000024,
+          586.735400000005,
+          633.5489000000016
+        ],
+        "metrics": {
+          "baseline": false,
+          "chrome": "156.0.8078.80",
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "network": "numeric loopback; genuine Keycloak/Kafka; controlled HTTP integration providers",
+          "dataset": {
+            "topics": 20,
+            "partitionsPerTopic": 3,
+            "records": 100,
+            "groups": 5,
+            "subjects": 20,
+            "connectors": 2
+          },
+          "sessionScopeValid": true,
+          "focusReturn": {
+            "before": {
+              "scroll": 0,
+              "value": "g06-reference"
+            },
+            "after": {
+              "value": "g06-reference",
+              "focused": true,
+              "scroll": 0
+            }
+          },
+          "quietRefresh": {
+            "draftRetained": true,
+            "nodeRetained": true,
+            "requests": 2
+          },
+          "apiRequestCount": 244,
+          "traces": [
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 34.700000047683716,
+              "readyMs": 379.40000009536743
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 99.30000019073486,
+              "readyMs": 383.5
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 81,
+              "readyMs": 149.29999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 70.90000009536743,
+              "readyMs": 372.60000014305115
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 69.40000009536743,
+              "readyMs": 117.29999995231628
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 27.5,
+              "readyMs": 389.30000019073486
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 80.20000004768372,
+              "readyMs": 170.70000004768372
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 89.19999980926514,
+              "readyMs": 195.29999995231628
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 82.39999985694885,
+              "readyMs": 141.29999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 89.90000009536743,
+              "readyMs": 181.60000014305115
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 72,
+              "readyMs": 148.10000014305115
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 72,
+              "readyMs": 181.10000014305115
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 68.80000019073486,
+              "readyMs": 143.90000009536743
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 74.60000014305115,
+              "readyMs": 163
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 69.09999990463257,
+              "readyMs": 138.79999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 76.5,
+              "readyMs": 167.90000009536743
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 86.70000004768372,
+              "readyMs": 138.29999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 70.5,
+              "readyMs": 132
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 55.80000019073486,
+              "readyMs": 113.70000004768372
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 31.299999952316284,
+              "readyMs": 170
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 60.40000009536743,
+              "readyMs": 118.20000004768372
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 58.5,
+              "readyMs": 155.39999985694885
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 46.799999952316284,
+              "readyMs": 114.19999980926514
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 69.40000009536743,
+              "readyMs": 157.20000004768372
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 71.09999990463257,
+              "readyMs": 117
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 69.90000009536743,
+              "readyMs": 184
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 62.299999952316284,
+              "readyMs": 142.09999990463257
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 55.40000009536743,
+              "readyMs": 237.90000009536743
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 49.799999952316284,
+              "readyMs": 112.90000009536743
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 62.200000047683716,
+              "readyMs": 155.90000009536743
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 84.70000004768372,
+              "readyMs": 151.5
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 69.30000019073486,
+              "readyMs": 154.10000014305115
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 75,
+              "readyMs": 126.70000004768372
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 104,
+              "readyMs": 198.19999980926514
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 54.90000009536743,
+              "readyMs": 130.30000019073486
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 47.59999990463257,
+              "readyMs": 186.09999990463257
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 69.20000004768372,
+              "readyMs": 148.29999995231628
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 62.5,
+              "readyMs": 162.79999995231628
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 69.09999990463257,
+              "readyMs": 131.70000004768372
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 66.29999995231628,
+              "readyMs": 164.29999995231628
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 73.70000004768372,
+              "readyMs": 126.59999990463257
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 80.70000004768372,
+              "readyMs": 154.70000004768372
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 62.200000047683716,
+              "readyMs": 113.40000009536743
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 27.200000047683716,
+              "readyMs": 186.70000004768372
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 65.70000004768372,
+              "readyMs": 127.5
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 64.5,
+              "readyMs": 168.5
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 54.90000009536743,
+              "readyMs": 122
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 80.5,
+              "readyMs": 183.09999990463257
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 79.69999980926514,
+              "readyMs": 139.5
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 78.39999985694885,
+              "readyMs": 167
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 57.5,
+              "readyMs": 121.39999985694885
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 20,
+              "readyMs": 196.5
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 59.5,
+              "readyMs": 128.79999995231628
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 61.09999990463257,
+              "readyMs": 171.39999985694885
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 64.29999995231628,
+              "readyMs": 129.19999980926514
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 66.79999995231628,
+              "readyMs": 164.40000009536743
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 82.90000009536743,
+              "readyMs": 135
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 80.29999995231628,
+              "readyMs": 260.59999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 62.200000047683716,
+              "readyMs": 128.10000014305115
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 19.59999990463257,
+              "readyMs": 181.79999995231628
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 66.59999990463257,
+              "readyMs": 129.59999990463257
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 57.90000009536743,
+              "readyMs": 151.59999990463257
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 53.5,
+              "readyMs": 121.29999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 77.70000004768372,
+              "readyMs": 167.20000004768372
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 76.89999985694885,
+              "readyMs": 129.5
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 83,
+              "readyMs": 174.90000009536743
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 60.700000047683716,
+              "readyMs": 112.5
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 39.90000009536743,
+              "readyMs": 173.29999995231628
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 54.39999985694885,
+              "readyMs": 118.19999980926514
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 68,
+              "readyMs": 159.09999990463257
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 62.89999985694885,
+              "readyMs": 120.29999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 77,
+              "readyMs": 172.60000014305115
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 72.70000004768372,
+              "readyMs": 122.29999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 64.20000004768372,
+              "readyMs": 147.70000004768372
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 53.299999952316284,
+              "readyMs": 105.39999985694885
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 41.5,
+              "readyMs": 177
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 59.40000009536743,
+              "readyMs": 139.20000004768372
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 75.30000019073486,
+              "readyMs": 180.40000009536743
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 62.700000047683716,
+              "readyMs": 122.29999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 62.5,
+              "readyMs": 151.40000009536743
+            }
+          ],
+          "summary": {
+            "topic-detail": {
+              "n": 10,
+              "feedbackP95Ms": 86.70000004768372,
+              "feedbackP99Ms": 86.70000004768372,
+              "readyP95Ms": 379.40000009536743,
+              "readyP99Ms": 379.40000009536743
+            },
+            "consumer-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 104,
+              "feedbackP99Ms": 104,
+              "readyP95Ms": 383.5,
+              "readyP99Ms": 383.5
+            },
+            "consumer-detail": {
+              "n": 10,
+              "feedbackP95Ms": 81,
+              "feedbackP99Ms": 81,
+              "readyP95Ms": 149.29999995231628,
+              "readyP99Ms": 149.29999995231628
+            },
+            "schema-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 72,
+              "feedbackP99Ms": 72,
+              "readyP95Ms": 372.60000014305115,
+              "readyP99Ms": 372.60000014305115
+            },
+            "subject-detail": {
+              "n": 10,
+              "feedbackP95Ms": 69.40000009536743,
+              "feedbackP99Ms": 69.40000009536743,
+              "readyP95Ms": 148.29999995231628,
+              "readyP99Ms": 148.29999995231628
+            },
+            "ecosystem-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 75.30000019073486,
+              "feedbackP99Ms": 75.30000019073486,
+              "readyP95Ms": 389.30000019073486,
+              "readyP99Ms": 389.30000019073486
+            },
+            "ecosystem-configure": {
+              "n": 10,
+              "feedbackP95Ms": 84.70000004768372,
+              "feedbackP99Ms": 84.70000004768372,
+              "readyP95Ms": 170.70000004768372,
+              "readyP99Ms": 170.70000004768372
+            },
+            "topic-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 89.19999980926514,
+              "feedbackP99Ms": 89.19999980926514,
+              "readyP95Ms": 195.29999995231628,
+              "readyP99Ms": 195.29999995231628
+            }
+          },
+          "budgets": {
+            "feedbackP95Ms": 250,
+            "feedbackP99Ms": 500,
+            "readyP95Ms": 5000,
+            "readyP99Ms": 10000,
+            "readDeadlineMs": 15000
+          },
+          "quantiles": "nearest rank; n=10 per journey; finite reference only",
+          "requestCounts": [
+            {
+              "method": "GET",
+              "path": "/api/v1/auth/mode",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/auth/navigation",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/auth/session",
+              "count": 2
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/catalog/topics/g06-reference-00",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/connect",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/connect/connectors",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/analytics/live",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/analytics/trend",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/diagnostics",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/lag",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/ksql",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/ksql/metadata",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/compatibility",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/compatibility/explanation",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/versions",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/versions/1",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/topics",
+              "count": 5
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/topics/g06-reference-00",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/topics/g06-reference-00/configuration",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/connections/connection-REFERENCE/ksqldb",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/fleet/capabilities",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/mutations/approvals",
+              "count": 31
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/notifications/management/capabilities",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/notifications/subscriptions",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/tools/serde/capabilities",
+              "count": 10
+            }
+          ],
+          "readyDefinition": "First visible destination surface/heading/form; provider-complete latency is not inferred."
+        },
+        "loginQuantiles": {
+          "n": 5,
+          "p95Ms": 1935.0983999999953,
+          "p99Ms": 1935.0983999999953,
+          "budgetP95Ms": 5000,
+          "budgetP99Ms": 10000,
+          "method": "nearest rank; finite sample"
+        }
+      },
+      {
+        "provider": "postgres",
+        "loginMs": [
+          1606.8678999999975,
+          581.9628999999986,
+          569.6607000000076,
+          554.3234000000084,
+          562.389599999995
+        ],
+        "metrics": {
+          "baseline": false,
+          "chrome": "156.0.8078.80",
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "network": "numeric loopback; genuine Keycloak/Kafka; controlled HTTP integration providers",
+          "dataset": {
+            "topics": 20,
+            "partitionsPerTopic": 3,
+            "records": 100,
+            "groups": 5,
+            "subjects": 20,
+            "connectors": 2
+          },
+          "sessionScopeValid": true,
+          "focusReturn": {
+            "before": {
+              "scroll": 0,
+              "value": "g06-reference"
+            },
+            "after": {
+              "value": "g06-reference",
+              "focused": true,
+              "scroll": 0
+            }
+          },
+          "quietRefresh": {
+            "draftRetained": true,
+            "nodeRetained": true,
+            "requests": 2
+          },
+          "apiRequestCount": 244,
+          "traces": [
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 32.09999990463257,
+              "readyMs": 187.79999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 94.20000004768372,
+              "readyMs": 356.59999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 87.5,
+              "readyMs": 144.79999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 70.5,
+              "readyMs": 296.09999990463257
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 71.29999995231628,
+              "readyMs": 138
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 70.90000009536743,
+              "readyMs": 250
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 67.20000004768372,
+              "readyMs": 149.5
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 83.40000009536743,
+              "readyMs": 181
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 85.5,
+              "readyMs": 145.5
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 83.09999990463257,
+              "readyMs": 175.79999995231628
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 67.5,
+              "readyMs": 154.79999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 12.799999952316284,
+              "readyMs": 178.59999990463257
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 65.10000014305115,
+              "readyMs": 118.5
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 90.89999985694885,
+              "readyMs": 184.09999990463257
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 60.799999952316284,
+              "readyMs": 127.5
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 77,
+              "readyMs": 178
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 59.09999990463257,
+              "readyMs": 163.59999990463257
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 70.09999990463257,
+              "readyMs": 154.09999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 56.5,
+              "readyMs": 127.79999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 15.700000047683716,
+              "readyMs": 174
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 57.90000009536743,
+              "readyMs": 133.40000009536743
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 61.90000009536743,
+              "readyMs": 173.40000009536743
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 68.60000014305115,
+              "readyMs": 130.90000009536743
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 81.90000009536743,
+              "readyMs": 174
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 82,
+              "readyMs": 134.29999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 73.59999990463257,
+              "readyMs": 338.5
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 62.40000009536743,
+              "readyMs": 113.29999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 38.799999952316284,
+              "readyMs": 188.29999995231628
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 71.90000009536743,
+              "readyMs": 163.79999995231628
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 64.09999990463257,
+              "readyMs": 171.09999990463257
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 61.700000047683716,
+              "readyMs": 133.40000009536743
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 80,
+              "readyMs": 181.5
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 78,
+              "readyMs": 134.40000009536743
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 79.39999985694885,
+              "readyMs": 166.09999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 65.29999995231628,
+              "readyMs": 112.79999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 36.39999985694885,
+              "readyMs": 185.59999990463257
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 65.69999980926514,
+              "readyMs": 143.89999985694885
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 119.90000009536743,
+              "readyMs": 224.10000014305115
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 62.299999952316284,
+              "readyMs": 134.79999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 79.59999990463257,
+              "readyMs": 167.89999985694885
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 88.20000004768372,
+              "readyMs": 146.39999985694885
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 75,
+              "readyMs": 174.59999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 64.90000009536743,
+              "readyMs": 134.79999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 26.40000009536743,
+              "readyMs": 174
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 63.200000047683716,
+              "readyMs": 145.10000014305115
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 66.39999985694885,
+              "readyMs": 159.59999990463257
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 69.20000004768372,
+              "readyMs": 139.20000004768372
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 85.40000009536743,
+              "readyMs": 170.5
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 83.79999995231628,
+              "readyMs": 136.29999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 70.10000014305115,
+              "readyMs": 176.40000009536743
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 62.19999980926514,
+              "readyMs": 121
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 13.400000095367432,
+              "readyMs": 187.5
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 67.59999990463257,
+              "readyMs": 141.70000004768372
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 60.09999990463257,
+              "readyMs": 159.79999995231628
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 56.59999990463257,
+              "readyMs": 114.29999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 78.5,
+              "readyMs": 167.60000014305115
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 83.70000004768372,
+              "readyMs": 151.70000004768372
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 67.5,
+              "readyMs": 167.09999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 65.40000009536743,
+              "readyMs": 120.79999995231628
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 31.40000009536743,
+              "readyMs": 172.60000014305115
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 70.60000014305115,
+              "readyMs": 141.79999995231628
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 69.29999995231628,
+              "readyMs": 168.29999995231628
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 56.700000047683716,
+              "readyMs": 123.29999995231628
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 65.89999985694885,
+              "readyMs": 162.19999980926514
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 78.29999995231628,
+              "readyMs": 135.20000004768372
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 64.20000004768372,
+              "readyMs": 156.09999990463257
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 61.10000014305115,
+              "readyMs": 114.20000004768372
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 26.5,
+              "readyMs": 170.09999990463257
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 52.60000014305115,
+              "readyMs": 120.10000014305115
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 67.20000004768372,
+              "readyMs": 167.5
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 56.09999990463257,
+              "readyMs": 122.70000004768372
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 88.70000004768372,
+              "readyMs": 209.70000004768372
+            },
+            {
+              "journey": "topic-detail",
+              "feedbackMs": 53,
+              "readyMs": 161.29999995231628
+            },
+            {
+              "journey": "consumer-navigation",
+              "feedbackMs": 74.29999995231628,
+              "readyMs": 166.79999995231628
+            },
+            {
+              "journey": "consumer-detail",
+              "feedbackMs": 60.200000047683716,
+              "readyMs": 122.5
+            },
+            {
+              "journey": "schema-navigation",
+              "feedbackMs": 21.200000047683716,
+              "readyMs": 162
+            },
+            {
+              "journey": "subject-detail",
+              "feedbackMs": 67.79999995231628,
+              "readyMs": 149.70000004768372
+            },
+            {
+              "journey": "ecosystem-navigation",
+              "feedbackMs": 67,
+              "readyMs": 168.70000004768372
+            },
+            {
+              "journey": "ecosystem-configure",
+              "feedbackMs": 64.19999980926514,
+              "readyMs": 129.5
+            },
+            {
+              "journey": "topic-navigation",
+              "feedbackMs": 78.39999985694885,
+              "readyMs": 176.09999990463257
+            }
+          ],
+          "summary": {
+            "topic-detail": {
+              "n": 10,
+              "feedbackP95Ms": 88.20000004768372,
+              "feedbackP99Ms": 88.20000004768372,
+              "readyP95Ms": 187.79999995231628,
+              "readyP99Ms": 187.79999995231628
+            },
+            "consumer-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 94.20000004768372,
+              "feedbackP99Ms": 94.20000004768372,
+              "readyP95Ms": 356.59999990463257,
+              "readyP99Ms": 356.59999990463257
+            },
+            "consumer-detail": {
+              "n": 10,
+              "feedbackP95Ms": 87.5,
+              "feedbackP99Ms": 87.5,
+              "readyP95Ms": 154.79999995231628,
+              "readyP99Ms": 154.79999995231628
+            },
+            "schema-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 70.5,
+              "feedbackP99Ms": 70.5,
+              "readyP95Ms": 296.09999990463257,
+              "readyP99Ms": 296.09999990463257
+            },
+            "subject-detail": {
+              "n": 10,
+              "feedbackP95Ms": 71.90000009536743,
+              "feedbackP99Ms": 71.90000009536743,
+              "readyP95Ms": 163.79999995231628,
+              "readyP99Ms": 163.79999995231628
+            },
+            "ecosystem-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 119.90000009536743,
+              "feedbackP99Ms": 119.90000009536743,
+              "readyP95Ms": 250,
+              "readyP99Ms": 250
+            },
+            "ecosystem-configure": {
+              "n": 10,
+              "feedbackP95Ms": 69.20000004768372,
+              "feedbackP99Ms": 69.20000004768372,
+              "readyP95Ms": 149.5,
+              "readyP99Ms": 149.5
+            },
+            "topic-navigation": {
+              "n": 10,
+              "feedbackP95Ms": 88.70000004768372,
+              "feedbackP99Ms": 88.70000004768372,
+              "readyP95Ms": 209.70000004768372,
+              "readyP99Ms": 209.70000004768372
+            }
+          },
+          "budgets": {
+            "feedbackP95Ms": 250,
+            "feedbackP99Ms": 500,
+            "readyP95Ms": 5000,
+            "readyP99Ms": 10000,
+            "readDeadlineMs": 15000
+          },
+          "quantiles": "nearest rank; n=10 per journey; finite reference only",
+          "requestCounts": [
+            {
+              "method": "GET",
+              "path": "/api/v1/auth/mode",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/auth/navigation",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/auth/session",
+              "count": 2
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/catalog/topics/g06-reference-00",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/connect",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/connect/connectors",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/analytics/live",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/analytics/trend",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/diagnostics",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/consumer-groups/g06-reference-group-0/lag",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/ksql",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/ksql/metadata",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/compatibility",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/compatibility/explanation",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/versions",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/schemas/subjects/g06-reference-00-value/versions/1",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/topics",
+              "count": 5
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/topics/g06-reference-00",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/clusters/connection-REFERENCE/topics/g06-reference-00/configuration",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/connections/connection-REFERENCE/ksqldb",
+              "count": 10
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/fleet/capabilities",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/mutations/approvals",
+              "count": 31
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/notifications/management/capabilities",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/notifications/subscriptions",
+              "count": 1
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/tools/serde/capabilities",
+              "count": 10
+            }
+          ],
+          "readyDefinition": "First visible destination surface/heading/form; provider-complete latency is not inferred."
+        },
+        "loginQuantiles": {
+          "n": 5,
+          "p95Ms": 1606.8678999999975,
+          "p99Ms": 1606.8678999999975,
+          "budgetP95Ms": 5000,
+          "budgetP99Ms": 10000,
+          "method": "nearest rank; finite sample"
+        }
+      }
+    ]
+  },
+  "followUpChangedLayoutAndRemainingCases": {
+    "developmentCandidate": true,
+    "publicationClaimed": false,
+    "providers": [
+      {
+        "provider": "sqlite",
+        "loginMs": [],
+        "metrics": {
+          "quietRefresh": {
+            "draftRetained": true,
+            "nodeRetained": true,
+            "focusRetained": true,
+            "scrollBefore": 250,
+            "after": {
+              "scroll": 250,
+              "focused": "topic-search",
+              "value": "g06-reference"
+            }
+          },
+          "focusReturn": {
+            "before": 250,
+            "after": {
+              "scroll": 250,
+              "focused": "topic-search",
+              "value": "g06-reference"
+            }
+          },
+          "readDeadline": {
+            "deadlineMs": 15331.0926,
+            "attemptsBeforeRetry": 1,
+            "draftRetained": true
+          },
+          "navigationCancellation": {
+            "lateReadDidNotRemountPriorPage": true
+          },
+          "clusterSwitch": {
+            "n": 10,
+            "readyMs": [
+              161.5300999999963,
+              105.67810000000463,
+              69.20449999999983,
+              74.18029999999999,
+              66.3119000000006,
+              80.05709999999817,
+              93.18879999999626,
+              83.18239999999787,
+              94.7126999999964,
+              83.7216000000044
+            ],
+            "logicalTargets": 2,
+            "physicalKafkaBrokers": 1
+          },
+          "fixtureStallsOnly": true
+        }
+      },
+      {
+        "provider": "postgres",
+        "loginMs": [],
+        "metrics": {
+          "quietRefresh": {
+            "draftRetained": true,
+            "nodeRetained": true,
+            "focusRetained": true,
+            "scrollBefore": 250,
+            "after": {
+              "scroll": 250,
+              "focused": "topic-search",
+              "value": "g06-reference"
+            }
+          },
+          "focusReturn": {
+            "before": 250,
+            "after": {
+              "scroll": 250,
+              "focused": "topic-search",
+              "value": "g06-reference"
+            }
+          },
+          "readDeadline": {
+            "deadlineMs": 15583.223700000002,
+            "attemptsBeforeRetry": 1,
+            "draftRetained": true
+          },
+          "navigationCancellation": {
+            "lateReadDidNotRemountPriorPage": true
+          },
+          "clusterSwitch": {
+            "n": 10,
+            "readyMs": [
+              152.6484000000055,
+              88.37750000000233,
+              91.87109999998938,
+              79.77569999999832,
+              86.26860000001034,
+              83.48099999999977,
+              124.74569999999949,
+              80.20770000001357,
+              76.93000000000757,
+              79.90679999999702
+            ],
+            "logicalTargets": 2,
+            "physicalKafkaBrokers": 1
+          },
+          "fixtureStallsOnly": true
+        }
+      }
+    ]
+  },
+  "limitations": [
+    "English Windows Chrome; finite single-user numeric loopback reference.",
+    "Schema Registry/Connect/ksql HTTP providers are controlled fixtures.",
+    "Two logical switch profiles share one actual Kafka broker.",
+    "Foreground traces precede the return-to-tab geometry-only patch; affected scroll/focus cases pass with the final built UI.",
+    "No W82 soak/load re-execution and no WAN/provider-complete p99 claim."
+  ]
+}

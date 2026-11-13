@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/backend/Infrastructure/Kafdeck.Infrastructure.Persistence/Kafdeck.Infrastructure.Persistence.csproj" />
+    <ProjectReference Include="../../../src/backend/Modules/Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj" />
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+</Project>

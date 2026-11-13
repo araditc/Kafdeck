@@ -1,0 +1,114 @@
+{
+  "releasedExecutableSha256": "50fdd22e00a4972be700c5352738953536293157a2289f03d2eff0d6d21b55a5",
+  "candidateDllSha256": "f796c32eb65c7a6fe36fa9f3663aea2b3f79f377c1aa4dc5eb441435f686793e",
+  "developmentCandidate": true,
+  "publicationClaimed": false,
+  "actualReleasedAndCandidateProcesses": true,
+  "genuineKeycloak": true,
+  "actualKafka": true,
+  "operationStatesAreSynthetic": true,
+  "providers": [
+    {
+      "provider": "sqlite",
+      "usersTargetsRolesRetained": true,
+      "stateUnchangedOnRead": true,
+      "protectedCredentialRestoredWithMatchingKeyring": true,
+      "missingKeyringDeniedWithoutClearingState": true,
+      "newerFormatRejectedWithoutWrite": true,
+      "actualProcessInterruptionAndVerifiedRestore": true,
+      "databaseSnapshots": {
+        "provider": "sqlite",
+        "syntheticCompatibilityStates": true,
+        "providerEffectsClaimed": false,
+        "rows": [
+          {
+            "id": "c7ee257e-bae6-4591-896c-3b35c0f8fe9e",
+            "state": "Ready",
+            "snapshotSha256": "0557ab07ad89a42b6d52be6ae5ab7821e0722beb581ab20ff4773b29e8459985"
+          },
+          {
+            "id": "e9482dd0-782c-437f-a045-b41baf701164",
+            "state": "AwaitingApproval",
+            "snapshotSha256": "b40256feb207e33a42ee49c28e54561547d65645b93e708d8b9386cd1d39c349"
+          },
+          {
+            "id": "f6cfb6ca-f1e8-4e8a-99a9-6e810c2a851c",
+            "state": "ExecutionUnknown",
+            "snapshotSha256": "4bbe345426291e1a2239ba4ca626d950891e8970ea44752c4cb4ba6fbf60d116"
+          }
+        ],
+        "versions": [
+          {
+            "component": "connect-auto-restart-state",
+            "version": 1
+          },
+          {
+            "component": "fleet-conflict-writer-fence",
+            "version": 2
+          },
+          {
+            "component": "fleet-mutation-state",
+            "version": 1
+          },
+          {
+            "component": "mutation-operations",
+            "version": 5
+          }
+        ]
+      },
+      "legacyStateSha256": "50dab405826bbfc3255f53d43080a59f3178e048c7b2b8b8e5d0ccd07498f816",
+      "candidateStateSha256": "50dab405826bbfc3255f53d43080a59f3178e048c7b2b8b8e5d0ccd07498f816"
+    },
+    {
+      "provider": "postgres",
+      "usersTargetsRolesRetained": true,
+      "stateUnchangedOnRead": true,
+      "protectedCredentialRestoredWithMatchingKeyring": true,
+      "missingKeyringDeniedWithoutClearingState": true,
+      "newerFormatRejectedWithoutWrite": true,
+      "actualProcessInterruptionAndVerifiedRestore": true,
+      "databaseSnapshots": {
+        "provider": "postgres",
+        "syntheticCompatibilityStates": true,
+        "providerEffectsClaimed": false,
+        "rows": [
+          {
+            "id": "1580111e-6a35-4e07-b403-e90a3536a15e",
+            "state": "Ready",
+            "snapshotSha256": "e42ec7cb67d123b2f43d30eb7b7143808d3e89c4e37249f53ffd71aa80ab205d"
+          },
+          {
+            "id": "bd69bf67-0b95-465b-aecb-f7509899e689",
+            "state": "ExecutionUnknown",
+            "snapshotSha256": "c7163352401f2d9ff321c889e772214277ffb203652e91f3105bc268878dc24e"
+          },
+          {
+            "id": "c9375b32-f999-437b-af92-a0881514e095",
+            "state": "AwaitingApproval",
+            "snapshotSha256": "654c7a39720fa74b595f936e062768d49f4a3268cec83a4d7aa7393a6fe7f025"
+          }
+        ],
+        "versions": [
+          {
+            "component": "connect-auto-restart-state",
+            "version": 1
+          },
+          {
+            "component": "fleet-conflict-writer-fence",
+            "version": 2
+          },
+          {
+            "component": "fleet-mutation-state",
+            "version": 1
+          },
+          {
+            "component": "mutation-operations",
+            "version": 5
+          }
+        ]
+      },
+      "legacyStateSha256": "01a7502e49f8fac20b49044b677d824797037fd9c8ed85ae698b0d157734c035",
+      "candidateStateSha256": "01a7502e49f8fac20b49044b677d824797037fd9c8ed85ae698b0d157734c035"
+    }
+  ]
+}

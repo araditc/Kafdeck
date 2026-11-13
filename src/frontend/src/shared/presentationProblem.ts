@@ -111,6 +111,7 @@ export const applicationProblemCopies = [
   "Destination management is not authorized.",
   "The change was not confirmed. Reload current state before retrying.",
   "Kafdeck request failed.",
+  "The read timed out. Retry the read or check the connection.",
   "The governed mutation request failed.",
   "The antiforgery token response was incomplete.",
 ] as const;

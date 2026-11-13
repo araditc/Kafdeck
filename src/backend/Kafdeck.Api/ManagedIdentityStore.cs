@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 
@@ -39,12 +40,18 @@ internal sealed record RegisteredHttpServiceSettings(string Url, string Authenti
 
 internal sealed class ManagedIdentityStore(string path, string issuer)
 {
+    // Freeze the legacy v0.9 representation, including the admitted optional
+    // provisioning receipts. Unknown newer fields must never be silently lost.
+    private static readonly JsonSerializerOptions Format = new() { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
+
     internal ManagedIdentityState Read()
     {
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-            var state = JsonSerializer.Deserialize<ManagedIdentityState>(stream);
+            using var document = JsonDocument.Parse(stream);
+            RejectDuplicateProperties(document.RootElement);
+            var state = document.RootElement.Deserialize<ManagedIdentityState>(Format);
             if (state is null || state.Issuer != issuer || state.Users is null ||
                 (state.OwnerId is { } owner && !state.Users.Any(user => user.Id == owner && user.Role == "owner" && user.Enabled)))
                 throw new InvalidDataException("Managed identity state is invalid for this realm.");
@@ -56,6 +63,7 @@ internal sealed class ManagedIdentityStore(string path, string issuer)
             return state;
         }
         catch (FileNotFoundException) { return new(issuer, null, false, null, default, []); }
+        catch (JsonException error) { throw new InvalidDataException("Managed identity state uses an invalid or unsupported format; restore a verified compatible backup.", error); }
     }
 
     internal FileStream? TryLock()
@@ -66,12 +74,15 @@ internal sealed class ManagedIdentityStore(string path, string issuer)
 
     internal void Write(ManagedIdentityState state)
     {
+        // A normal writer must not replace an unreadable/newer state. Callers
+        // retain their existing exclusive operation lease and atomic rename.
+        if (File.Exists(path)) _ = Read();
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(stream, state);
+                JsonSerializer.Serialize(stream, state, Format);
                 stream.Flush(flushToDisk: true);
             }
             File.Move(temporary, path, overwrite: true);
@@ -114,6 +125,21 @@ internal sealed class ManagedIdentityStore(string path, string issuer)
         user is { Enabled: true } && session.AuthenticatedAtUtc >= user.SessionsValidFrom;
 
     private static byte[] Hash(string code) => SHA256.HashData(Encoding.UTF8.GetBytes(code));
+
+    private static void RejectDuplicateProperties(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in value.EnumerateObject())
+            {
+                if (!names.Add(property.Name)) throw new InvalidDataException("Managed identity state contains ambiguous duplicate properties.");
+                RejectDuplicateProperties(property.Value);
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray()) RejectDuplicateProperties(item);
+    }
 }
 
 internal sealed class ManagedIdentityOptions

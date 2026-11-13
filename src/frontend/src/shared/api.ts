@@ -2,6 +2,7 @@ import { ApplicationCopyError, markApplicationError } from './presentationProble
 import { t } from './i18n.js';
 import { clearDeploymentAccessToken, withDeploymentAccessToken } from './deploymentAccess.js';
 import { notifySessionLossIfUnauthorized } from './operatorSessionSecurity.js';
+import { boundedBrowserRead } from './browserRead.js';
 import type { KafkaConnectionDraft, KafkaConnectionObservation, KafkaConnectionTarget } from './kafkaConnections.js';
 export { operatorSessionLostEvent } from './operatorSessionSecurity.js';
 export type Freshness = 'fresh' | 'stale';
@@ -699,12 +700,23 @@ async function parseProblem(response: Response, notifySessionLoss = true): Promi
 }
 
 async function readJson<T>(path: string, signal?: AbortSignal, notifySessionLoss = true): Promise<T> {
-  const init: RequestInit = { method: 'GET', headers: requestHeaders('application/json') };
-  if (!notifySessionLoss) init.cache = 'no-store';
-  if (signal !== undefined) init.signal = signal;
-  const response = await fetch(path, init);
-  if (!response.ok) throw await parseProblem(response, notifySessionLoss && !signal?.aborted);
-  return (await response.json()) as T;
+  try {
+    return await boundedBrowserRead(async currentSignal => {
+      const init: RequestInit = { method: 'GET', headers: requestHeaders('application/json'), signal: currentSignal };
+      if (!notifySessionLoss) init.cache = 'no-store';
+      const response = await fetch(path, init);
+      if (!response.ok) {
+        const problem = await parseProblem(response, notifySessionLoss && !currentSignal.aborted);
+        currentSignal.throwIfAborted();
+        throw problem;
+      }
+      return (await response.json()) as T;
+    }, signal);
+  } catch (error) {
+    if (!signal?.aborted && error instanceof DOMException && error.name === 'TimeoutError')
+      throw markApplicationError(new ApiProblem(408, t("The read timed out. Retry the read or check the connection."), 'urn:kafdeck:problem:browser-read-timeout'), "The read timed out. Retry the read or check the connection.");
+    throw error;
+  }
 }
 
 interface ToolingCsrfToken { requestToken: string; headerName: string; }

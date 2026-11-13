@@ -8,6 +8,7 @@ using Kafdeck.Core.Security;
 using Kafdeck.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -185,6 +186,9 @@ internal sealed class ManagedRegistrationHttpFixture : IAsyncDisposable
         builder.Services.AddSingleton(new KafdeckAuthorizationService(options, new AuthorizationPolicyEvaluator(policy)) { ManagedIdentity = f.Identity.Store });
         builder.Services.AddSingleton<ISecurityAuditSink>(f.Identity.Audit);
         builder.Services.AddSingleton(f.Identity.Client);
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton(services => new RegisteredKafkaRuntime(
+            services.GetRequiredService<IHttpContextAccessor>(), f.Identity.Store, builder.Configuration));
         builder.Services.AddKafdeckAntiforgery("http://127.0.0.1:0");
         var actor = owner ? f.Identity.OwnerId : Guid.NewGuid();
         if (!owner)

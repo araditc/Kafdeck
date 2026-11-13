@@ -1498,5 +1498,7 @@ export const messages: Readonly<Record<string, string>> = {
   "Pending user provisioning": "درخواست‌های ساخت کاربر در انتظار بازیابی",
   "Recovery verifies the original account and keeps its original temporary password. It does not create or reset an account.": "بازیابی حساب اصلی را بررسی می‌کند و رمز موقت اولیه را نگه می‌دارد. حسابی ساخته یا بازنشانی نمی‌شود.",
   "Recover user creation": "بازیابی ساخت کاربر",
-  "This page is unavailable for the current account or cluster.": "این صفحه برای حساب یا کلاستر فعلی در دسترس نیست."
+  "This page is unavailable for the current account or cluster.": "این صفحه برای حساب یا کلاستر فعلی در دسترس نیست.",
+  "The read timed out. Retry the read or check the connection.": "مهلت خواندن تمام شد. خواندن را دوباره امتحان کنید یا اتصال را بررسی کنید.",
+  "This connection is saved, but credential capacity is full. Reuse the saved target after a credential lease expires.": "این اتصال ذخیره شده، اما ظرفیت نگهداری اطلاعات ورود پر است. پس از انقضای یکی از اعتبارهای موقت، همان اتصال ذخیره‌شده را دوباره استفاده کنید."
 };

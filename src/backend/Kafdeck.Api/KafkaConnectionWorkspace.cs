@@ -131,7 +131,11 @@ internal static class KafkaConnectionWorkspace
                     attempt.Outcome = SecurityAuditOutcome.Succeeded;
                     attempt.Category = attempt.Created ? "kafka_target_registered" : "kafka_target_registration_reused";
                 }
-                if (profile is { Registered: true }) runtime?.Remember(context, profile.Id, config);
+                if (profile is { Registered: true } && config.SecurityProtocol != SecurityProtocol.Plaintext &&
+                    runtime?.Remember(context, profile.Id, config) != true)
+                    return Results.Problem(statusCode: 409, type: "urn:kafdeck:problem:connection-credential-capacity",
+                        title: "Kafka credentials could not be retained. The connection definition is saved; retry this target after a credential lease expires.",
+                        extensions: new Dictionary<string, object?> { ["clusterId"] = profile.Id, ["targetSaved"] = true });
                 var brokers = pending || Allowed(context, authorization, AuthorizationAction.BrokerRead, profile!.Id)
                     ? metadata.Brokers.OrderBy(broker => broker.BrokerId).Take(100)
                         .Select(broker => new { id = broker.BrokerId, host = broker.Host, port = broker.Port }).ToArray()

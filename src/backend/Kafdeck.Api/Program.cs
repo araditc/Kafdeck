@@ -52,8 +52,10 @@ var builder = WebApplication.CreateBuilder(args.Where(value => value is not
 
 var kafdeckOptions = KafdeckConfigurationLoader.Load(builder.Configuration);
 KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
+builder.Services.ConfigureManagedStateDataProtection(builder.Configuration);
 var managedIdentityOptions = builder.Configuration.GetSection("Kafdeck:ManagedIdentity").Get<ManagedIdentityOptions>() ?? new();
 var managedIdentity = managedIdentityOptions.Enabled ? managedIdentityOptions.ValidateAndCreate(kafdeckOptions) : null;
+if (managedIdentity is not null) _ = managedIdentity.Read();
 if (issueSetupCode)
 {
     if (managedIdentity is null) throw new InvalidOperationException("Managed identity is disabled.");

@@ -13,6 +13,7 @@ internal sealed class RegisteredKafkaRuntime : IDisposable
     private readonly ManagedIdentityStore _store;
     private readonly IPNetwork[] _networks;
     private readonly MemoryCache _credentials;
+    private readonly object _credentialAdmission = new();
     private readonly object _requestClientsKey = new();
 
     // An injected cache is owned by this runtime; production retains the fixed bounded default.
@@ -33,13 +34,23 @@ internal sealed class RegisteredKafkaRuntime : IDisposable
     internal IReadOnlyList<ClusterProfile> IncludeRegistered(IReadOnlyList<ClusterProfile> configured) =>
         new ClusterProfiles(configured, _store);
 
-    internal void Remember(HttpContext context, string id, AdminClientConfig config)
+    internal bool Remember(HttpContext context, string id, AdminClientConfig config)
     {
-        if (config.SecurityProtocol == SecurityProtocol.Plaintext ||
-            !OperatorSessionContextFactory.TryCreate(context.User, out var session) || session is null) return;
-
-        _credentials.Set((session.SessionId, id), new CredentialLease(Guid.NewGuid(), config),
-            new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) });
+        if (config.SecurityProtocol == SecurityProtocol.Plaintext) return true;
+        if (!OperatorSessionContextFactory.TryCreate(context.User, out var session) || session is null) return false;
+        lock (_credentialAdmission)
+        {
+            var key = (session.SessionId, id);
+            var lease = new CredentialLease(Guid.NewGuid(), config);
+            // Never evict another admitted session merely to test a new target.
+            // Absolute expiry still applies, and capacity remains fixed at 128.
+            _credentials.Set(key, lease, new MemoryCacheEntryOptions
+            {
+                Size = 1, Priority = CacheItemPriority.NeverRemove,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+            });
+            return _credentials.TryGetValue(key, out CredentialLease? retained) && ReferenceEquals(lease, retained);
+        }
     }
 
     // Snapshot keys include the exact credential lease for a secured target.

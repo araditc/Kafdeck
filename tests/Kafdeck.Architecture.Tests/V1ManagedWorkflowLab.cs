@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Kafdeck.Architecture.Tests;
 
@@ -50,7 +51,7 @@ internal sealed class V1ManagedWorkflowLab : IAsyncDisposable
             new("connection-a","A",["127.0.0.1:19092"],protocol,protocol=="PLAINTEXT"?null:"PLAIN"),
             new("connection-b","B",["127.0.0.1:19093"],protocol,protocol=="PLAINTEXT"?null:"PLAIN")] });
     }
-    internal static async Task<V1ManagedWorkflowLab> Start(bool setup = false)
+    internal static async Task<V1ManagedWorkflowLab> Start(bool setup = false, MemoryCache? credentials = null)
     {
         var f=new V1ManagedWorkflowLab();
         if(setup)f.Store.Write(new(ManagedProvisioningFixture.Issuer,null,false,null,default,[]));
@@ -63,7 +64,7 @@ internal sealed class V1ManagedWorkflowLab : IAsyncDisposable
         f._providerClient=new(new HttpClient(f.Provider),ManagedProvisioningFixture.Issuer,"provisioner","fixture-only-secret");
         builder.Services.AddSingleton(f._providerClient);builder.Services.AddSingleton<ISecurityAuditSink>(f.Identity.Audit);
         builder.Services.AddSingleton(new GovernanceRuntimeOptions());builder.Services.AddSingleton<ClusterExplorerService>(_=>null!);
-        f.Runtime=new(f.Requests,f.Store,f.Configuration);builder.Services.AddSingleton(f.Runtime);builder.Services.AddSingleton<IHttpContextAccessor>(f.Requests);
+        f.Runtime=new(f.Requests,f.Store,f.Configuration,credentials);builder.Services.AddSingleton(f.Runtime);builder.Services.AddSingleton<IHttpContextAccessor>(f.Requests);
         builder.Services.AddKafdeckAntiforgery("http://127.0.0.1:0");
         f.App=builder.Build();f.App.UseRouting();f.App.Use((context,next)=>{context.User=f.Actor;return next(context);});f.App.UseAntiforgery();f.App.MapKafdeckAntiforgeryEndpoint();
         f.App.MapManagedIdentity(f.Store,options);

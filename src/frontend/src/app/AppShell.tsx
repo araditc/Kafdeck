@@ -106,6 +106,8 @@ export function AppShell() {
   const [operatorScope, setOperatorScope] = useState<string | null>(null);
   const [verificationPending, setVerificationPending] = useState(true);
   const privatePage = useRef<HTMLDivElement>(null);
+  const verificationSpace = useRef<HTMLDivElement>(null);
+  const verificationHeight = useRef(0);
   const verifiedSession = useRef<{ scope: string | null; key: string; mode: AccessMode } | null>(null);
   const legacySessionEpoch = useRef(0);
   const verificationEpoch = useRef(0);
@@ -251,6 +253,10 @@ export function AppShell() {
     // state is neither visible, focusable nor in the accessibility tree pending
     // the authoritative response, including the operator name in the header.
     if (privatePage.current) {
+      // Reserve only public geometry before removing private content from
+      // layout. Otherwise the browser clamps scrollY to zero while fenced.
+      if (!privatePage.current.hidden) verificationHeight.current = privatePage.current.getBoundingClientRect().height;
+      if (verificationSpace.current) verificationSpace.current.style.height = `${verificationHeight.current}px`;
       privatePage.current.hidden = true; privatePage.current.inert = true;
       privatePage.current.style.display = 'none';
     }
@@ -326,6 +332,7 @@ export function AppShell() {
       privatePage.current.inert = verificationPending;
       privatePage.current.style.display = verificationPending ? 'none' : '';
     }
+    if (verificationSpace.current) verificationSpace.current.style.height = verificationPending ? `${verificationHeight.current}px` : '0px';
     const restore = verificationFocus.current;
     if (!verificationPending && restore?.ready) {
       const decision = verificationFocusDecision({
@@ -338,7 +345,7 @@ export function AppShell() {
       // Keep the connected candidate then; a later focused verification may
       // recover it, while another focused control always ends the candidate.
       if (decision !== 'defer') verificationFocus.current = null;
-      if (decision === 'restore') restore.element.focus({ preventScroll: false });
+      if (decision === 'restore') restore.element.focus({ preventScroll: true });
     }
   });
 
@@ -659,10 +666,14 @@ export function AppShell() {
     setupState={setupState} onSetupState={setSetupState}
     onToken={(token, label) => revalidateOperatorSession({ token, label })} onRetry={() => revalidateOperatorSession()} />;
 
-  const verificationStatus = verificationPending && <div className="container-xl py-3" role="status" aria-live="polite">
+  const verificationStatus = <>
+    <div ref={verificationSpace} aria-hidden="true" style={{height: verificationPending ? verificationHeight.current : 0}} />
+    {verificationPending && <div className="container-xl py-3" role="status" aria-live="polite"
+      style={{position: 'fixed', insetBlockStart: '1rem', insetInline: '1rem', zIndex: 1100}}>
       <p>{t("Checking operator session…")}</p>
       <p>{t("Authorized content is hidden until verification completes.")}</p>
-    </div>;
+    </div>}
+  </>;
 
   const openUserManagement = operator?.canManageUsers ? () => setUserManagementScope(operatorScope) : null;
   if (openUserManagement && userManagementScope === operatorScope) return <>
