@@ -12,14 +12,16 @@ internal sealed class RegisteredKafkaRuntime : IDisposable
     private readonly IHttpContextAccessor _requests;
     private readonly ManagedIdentityStore _store;
     private readonly IPNetwork[] _networks;
-    private readonly MemoryCache _credentials = new(new MemoryCacheOptions { SizeLimit = 128 });
+    private readonly MemoryCache _credentials;
     private readonly object _requestClientsKey = new();
 
-    internal RegisteredKafkaRuntime(IHttpContextAccessor requests, ManagedIdentityStore store, IConfiguration settings)
+    // An injected cache is owned by this runtime; production retains the fixed bounded default.
+    internal RegisteredKafkaRuntime(IHttpContextAccessor requests, ManagedIdentityStore store, IConfiguration settings, MemoryCache? credentials = null)
     {
         _requests = requests;
         _store = store;
         _networks = ReadNetworks(settings);
+        _credentials = credentials ?? new MemoryCache(new MemoryCacheOptions { SizeLimit = 128 });
     }
 
     internal static IPNetwork[] ReadNetworks(IConfiguration settings) =>
