@@ -1,0 +1,293 @@
+{
+  "scope": [
+    "G06",
+    "E01",
+    "Q01"
+  ],
+  "status": "complete on exact-head PR admission",
+  "baselineMain": "bd9f7a5b37d5b1ab989c0bf21bfde4d6cf43e3c1",
+  "baselineMainAutomaticWorkflows": {
+    "passed": 10,
+    "failed": 0
+  },
+  "releaseV09Source": "01c7553425fbc61ba4a7a21918265c562086ba02",
+  "releaseV09WinX64ArchiveSha256": "9dd556375a96dd7f8f7315fc02c83f87a30ee2a500d6b9a4199bd47a5e517f8f",
+  "developmentCandidate": true,
+  "publicationClaimed": false,
+  "targetedTrx": [
+    {
+      "name": "q01-before",
+      "sha256": "5cc7540cdfacf29b3717a2cb189b49d13720623a1450909d8019adbd3298a8a7",
+      "counters": {
+        "total": "1",
+        "executed": "1",
+        "passed": "0",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "name": "state-capacity-focused",
+      "sha256": "ed945c6327530cba39d3693b980f3f199b7e3d06f87b0f4010cfcb78750fa3a6",
+      "counters": {
+        "total": "12",
+        "executed": "12",
+        "passed": "12",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "name": "authority-retention",
+      "sha256": "2f3a33d773fcd2c013508f5d8908ce546ed1e5a8884d5331c2fef0e1b6b69676",
+      "counters": {
+        "total": "29",
+        "executed": "29",
+        "passed": "29",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "name": "restore-config-registration",
+      "sha256": "e21689a829684d40b6479e6236ece5f030b6061751649bb52a0108677bf052a0",
+      "counters": {
+        "total": "6",
+        "executed": "6",
+        "passed": "6",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "name": "changed-contract",
+      "sha256": "fb526e54ea24118daa02f82e7c6f9f0acbf1bf0bf9f1ccde3f0561c2a881eab9",
+      "counters": {
+        "total": "15",
+        "executed": "15",
+        "passed": "15",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "frontend": {
+    "affectedSharedReadSuite": {
+      "passed": 134,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "5e687f7f1d367fce699a27683af0b853bfa3ae088f28148fb8b8052ab9d20a9b"
+    },
+    "afterLayoutChangeAppShell": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "8b0be23aa50526da158c493d3568b76f006c0a3dcda8e7d4bb9565373d61efb5"
+    },
+    "productionBuildLogSha256": "cc8be567ad2147881ec3dd7e92d51d0690af5106ea0291d3d140697f53ab744d"
+  },
+  "observedDefects": {
+    "capacityBefore": "Full real cache; loopback test expected 409 but returned 200.",
+    "legacyManagedFocus": "Actual released binary/Chrome scope invalid; draft cleared and focus lost on return.",
+    "scrollBeforeGeometryFix": {
+      "source": "agent-observed failed physical browser assertion",
+      "before": 250,
+      "after": 0
+    }
+  },
+  "guardReuse": [
+    {
+      "path": "src/backend/Infrastructure/Kafdeck.Infrastructure.Persistence/AdoGovernanceGenerationGate.cs",
+      "sha256": "fb529a76419adfc4ed428e38903ceb6f5d40fdce105857ef374a15c08448b058",
+      "identicalToReleasedV09": true
+    },
+    {
+      "path": "src/backend/Infrastructure/Kafdeck.Infrastructure.Persistence/AdoMutationOperationRepository.cs",
+      "sha256": "efd100316678824608b6fc3e88c201197fee00ac3131357373f68a43a31307b2",
+      "identicalToReleasedV09": true
+    }
+  ],
+  "sourceFingerprints": [
+    {
+      "path": "deploy/dev/v1-managed-upgrade/Probe.csproj",
+      "sha256": "3eadeecacec1bd6dd575d3e8dc752cdb8f96e0a5ca055b7985fd10fa66002ef5"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/Program.cs",
+      "sha256": "3a8cb6a34586cb3fbbed9b49493901e493a3167e6e1d44ec52e80c6711590226"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/README.md",
+      "sha256": "223825dd67153f60439f510aa830f3e2272d90e833ffc57c298bbf700da56a88"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/browser-edge-cases.cjs",
+      "sha256": "e307c3438c5a7ce9850374d178864b558ef452508ab2c38c9595bf2c9c28ad00"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/browser-responsiveness.cjs",
+      "sha256": "8b6a3a22968a166b7a6048e6364a3408d80ef644640a17b1a89c49ee5e87f12f"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/browser-run.cjs",
+      "sha256": "6dbfe953c627cc1a1d45884b43bb20df7b1d6d94369c92007922f1c666ecb82f"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/http-fixture.cjs",
+      "sha256": "f649d6bc76363ed04089ca4fa6153083a79567b2dc8a718b5743d130c76df3ca"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/packages.lock.json",
+      "sha256": "b90f5dec7893d4f18d9773907a74617acf36f4b06deae2e86a48d068cfe03620"
+    },
+    {
+      "path": "deploy/dev/v1-managed-upgrade/run.cjs",
+      "sha256": "2470a48bd2d8c86111ba238a55880f2d7ec042e37204e92dd1b33adb364d561b"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/KafkaConnectionWorkspace.cs",
+      "sha256": "b586f363745efdd6a3e9c92f8ed8d4c3c62cffdac7adacaed9a39eeac55ebb6d"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/ManagedIdentityStore.cs",
+      "sha256": "d15b2d6887f88bbd925cc39389448f52099a78a3f726becb86244c30e27e2faa"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/ManagedStateDataProtection.cs",
+      "sha256": "11916cd445c153ebf1658db2167401bb5561596dcd74d2ada8a5d67401f2719d"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs",
+      "sha256": "15f1d50ce6e3c0124dd862571ddecfca1db3e56a735ac3f0364eda664efaef7a"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/OperatorSessionUiScope.cs",
+      "sha256": "797c89a4469577d242d165debeb48d575be544fcb2f846592a0bbd2fdff0940d"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/Program.cs",
+      "sha256": "12703ff53f1e0585de1701950afa3c7288662e9ff48d88695ebff8d4c8013d40"
+    },
+    {
+      "path": "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs",
+      "sha256": "a3eb952a4d6b6e94f376d965f4cfd607949813ee6eef1cbae84dc7b63c900661"
+    },
+    {
+      "path": "src/frontend/src/app/AppShell.tsx",
+      "sha256": "f28bceb22b130d62bd444d7a13656262f59d81495e7becd596888f96dad57823"
+    },
+    {
+      "path": "src/frontend/src/shared/api.ts",
+      "sha256": "6b68eeb9d6282e6f43f72b559ace060e3292083dcd687808d9d9d47adc7d8091"
+    },
+    {
+      "path": "src/frontend/src/shared/browserRead.ts",
+      "sha256": "578591329175b45efe41520e5a38bdeeaaa74f3db677330bd00f3f74ee80d3de"
+    },
+    {
+      "path": "src/frontend/src/shared/locales/en.json",
+      "sha256": "1ca11c913c3d2723d43230bb2edee4fc82fc9fad434956e5f3772b8e479347d7"
+    },
+    {
+      "path": "src/frontend/src/shared/locales/fa.json",
+      "sha256": "e88861d8e8d8cf2c3049df036df50b0ba6f541423a7c7066707cc0a7915a30ac"
+    },
+    {
+      "path": "src/frontend/src/shared/locales/messages.ts",
+      "sha256": "28cb6bb53085a9cd05e6028f7188b09e5a94e9ecfc1d0678738d241c90a3a284"
+    },
+    {
+      "path": "src/frontend/src/shared/presentationProblem.ts",
+      "sha256": "84b32374f832c056358ef42565ce072d455ee2f8963a0218652bf847befce957"
+    },
+    {
+      "path": "src/frontend/tests/browser-read.test.mjs",
+      "sha256": "88143072090b356b549807784985794f36395ef33ecc141067b9467c4fe0b1d5"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V1CredentialCapacityTests.cs",
+      "sha256": "fc2c49ca2c2669b95f57109d44b4469b7b24e552852ec97bde5b6e147e32ea49"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V1DataProtectionConfigurationTests.cs",
+      "sha256": "dbdd539451d934a871a1f2b09ac3348c587c3dc2d76ed5f3b3e9e3b2ebdf24ae"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V1ManagedSessionScopeTests.cs",
+      "sha256": "a0755325f45e01843906e5b33e1856c14759d4ac642387d5662be7e255fbcf6a"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V1ManagedStateFormatTests.cs",
+      "sha256": "c6a73a75e58a00ed0894b9065b4bd7ffb124d23b82aa26561f939a817856ed1e"
+    },
+    {
+      "path": "tests/Kafdeck.Architecture.Tests/V1ManagedWorkflowLab.cs",
+      "sha256": "701b1306a1a929e7242aed0a2d867db9868631f198dcdcb8e2ac07ea86ed1b6e"
+    }
+  ],
+  "physicalUpgrade": "v1.0-g06-upgrade-20261113.json",
+  "browserTrace": "v1.0-e01-browser-20261113.json",
+  "remaining": [
+    "V1-1 full compatibility contracts/policy",
+    "V1-4 selected final RC/media binding and applicable operator acceptance",
+    "V1-5 security/support matrix",
+    "E02 / V1-6 release media and version-specific publisher",
+    "V1-7 exact owner signing/publication decisions"
+  ],
+  "historicalAndSignedEvidenceUnchanged": true
+}

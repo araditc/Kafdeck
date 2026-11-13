@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kafdeck experimental managed-browser API",
-    "version": "1.0.0-experimental.1",
+    "version": "1.0.0-experimental.2",
     "description": "G03 contract revision, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
   },
   "servers": [
@@ -735,7 +735,7 @@
       "post": {
         "operationId": "managed-targets-register",
         "summary": "Register or reuse a Kafka target",
-        "description": "SASL requires mechanism, nonblank username/password without controls; non-SASL rejects all three. TLS allows optional CA plus paired client certificate/key, and optional key password; plaintext rejects TLS fields. TLS certificate and hostname verification stay enabled. Registered/new targets must satisfy configured CIDRs for bootstrap and returned broker metadata. Up to four simultaneous probes, five-second Kafka metadata deadline. Snapshot is not a promise of an active credential lease; the existing bounded lease/cache contract still applies. A new registered target returns HTTP 200, not 201, and a stable connection-* ID. Deduplication matches protocol and case-insensitive bootstrap set, not display name or SASL mechanism. Registration limit 256, name collision yields 409. Secrets are retained only in the existing per-session in-memory lease, not target JSON; reconnect after expiry/restart. Audit records actual outcome without broker/name/credential data. No Idempotency-Key header.",
+        "description": "SASL requires mechanism, nonblank username/password without controls; non-SASL rejects all three. TLS allows optional CA plus paired client certificate/key, and optional key password; plaintext rejects TLS fields. TLS certificate and hostname verification stay enabled. Registered/new targets must satisfy configured CIDRs for bootstrap and returned broker metadata. Up to four simultaneous probes, five-second Kafka metadata deadline. Snapshot is not a promise of an active credential lease; the existing bounded lease/cache contract still applies. A new registered target returns HTTP 200, not 201, and a stable connection-* ID. Deduplication matches protocol and case-insensitive bootstrap set, not display name or SASL mechanism. Registration limit 256, name collision yields 409. Secrets are retained only in the existing per-session in-memory lease, not target JSON; reconnect after expiry/restart. Audit records actual outcome without broker/name/credential data. No Idempotency-Key header. Secured registered-target success requires retaining the credential lease. Capacity exhaustion returns 409 connection-credential-capacity with clusterId and targetSaved=true; the definition exists but credentials were not retained. Keep the target and retry after lease expiry; never interpret this response as a usable connection. Other admitted leases remain intact; 128-entry and 30-minute limits are unchanged.",
         "x-stability": "experimental",
         "x-availability": "OIDC and ConnectionWorkspace.Enabled and managed owner for registration",
         "x-authority": "current installation owner",
@@ -789,7 +789,7 @@
             }
           },
           "409": {
-            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "description": "Target conflict or secured credential lease capacity. Capacity problem includes clusterId and targetSaved=true; no usable credentials were retained.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -872,7 +872,8 @@
           "connection-failed",
           "connection-save-busy",
           "connection-limit",
-          "connection-save-failed"
+          "connection-save-failed",
+          "connection-credential-capacity"
         ]
       }
     },
@@ -880,7 +881,7 @@
       "post": {
         "operationId": "managed-connections-test",
         "summary": "Test a Kafka connection without registering it",
-        "description": "SASL requires mechanism, nonblank username/password without controls; non-SASL rejects all three. TLS allows optional CA plus paired client certificate/key, and optional key password; plaintext rejects TLS fields. TLS certificate and hostname verification stay enabled. Registered/new targets must satisfy configured CIDRs for bootstrap and returned broker metadata. Up to four simultaneous probes, five-second Kafka metadata deadline. Snapshot is not a promise of an active credential lease; the existing bounded lease/cache contract still applies. A new target has null clusterId/savedTarget and requiresRegistration=true. Successful testing does not save a target or emit registration audit.",
+        "description": "SASL requires mechanism, nonblank username/password without controls; non-SASL rejects all three. TLS allows optional CA plus paired client certificate/key, and optional key password; plaintext rejects TLS fields. TLS certificate and hostname verification stay enabled. Registered/new targets must satisfy configured CIDRs for bootstrap and returned broker metadata. Up to four simultaneous probes, five-second Kafka metadata deadline. Snapshot is not a promise of an active credential lease; the existing bounded lease/cache contract still applies. A new target has null clusterId/savedTarget and requiresRegistration=true. Successful testing does not save a target or emit registration audit. Secured registered-target success requires retaining the credential lease. Capacity exhaustion returns 409 connection-credential-capacity with clusterId and targetSaved=true; the definition exists but credentials were not retained. Keep the target and retry after lease expiry; never interpret this response as a usable connection. Other admitted leases remain intact; 128-entry and 30-minute limits are unchanged.",
         "x-stability": "experimental",
         "x-availability": "OIDC and ConnectionWorkspace.Enabled",
         "x-authority": "browser operator for an authorized target; owner for a new target",
@@ -972,6 +973,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Target conflict or secured credential lease capacity. Capacity problem includes clusterId and targetSaved=true; no usable credentials were retained.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-declared-body-limit-bytes": 393216,
@@ -1003,7 +1014,8 @@
           "connection-input",
           "connection-network",
           "connection-busy",
-          "connection-failed"
+          "connection-failed",
+          "connection-credential-capacity"
         ]
       }
     },

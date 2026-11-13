@@ -530,7 +530,7 @@ public static class KafdeckOidcEndpointExtensions
             var managed = context.RequestServices.GetService<ManagedIdentityStore>();
             var user = managed?.Find(session);
             var policyFingerprint = context.RequestServices.GetService<KafdeckAuthorizationService>()?.PolicyFingerprint;
-            if (user is not null) policyFingerprint += ":" + user.Role + ":" + string.Join(",", user.ClusterIds);
+            policyFingerprint = OperatorSessionUiScope.ManagedAuthority(policyFingerprint, user);
             return Results.Ok(new
             {
                 authenticated = true,

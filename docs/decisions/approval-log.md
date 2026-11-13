@@ -1,5 +1,9 @@
 # Project Approval Log
 
+## Bounded v1.0 G06 / E01 / Q01 request — 2026-11-13
+
+The owner explicitly requested resolving G06 and the still-open E01/Q01 in #469 while preserving the bounded v1.0 stabilization scope and reusing successful v0.9 evidence. [ADR-0011](../adr/0011-managed-state-format-freeze.md) records the proposed format-freeze/verified-restore policy. Its acceptance is conditional on the linked implementation PR's exact-head CI, required CODEOWNER review and protected-main admission recorded in #469. Existing authorization, mutation generation fences, signed v0.9 bytes and the 128-entry/30-minute in-memory credential limits remain. This request and technical admission authorize no v1.0 signing or publication; final RC/media and owner release decisions remain separate gates.
+
 This file records accepted project-level approval gates. It is an auditable project record, not a replacement for ADRs/RFCs.
 
 ## Gate 0 — Product, Architecture and Engineering Baseline

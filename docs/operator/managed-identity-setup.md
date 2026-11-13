@@ -105,3 +105,11 @@ Preserve the managed state file and matching realm/key material together. New nu
 ## Browser API reference
 
 See the [experimental managed-browser contract](../api/managed-browser-contract.md) for exact user/connection request and response shapes, CSRF, conditional availability, recovery and revision semantics. Authenticated discovery is `/api/v1/openapi/managed-browser.json`; this is not a separate Bearer/CLI management surface.
+
+## Managed-state upgrade and key backups (main after v0.9)
+
+The [G06 format-freeze and recovery contract](../implementation/v1.0-g06-state-responsiveness.md#g06-format-freeze-and-recoverable-encryption-context) covers the managed JSON separately from the mutation database. Back up both with the matching Data Protection key ring, original content-root/application discriminator, issuer/client configuration and material-digest key. Stop writers and verify a private restored copy before switching binaries. Unknown/duplicate/truncated/newer state is rejected at startup and cannot be overwritten by ordinary setup/user/connection writes. Do not delete state to recover an installation.
+
+By default the existing ASP.NET key-ring selection is retained. To use an explicit restored ring, configure `Kafdeck:DataProtection:KeyDirectory` to its existing absolute private directory. Optional `Kafdeck:DataProtection:ApplicationName` must match the original context; otherwise retain the original content root. Windows DPAPI-protected keys require the original compatible account/machine context. Merely copying a key XML file does not make it decryptable elsewhere. Rollback restores verified backed-up data/configuration and the original binary together, rather than running an old binary against a newer live file.
+
+Secured Kafka leases remain in memory for 30 minutes, with capacity 128. HTTP 409 `connection-credential-capacity` means the target definition exists but credentials were not retained; reconnect to that saved target after capacity becomes available. Existing admitted leases stay usable. Restart still requires Kafka credentials again. Browser reads have a 15-second deadline; a timed-out read may be retried explicitly. Never interpret a write timeout as proof no effect occurred.

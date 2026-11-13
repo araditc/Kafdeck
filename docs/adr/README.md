@@ -32,5 +32,6 @@ Original headers preserve their recorded status/date. Proposed headers in older 
 - [ADR-0008 — Governed Ecosystem Execution and Stable Provider Profiles](0008-governed-ecosystem-execution.md).
 - [ADR-0009 — Automation Principals, Telemetry Authority and Declarative Ownership](0009-automation-principals-telemetry-declarative-ownership.md).
 - [ADR-0010 — Governance at the existing effect boundary](0010-governance-effect-boundary.md).
+- [ADR-0011 — Managed-state format freeze and verified key-context restore](0011-managed-state-format-freeze.md) (proposed for G06 admission; tracked in #469).
 
 ADR-0009 was admitted through W61 #221; ADR-0010 through W72 #437. Their headers retain exact main admission identities. Current architecture is summarized in the [architecture overview](../architecture/architecture.md).
