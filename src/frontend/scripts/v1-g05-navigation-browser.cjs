@@ -53,6 +53,13 @@ const server=createServer((req,res)=>{
     await page.waitForFunction(()=>!!document.querySelector('#ownership-catalog-title'));
     assert.ok(reads.some(r=>r.cluster==='b'));
     assert.ok(reads.every(r=>r.cluster==='b'));
+    // Selecting the already-current cluster must not clear its hint without
+    // changing the effect dependencies (the genuine W74/W76 bootstrap does this).
+    const hintsBeforeReselect=navigation.length;
+    await page.getByLabel('Cluster',{exact:true}).selectOption('b');
+    await nav.getByRole('link',{name:'Ownership catalog',exact:true}).waitFor();
+    await page.locator('#ownership-catalog-title').waitFor();
+    assert.equal(navigation.length,hintsBeforeReselect);
     // A new authoritative session scope removes the old grant and mounted panel.
     externalAllowed=false;scope='b'.repeat(64);
     await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
@@ -65,7 +72,7 @@ const server=createServer((req,res)=>{
     assert.ok(navigation.every(r=>r.method==='GET'));
     fs.mkdirSync(path.dirname(evidence),{recursive:true});
     await page.screenshot({path:path.join(path.dirname(evidence),'navigation-denied-mobile.png'),fullPage:true});
-    fs.writeFileSync(evidence,JSON.stringify({...require('./governance-browser-source.cjs')(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:true,genuineIdentityOrProviderEffectsClaimed:false,deniedDeepLinkNoGovernanceReads:true,deniedPaletteDisabled:true,clusterScopedAllowedCatalog:true,newSessionRevokesMountedPage:true,mobileNoOverflow:true,navigationRequests:navigation,governanceReads:reads,noExternalRequests:true,pageErrors:errors},null,2));
+    fs.writeFileSync(evidence,JSON.stringify({...require('./governance-browser-source.cjs')(root),actualCompiledUi:true,actualChromium:true,browserVersion:browser.version(),apiFixtures:true,genuineIdentityOrProviderEffectsClaimed:false,deniedDeepLinkNoGovernanceReads:true,deniedPaletteDisabled:true,clusterScopedAllowedCatalog:true,sameClusterReselectPreservesNavigation:true,newSessionRevokesMountedPage:true,mobileNoOverflow:true,navigationRequests:navigation,governanceReads:reads,noExternalRequests:true,pageErrors:errors},null,2));
     await context.close();console.log('G05 compiled navigation browser acceptance passed (explicit API fixtures).');
   }finally{if(browser)await browser.close();server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

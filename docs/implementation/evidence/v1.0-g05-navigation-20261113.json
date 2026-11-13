@@ -9,8 +9,8 @@
     "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs": "f51c6a3517e3038da45065c403fc0996af8f47c92df6e90981c2ff759e356250",
     "src/frontend/scripts/v09-governance-browser.cjs": "b4881d270e2c08787e5d2631f41ee6acb72cf79e295c6cfd2e307d4f44eb2906",
     "src/frontend/scripts/v09-workflows-browser.cjs": "a900c2a4069b14a192bdbab4d1de7735c6d7dedc0903ec54b11b52b9aaf69191",
-    "src/frontend/scripts/v1-g05-navigation-browser.cjs": "4655fc52703b2c82b491a3fe8a7e24a9fe0bd1d360f991324d6172ea87db2038",
-    "src/frontend/src/app/AppShell.tsx": "0d3b3f3e37fcdd2770a0781e322ed2d174267b074eaf9cbb86801c1e521272fe",
+    "src/frontend/scripts/v1-g05-navigation-browser.cjs": "6d179f74289d8471357da49b34acec561e1a3402cecbce34ea1c9e09ff6c626d",
+    "src/frontend/src/app/AppShell.tsx": "b5b8d8b3af255ed2f0e65a10cc1773996c477a5caea56b469d16774ab46febc3",
     "src/frontend/src/app/CommandPalette.tsx": "a9489fb2a153d9981680a7fa8949bd33c63f0516ef3e6118ab2126777e25e825",
     "src/frontend/src/app/commandPaletteModel.ts": "0755f22711355413ba60c3fe7d3cd3a3751749dd8050166e8fa3285f04c25d33",
     "src/frontend/src/app/governanceNavigation.ts": "ca5565bef0f4b12c15480a439c79c85464806d2edaaaa3a5a580bb2d6a724ea7",
@@ -73,6 +73,14 @@
       "trxPath": "artifacts/g05-results/g05-route-metadata.trx",
       "trxSha256": "0072894398c544495d07a302b6dcf6abf702130adee4d6bf4411918718fc3430",
       "reuse": "Original 16 successful loopback cases were not manually repeated; final changed-source CI is authoritative for final-head regression."
+    },
+    "integratedCiReuse": {
+      "source": "5c5d81214938d1ba039825025b76f9f70d5bb745",
+      "qualityWorkflow": 43394532304,
+      "passed": 2485,
+      "failed": 0,
+      "explicitFixtureSkips": 81,
+      "scope": "Backend code unchanged by the subsequent frontend-only same-cluster correction."
     }
   },
   "frontend": {
@@ -86,6 +94,77 @@
   },
   "browser": {
     "reportPath": "artifacts/g05-results/browser.json",
+    "reportSha256": "d8b74dc121c835c988f903949e6f4365dfd426e8a4b9452d2b1542424c554edd",
+    "report": {
+      "sourceSha": "5c5d81214938d1ba039825025b76f9f70d5bb745",
+      "sourceWorktreeDirty": true,
+      "compiledAssets": [
+        {
+          "file": "index-BG6P0C2k.css",
+          "sha256": "f909c3ad323df42f8ef1458faf727ec5ff844e179ef25268e379b6b2285faa48"
+        },
+        {
+          "file": "index-DvbRgCmu.js",
+          "sha256": "d52cc1163d96c254e2f38a4c01481ac35d998569fabd31942b0488fa6af734be"
+        }
+      ],
+      "actualCompiledUi": true,
+      "actualChromium": true,
+      "browserVersion": "156.0.8078.80",
+      "apiFixtures": true,
+      "genuineIdentityOrProviderEffectsClaimed": false,
+      "deniedDeepLinkNoGovernanceReads": true,
+      "deniedPaletteDisabled": true,
+      "clusterScopedAllowedCatalog": true,
+      "sameClusterReselectPreservesNavigation": true,
+      "newSessionRevokesMountedPage": true,
+      "mobileNoOverflow": true,
+      "navigationRequests": [
+        {
+          "clusterId": "a",
+          "method": "GET"
+        },
+        {
+          "clusterId": "b",
+          "method": "GET"
+        },
+        {
+          "clusterId": "a",
+          "method": "GET"
+        }
+      ],
+      "governanceReads": [
+        {
+          "path": "/api/v1/governance/catalog/teams",
+          "cluster": "b"
+        }
+      ],
+      "noExternalRequests": true,
+      "pageErrors": []
+    }
+  },
+  "reused": {
+    "baselineMainPushWorkflows": "10/10 success",
+    "G01throughG04": "admitted PRs #471/#472/#473; not manually rerun",
+    "v09SignedMedia": "unchanged"
+  },
+  "stillOpen": [
+    "V1-1",
+    "V1-3 E01/Q01",
+    "V1-4 G06",
+    "V1-5",
+    "V1-6",
+    "V1-7"
+  ],
+  "publicationOrDeploymentClaimed": false,
+  "ciIntegration": {
+    "workflow": ".github/workflows/v08-g2-live-acceptance.yml",
+    "sha256OfLFContent": "2a45aadd96acfd7ea6db172e772b96302218cbbbcb96cccab113825bd8996655",
+    "runsNewBrowserCase": true,
+    "sanitizedEvidenceUploadConfigured": true
+  },
+  "initialBrowser": {
+    "reportPath": "artifacts/g05-results/browser-before-reselect.json",
     "reportSha256": "1c5e9e60b237e343b6010eb9e150359774a7cee304aed742137e5bc20e338a32",
     "report": {
       "sourceSha": "f71008933d4972e2d5dee2dc3a11cd94d2a4bce1",
@@ -134,24 +213,11 @@
       "pageErrors": []
     }
   },
-  "reused": {
-    "baselineMainPushWorkflows": "10/10 success",
-    "G01throughG04": "admitted PRs #471/#472/#473; not manually rerun",
-    "v09SignedMedia": "unchanged"
-  },
-  "stillOpen": [
-    "V1-1",
-    "V1-3 E01/Q01",
-    "V1-4 G06",
-    "V1-5",
-    "V1-6",
-    "V1-7"
-  ],
-  "publicationOrDeploymentClaimed": false,
-  "ciIntegration": {
-    "workflow": ".github/workflows/v08-g2-live-acceptance.yml",
-    "sha256OfLFContent": "2a45aadd96acfd7ea6db172e772b96302218cbbbcb96cccab113825bd8996655",
-    "runsNewBrowserCase": true,
-    "sanitizedEvidenceUploadConfigured": true
+  "sameClusterCorrection": {
+    "foundBy": "Real Keycloak SQLite W74/W76 browser CI, workflow 43394532316, 2 failures / 133 passes / zero skips",
+    "cause": "Reselecting the same cluster cleared its hint without changing the effect dependency, permanently hiding authorized menus.",
+    "fix": "Discard hint only when the selected cluster actually changes; current-scope authority is preserved.",
+    "newFocusedBrowserCase": "passed",
+    "genuineLiveRetest": "pending final changed-source CI; no success claimed before observation"
   }
 }

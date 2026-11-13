@@ -567,7 +567,7 @@ export function AppShell() {
   }, [loadClusters, loadTopics, selectedClusterId, topicQuery, showManagedWorkspace, requestedPage, activeTopic, operatorScope, wantsClusterObservation]);
 
   const selectCluster = (clusterId: string) => {
-    setGovernanceNavigation(null);
+    if (clusterId !== selectedClusterRef.current) setGovernanceNavigation(null);
     topicDetailRequest.current?.abort();
     setActiveTopic(null);
     ++topicListGeneration.current;
