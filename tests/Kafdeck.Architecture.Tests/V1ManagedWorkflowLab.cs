@@ -51,7 +51,7 @@ internal sealed class V1ManagedWorkflowLab : IAsyncDisposable
             new("connection-a","A",["127.0.0.1:19092"],protocol,protocol=="PLAINTEXT"?null:"PLAIN"),
             new("connection-b","B",["127.0.0.1:19093"],protocol,protocol=="PLAINTEXT"?null:"PLAIN")] });
     }
-    internal static async Task<V1ManagedWorkflowLab> Start(bool setup = false, MemoryCache? credentials = null)
+    internal static async Task<V1ManagedWorkflowLab> Start(bool setup = false, MemoryCache? credentials = null, MonitoringStore? monitoring = null)
     {
         var f=new V1ManagedWorkflowLab();
         if(setup)f.Store.Write(new(ManagedProvisioningFixture.Issuer,null,false,null,default,[]));
@@ -66,7 +66,14 @@ internal sealed class V1ManagedWorkflowLab : IAsyncDisposable
         builder.Services.AddSingleton(new GovernanceRuntimeOptions());builder.Services.AddSingleton<ClusterExplorerService>(_=>null!);
         f.Runtime=new(f.Requests,f.Store,f.Configuration,credentials);builder.Services.AddSingleton(f.Runtime);builder.Services.AddSingleton<IHttpContextAccessor>(f.Requests);
         builder.Services.AddKafdeckAntiforgery("http://127.0.0.1:0");
+        if(monitoring is not null)
+        {
+            builder.Services.AddSingleton(monitoring);
+            builder.Services.AddSingleton(f.Store);
+            builder.Services.AddSingleton(TimeProvider.System);
+        }
         f.App=builder.Build();f.App.UseRouting();f.App.Use((context,next)=>{context.User=f.Actor;return next(context);});f.App.UseAntiforgery();f.App.MapKafdeckAntiforgeryEndpoint();
+        if(monitoring is not null) KafkaMetricSources.Map(f.App,options with {Clusters=f.Runtime.IncludeRegistered(options.Clusters)});
         f.App.MapManagedIdentity(f.Store,options);
         f.App.MapKafkaConnectionWorkspace(options,f.Store,(_,_)=>{f.MetadataProbes++;return Task.FromResult(new Metadata([new Confluent.Kafka.BrokerMetadata(1,"127.0.0.1",19092)],[],1,"127.0.0.1:19092"));});
         f.App.MapRegisteredHttpServices(f.Store,new(f.Store,f.Requests,new EphemeralDataProtectionProvider(),f.Configuration));

@@ -28,6 +28,7 @@ import {
 import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { TopicRecordPublisher } from '../features/records/TopicRecordPublisher.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
+import { MonitoringPage } from '../features/monitoring/MonitoringPage.js';
 import { RegisteredConnectView } from '../features/readviews/RegisteredConnectView.js';
 import { RegisteredKsqlView } from '../features/readviews/RegisteredKsqlView.js';
 import { NotificationObservationPanel } from '../features/notifications/NotificationObservationPanel.js';
@@ -739,7 +740,7 @@ export function AppShell() {
           </div>
           <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => {
             if (!selectedDirectoryEntry) void loadClusters(undefined, clusters.length > 0);
-            else if (requestedPage === 'consumers') setConsumerRefresh(version => version + 1);
+            else if (requestedPage === 'consumers' || requestedPage === 'monitoring') setConsumerRefresh(version => version + 1);
             else if (wantsClusterObservation) {
               setClusterRefresh(version => version + 1);
               void loadClusters(undefined, true);
@@ -810,6 +811,8 @@ export function AppShell() {
               referenceSubscription={null} onUpdated={() => { /* No NotificationRead grant. */ }} />
           </section>}</>}
           {selectedDirectoryEntry && <>
+            {activePage === 'monitoring' && <MonitoringPage key={JSON.stringify([operatorScope, selectedClusterId])}
+              clusterId={selectedClusterId} refresh={consumerRefresh} manage={operator?.canManageUsers===true} />}
             {wantsClusterObservation && clusterObservationError && <div className="alert alert-danger kafdeck-status" role="alert">{problemPresentation(clusterObservationError)}</div>}
             {wantsClusterObservation && !selected && !clusterObservationError && <div className="alert alert-info kafdeck-status" role="status">{t("Loading cluster observations…")}</div>}
             {activePage === 'overview' && selected && <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">

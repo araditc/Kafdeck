@@ -1,5 +1,5 @@
 export const dashboardPages = [
-  ['overview', 'Overview'], ['brokers', 'Brokers'], ['topics', 'Topics'],
+  ['overview', 'Overview'], ['monitoring', 'Monitoring'], ['brokers', 'Brokers'], ['topics', 'Topics'],
   ['consumers', 'Consumers'], ['schemas', 'Schemas'], ['ecosystem', 'Ecosystem'],
   ['fleet', 'Fleet'], ['automation', 'Automation'], ['ownership-catalog', 'Ownership catalog'],
   ['governance-policy', 'Governance policy'], ['service-requests', 'Requests'],

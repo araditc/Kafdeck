@@ -153,6 +153,8 @@ internal static class ManagedIdentityEndpoints
         if (clusterId is null || (user.Role != "owner" && !user.ClusterIds.Contains(clusterId, StringComparer.Ordinal))) return false;
         if (action is AuthorizationAction.RecordRead or AuthorizationAction.RecordExport)
             return CanManageRegisteredTarget(user, clusterId) && IsRegisteredTarget(store, clusterId);
+        if (action == AuthorizationAction.MonitoringRead)
+            return user.Role is "owner" or "operator" or "manager";
         if (action == AuthorizationAction.SchemaCreate)
             return registeredWrites && schemaRegistryConfigured && CanManageRegisteredTarget(user, clusterId);
         if (IsRegisteredMutationAction(action))

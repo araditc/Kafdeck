@@ -819,6 +819,11 @@ if (declarativeOptions.Enabled)
     builder.Services.AddSingleton<DeclarativeSubscriptionMutationHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler>(services => services.GetRequiredService<DeclarativeSubscriptionMutationHandler>());
 }
+builder.Services.AddSingleton(MonitoringSettings.Load(builder.Configuration,
+    managedIdentity is null ? null : Path.Combine(Path.GetDirectoryName(managedIdentityOptions.StateFile!)!, "kafdeck-monitoring.sqlite")));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<MonitoringStore>();
+builder.Services.AddHostedService<MonitoringWatchdog>();
 var app = builder.Build();
 if (governanceGenerationAdmission)
 {
@@ -1081,6 +1086,7 @@ app.MapKafdeckV07SchemaDeveloperTools(dashboardOptions);
 app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckV08Observability(kafdeckOptions);
+KafkaMetricSources.Map(app,dashboardOptions);
 app.MapKafdeckV08OperationalAnalytics(kafdeckOptions);
 if (dataQualityOptions?.Enabled == true)
 {
