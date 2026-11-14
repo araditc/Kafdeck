@@ -9,6 +9,8 @@ internal sealed record MonitorRule(string Name, string Metric, double Threshold,
 internal sealed class MonitoringStore
 {
     private readonly MonitoringSettings _settings;
+    // Internal samples are admitted only in process. An empty credential cannot match a hashed HTTP credential.
+    private readonly BrokerSource[] _metadataSources;
     private readonly string _connection;
     private readonly MonitorRule[] _rules;
     private readonly ILogger<MonitoringStore> _logger;
@@ -20,11 +22,14 @@ internal sealed class MonitoringStore
     public MonitoringStore(MonitoringSettings settings, IConfiguration configuration, ILogger<MonitoringStore> logger, TimeProvider clock)
     {
         _settings = settings;
+        _metadataSources = settings.MetadataClusters.Select(cluster=>new BrokerSource(cluster,MonitoringSettings.MetadataInstance,[])).ToArray();
         _logger = logger;
         _clock = clock;
         _connection = new SqliteConnectionStringBuilder { DataSource=settings.Database, DefaultTimeout=3 }.ToString();
         var section = configuration.GetSection("Kafdeck:Monitoring");
         _rules = [
+            new("KafkaMetadataOfflinePartitions", "kafka.metadata/offline_partitions", 0,false,0,"critical"),
+            new("KafkaMetadataUnderReplicated", "kafka.metadata/under_replicated_partitions", 0,false,120,"warning"),
             new("KafkaOfflinePartitions", "kafka.controller:KafkaController/OfflinePartitionsCount/Value", 0,false,0,"critical"),
             new("KafkaUnderReplicated", "kafka.server:ReplicaManager/UnderReplicatedPartitions/Value", 0,false,120,"warning"),
             new("KafkaHandlerBusy", "kafka.server:KafkaRequestHandlerPool/RequestHandlerAvgIdlePercent/OneMinuteRate", 0.15,true,300,"warning"),
@@ -57,7 +62,7 @@ internal sealed class MonitoringStore
             CREATE INDEX IF NOT EXISTS monitor_incident_time ON monitor_incident(cluster,fired);
             """;
         init.ExecuteNonQuery();
-        foreach (var source in settings.Sources)
+        foreach (var source in settings.Sources.Concat(_metadataSources))
             Exec(db,"INSERT OR IGNORE INTO monitor_source VALUES($c,$i,$t,NULL,0)",("$c",source.ClusterId),("$i",source.Instance),("$t",Now));
     }
 
@@ -105,7 +110,7 @@ internal sealed class MonitoringStore
         if (_settings.Database.Length==0) return [];
         using var db=Open();using var cmd=Sql(db,"SELECT cluster,instance,hash FROM monitor_enrollment");
         using var r=cmd.ExecuteReader();
-        var rows=_settings.Sources.ToList();
+        var rows=_settings.Sources.Concat(_metadataSources).ToList();
         while (r.Read()) rows.Add(new(r.GetString(0),r.GetString(1),(byte[])r[2]));
         return rows.ToArray();
     }
@@ -113,7 +118,7 @@ internal sealed class MonitoringStore
     internal IResult Enroll(string cluster,string instance,string action)
     {
         if (_settings.Database.Length==0) return Results.Problem(statusCode:409,title:"Configure a monitoring DatabasePath on the Kafdeck server.");
-        if (string.IsNullOrWhiteSpace(instance) || instance.Length>160 || instance.Any(char.IsControl) ||
+        if (string.IsNullOrWhiteSpace(instance) || instance==MonitoringSettings.MetadataInstance || instance.Length>160 || instance.Any(char.IsControl) ||
             action is not ("create" or "rotate" or "revoke")) return Results.BadRequest();
         lock (_writes)
         {

@@ -126,6 +126,23 @@ public sealed class KafkaMonitoringTests : IDisposable
     }
 
     [Fact]
+    public void Kafka_metadata_projection_matches_leaders_replication_and_suppresses_incomplete_totals()
+    {
+        var ok=new Confluent.Kafka.Error(Confluent.Kafka.ErrorCode.NoError);
+        var noLeader=new Confluent.Kafka.Error(Confluent.Kafka.ErrorCode.LeaderNotAvailable);
+        var brokers=new List<Confluent.Kafka.BrokerMetadata>{new(1,"first",9092),new(2,"second",9092)};
+        var topic=new Confluent.Kafka.TopicMetadata("topic",[new(0,1,[1,2],[1],ok),new(1,-1,[2],[],noLeader)],ok);
+        var batch=KafkaMetadataMonitor.Capture(new(brokers,[topic],1,"first"),21.5);
+        double Value(string name)=>Assert.Single(batch.Samples,p=>p.Metric=="kafka.metadata/"+name).Value;
+        Assert.False(batch.Partial);
+        Assert.Equal(2,Value("brokers")); Assert.Equal(1,Value("offline_partitions")); Assert.Equal(2,Value("under_replicated_partitions"));
+        Assert.Equal(21.5,Value("response_ms")); Assert.Equal(1,Assert.Single(batch.Samples,p=>p.Metric.EndsWith("partition_leaders") && p.Labels["broker_id"]=="1").Value);
+        var failed=new Confluent.Kafka.TopicMetadata("unavailable",[],new(Confluent.Kafka.ErrorCode.TopicAuthorizationFailed));
+        var partial=KafkaMetadataMonitor.Capture(new(brokers,[topic,failed],1,"first"),50);
+        Assert.True(partial.Partial);Assert.DoesNotContain(partial.Samples,p=>p.Metric.Contains("partitions"));
+    }
+
+    [Fact]
     public void Client_statistics_keep_numeric_metrics_with_broker_topic_partition_and_request_dimensions()
     {
         const long now=1_800_000_000;

@@ -12,6 +12,8 @@ internal sealed record JmxPoint(string Metric, SortedDictionary<string, string> 
 internal sealed record JmxBatch(bool Partial, Guid Cycle, int Part, bool Last, JmxPoint[] Samples);
 internal sealed record MonitoringSettings(string Database, BrokerSource[] Sources)
 {
+    internal const string MetadataInstance = "kafdeck-metadata";
+    internal string[] MetadataClusters { get; init; } = [];
     internal static MonitoringSettings Load(IConfiguration config,string? managedDatabase)
     {
         var section = config.GetSection("Kafdeck:Monitoring");
@@ -32,9 +34,12 @@ internal sealed record MonitoringSettings(string Database, BrokerSource[] Source
                 throw new InvalidOperationException("Monitoring source identities and credentials must be unique.");
             sources.Add(new(cluster, instance, hash));
         }
+        var ids=section.GetSection("MetadataClusters").Get<string[]>() ?? [];
+        if(ids.Length>16 || ids.Any(id=>string.IsNullOrWhiteSpace(id) || id.Length>160) || ids.Distinct().Count()!=ids.Length ||
+            sources.Any(s=>s.Instance==MetadataInstance)) throw new InvalidOperationException("Invalid metadata monitoring targets.");
         var db = section["DatabasePath"] ?? managedDatabase ?? "";
-        if ((sources.Count > 0 || db.Length > 0) && !Path.IsPathFullyQualified(db)) throw new InvalidOperationException("Monitoring needs an absolute DatabasePath.");
-        return new(db, sources.ToArray());
+        if ((ids.Length>0 || sources.Count > 0 || db.Length > 0) && !Path.IsPathFullyQualified(db)) throw new InvalidOperationException("Monitoring needs an absolute DatabasePath.");
+        return new(db, sources.ToArray()){MetadataClusters=ids};
     }
 }
 

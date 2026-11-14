@@ -4,6 +4,8 @@ Select a cluster and open **Monitoring**. The dashboard, numeric samples, rule e
 
 ## Enable broker measurements
 
+For a saved PLAINTEXT connection an operator can enable a read-only Kafka metadata sampler by adding its cluster ID to the server configuration list `Kafdeck:Monitoring:MetadataClusters` and restarting Kafdeck. Every 30 seconds Kafdeck reads Kafka metadata over the existing broker listener, within the configured registration networks. In **Metric explorer** search for `kafka.metadata/`. The source `kafdeck-metadata` reports visible brokers, topics, partitions, leader distribution, offline and under-replicated partitions, and metadata response time. Partial observations suppress incomplete topology totals. The server alerts on offline partitions, sustained under-replication, or absence of samples. Internal broker request timings, CPU and GC still require the per-JVM agent below.
+
 1. Sign in as the managed deployment owner. Open **Monitoring → Manage monitoring sources** and download the agent. Register a distinct instance name for each Kafka broker or standalone controller, such as `broker-2`.
 2. Save the displayed key to a file readable by the Kafka service account. Use separate keys for each source. Registration and rotation display the key once. The server stores its SHA-256 digest.
 3. Copy the JAR to the Kafka host. Put the following in a file such as `/etc/kafdeck/agent.properties`. Use the HTTPS address reachable from *the broker*. The Kafka JVM must trust that server's certificate.

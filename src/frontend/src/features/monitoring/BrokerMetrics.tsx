@@ -7,6 +7,8 @@ import { TimeChart } from './Chart.js';
 import { AlertRules } from './AlertRules.js';
 
 const investigations: Record<string, string> = {
+  KafkaMetadataOfflinePartitions: 'Inspect partition leaders and controller events for unavailable replicas.',
+  KafkaMetadataUnderReplicated: 'Check ISR membership, follower disk latency and replication traffic.',
   KafkaTargetDown: 'Check the Kafka process, agent credentials and network path to Kafdeck.',
   KafkaOfflinePartitions: 'Inspect partition leaders and controller events for unavailable replicas.',
   KafkaUnderReplicated: 'Check ISR membership, follower disk latency and replication traffic.',

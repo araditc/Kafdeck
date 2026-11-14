@@ -824,6 +824,9 @@ builder.Services.AddSingleton(MonitoringSettings.Load(builder.Configuration,
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MonitoringStore>();
 builder.Services.AddHostedService<MonitoringWatchdog>();
+if (managedIdentity is not null && builder.Configuration.GetValue<bool>("Kafdeck:ConnectionWorkspace:Enabled") &&
+    builder.Configuration.GetSection("Kafdeck:Monitoring:MetadataClusters").Exists())
+    builder.Services.AddHostedService<KafkaMetadataMonitor>();
 var app = builder.Build();
 if (governanceGenerationAdmission)
 {
