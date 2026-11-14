@@ -137,17 +137,17 @@
       "kafdeck.api": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Ecosystem": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Kafka": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Persistence": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Security": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )",
-          "Kafdeck.Modules.Clusters": "[0.9.0, )",
-          "Kafdeck.Modules.Consumers": "[0.9.0, )",
-          "Kafdeck.Modules.Schemas": "[0.9.0, )",
-          "Kafdeck.Modules.Topics": "[0.9.0, )",
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Configuration": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Ecosystem": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Kafka": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Persistence": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Security": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Clusters": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Consumers": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Schemas": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Topics": "[1.0.0-rc.1, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.13, )",
           "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.20.0, )",
           "OpenTelemetry.Extensions.Hosting": "[1.20.0, )"
@@ -159,31 +159,31 @@
       "kafdeck.infrastructure.configuration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.infrastructure.ecosystem": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Configuration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.infrastructure.kafka": {
         "type": "Project",
         "dependencies": {
           "Confluent.Kafka": "[2.16.0, )",
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Configuration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.infrastructure.persistence": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Modules.Administration": "[0.9.0, )",
-          "Kafdeck.Modules.Connect": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Connect": "[1.0.0-rc.1, )",
           "Microsoft.Data.Sqlite": "[10.0.13, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -193,65 +193,65 @@
         "dependencies": {
           "Apache.Avro": "[1.12.2, )",
           "Google.Protobuf": "[3.36.2, )",
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Infrastructure.Configuration": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Infrastructure.Configuration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.infrastructure.security": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.clusters": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.consumers": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.generator": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )",
-          "Kafdeck.Modules.Records": "[0.9.0, )",
-          "Kafdeck.Modules.Schemas": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Records": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Schemas": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.records": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.schemas": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.topics": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "Apache.Avro": {

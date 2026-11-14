@@ -1788,7 +1788,7 @@
   ],
   "producers": {
     "src/mcp/Kafdeck.Mcp/McpApiBackend.cs": "d9e54426b0d4eec4a7446aebd34e508fb24a89d4407216dd4aca15625e1db08f",
-    "src/mcp/Kafdeck.Mcp/McpServer.cs": "3f56fcb327b50293d2489c6cc7beb663d4c54407b186f27bd697a0376c46aa03",
+    "src/mcp/Kafdeck.Mcp/McpServer.cs": "9f535b326716aad9f8e0d962e55e0f1a57280f4b2562339766dc6c85fc73d570",
     "src/mcp/Kafdeck.Mcp/McpTools.cs": "b588d75d4c6673c18227377e308c9cfd363d2f0c5e0d408b89ee3e224e74b400",
     "src/mcp/Kafdeck.Mcp/Program.cs": "7993a7fb78295e7f51f75837507fddaae8ba662e426e5e2aac1249d7e0d4e73a"
   }

@@ -70,8 +70,8 @@
       "kafdeck.infrastructure.persistence": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Modules.Administration": "[0.9.0, )",
-          "Kafdeck.Modules.Connect": "[0.9.0, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Connect": "[1.0.0-rc.1, )",
           "Microsoft.Data.Sqlite": "[10.0.13, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -79,14 +79,14 @@
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.connect": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "Microsoft.Data.Sqlite": {

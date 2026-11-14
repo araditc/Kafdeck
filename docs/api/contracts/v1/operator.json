@@ -1926,7 +1926,7 @@
     "src/backend/Kafdeck.Api/Program.cs": "12703ff53f1e0585de1701950afa3c7288662e9ff48d88695ebff8d4c8013d40",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",
     "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs": "a3eb952a4d6b6e94f376d965f4cfd607949813ee6eef1cbae84dc7b63c900661",
-    "deploy/helm/kafdeck/Chart.yaml": "ca9b06277579d7f86ae14b9deb4c2d978ddda2286551a9dbf8012ff91e37d356",
+    "deploy/helm/kafdeck/Chart.yaml": "d6946564c70ff989bdd79fdb891b92b29ba7433f82e887b889eba5be1cc093be",
     "deploy/helm/kafdeck/templates/_helpers.tpl": "fe5f97cfd9b6d4d5c30002a0504d480423f7ec92c2c36d07a19e6fa2947f913c",
     "deploy/helm/kafdeck/templates/deployment.yaml": "e9378dd98b80404bf1be859add74fd1eee5eb9ea28fd4cba45f1effe9b7ad27e",
     "deploy/helm/kafdeck/templates/network-policy.yaml": "b4f57d1cfbe5e606bd318fffc9e4e3748dc62192dc3ace788906e23e2712b021",

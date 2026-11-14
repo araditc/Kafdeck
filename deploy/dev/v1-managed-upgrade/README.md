@@ -23,3 +23,7 @@ Then set `KAFDECK_E01_EDGE_CASES=1` and run the browser command once for the sep
 Keep the same content root/application discriminator across old/new API processes. Explicit candidate key-ring selection copies the actual matching legacy keys; missing keys must deny reads without clearing saved state. Windows DPAPI portability to another user/machine is deliberately not claimed. Fixture checkpoints permit resuming setup/backup preparation; they are not release artifacts and must never be uploaded.
 
 The committed evidence records the actual tested native reference profile. Linux/CNI/provider matrices and final signed-RC media remain separately scoped gates; these scripts do not silently broaden their support claims or rerun W82.
+
+## Selected unsigned v1 RC
+
+Use `rc-run.cjs` and the [V1-4 admission procedure](../../../docs/releases/v1.0-rc-admission.md) for an independently selected native RC packet. It verifies source/manifest/input hashes, installs the archived native API/UI into a fresh owned directory and runs actual first-install/upgrade/restore with those bytes. The original DLL mode above remains a development proof. The RC reference reuses unchanged G06 negative guard cases explicitly and does not overwrite their historical report or claim an official signature/publication.

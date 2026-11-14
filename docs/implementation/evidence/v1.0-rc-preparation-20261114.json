@@ -1,0 +1,70 @@
+{
+  "gate": "V1-4",
+  "date": "2026-11-14",
+  "status": "prepared; exact native RC and managed upgrade admission pending",
+  "baseMain": "0ea9db09688b375194016b6316dc6e5c45ac5499",
+  "baseMainPushWorkflowsAllSucceeded": true,
+  "baseMainPushRuns": [
+    43456978031,
+    43456977975,
+    43456978544,
+    43456978196,
+    43456977987,
+    43456978068,
+    43456978128,
+    43456978071
+  ],
+  "candidate": "v1.0.0-rc.1",
+  "assemblyVersion": "1.0.0.0",
+  "terraformVersion": "0.8.0",
+  "mcpProtocol": "2025-06-18",
+  "versionOnlyInternalLockFiles": 81,
+  "externalResolvedPackagesUnchanged": true,
+  "backendGuardSourcesUnchanged": true,
+  "cliBehaviorSourcesUnchanged": true,
+  "frontendBehaviorSourcesUnchanged": true,
+  "mcpChange": "ServerVersion metadata only; tool/protocol/effect boundary unchanged",
+  "versionOnlyContractProducerUpdates": [
+    "src/mcp/Kafdeck.Mcp/McpServer.cs",
+    "deploy/helm/kafdeck/Chart.yaml"
+  ],
+  "tests": {
+    "lockedRestoreFromExistingLocalCache": true,
+    "localSdk": "10.0.404",
+    "nativeProducerSdk": "10.0.403",
+    "packetGuardCases": 9,
+    "packetGuardPassed": 9,
+    "focusedContractPassed": 4,
+    "focusedContractSkipped": 0,
+    "focusedContractTrxSha256": "e599e84ae5ad40fe23648b0ba8aca4ee115fc7a0c49b26b20a49b77104962fca",
+    "changedPowerShellParserErrors": 0,
+    "changedNodeConsumerSyntaxPassed": true,
+    "localDocumentLinks": 47
+  },
+  "reusedEvidence": {
+    "docs/implementation/evidence/v1.0-g06-upgrade-20261113.json": "18f71309b1581251ab0920b4658d216c768da7bdafe917d662cb3f9dea182df4",
+    "docs/implementation/evidence/v1.0-g06-stabilization-20261113.json": "54f73aa31bc87f117d7b056cca060f3cce859c73f07659c20029df281bcbdb2d",
+    "docs/implementation/evidence/v0.9-release-published-20261112.json": "987f239a5b121e2cebb165db7296d2199a27cc2298703e03400d47d32143392b"
+  },
+  "nativeRcInstalled": false,
+  "actualManagedRcUpgradePassed": false,
+  "signed": false,
+  "releaseReady": false,
+  "publicationAuthorized": false,
+  "pending": [
+    "authenticated five-RID exact-source native producer/install evidence",
+    "actual source/manifest/archive-bound first-owner and two-database managed upgrade/restore",
+    "normal PR/main admission"
+  ],
+  "separateGates": [
+    "V1-5 exact support cells/current scans",
+    "V1-6 complete OCI/Helm/integration/signed media",
+    "V1-7 owner signing/publication decisions"
+  ],
+  "limits": [
+    "Controlled packet test bytes are not actual installation/authentication evidence.",
+    "G06 negative guard successes are reused only for identical guard source and external dependencies.",
+    "No successful W82 load/soak or signed-distribution campaign was manually repeated.",
+    "Original user worktree/service and immutable v0.9 inputs remain unchanged."
+  ]
+}

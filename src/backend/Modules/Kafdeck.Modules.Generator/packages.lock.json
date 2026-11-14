@@ -8,21 +8,21 @@
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.records": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       },
       "kafdeck.modules.schemas": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[0.9.0, )",
-          "Kafdeck.Modules.Administration": "[0.9.0, )"
+          "Kafdeck.Core": "[1.0.0-rc.1, )",
+          "Kafdeck.Modules.Administration": "[1.0.0-rc.1, )"
         }
       }
     }
