@@ -39,7 +39,9 @@
     "focusedContractTrxSha256": "e599e84ae5ad40fe23648b0ba8aca4ee115fc7a0c49b26b20a49b77104962fca",
     "changedPowerShellParserErrors": 0,
     "changedNodeConsumerSyntaxPassed": true,
-    "localDocumentLinks": 47
+    "localDocumentLinks": 47,
+    "correctedReleaseIdentityCasePassed": 1,
+    "correctedReleaseIdentityTrxSha256": "a1eccecdd0d7a93dc7252f90553126b117c5c526e96058ccfdc8c0566e1e947c"
   },
   "reusedEvidence": {
     "docs/implementation/evidence/v1.0-g06-upgrade-20261113.json": "18f71309b1581251ab0920b4658d216c768da7bdafe917d662cb3f9dea182df4",
@@ -66,5 +68,13 @@
     "G06 negative guard successes are reused only for identical guard source and external dependencies.",
     "No successful W82 load/soak or signed-distribution campaign was manually repeated.",
     "Original user worktree/service and immutable v0.9 inputs remain unchanged."
-  ]
+  ],
+  "ciFollowup": {
+    "sourceSha": "c1645439cc50bbd62da9232406fe0f3dc9dfd747",
+    "nativeRun": 43575621559,
+    "nativeFiveRidsSucceeded": true,
+    "releaseQualityRun": 43575621600,
+    "releaseQualityFailure": "Current build version was compared with immutable v0.9 publication input; corrected test uses the explicit active RC selector and retains historical checks.",
+    "automatedReviewFinding": "Fresh-install test must use a disposable source-bound Keycloak realm separate from both retained G06 upgrade realms. Corrected before actual managed-RC execution; not claimed as a prior runtime failure."
+  }
 }

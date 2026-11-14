@@ -11,8 +11,10 @@ const {chromium}=require(process.env.KAFDECK_BROWSER_PLAYWRIGHT||path.join(root,
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,'')),sha=f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 const write=(f,x)=>fs.writeFileSync(f,JSON.stringify(x,null,2));
 const rcManifest=process.argv[6]?read(path.resolve(process.argv[6])):null;
+const rcFirstRealm=rcManifest?read(path.join(lab,'rc-first-install-realm.json')):null;
 if(rcManifest){
  assert.equal(rcManifest.kind,'unsigned-v1-native-candidate');assert.equal(rcManifest.rid,'win-x64');assert.equal(rcManifest.signed,false);assert.equal(rcManifest.releaseReady,false);
+ assert.equal(rcFirstRealm.sourceSha,rcManifest.sourceSha);assert.equal(rcFirstRealm.isolatedFromUpgradeRealms,true);assert.match(rcFirstRealm.issuer,/^https:\/\/localhost:18444\/realms\/kafdeck-v1-rc-install-[a-f0-9]{12}-[a-f0-9]{12}$/);
  for(const [name,hash] of Object.entries(rcManifest.components['api-ui'].files)){assert.ok(!name.includes('..')&&!path.isAbsolute(name));assert.equal(sha(path.join(path.dirname(candidate),name)),hash,'Installed RC file mismatch: '+name);}
 }
 const reportName=rcManifest?'v1-rc-upgrade.json':'g06-upgrade.json';
@@ -93,7 +95,7 @@ function configure(provider,directory){
   phase='seed-reference-kafka';if(!fs.existsSync(path.join(lab,'kafka-reference-ready'))){probeRun(['kafka','127.0.0.1:19092']);fs.writeFileSync(path.join(lab,'kafka-reference-ready'),'20 topics / 100 records / 5 groups');}
   if(rcManifest){
    phase='rc-first-install';const fresh=path.join(lab,'rc-first-install-'+crypto.randomBytes(8).toString('hex'));fs.mkdirSync(fresh);
-   const settings=configure('sqlite',fresh);settings['Kafdeck:DataProtection:KeyDirectory']=path.join(fresh,'keys');fs.mkdirSync(settings['Kafdeck:DataProtection:KeyDirectory']);write(path.join(fresh,'appsettings.json'),settings);
+   const settings=configure('sqlite',fresh);settings['Kafdeck:Deployment:Oidc:Issuer']=rcFirstRealm.issuer;settings['Kafdeck:DataProtection:KeyDirectory']=path.join(fresh,'keys');fs.mkdirSync(settings['Kafdeck:DataProtection:KeyDirectory']);write(path.join(fresh,'appsettings.json'),settings);
    fs.cpSync(path.join(path.dirname(candidate),'wwwroot'),path.join(fresh,'wwwroot'),{recursive:true});
    const issued=run(candidate,['--issue-setup-code'],{...process.env,ASPNETCORE_CONTENTROOT:fresh}).trim().split(/\s/).pop();
    await start(candidate,fresh);const bootstrap=await browser.newContext({ignoreHTTPSErrors:true});
@@ -102,7 +104,7 @@ function configure(provider,directory){
    const users=await owner.context.request.get(api+'/api/v1/identity/users');assert.equal(users.status(),200);assert.ok((await users.text()).includes(email));
    const target=await post(owner.context,'/api/v1/connections/targets',{name:'RC fresh install',bootstrapServers:['127.0.0.1:19092'],protocol:'PLAINTEXT',mechanism:null});
    const topics=await owner.context.request.get(api+'/api/v1/clusters/'+target.clusterId+'/topics');assert.equal(topics.status(),200);
-   summary.firstInstall={provider:'sqlite',nativeArchive:true,firstOwnerCreated:true,keycloakOwnerLogin:true,targetRegistration:true,actualKafkaTopicRead:true};
+   summary.firstInstall={provider:'sqlite',nativeArchive:true,firstOwnerCreated:true,keycloakOwnerLogin:true,targetRegistration:true,actualKafkaTopicRead:true,dedicatedRealmSeparateFromUpgrade:true};
    await owner.context.close();await stop();
   }
   for(const provider of ['sqlite','postgres']){

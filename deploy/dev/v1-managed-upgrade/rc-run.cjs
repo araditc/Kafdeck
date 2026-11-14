@@ -10,6 +10,10 @@ for(const value of [source])assert.match(value||'',/^[a-f0-9]{40}$/);
 for(const value of [manifestHash,inputHash])assert.match(value||'',/^[a-f0-9]{64}$/);
 const lab=path.resolve(labArg||''),media=path.resolve(mediaArg||'');
 assert.ok(fs.existsSync(path.join(lab,'services-private.json')),'Explicit owned ready lab required.');
+const freshRealm=JSON.parse(fs.readFileSync(path.join(lab,'rc-first-install-realm.json'),'utf8'));
+assert.equal(freshRealm.sourceSha,source,'Prepare the dedicated fresh-install realm for this exact RC before starting Keycloak.');
+assert.equal(freshRealm.isolatedFromUpgradeRealms,true);
+assert.match(freshRealm.issuer,/^https:\/\/localhost:18444\/realms\/kafdeck-v1-rc-install-[a-f0-9]{12}-[a-f0-9]{12}$/);
 function git(args){const r=spawnSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,maxBuffer:32*1024*1024});assert.equal(r.status,0,'Source-bound reuse query failed.');return r.stdout.trim();}
 const baseline='0ea9db09688b375194016b6316dc6e5c45ac5499';
 assert.equal(git(['rev-parse','HEAD']),source,'Use the exact selected source checkout.');
