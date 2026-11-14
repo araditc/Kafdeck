@@ -8,7 +8,7 @@ namespace Kafdeck.Mcp;
 public sealed class McpServer(IMcpApiBackend backend, bool enableEffects = false)
 {
     public const string ProtocolVersion = "2025-06-18";
-    public const string ServerVersion = "0.9.0";
+    public const string ServerVersion = "1.0.0-rc.1";
     public const int MaxRequestBytes = 64 * 1024;
     public const int MaxOutputBytes = 2 * 1024 * 1024;
     public const int ToolPageSize = 20;

@@ -9,15 +9,22 @@ namespace Kafdeck.Architecture.Tests;
 public sealed class ReleaseIdentityTests
 {
     [Fact]
-    public void Packaged_versions_match_the_governed_release_manifest()
+    public void Packaged_versions_match_the_active_rc_without_rewriting_publication_history()
     {
         var root = FindRepositoryRoot();
 
-        using var releaseDocument = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(root, ".github", "release", "release.json")));
-        var releaseVersion = releaseDocument.RootElement.GetProperty("version").GetString()
-                             ?? throw new InvalidOperationException("Release version is missing.");
-        var expectedPackageVersion = ToPackageVersion(releaseVersion);
+        // release.json is the immutable v0.9 publication input, not the current
+        // development build selector. Its independent historical checks below remain.
+        using var selectionDocument = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(root, ".github", "release", "v1.0-rc.json")));
+        var selection = selectionDocument.RootElement;
+        var expectedPackageVersion = selection.GetProperty("version").GetString()
+                                     ?? throw new InvalidOperationException("RC version is missing.");
+        Assert.Equal("v" + expectedPackageVersion, selection.GetProperty("candidate").GetString());
+        Assert.False(selection.GetProperty("signed").GetBoolean());
+        Assert.False(selection.GetProperty("releaseReady").GetBoolean());
+        Assert.False(selection.GetProperty("publicationAuthorized").GetBoolean());
+        Assert.Equal(Kafdeck.Mcp.McpServer.ServerVersion, expectedPackageVersion);
 
         var buildProps = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
         var backendVersion = buildProps.Descendants("Version").Single().Value;
