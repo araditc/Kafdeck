@@ -828,6 +828,20 @@ if (managedIdentity is not null && builder.Configuration.GetValue<bool>("Kafdeck
     builder.Configuration.GetSection("Kafdeck:Monitoring:MetadataClusters").Exists())
     builder.Services.AddHostedService<KafkaMetadataMonitor>();
 var app = builder.Build();
+// An optional dedicated Kestrel listener exposes only token-authenticated agent uploads.
+if(builder.Configuration.GetValue<int?>("Kafdeck:Monitoring:IngestOnlyPort") is int ingestPort)
+{
+    app.Use(async (context,next) =>
+    {
+        if(context.Connection.LocalPort==ingestPort &&
+           !(context.Request.IsHttps && HttpMethods.IsPost(context.Request.Method) && context.Request.Path=="/monitoring/ingest"))
+        {
+            context.Response.StatusCode=StatusCodes.Status404NotFound;
+            return;
+        }
+        await next(context);
+    });
+}
 if (governanceGenerationAdmission)
 {
     var previous = Guid.ParseExact(builder.Configuration["Kafdeck:Governance:PreviousDeploymentGeneration"] ?? "", "D");

@@ -28,6 +28,9 @@ internal sealed class MonitoringStore
         _connection = new SqliteConnectionStringBuilder { DataSource=settings.Database, DefaultTimeout=3 }.ToString();
         var section = configuration.GetSection("Kafdeck:Monitoring");
         _rules = [
+            new("KafkaBrokerCpuHigh","kafdeck.jvm/cpu_percent",85,false,300,"warning"),
+            new("KafkaBrokerGcHigh","kafdeck.jvm/gc_time_percent",10,false,120,"warning"),
+            new("KafkaRequestQueueSlow","kafka.network:RequestMetrics/RequestQueueTimeMs/99thPercentile",100,false,120,"warning"),
             new("KafkaMetadataOfflinePartitions", "kafka.metadata/offline_partitions", 0,false,0,"critical"),
             new("KafkaMetadataUnderReplicated", "kafka.metadata/under_replicated_partitions", 0,false,120,"warning"),
             new("KafkaOfflinePartitions", "kafka.controller:KafkaController/OfflinePartitionsCount/Value", 0,false,0,"critical"),
@@ -57,6 +60,7 @@ internal sealed class MonitoringStore
             CREATE INDEX IF NOT EXISTS monitor_expiry ON monitor_sample(time);
             CREATE TABLE IF NOT EXISTS monitor_alert(cluster TEXT, instance TEXT, name TEXT, metric TEXT, labels TEXT, since INTEGER, seen INTEGER, value REAL, threshold REAL, state TEXT, severity TEXT, PRIMARY KEY(cluster,instance,name,labels));
             CREATE TABLE IF NOT EXISTS monitor_rule(cluster TEXT, name TEXT, metric TEXT, threshold REAL, below INTEGER, seconds INTEGER, severity TEXT, PRIMARY KEY(cluster,name));
+            CREATE TABLE IF NOT EXISTS monitor_sampling(cluster TEXT PRIMARY KEY, seconds INTEGER NOT NULL CHECK(seconds BETWEEN 10 AND 60));
             CREATE TABLE IF NOT EXISTS monitor_incident(id INTEGER PRIMARY KEY, cluster TEXT, instance TEXT, name TEXT, metric TEXT, labels TEXT, since INTEGER, fired INTEGER, value REAL, threshold REAL, severity TEXT, ended INTEGER, reason TEXT);
             CREATE UNIQUE INDEX IF NOT EXISTS monitor_incident_open ON monitor_incident(cluster,instance,name,labels) WHERE ended IS NULL;
             CREATE INDEX IF NOT EXISTS monitor_incident_time ON monitor_incident(cluster,fired);
@@ -67,6 +71,24 @@ internal sealed class MonitoringStore
     }
 
     private long Now => _clock.GetUtcNow().ToUnixTimeSeconds();
+    internal int? SamplingOverride(string cluster)
+    {
+        if (_settings.Database.Length==0) return null;
+        using var db=Open();
+        using var cmd=Sql(db,"SELECT seconds FROM monitor_sampling WHERE cluster=$c",("$c",cluster));
+        return cmd.ExecuteScalar() is long value ? (int)value : null;
+    }
+    internal IResult SetSampling(string cluster,int seconds)
+    {
+        if(seconds is <10 or >60) return Results.BadRequest();
+        if(_settings.Database.Length==0) return Results.Conflict();
+        lock(_writes)
+        {
+            using var db=Open();
+            Exec(db,"INSERT INTO monitor_sampling VALUES($c,$v) ON CONFLICT(cluster) DO UPDATE SET seconds=excluded.seconds",("$c",cluster),("$v",seconds));
+        }
+        return Results.Ok(new {seconds});
+    }
     private static List<MonitorRule> ClusterRules(SqliteConnection db,string cluster)
     {
         using var cmd=Sql(db,"SELECT name,metric,threshold,below,seconds,severity FROM monitor_rule WHERE cluster=$c ORDER BY name",("$c",cluster));
@@ -260,6 +282,7 @@ internal sealed class MonitoringStore
 
     internal IResult Read(string cluster,string kind,string? metric,string? search,int minutes,string? instance,string? filters,CancellationToken ct)
     {
+        if(kind=="sampling") return Results.Ok(new {seconds=SamplingOverride(cluster)??30});
         var sources=Sources().Where(s=>s.ClusterId==cluster).Select(s=>s.Instance).ToArray();
         if (sources.Length==0) return Results.Ok(new {state="unconfigured"});
         if (minutes is not (15 or 60 or 360 or 1440) || metric?.Length>512 || search?.Length>100 || instance?.Length>160 || filters?.Length>2500) return Results.BadRequest();

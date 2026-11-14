@@ -10,6 +10,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.security.KeyStore;
+import java.security.cert.CertificateFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,7 +28,12 @@ import javax.management.openmbean.CompositeData;
 /** Loaded by Kafka itself. No JMX remote port, HTTP listener or external collector. */
 public final class KafkaAgent {
     private KafkaAgent() {}
-    public static void premain(String config, Instrumentation instrumentation) {
+    private static boolean running;
+    public static void agentmain(String config, Instrumentation instrumentation) {
+        premain(config,instrumentation);
+    }
+    public static synchronized void premain(String config, Instrumentation instrumentation) {
+        if(running) return;
         try {
             var properties = new Properties();
             try (var in = Files.newBufferedReader(Path.of(config))) { properties.load(in); }
@@ -34,25 +43,46 @@ public final class KafkaAgent {
                 uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null ||
                 !"/monitoring/ingest".equals(uri.getPath())) throw new IllegalArgumentException();
             var tokenFile = Path.of(properties.getProperty("tokenFile"));
-            var client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
-                .connectTimeout(Duration.ofSeconds(4)).build();
+            var builder = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(4));
+            if (properties.containsKey("caFile")) {
+                var trust = KeyStore.getInstance(KeyStore.getDefaultType()); trust.load(null,null);
+                try (var pem=Files.newInputStream(Path.of(properties.getProperty("caFile")))) {
+                    trust.setCertificateEntry("kafdeck",CertificateFactory.getInstance("X.509").generateCertificate(pem));
+                }
+                var managers=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); managers.init(trust);
+                var tls=SSLContext.getInstance("TLS"); tls.init(null, managers.getTrustManagers(), null);
+                builder.sslContext(tls);
+            }
+            var client = builder.build();
             var pool = Executors.newSingleThreadScheduledExecutor(r -> {
                 var t = new Thread(r, "kafdeck-metrics"); t.setDaemon(true); return t;
             });
             int interval = Integer.parseInt(properties.getProperty("intervalSeconds", "30"));
             if (interval < 10 || interval > 60) throw new IllegalArgumentException();
-            pool.scheduleWithFixedDelay(() -> {
+            boolean perPartition=Boolean.parseBoolean(properties.getProperty("includeTopicPartitions","true"));
+            class Capture implements Runnable {
+                int delay=interval;
+                public void run() {
                 try {
                     final String token = Files.readString(tokenFile).trim();
                     collect(body -> {
                         var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(8))
                             .header("X-Kafdeck-Agent-Token", token).header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString(body)).build();
-                        int status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
-                        if (status != 204) throw new java.io.IOException("HTTP " + status);
-                    });
+                        var response=client.send(request, HttpResponse.BodyHandlers.discarding());
+                        if (response.statusCode()!=204) throw new java.io.IOException("HTTP "+response.statusCode());
+                        var setting=response.headers().firstValue("X-Kafdeck-Interval-Seconds");
+                        if(setting.isPresent()) {
+                            int seconds=Integer.parseInt(setting.get());
+                            if(seconds>=10 && seconds<=60) delay=seconds;
+                        }
+                    },perPartition);
                 } catch (Exception e) { System.err.println("Kafdeck monitoring capture failed: " + e.getClass().getSimpleName()); }
-            }, 1, interval, TimeUnit.SECONDS);
+                finally { pool.schedule(this,delay,TimeUnit.SECONDS); }
+                }
+            }
+            pool.schedule(new Capture(),1,TimeUnit.SECONDS);
+            running=true;
         } catch (Exception e) { System.err.println("Kafdeck monitoring configuration invalid: " + e.getClass().getSimpleName()); }
     }
 
@@ -79,14 +109,29 @@ public final class KafkaAgent {
             rows.add(row); bytes += length;
         }
     }
-    static void collect(Sink sink) throws Exception {
+    private static long lastGcMillis=-1, lastTick;
+    static void collect(Sink sink,boolean perPartition) throws Exception {
         var batch = new Batch(sink);
+        var os=ManagementFactory.getOperatingSystemMXBean();
+        if(os instanceof com.sun.management.OperatingSystemMXBean) {
+            double load=((com.sun.management.OperatingSystemMXBean)os).getProcessCpuLoad();
+            if(load>=0 && load<=1) batch.add("kafdeck.jvm/cpu_percent","{}",load*100);
+        }
+        long tick=System.nanoTime();
+        var times=ManagementFactory.getGarbageCollectorMXBeans().stream().mapToLong(bean->bean.getCollectionTime()).toArray();
+        if(times.length>0 && java.util.Arrays.stream(times).allMatch(v->v>=0)) {
+            long total=java.util.Arrays.stream(times).sum();
+            if(lastGcMillis>=0 && total>=lastGcMillis && tick>lastTick)
+                batch.add("kafdeck.jvm/gc_time_percent","{}",(total-lastGcMillis)*100_000_000d/(tick-lastTick));
+            lastGcMillis=total; lastTick=tick;
+        } else { lastGcMillis=-1; }
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
         var names = new ArrayList<>(server.queryNames(null, null));
         names.sort(Comparator.comparing(ObjectName::getCanonicalName));
         for (var bean : names) {
             String domain = bean.getDomain();
             if (!(domain.startsWith("kafka.") || domain.equals("java.lang") || domain.equals("java.nio"))) continue;
+            if (!perPartition && (bean.getKeyProperty("topic")!=null || bean.getKeyProperty("partition")!=null)) continue;
             if (batch.part >= 63) { batch.partial = true; break; }
             try {
                 var labels = new TreeMap<>(bean.getKeyPropertyList());
@@ -106,11 +151,12 @@ public final class KafkaAgent {
                     try {
                         Object value = server.getAttribute(bean, field);
                         String metric = prefix + "/" + field;
-                        if (value instanceof Number n) batch.add(metric, dimensions, n);
-                        else if (value instanceof CompositeData obj) {
+                        if (value instanceof Number) batch.add(metric, dimensions, (Number)value);
+                        else if (value instanceof CompositeData) {
+                            var obj=(CompositeData)value;
                             for (String k : obj.getCompositeType().keySet()) {
                                 Object v = obj.get(k);
-                                if (v instanceof Number n) batch.add(metric + "/" + k, dimensions, n);
+                                if (v instanceof Number) batch.add(metric + "/" + k, dimensions, (Number)v);
                             }
                         }
                     } catch (javax.management.JMException | RuntimeException unavailable) { batch.partial = true; }
@@ -120,12 +166,10 @@ public final class KafkaAgent {
         batch.flush(true);
     }
     private static boolean numericType(String type) {
-        return switch(type) {
-            case "java.lang.Object","int","long","double","float","short","byte","java.lang.Number","java.lang.Integer","java.lang.Long",
-                 "java.lang.Double","java.lang.Float","java.lang.Short","java.lang.Byte" -> true;
-            default -> false;
-        };
+        return NUMERIC_TYPES.contains(type);
     }
+    private static final java.util.Set<String> NUMERIC_TYPES=java.util.Set.of("java.lang.Object","int","long","double","float","short",
+        "byte","java.lang.Number","java.lang.Integer","java.lang.Long","java.lang.Double","java.lang.Float","java.lang.Short","java.lang.Byte");
     private static String quote(String s) {
         var out = new StringBuilder("\"");
         for (int i=0;i<s.length();i++) {

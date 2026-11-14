@@ -4,7 +4,7 @@ Select a cluster and open **Monitoring**. The dashboard, numeric samples, rule e
 
 ## Enable broker measurements
 
-For a saved PLAINTEXT connection an operator can enable a read-only Kafka metadata sampler by adding its cluster ID to the server configuration list `Kafdeck:Monitoring:MetadataClusters` and restarting Kafdeck. Every 30 seconds Kafdeck reads Kafka metadata over the existing broker listener, within the configured registration networks. In **Metric explorer** search for `kafka.metadata/`. The source `kafdeck-metadata` reports visible brokers, topics, partitions, leader distribution, offline and under-replicated partitions, and metadata response time. Partial observations suppress incomplete topology totals. The server alerts on offline partitions, sustained under-replication, or absence of samples. Internal broker request timings, CPU and GC still require the per-JVM agent below.
+For a saved PLAINTEXT connection, add its cluster ID to `Kafdeck:Monitoring:MetadataClusters` and restart Kafdeck to enable read-only metadata collection. The `kafdeck-metadata` source reports visible brokers, topics, partitions, leader distribution, offline and under-replicated partitions, and response time. Partial observations suppress incomplete topology totals. To adjust sampling for this cluster, sign in as deployment owner and open **Monitoring overview → Sampling interval**. The default is 30 seconds. The metadata sampler and enrolled broker agents adopt the saved setting. Each agent starts its next interval after transmission completes.
 
 1. Sign in as the managed deployment owner. Open **Monitoring → Manage monitoring sources** and download the agent. Register a distinct instance name for each Kafka broker or standalone controller, such as `broker-2`.
 2. Save the displayed key to a file readable by the Kafka service account. Use separate keys for each source. Registration and rotation display the key once. The server stores its SHA-256 digest.
@@ -16,7 +16,7 @@ For a saved PLAINTEXT connection an operator can enable a read-only Kafka metada
    intervalSeconds=30
    ```
 
-4. Append the following JVM option to the broker's existing `KAFKA_OPTS` and perform a rolling restart following the cluster's maintenance procedure. The agent requires Java 17 or later. It runs on a daemon thread in the existing Kafka process.
+4. Append the following JVM option to the broker's existing `KAFKA_OPTS` and perform a rolling restart following the cluster's maintenance procedure. The same JAR targets Java 11 bytecode and runs on the broker's existing JVM. The compatibility matrix covers Java 11, 17, 21, 25 and 27. Select a JVM supported by your Kafka distribution. A runtime with the standard instrumentation, HTTP client, management and JDK management modules is required.
 
    ```text
    -javaagent:/opt/kafdeck/kafdeck-kafka-agent.jar=/etc/kafdeck/agent.properties
@@ -25,6 +25,12 @@ For a saved PLAINTEXT connection an operator can enable a read-only Kafka metada
 5. Open **Metric explorer**, search for `UnderReplicatedPartitions`, select its `Value` attribute and the desired broker. The first points should arrive after a successful capture. On a missing or partial capture, check the source status, Kafka process log, endpoint, key and certificate trust. Rotate the key in the dashboard and update the token file to replace credentials without restarting Kafka. **Revoke** removes that source and its monitoring history.
 
 The [agent source and packaged JAR](../../tools/kafka-agent/) ship together. To rebuild with Python and a JDK, run `python tools/kafka-agent/build.py --output tools/kafka-agent/kafdeck-kafka-agent.jar`.
+
+To check the distributed JAR against a JVM, run `python tools/kafka-agent/tests/smoke.py --java /path/to/bin/java --javac /path/to/bin/javac`. The test starts a local JVM, receives two authenticated captures and checks JMX, CPU, GC and a change in sampling interval.
+
+For a private certificate authority, set `caFile=/etc/kafdeck/ca.pem` in the agent properties. For a dedicated agent listener, configure a distinct HTTPS Kestrel endpoint, include its URL in `Kafdeck:Deployment:ListenUrls` and set `Kafdeck:Monitoring:IngestOnlyPort` to that port. The port accepts only the agent ingestion route. Set `includeTopicPartitions=false` to collect aggregate broker metrics on a high-cardinality cluster. The default includes topic and partition dimensions.
+
+**Monitoring overview** plots each broker's process CPU, percentage of elapsed time spent collecting garbage, and Produce request queue p99 in milliseconds. GC needs two successive captures. The next three plots show Kafka metadata response time, offline partitions and under-replication. Use the chart window to compare the same time range across brokers. A missing sample is displayed as a gap.
 
 ## What each source measures
 
@@ -56,7 +62,7 @@ Imported files stay in the tab. Server-side rules evaluate live source measureme
 
 ## Set and investigate alerts
 
-The built-in rules monitor missing source heartbeats (120 seconds), controller offline partitions (above zero immediately), under-replicated partitions (above zero for two minutes), handler idle fraction (below 0.15 for five minutes) and request p99 (above 250 ms for five minutes). These are starting thresholds. Use the baseline and latency objective for the selected workload.
+The built-in rules monitor missing source heartbeats (120 seconds), controller offline partitions (above zero immediately), under-replicated partitions (above zero for two minutes), handler idle fraction (below 0.15 for five minutes) and total request p99 (above 250 ms for five minutes). CPU above 85% for five minutes, GC time above 10% for two minutes, and request queue p99 above 100 ms for two minutes also trigger warnings. Queue thresholds apply independently to each request type on each broker. Compare alerts with the workload's latency objective and normal traffic.
 
 Select any collected metric, then open **Custom alert rules** as deployment owner. Choose a name, comparison, threshold in the metric's native units, hold time and severity. The rule applies independently to each instance and label set in that cluster. For a signal that should fire on the first observation, use zero seconds. A change to a rule resets its hold time.
 

@@ -1,4 +1,13 @@
 {
+  "Broker CPU": "CPU بروکر",
+  "GC time": "سهم زمان GC",
+  "Metadata response time": "زمان پاسخ فراداده",
+  "Monitoring overview": "نمودارهای پایش",
+  "Sampling interval": "بازهٔ نمونه‌برداری",
+  "Chart window": "بازهٔ نمودار",
+  "{0} seconds": "{0} ثانیه",
+  "partitions": "پارتیشن",
+  "%": "٪",
   "Reporting sources": "منابع ارسال متریک",
   "Awaiting first sample": "در انتظار اولین نمونه",
   "Manage monitoring sources": "مدیریت منابع مانیتورینگ",

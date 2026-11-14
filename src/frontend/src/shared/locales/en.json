@@ -1,4 +1,13 @@
 {
+  "Broker CPU": "Broker CPU",
+  "GC time": "GC time",
+  "Metadata response time": "Metadata response time",
+  "Monitoring overview": "Monitoring overview",
+  "Sampling interval": "Sampling interval",
+  "Chart window": "Chart window",
+  "{0} seconds": "{0} seconds",
+  "partitions": "partitions",
+  "%": "%",
   "Reporting sources": "Reporting sources",
   "Awaiting first sample": "Awaiting first sample",
   "Manage monitoring sources": "Manage monitoring sources",

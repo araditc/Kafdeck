@@ -9,7 +9,8 @@ internal sealed class KafkaMetadataMonitor(MonitoringSettings settings, Register
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        using var timer=new PeriodicTimer(TimeSpan.FromSeconds(30));
+        var previous=new Dictionary<string,long>(StringComparer.Ordinal);
+        using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));
         do
         {
             foreach(var cluster in settings.MetadataClusters)
@@ -17,6 +18,9 @@ internal sealed class KafkaMetadataMonitor(MonitoringSettings settings, Register
                 ct.ThrowIfCancellationRequested();
                 try
                 {
+                    var now=Stopwatch.GetTimestamp();
+                    if(previous.TryGetValue(cluster,out var last) && Stopwatch.GetElapsedTime(last,now).TotalSeconds<(store.SamplingOverride(cluster)??30)) continue;
+                    previous[cluster]=now;
                     var config=runtime.ReadOnlyMetadataConfig(cluster);
                     if(config is null) continue;
                     using var client=new AdminClientBuilder(config).SetLogHandler((_,_)=>{}).Build();

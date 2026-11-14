@@ -126,6 +126,44 @@ public sealed class KafkaMonitoringTests : IDisposable
     }
 
     [Fact]
+    public void Broker_cpu_gc_and_request_queue_rules_fire_after_their_hold_and_recover_at_threshold()
+    {
+        const string cpu = "kafdeck.jvm/cpu_percent";
+        const string gc = "kafdeck.jvm/gc_time_percent";
+        const string queue = "kafka.network:RequestMetrics/RequestQueueTimeMs/99thPercentile";
+        var labels = new SortedDictionary<string, string> { ["request"] = "Produce" };
+        for (int seconds = 0; seconds <= 300; seconds += 30)
+        {
+            Assert.Equal(204, Status(Ingest(new(cpu, [], 86), new(gc, [], 11), new(queue, labels, 101))));
+            var alerts = Rows("alerts").GetProperty("rows").EnumerateArray().ToDictionary(
+                row => row.GetProperty("name").GetString()!, row => row.GetProperty("state").GetString());
+            Assert.Equal(seconds < 300 ? "pending" : "firing", alerts["KafkaBrokerCpuHigh"]);
+            Assert.Equal(seconds < 120 ? "pending" : "firing", alerts["KafkaBrokerGcHigh"]);
+            Assert.Equal(seconds < 120 ? "pending" : "firing", alerts["KafkaRequestQueueSlow"]);
+            _clock.Advance(30);
+        }
+        Assert.Equal(204, Status(Ingest(new(cpu, [], 85), new(gc, [], 10), new(queue, labels, 100))));
+        Assert.Empty(Rows("alerts").GetProperty("rows").EnumerateArray());
+        var incidents = Rows("incidents").GetProperty("rows").EnumerateArray().ToArray();
+        Assert.Equal(3, incidents.Length);
+        Assert.All(incidents, row => Assert.Equal("recovered", row.GetProperty("reason").GetString()));
+    }
+
+    [Fact]
+    public void Sampling_interval_is_bounded_persistent_and_scoped_to_one_cluster()
+    {
+        Assert.Null(_store.SamplingOverride("a"));
+        foreach(var value in new[]{10,30,60})
+        {
+            Assert.Equal(200,Status(_store.SetSampling("a",value)));
+            Assert.Equal(value,Open().SamplingOverride("a"));
+        }
+        Assert.Equal(400,Status(_store.SetSampling("a",61)));
+        Assert.Equal(400,Status(_store.SetSampling("a",9)));
+        Assert.Null(_store.SamplingOverride("b"));
+    }
+
+    [Fact]
     public void Kafka_metadata_projection_matches_leaders_replication_and_suppresses_incomplete_totals()
     {
         var ok=new Confluent.Kafka.Error(Confluent.Kafka.ErrorCode.NoError);

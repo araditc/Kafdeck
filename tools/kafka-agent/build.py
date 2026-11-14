@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import zipfile
 
-parser = argparse.ArgumentParser(description="Build the Kafdeck Kafka monitoring agent using JDK 17 or newer.")
+parser = argparse.ArgumentParser(description="Build the Kafdeck Kafka monitoring agent using JDK 11 or newer.")
 parser.add_argument("--jdk", type=Path, help="JDK directory (defaults to javac on PATH)")
 parser.add_argument("--output", type=Path, default=Path("artifacts/kafdeck-kafka-agent.jar"))
 args = parser.parse_args()
@@ -15,7 +15,7 @@ def tool(name):
 
 args.output.parent.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory() as classes:
-    subprocess.run([tool("javac"), "--release", "17", "-d", classes, str(base/"src/org/kafdeck/monitoring/KafkaAgent.java")], check=True)
+    subprocess.run([tool("javac"), "--release", "11", "-d", classes, str(base/"src/org/kafdeck/monitoring/KafkaAgent.java")], check=True)
     with zipfile.ZipFile(args.output, "w") as jar:
         def add(path, content):
             entry = zipfile.ZipInfo(path, (2000, 1, 1, 0, 0, 0))

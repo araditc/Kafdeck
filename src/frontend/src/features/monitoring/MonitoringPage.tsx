@@ -10,6 +10,7 @@ import { useObservation } from './useObservation.js';
 import { BarChart, TimeChart, type Sample } from './Chart.js';
 import { MeasurementImport } from './MeasurementImport.js';
 import { BrokerMetrics } from './BrokerMetrics.js';
+import { MonitoringOverview } from './MonitoringOverview.js';
 import { AgentSetup } from './AgentSetup.js';
 import { offsetRates, type OffsetSample } from './offsetRates.js';
 
@@ -121,14 +122,16 @@ function Replication({ clusterId, topic, refresh }: {clusterId: string; topic: s
 
 export function MonitoringPage({ clusterId, refresh, manage }: {clusterId: string; refresh: number; manage: boolean}) {
   const [agentRevision,setAgentRevision]=useState(0);
+  const [seconds,setSeconds]=useState(30);
   const list = useCallback((signal: AbortSignal) => kafdeckApi.listConsumerGroups(clusterId, signal), [clusterId]);
   const groups = useObservation(list, refresh);
   const [group, setGroup] = useState('');
   const [draft, setDraft] = useState('');
   const [topic, setTopic] = useState('');
   return <div id="monitoring">
+    <MonitoringOverview clusterId={clusterId} manage={manage} refresh={refresh+agentRevision} onInterval={setSeconds}/>
     {manage && <AgentSetup clusterId={clusterId} onChanged={()=>setAgentRevision(n=>n+1)} />}
-    <BrokerMetrics clusterId={clusterId} refresh={refresh+agentRevision} manage={manage} />
+    <BrokerMetrics clusterId={clusterId} refresh={refresh+agentRevision} manage={manage} seconds={seconds} />
     <section className="card monitor-panel"><h3>{t("Consumer activity")}</h3>
       <Observation state={groups}>{result => <>
         {result.partial && <p>{t("Partial observation")}</p>}

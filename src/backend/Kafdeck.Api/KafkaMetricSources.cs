@@ -46,6 +46,7 @@ internal sealed record MonitoringSettings(string Database, BrokerSource[] Source
 internal static class KafkaMetricSources
 {
     internal sealed record Enrollment(string Instance,string Action);
+    internal sealed record SamplingChange(int Seconds);
     internal sealed record RuleChange(string Name, string? Metric, double Threshold, bool Below, int Seconds, string? Severity, bool Remove);
     private static (BrokerSource? Source,IResult? Error) Authenticate(HttpContext context, MonitoringStore store)
     {
@@ -74,6 +75,8 @@ internal static class KafkaMetricSources
                 p.Labels.Count > 24 || p.Labels.Any(l => l.Key.Length is 0 or >100 || l.Key.Any(char.IsControl) ||
                     l.Value is null || l.Value.Length > 512 || l.Value.Any(char.IsControl) || l.Key is "instance" or "kafdeck_cluster")))
                 return Results.BadRequest();
+            if (batch.Last && store.SamplingOverride(source!.ClusterId) is int seconds)
+                context.Response.Headers["X-Kafdeck-Interval-Seconds"]=seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return store.Ingest(source!,batch,ct);
         }).WithMetadata(new RequestSizeLimitAttribute(2_000_000));
         app.MapPost("/monitoring/client-stats", async (HttpContext context,MonitoringStore store,TimeProvider clock,CancellationToken ct) =>
@@ -92,6 +95,12 @@ internal static class KafkaMetricSources
         {
             bool Owner(HttpContext ctx) => ctx.User.Identity is not NonBrowserReadIdentity &&
                 OperatorSessionContextFactory.TryCreate(ctx.User,out var session) && session is not null && ManagedIdentityEndpoints.IsOwner(identity,session);
+            app.MapPost("/api/v1/clusters/{clusterId}/monitoring/sampling",(string clusterId, SamplingChange input,HttpContext ctx,MonitoringStore store)=>
+            {
+                if(!Owner(ctx)) return Results.StatusCode(403);
+                if(!options.Clusters.Any(c=>c.Id==clusterId)) return Results.NotFound();
+                return store.SetSampling(clusterId,input.Seconds);
+            }).WithMetadata(new RequestSizeLimitAttribute(512)).RequireKafdeckAntiforgery();
             app.MapPost("/api/v1/clusters/{clusterId}/monitoring/agents", (string clusterId, Enrollment input, HttpContext ctx, MonitoringStore store) =>
             {
                 ctx.Response.Headers.CacheControl="no-store";

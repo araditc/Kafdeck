@@ -850,6 +850,12 @@ function recordParams(query: RecordQuery): URLSearchParams {
 }
 
 export const kafdeckApi = {
+  monitoringSampling(clusterId:string,signal:AbortSignal) {
+    return readJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',signal);
+  },
+  setMonitoringSampling(clusterId:string,seconds:number,signal:AbortSignal) {
+    return postJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',{seconds},signal);
+  },
   monitoringSources(clusterId: string, signal: AbortSignal) {
     return readJson<MonitoringResult<{rows:{instance:string;seen:number|null;health:'waiting'|'stale'|'partial'|'current'}[]}>>(
       clusterPath(clusterId)+'/monitoring/sources',signal);

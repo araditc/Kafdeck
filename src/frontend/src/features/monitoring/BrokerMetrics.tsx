@@ -57,7 +57,7 @@ function SeriesView({clusterId, metric, minutes, instance, filters, refresh}: {
   </>;
 }
 
-export function BrokerMetrics({clusterId, refresh, manage}: {clusterId: string; refresh: number; manage: boolean}) {
+export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId: string; refresh: number; manage: boolean; seconds:number}) {
   const [input, setInput] = useState(''), [search, setSearch] = useState('');
   const [metric, setMetric] = useState(''), [minutes, setMinutes] = useState(60);
   const [draftInstance, setDraftInstance] = useState(''), [instance, setInstance] = useState('');
@@ -68,7 +68,7 @@ export function BrokerMetrics({clusterId, refresh, manage}: {clusterId: string; 
   const delivered = useRef(new Set<string>());
   const alertsRead = useCallback((s: AbortSignal) => kafdeckApi.monitoringAlerts(clusterId, s), [clusterId]);
   const namesRead = useCallback((s: AbortSignal) => kafdeckApi.monitoringNames(clusterId, search, s), [clusterId, search]);
-  const alerts = useObservation(alertsRead, refresh, 15_000, notify), names = useObservation(namesRead, refresh);
+  const alerts = useObservation(alertsRead, refresh, Math.min(15,seconds)*1000, notify), names = useObservation(namesRead, refresh,60000);
   useEffect(() => {
     if (!notify || alerts.value?.state !== 'available' || Notification.permission !== 'granted') return;
     const firing = alerts.value.rows.filter(a => a.state === 'firing');
