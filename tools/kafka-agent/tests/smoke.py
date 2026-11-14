@@ -31,6 +31,7 @@ def main():
             captures.put((time.monotonic(), batch))
             self.send_response(204)
             self.send_header("X-Kafdeck-Interval-Seconds", "10")
+            self.send_header("X-Kafdeck-Topics", "v1:orders")
             self.end_headers()
 
         def log_message(self, *args):
@@ -44,7 +45,7 @@ def main():
         secret.chmod(0o600)
         config = root / "agent.properties"
         config.write_text(f"endpoint=http://127.0.0.1:{server.server_port}/monitoring/ingest\n"
-                          f"tokenFile={secret.as_posix()}\nintervalSeconds=60\n")
+                          f"tokenFile={secret.as_posix()}\nintervalSeconds=60\nincludeTopicPartitions=false\n")
         subprocess.run([args.javac, "--release", "11", "-d", tmp, str(directory / "AgentSmoke.java")], check=True)
         version = subprocess.check_output([args.java, "-version"], stderr=subprocess.STDOUT, text=True).splitlines()[0]
         with subprocess.Popen([args.java, f"-javaagent:{jar}={config}", "-cp", tmp, "AgentSmoke"]) as process:
@@ -57,6 +58,9 @@ def main():
                     assert values["kafka.test:Probe/Compatibility/Value"] == 73
                     assert "java.lang:Memory/HeapMemoryUsage/used" in values
                 assert first["cycle"] != second["cycle"]
+                assert not any("topic" in row["labels"] for row in first["samples"])
+                scoped = [row["labels"] for row in second["samples"] if "topic" in row["labels"]]
+                assert scoped == [{"partition":"0","topic":"orders"}]
                 assert 0 <= values["kafdeck.jvm/cpu_percent"] <= 100
                 assert values["kafdeck.jvm/gc_time_percent"] >= 0
                 assert 9 <= second_time - first_time <= 21

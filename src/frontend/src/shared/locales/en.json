@@ -1,4 +1,12 @@
 {
+  "No matching results": "No matching results",
+  "Load more": "Load more",
+  "Topic-level metrics": "Topic-level metrics",
+  "Topic and partition monitoring": "Topic and partition monitoring",
+  "Choose a topic": "Choose a topic",
+  "Monitor this topic": "Monitor this topic",
+  "Stop monitoring this topic": "Stop monitoring this topic",
+  "Monitored topics": "Monitored topics",
   "Broker CPU": "Broker CPU",
   "GC time": "GC time",
   "Metadata response time": "Metadata response time",

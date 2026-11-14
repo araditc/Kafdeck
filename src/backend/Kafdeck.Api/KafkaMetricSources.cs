@@ -47,6 +47,7 @@ internal static class KafkaMetricSources
 {
     internal sealed record Enrollment(string Instance,string Action);
     internal sealed record SamplingChange(int Seconds);
+    internal sealed record TopicChange(string Topic,bool Enabled);
     internal sealed record RuleChange(string Name, string? Metric, double Threshold, bool Below, int Seconds, string? Severity, bool Remove);
     private static (BrokerSource? Source,IResult? Error) Authenticate(HttpContext context, MonitoringStore store)
     {
@@ -77,7 +78,9 @@ internal static class KafkaMetricSources
                 return Results.BadRequest();
             if (batch.Last && store.SamplingOverride(source!.ClusterId) is int seconds)
                 context.Response.Headers["X-Kafdeck-Interval-Seconds"]=seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            return store.Ingest(source!,batch,ct);
+            if (batch.Last && store.SelectedTopics(source!.ClusterId) is { } topics)
+                context.Response.Headers["X-Kafdeck-Topics"]="v1:"+string.Join(',',topics);
+            return store.Ingest(source!,batch,ct,context.Request.Headers["X-Kafdeck-Topic-Only"]=="1");
         }).WithMetadata(new RequestSizeLimitAttribute(2_000_000));
         app.MapPost("/monitoring/client-stats", async (HttpContext context,MonitoringStore store,TimeProvider clock,CancellationToken ct) =>
         {
@@ -101,6 +104,12 @@ internal static class KafkaMetricSources
                 if(!options.Clusters.Any(c=>c.Id==clusterId)) return Results.NotFound();
                 return store.SetSampling(clusterId,input.Seconds);
             }).WithMetadata(new RequestSizeLimitAttribute(512)).RequireKafdeckAntiforgery();
+            app.MapPost("/api/v1/clusters/{clusterId}/monitoring/topic-selection",(string clusterId, TopicChange input,HttpContext ctx,MonitoringStore store)=>
+            {
+                if(!Owner(ctx)) return Results.StatusCode(403);
+                if(!options.Clusters.Any(c=>c.Id==clusterId)) return Results.NotFound();
+                return store.SetTopic(clusterId,input.Topic,input.Enabled);
+            }).WithMetadata(new RequestSizeLimitAttribute(1024)).RequireKafdeckAntiforgery();
             app.MapPost("/api/v1/clusters/{clusterId}/monitoring/agents", (string clusterId, Enrollment input, HttpContext ctx, MonitoringStore store) =>
             {
                 ctx.Response.Headers.CacheControl="no-store";
@@ -121,8 +130,8 @@ internal static class KafkaMetricSources
             .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
             .RequireKafdeckAuthorization(AuthorizationAction.MonitoringRead, "clusterId");
         app.MapGet("/api/v1/clusters/{clusterId}/monitoring/{kind}", (string clusterId, string kind, string? metric, string? search,
-            int? minutes, string? instance, string? filters, MonitoringStore store, CancellationToken ct) =>
-            options.Clusters.Any(c=>c.Id==clusterId) ? store.Read(clusterId, kind, metric, search, minutes ?? 60, instance, filters, ct) : Results.NotFound())
+            int? minutes, string? instance, string? filters, string? after, string? topic, int? partition, MonitoringStore store, CancellationToken ct) =>
+            options.Clusters.Any(c=>c.Id==clusterId) ? store.Read(clusterId, kind, metric, search, minutes ?? 60, instance, filters, ct,after,topic,partition) : Results.NotFound())
             .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
             .RequireKafdeckAuthorization(AuthorizationAction.MonitoringRead, "clusterId");
     }

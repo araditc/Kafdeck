@@ -32,6 +32,14 @@ For a private certificate authority, set `caFile=/etc/kafdeck/ca.pem` in the age
 
 **Monitoring overview** plots each broker's process CPU, percentage of elapsed time spent collecting garbage, and Produce request queue p99 in milliseconds. GC needs two successive captures. The next three plots show Kafka metadata response time, offline partitions and under-replication. Use the chart window to compare the same time range across brokers. A missing sample is displayed as a gap.
 
+## Monitor a topic or partition
+
+In **Monitoring → Topic and partition monitoring**, choose a topic from the Kafka catalogue. Search narrows the list and **Load more** fetches the next page. A deployment owner can select **Monitor this topic**. The selection is saved for the cluster and reaches its agents on their next successful report. Allow two sampling intervals for the first points.
+
+Choose **Topic-level metrics** for broker counters scoped to the topic, or select a partition number for its replica metrics. The **Metric** list shows names observed for that selection, such as the log size or end offset. Choose **Series labels** to switch between reporting replicas. Available measurements depend on the broker version, replica placement and traffic. **Stop monitoring this topic** removes the topic from upcoming captures. Its existing samples remain available for the retention window.
+
+The first dashboard selection takes control of topic collection for the cluster. It replaces the installation default for topic dimensions and preserves aggregate broker monitoring. Up to 32 topics can be selected at once. Agents distributed before this feature must be upgraded to receive the selection. Metric explorer and custom alert rules also use searchable, paged metric lists.
+
 ## What each source measures
 
 | Question | Where to look in Kafdeck | Interpretation |

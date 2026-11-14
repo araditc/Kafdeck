@@ -9,7 +9,9 @@ import { readViewProblemText, type ReadViewProblem } from '../readviews/readView
 import { useObservation } from './useObservation.js';
 import { BarChart, TimeChart, type Sample } from './Chart.js';
 import { MeasurementImport } from './MeasurementImport.js';
-import { BrokerMetrics } from './BrokerMetrics.js';
+import { BrokerMetrics, SeriesView } from './BrokerMetrics.js';
+import { CatalogSelect, MetricSelect } from './CatalogSelect.js';
+import { readViewError } from '../readviews/readViewProblem.js';
 import { MonitoringOverview } from './MonitoringOverview.js';
 import { AgentSetup } from './AgentSetup.js';
 import { offsetRates, type OffsetSample } from './offsetRates.js';
@@ -101,7 +103,21 @@ function GroupMonitoring({ clusterId, group, refresh }: {clusterId: string; grou
   </>;
 }
 
-function Replication({ clusterId, topic, refresh }: {clusterId: string; topic: string; refresh: number}) {
+function TopicMeasurements({clusterId,topic,partition,seconds,refresh}: {clusterId:string;topic:string;partition:string;seconds:number;refresh:number}) {
+  const [metric,setMetric]=useState(''),[minutes,setMinutes]=useState(15);
+  const filters=JSON.stringify(partition ? {topic,partition} : {topic});
+  return <>
+    <div className="monitor-controls">
+      <MetricSelect {...{clusterId,topic,partition,refresh}} polling={seconds*1000} value={metric} onChange={setMetric}/>
+      <label>{t("History interval")}<select className="form-select" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}>
+        {[15,60,360,1440].map(n=><option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label>
+    </div>
+    {metric && <SeriesView key={JSON.stringify([metric,minutes])} instance="" {...{clusterId,metric,minutes,filters,refresh,seconds}}/>}
+  </>;
+}
+
+function Replication({ clusterId, topic, refresh, seconds }: {clusterId: string; topic: string; refresh: number;seconds:number}) {
+  const [partition,setPartition]=useState('');
   const read = useCallback((signal: AbortSignal) => kafdeckApi.getTopic(clusterId, topic, signal), [clusterId, topic]);
   const state = useObservation(read, refresh, 30_000);
   return <Observation state={state}>{result => {
@@ -116,8 +132,44 @@ function Replication({ clusterId, topic, refresh }: {clusterId: string; topic: s
         <div><dt>{t("Under-replicated partitions")}</dt><dd>{data.underReplicatedPartitionCount}</dd></div></dl>
       <BarChart title={t("Partition leaders by broker")} unit={t("Partitions")}
         rows={[...leaders].sort(([a],[b]) => a-b).map(([broker, value]) => ({label: t("Broker {0}", [broker]), value}))} />
+      <div className="monitor-controls"><label>{t("Partition")}<select className="form-select" value={partition}
+        onChange={e=>setPartition(e.target.value)}>
+        <option value="">{t("Topic-level metrics")}</option>
+        {data.partitions.map(p=><option key={p.partitionId} value={p.partitionId}>{p.partitionId}</option>)}
+      </select></label></div>
+      <TopicMeasurements key={partition} {...{clusterId,topic,partition,refresh,seconds}}/>
     </>;
   }}</Observation>;
+}
+
+function TopicMonitoring({clusterId,refresh,manage,seconds}: {clusterId:string;refresh:number;manage:boolean;seconds:number}) {
+  const [topic,setTopic]=useState(''),[revision,setRevision]=useState(0),[saving,setSaving]=useState(false),[error,setError]=useState('');
+  const read=useCallback((signal:AbortSignal)=>kafdeckApi.monitoredTopics(clusterId,signal),[clusterId]);
+  const selection=useObservation(read,revision+refresh,60000);
+  const tracked=selection.value?.topics??[];
+  const readTopics=useCallback(async(q:string,cursor:string|null,signal:AbortSignal)=>{
+    const {data}=await kafdeckApi.listTopics(clusterId,q,cursor,signal);
+    return {names:data.items.map(t=>t.name),next:data.nextCursor};
+  },[clusterId]);
+  async function toggle() {
+    setSaving(true);setError('');
+    try {await kafdeckApi.setTopicMonitoring(clusterId,topic,!tracked.includes(topic),new AbortController().signal);setRevision(n=>n+1);}
+    catch(ex){setError(readViewProblemText(readViewError(ex)));}
+    finally{setSaving(false);}
+  }
+  return <section className="card monitor-panel"><h3>{t("Topic and partition monitoring")}</h3>
+    <div className="monitor-controls">
+      <CatalogSelect label={t("Topic name")} searchLabel={t("Search topics")} placeholder={t("Choose a topic")}
+        value={topic} onChange={setTopic} disabled={saving} read={readTopics}/>
+      {topic && manage && selection.value && <button type="button" className="btn btn-outline-primary" disabled={saving} onClick={()=>void toggle()}>
+        {tracked.includes(topic)?t("Stop monitoring this topic"):t("Monitor this topic")}
+      </button>}
+    </div>
+    {tracked.length>0 && <div>{t("Monitored topics")} · {tracked.map(name=><button key={name} type="button" className="btn btn-sm btn-link"
+      disabled={saving} onClick={()=>setTopic(name)}>{name}</button>)}</div>}
+    {(error || selection.problem) && <p role="alert">{error || readViewProblemText(selection.problem!)}</p>}
+    {topic && <Replication key={topic} {...{clusterId,topic,refresh,seconds}}/>}
+  </section>;
 }
 
 export function MonitoringPage({ clusterId, refresh, manage }: {clusterId: string; refresh: number; manage: boolean}) {
@@ -126,10 +178,9 @@ export function MonitoringPage({ clusterId, refresh, manage }: {clusterId: strin
   const list = useCallback((signal: AbortSignal) => kafdeckApi.listConsumerGroups(clusterId, signal), [clusterId]);
   const groups = useObservation(list, refresh);
   const [group, setGroup] = useState('');
-  const [draft, setDraft] = useState('');
-  const [topic, setTopic] = useState('');
   return <div id="monitoring">
     <MonitoringOverview clusterId={clusterId} manage={manage} refresh={refresh+agentRevision} onInterval={setSeconds}/>
+    <TopicMonitoring key={clusterId} {...{clusterId,refresh,manage,seconds}}/>
     {manage && <AgentSetup clusterId={clusterId} onChanged={()=>setAgentRevision(n=>n+1)} />}
     <BrokerMetrics clusterId={clusterId} refresh={refresh+agentRevision} manage={manage} seconds={seconds} />
     <section className="card monitor-panel"><h3>{t("Consumer activity")}</h3>
@@ -142,13 +193,6 @@ export function MonitoringPage({ clusterId, refresh, manage }: {clusterId: strin
           : <p>{t("No visible consumer groups.")}</p>}
         {group && result.data.some(g => g.groupId === group) && <GroupMonitoring key={group} group={group} clusterId={clusterId} refresh={refresh} />}
       </>}</Observation>
-    </section>
-    <section className="card monitor-panel"><h3>{t("Topic replication")}</h3>
-      <form className="monitor-controls" onSubmit={e => {e.preventDefault(); setTopic(draft.trim());}}>
-        <label>{t("Topic name")}<input className="form-control" value={draft} maxLength={249} required onChange={e => setDraft(e.target.value)} /></label>
-        <button className="btn btn-outline-primary" disabled={!draft.trim()}>{t("Inspect topic")}</button>
-      </form>
-      {topic && <Replication key={topic} topic={topic} clusterId={clusterId} refresh={refresh} />}
     </section>
     <MeasurementImport />
   </div>;

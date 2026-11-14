@@ -26,8 +26,8 @@ import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
 
 /** Loaded by Kafka itself. No JMX remote port, HTTP listener or external collector. */
-public final class KafkaAgent {
-    private KafkaAgent() {}
+public final class BrokerMetricsAgent {
+    private BrokerMetricsAgent() {}
     private static boolean running;
     public static void agentmain(String config, Instrumentation instrumentation) {
         premain(config,instrumentation);
@@ -35,6 +35,9 @@ public final class KafkaAgent {
     public static synchronized void premain(String config, Instrumentation instrumentation) {
         if(running) return;
         try {
+            // When upgrading an already attached legacy agent, collect only its missing topic dimensions.
+            boolean topicOnly = config != null && config.startsWith("topics-only:");
+            if (topicOnly) config = config.substring("topics-only:".length());
             var properties = new Properties();
             try (var in = Files.newBufferedReader(Path.of(config))) { properties.load(in); }
             var uri = URI.create(properties.getProperty("endpoint"));
@@ -55,28 +58,35 @@ public final class KafkaAgent {
             }
             var client = builder.build();
             var pool = Executors.newSingleThreadScheduledExecutor(r -> {
-                var t = new Thread(r, "kafdeck-metrics"); t.setDaemon(true); return t;
+                var t = new Thread(r, topicOnly ? "kafdeck-topic-metrics" : "kafdeck-metrics"); t.setDaemon(true); return t;
             });
             int interval = Integer.parseInt(properties.getProperty("intervalSeconds", "30"));
             if (interval < 10 || interval > 60) throw new IllegalArgumentException();
             boolean perPartition=Boolean.parseBoolean(properties.getProperty("includeTopicPartitions","true"));
             class Capture implements Runnable {
                 int delay=interval;
+                java.util.Set<String> topics = null;
                 public void run() {
                 try {
                     final String token = Files.readString(tokenFile).trim();
                     collect(body -> {
                         var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(8))
                             .header("X-Kafdeck-Agent-Token", token).header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(body)).build();
-                        var response=client.send(request, HttpResponse.BodyHandlers.discarding());
+                            .POST(HttpRequest.BodyPublishers.ofString(body));
+                        if (topicOnly) request.header("X-Kafdeck-Topic-Only","1");
+                        var response=client.send(request.build(), HttpResponse.BodyHandlers.discarding());
                         if (response.statusCode()!=204) throw new java.io.IOException("HTTP "+response.statusCode());
                         var setting=response.headers().firstValue("X-Kafdeck-Interval-Seconds");
                         if(setting.isPresent()) {
                             int seconds=Integer.parseInt(setting.get());
                             if(seconds>=10 && seconds<=60) delay=seconds;
                         }
-                    },perPartition);
+                        var selection=response.headers().firstValue("X-Kafdeck-Topics").orElse("");
+                        if (selection.startsWith("v1:")) {
+                            var list=selection.substring(3);
+                            topics=list.isEmpty() ? java.util.Set.of() : java.util.Set.copyOf(List.of(list.split(",")));
+                        }
+                    },perPartition,topicOnly,topics);
                 } catch (Exception e) { System.err.println("Kafdeck monitoring capture failed: " + e.getClass().getSimpleName()); }
                 finally { pool.schedule(this,delay,TimeUnit.SECONDS); }
                 }
@@ -110,8 +120,7 @@ public final class KafkaAgent {
         }
     }
     private static long lastGcMillis=-1, lastTick;
-    static void collect(Sink sink,boolean perPartition) throws Exception {
-        var batch = new Batch(sink);
+    private static void collectJvm(Batch batch) throws Exception {
         var os=ManagementFactory.getOperatingSystemMXBean();
         if(os instanceof com.sun.management.OperatingSystemMXBean) {
             double load=((com.sun.management.OperatingSystemMXBean)os).getProcessCpuLoad();
@@ -125,13 +134,27 @@ public final class KafkaAgent {
                 batch.add("kafdeck.jvm/gc_time_percent","{}",(total-lastGcMillis)*100_000_000d/(tick-lastTick));
             lastGcMillis=total; lastTick=tick;
         } else { lastGcMillis=-1; }
+    }
+    static void collect(Sink sink,boolean perPartition,boolean topicOnly,java.util.Set<String> topics) throws Exception {
+        var batch = new Batch(sink);
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
-        var names = new ArrayList<>(server.queryNames(null, null));
+        var names = new ArrayList<ObjectName>();
+        if (topicOnly) {
+            if (topics != null) for (var topic : topics)
+                names.addAll(server.queryNames(new ObjectName("kafka.*:topic="+topic+",*"), null));
+        } else {
+            collectJvm(batch);
+            names.addAll(server.queryNames(null, null));
+        }
         names.sort(Comparator.comparing(ObjectName::getCanonicalName));
         for (var bean : names) {
             String domain = bean.getDomain();
             if (!(domain.startsWith("kafka.") || domain.equals("java.lang") || domain.equals("java.nio"))) continue;
-            if (!perPartition && (bean.getKeyProperty("topic")!=null || bean.getKeyProperty("partition")!=null)) continue;
+            String topic=bean.getKeyProperty("topic");
+            if (topic != null || bean.getKeyProperty("partition") != null) {
+                boolean included = topics == null ? perPartition : topic != null && topics.contains(topic);
+                if (!included) continue;
+            }
             if (batch.part >= 63) { batch.partial = true; break; }
             try {
                 var labels = new TreeMap<>(bean.getKeyPropertyList());

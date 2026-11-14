@@ -5,6 +5,7 @@ import { readViewProblemText } from '../readviews/readViewProblem.js';
 import { useObservation } from './useObservation.js';
 import { TimeChart } from './Chart.js';
 import { AlertRules } from './AlertRules.js';
+import { MetricSelect } from './CatalogSelect.js';
 
 const investigations: Record<string, string> = {
   KafkaMetadataOfflinePartitions: 'Inspect partition leaders and controller events for unavailable replicas.',
@@ -30,12 +31,12 @@ const diagnostics = [
   ['ISR shrink rate', 'kafka.server:ReplicaManager/IsrShrinksPerSec/OneMinuteRate', ''],
 ] as const;
 
-function SeriesView({clusterId, metric, minutes, instance, filters, refresh}: {
-  clusterId: string; metric: string; minutes: number; instance: string; filters: string; refresh: number;
+export function SeriesView({clusterId, metric, minutes, instance, filters, refresh, seconds=30}: {
+  clusterId: string; metric: string; minutes: number; instance: string; filters: string; refresh: number;seconds?:number
 }) {
   const read = useCallback((signal: AbortSignal) => kafdeckApi.monitoringSeries(clusterId, metric, minutes, instance, filters, signal),
     [clusterId, metric, minutes, instance, filters]);
-  const {value, problem} = useObservation(read, refresh, 30_000);
+  const {value, problem} = useObservation(read, refresh, seconds*1000);
   const [selection, setSelection] = useState('');
   if (problem) return <p role="status">{readViewProblemText(problem)}</p>;
   if (!value) return <p role="status">{t("Loading…")}</p>;
@@ -58,7 +59,6 @@ function SeriesView({clusterId, metric, minutes, instance, filters, refresh}: {
 }
 
 export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId: string; refresh: number; manage: boolean; seconds:number}) {
-  const [input, setInput] = useState(''), [search, setSearch] = useState('');
   const [metric, setMetric] = useState(''), [minutes, setMinutes] = useState(60);
   const [draftInstance, setDraftInstance] = useState(''), [instance, setInstance] = useState('');
   const [notify, setNotify] = useState(false);
@@ -67,8 +67,7 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
   const [invalid, setInvalid] = useState(false);
   const delivered = useRef(new Set<string>());
   const alertsRead = useCallback((s: AbortSignal) => kafdeckApi.monitoringAlerts(clusterId, s), [clusterId]);
-  const namesRead = useCallback((s: AbortSignal) => kafdeckApi.monitoringNames(clusterId, search, s), [clusterId, search]);
-  const alerts = useObservation(alertsRead, refresh, Math.min(15,seconds)*1000, notify), names = useObservation(namesRead, refresh,60000);
+  const alerts = useObservation(alertsRead, refresh, Math.min(15,seconds)*1000, notify);
   useEffect(() => {
     if (!notify || alerts.value?.state !== 'available' || Notification.permission !== 'granted') return;
     const firing = alerts.value.rows.filter(a => a.state === 'firing');
@@ -100,7 +99,7 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
           <p>{t("Measured {0}, threshold {1}. First detected {2}.", [alert.value, alert.threshold, new Date(alert.since*1000).toISOString()])}</p>
           {next && <p>{t(next)}</p>}
           <button type="button" className="btn btn-sm btn-outline-primary"
-            onClick={() => {setInput(alert.metric);setSearch(alert.metric);setMetric(alert.metric);const exact=JSON.stringify(alert.labels);
+            onClick={() => {setMetric(alert.metric);const exact=JSON.stringify(alert.labels);
               setFilters(exact);setRawFilters(exact);setInvalid(false);setInstance(alert.instance);setDraftInstance(alert.instance);}}>
             {t("Inspect measurement")}</button>
         </div>;
@@ -115,13 +114,13 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
       {showHistory && <IncidentHistory clusterId={clusterId} refresh={refresh} />}
     </details>}
     <h3>{t("Metric explorer")}</h3>
-    {names.value?.state === 'available' && <div className="monitor-controls">
+    {alerts.value?.state === 'available' && <div className="monitor-controls">
       <label>{t("Investigate broker latency")}<select className="form-select" value={diagnostics.some(d=>d[1]===metric)? metric : ''}
         onChange={e=>{
           const target=diagnostics.find(d=>d[1]===e.target.value);
           if (!target) return;
           const exact=target[2] ? JSON.stringify({request:target[2]}) : '{}';
-          setInput(target[1]);setSearch(target[1]);setMetric(target[1]);setFilters(exact);setRawFilters(exact);setInvalid(false);
+          setMetric(target[1]);setFilters(exact);setRawFilters(exact);setInvalid(false);
           setInstance(draftInstance.trim());
         }}>
         <option value="">{t("Choose an investigation")}</option>
@@ -136,28 +135,21 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
             k === 'instance' || k === 'kafdeck_cluster' || typeof v !== 'string' || v.length > 255)) throw Error();
         setFilters(JSON.stringify(parsed));setInvalid(false);
       } catch {setInvalid(true);return;}
-      setSearch(input.trim());if (input.trim() !== search) setMetric('');setInstance(draftInstance.trim());
+      setInstance(draftInstance.trim());
     }}>
-      <label>{t("Filter metric names")}<input className="form-control" maxLength={100} value={input} onChange={e => setInput(e.target.value)} /></label>
       <label>{t("Instance (optional)")}<input className="form-control" maxLength={255} value={draftInstance} onChange={e => setDraftInstance(e.target.value)} /></label>
       <label>{t("Exact labels (JSON, optional)")}<input className="form-control" maxLength={2500} dir="ltr" placeholder='{"topic":"orders"}'
         value={rawFilters} onChange={e => setRawFilters(e.target.value)} /></label>
       <button className="btn btn-outline-primary">{t("Search")}</button>
     </form>
     {invalid && <p role="alert">{t("Use up to eight exact label and value pairs.")}</p>}
-    {names.problem && <p role="status">{readViewProblemText(names.problem)}</p>}
-    {names.value?.state === 'available' && <>
-      {(names.value.truncated || names.value.warning) && <p>{t("Partial metric list. Refine the name filter.")}</p>}
-      <div className="monitor-controls"><label>{t("Metric")}<select className="form-select" value={metric} onChange={e => setMetric(e.target.value)}>
-        <option value="">{t("Select a metric")}</option>
-        {metric && !names.value.names.includes(metric) && <option>{metric}</option>}
-        {names.value.names.map(name => <option key={name}>{name}</option>)}
-      </select></label><label>{t("History interval")}<select className="form-select" value={minutes}
+    {alerts.value?.state === 'available' && <>
+      <div className="monitor-controls"><MetricSelect clusterId={clusterId} value={metric} onChange={setMetric} refresh={refresh}/>
+      <label>{t("History interval")}<select className="form-select" value={minutes}
         onChange={e => setMinutes(Number(e.target.value))}>{[15,60,360,1440].map(n => <option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label></div>
-      {names.value.names.length === 0 && <p>{t("No matching metrics.")}</p>}
     </>}
-    {metric && <SeriesView key={JSON.stringify([metric,instance,filters,minutes])} {...{clusterId,metric,minutes,instance,filters,refresh}} />}
-    {manage && names.value?.state === 'available' && <AlertRules clusterId={clusterId} metric={metric} />}
+    {metric && <SeriesView key={JSON.stringify([metric,instance,filters,minutes])} {...{clusterId,metric,minutes,instance,filters,refresh,seconds}} />}
+    {manage && alerts.value?.state === 'available' && <AlertRules clusterId={clusterId} metric={metric} />}
   </section>;
 }
 

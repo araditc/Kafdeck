@@ -150,6 +150,36 @@ public sealed class KafkaMonitoringTests : IDisposable
     }
 
     [Fact]
+    public void Selected_topic_metrics_are_persistent_scoped_and_browsable_per_partition()
+    {
+        Assert.Equal(400, Status(_store.SetTopic("a","alpha,beta",true)));
+        Assert.Equal(200, Status(_store.SetTopic("a","orders",true)));
+        Assert.Equal(["orders"], Open().SelectedTopics("a")!);
+        Assert.Null(_store.SelectedTopics("b"));
+        var key = "kafka.log:Log/Size/Value";
+        var batch = new JmxBatch(false, Guid.NewGuid(), 0, true, [
+            new(key, new(){["topic"]="orders", ["partition"]="0"}, 23),
+            new(key, new(){["topic"]="hidden", ["partition"]="0"}, 90),
+            new("kafka.server:BrokerTopicMetrics/BytesInPerSec/Count",new(){["topic"]="orders"},31)]);
+        Assert.Equal(204,Status(Ingest(Point(4))));
+        Assert.Equal(204,Status(_store.Ingest(_source,batch,default,true)));
+        Assert.Equal(429,Status(_store.Ingest(_source,batch,default,true)));
+        string[] Catalogue(string topic,int? partition,string? after=null) =>
+            Body(_store.Read("a","metrics",null,"",60,null,null,default,after,topic,partition))
+                .GetProperty("names").EnumerateArray().Select(n=>n.GetString()!).ToArray();
+        Assert.Equal([key],Catalogue("orders",0));
+        Assert.Empty(Catalogue("hidden",0));
+        Assert.Empty(Catalogue("orders",0,key));
+        Assert.Equal(["kafka.server:BrokerTopicMetrics/BytesInPerSec/Count"],Catalogue("orders",null));
+        Assert.Equal(200, Status(_store.SetTopic("a","orders",false)));
+        Assert.Empty(Open().SelectedTopics("a")!);
+        _clock.Advance(30);
+        Assert.Equal(204,Status(_store.Ingest(_source,batch,default,true)));
+        var history=Body(_store.Read("a","series",key,null,15,null,"{\"topic\":\"orders\",\"partition\":\"0\"}",default));
+        Assert.Single(history.GetProperty("rows")[0].GetProperty("points").EnumerateArray());
+    }
+
+    [Fact]
     public void Sampling_interval_is_bounded_persistent_and_scoped_to_one_cluster()
     {
         Assert.Null(_store.SamplingOverride("a"));

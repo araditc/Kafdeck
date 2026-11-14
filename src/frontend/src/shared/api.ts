@@ -853,6 +853,12 @@ export const kafdeckApi = {
   monitoringSampling(clusterId:string,signal:AbortSignal) {
     return readJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',signal);
   },
+  monitoredTopics(clusterId:string,signal:AbortSignal) {
+    return readJson<{topics:string[]}>(clusterPath(clusterId)+'/monitoring/topic-selection',signal);
+  },
+  setTopicMonitoring(clusterId:string,topic:string,enabled:boolean,signal:AbortSignal) {
+    return postJson<{topics:string[]}>(clusterPath(clusterId)+'/monitoring/topic-selection',{topic,enabled},signal);
+  },
   setMonitoringSampling(clusterId:string,seconds:number,signal:AbortSignal) {
     return postJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',{seconds},signal);
   },
@@ -873,9 +879,12 @@ export const kafdeckApi = {
   enrollMonitor(clusterId: string, instance: string, action: string, signal: AbortSignal) {
     return postJson<{instance: string;token?: string}>(clusterPath(clusterId)+'/monitoring/agents',{instance,action},signal);
   },
-  monitoringNames(clusterId: string, search: string, signal: AbortSignal) {
+  monitoringNames(clusterId: string, search: string, signal: AbortSignal, after='', topic='', partition='') {
+    const query=new URLSearchParams({search,after});
+    if(topic) query.set('topic',topic);
+    if(partition) query.set('partition',partition);
     return readJson<MonitoringResult<{names: string[]}>>(
-      clusterPath(clusterId) + '/monitoring/metrics?' + new URLSearchParams({search}), signal);
+      clusterPath(clusterId) + '/monitoring/metrics?' + query, signal);
   },
   monitoringSeries(clusterId: string, metric: string, minutes: number, instance: string, filters: string, signal: AbortSignal) {
     return readJson<MonitoringResult<{from: number; to: number; rows: BrokerMetricSeries[]}>>(

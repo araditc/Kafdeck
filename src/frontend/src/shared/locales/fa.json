@@ -1,4 +1,12 @@
 {
+  "No matching results": "نتیجه‌ای پیدا نشد",
+  "Load more": "نمایش موارد بیشتر",
+  "Topic-level metrics": "متریک‌های کل تاپیک",
+  "Topic and partition monitoring": "پایش تاپیک و پارتیشن",
+  "Choose a topic": "یک تاپیک انتخاب کنید",
+  "Monitor this topic": "فعال کردن پایش این تاپیک",
+  "Stop monitoring this topic": "توقف پایش این تاپیک",
+  "Monitored topics": "تاپیک‌های تحت پایش",
   "Broker CPU": "CPU بروکر",
   "GC time": "سهم زمان GC",
   "Metadata response time": "زمان پاسخ فراداده",

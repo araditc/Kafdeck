@@ -13,6 +13,9 @@ public class AgentSmoke {
     public static void main(String[] args) throws Exception {
         ManagementFactory.getPlatformMBeanServer().registerMBean(
             new Probe(), new ObjectName("kafka.test:type=Probe,name=Compatibility"));
+        for (String topic : new String[]{"orders","other"})
+            ManagementFactory.getPlatformMBeanServer().registerMBean(
+                new Probe(), new ObjectName("kafka.test:type=Probe,name=Partition,topic="+topic+",partition=0"));
         Thread.sleep(60_000);
     }
 }

@@ -17,7 +17,7 @@ internal sealed class MonitoringStore
     private readonly TimeProvider _clock;
     private long _lastCleanup;
     private readonly object _writes = new();
-    private readonly Dictionary<(string,string),(Guid Cycle,int Next,long Started)> _cycles = [];
+    private readonly Dictionary<(string,string,bool),(Guid Cycle,int Next,long Started)> _cycles = [];
     private const string Heartbeat = "kafdeck:collector/available";
     public MonitoringStore(MonitoringSettings settings, IConfiguration configuration, ILogger<MonitoringStore> logger, TimeProvider clock)
     {
@@ -61,6 +61,7 @@ internal sealed class MonitoringStore
             CREATE TABLE IF NOT EXISTS monitor_alert(cluster TEXT, instance TEXT, name TEXT, metric TEXT, labels TEXT, since INTEGER, seen INTEGER, value REAL, threshold REAL, state TEXT, severity TEXT, PRIMARY KEY(cluster,instance,name,labels));
             CREATE TABLE IF NOT EXISTS monitor_rule(cluster TEXT, name TEXT, metric TEXT, threshold REAL, below INTEGER, seconds INTEGER, severity TEXT, PRIMARY KEY(cluster,name));
             CREATE TABLE IF NOT EXISTS monitor_sampling(cluster TEXT PRIMARY KEY, seconds INTEGER NOT NULL CHECK(seconds BETWEEN 10 AND 60));
+            CREATE TABLE IF NOT EXISTS monitor_topic_selection(cluster TEXT PRIMARY KEY, topics TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS monitor_incident(id INTEGER PRIMARY KEY, cluster TEXT, instance TEXT, name TEXT, metric TEXT, labels TEXT, since INTEGER, fired INTEGER, value REAL, threshold REAL, severity TEXT, ended INTEGER, reason TEXT);
             CREATE UNIQUE INDEX IF NOT EXISTS monitor_incident_open ON monitor_incident(cluster,instance,name,labels) WHERE ended IS NULL;
             CREATE INDEX IF NOT EXISTS monitor_incident_time ON monitor_incident(cluster,fired);
@@ -71,6 +72,31 @@ internal sealed class MonitoringStore
     }
 
     private long Now => _clock.GetUtcNow().ToUnixTimeSeconds();
+    internal string[]? SelectedTopics(string cluster)
+    {
+        if (_settings.Database.Length == 0) return null;
+        using var db = Open();
+        using var cmd = Sql(db, "SELECT topics FROM monitor_topic_selection WHERE cluster=$c", ("$c",cluster));
+        return cmd.ExecuteScalar() is string json ? JsonSerializer.Deserialize<string[]>(json) : null;
+    }
+
+    internal IResult SetTopic(string cluster, string topic, bool enabled)
+    {
+        if (string.IsNullOrEmpty(topic) || topic.Length > 249 || topic is "." or ".." ||
+            topic.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '.' or '_'))) return Results.BadRequest();
+        if (_settings.Database.Length == 0) return Results.Conflict();
+        lock (_writes)
+        {
+            var topics = new SortedSet<string>(SelectedTopics(cluster) ?? [], StringComparer.Ordinal);
+            if (enabled) topics.Add(topic); else topics.Remove(topic);
+            // A maximum-length list fits a single HTTP response header.
+            if (topics.Count > 32) return Results.Conflict(new {title="Up to 32 topics can be monitored per cluster."});
+            using var db = Open();
+            Exec(db, "INSERT OR REPLACE INTO monitor_topic_selection VALUES($c,$topics)",
+                ("$c",cluster), ("$topics",JsonSerializer.Serialize(topics)));
+            return Results.Ok(new {topics});
+        }
+    }
     internal int? SamplingOverride(string cluster)
     {
         if (_settings.Database.Length==0) return null;
@@ -159,7 +185,7 @@ internal sealed class MonitoringStore
                 Exec(db,"DELETE FROM monitor_source WHERE cluster=$c AND instance=$i",scope);
                 Exec(db,"DELETE FROM monitor_sample WHERE series IN (SELECT id FROM monitor_series WHERE cluster=$c AND instance=$i)",scope);
                 Exec(db,"DELETE FROM monitor_series WHERE cluster=$c AND instance=$i",scope);
-                tx.Commit();_cycles.Remove((cluster,instance));return Results.Ok(new {instance});
+                tx.Commit();_cycles.Remove((cluster,instance,false));_cycles.Remove((cluster,instance,true));return Results.Ok(new {instance});
             }
             using var total=Sql(db,"SELECT count(*) FROM monitor_enrollment");
             if (!exists && (long)total.ExecuteScalar()!+_settings.Sources.Length>=128) return Results.Conflict();
@@ -180,7 +206,7 @@ internal sealed class MonitoringStore
     private static void Exec(SqliteConnection db,string text,params (string Key,object Value)[] args)
     { using var cmd=Sql(db,text,args);cmd.ExecuteNonQuery(); }
 
-    internal IResult Ingest(BrokerSource src,JmxBatch batch,CancellationToken ct)
+    internal IResult Ingest(BrokerSource src,JmxBatch batch,CancellationToken ct,bool topicOnly=false)
     {
         lock (_writes)
         {
@@ -188,9 +214,9 @@ internal sealed class MonitoringStore
             using var db=Open();
             var now=Now;
             using var recent=Sql(db,"SELECT seen FROM monitor_source WHERE cluster=$c AND instance=$i",("$c",src.ClusterId),("$i",src.Instance));
-            var key=(src.ClusterId,src.Instance);
+            var key=(src.ClusterId,src.Instance,topicOnly);
             var active=_cycles.GetValueOrDefault(key);
-            if (batch.Part==0 && (now-active.Started<5 || recent.ExecuteScalar() is long seen && now-seen<5)) return Results.StatusCode(429);
+            if (batch.Part==0 && (now-active.Started<5 || !topicOnly && recent.ExecuteScalar() is long seen && now-seen<5)) return Results.StatusCode(429);
             if (batch.Part>0 && (active.Cycle!=batch.Cycle || active.Next!=batch.Part)) return Results.Conflict();
             using var tx=db.BeginTransaction();
             using var insert=Sql(db,"INSERT OR IGNORE INTO monitor_series(cluster,instance,metric,labels) VALUES($c,$i,$m,$l)",
@@ -200,9 +226,15 @@ internal sealed class MonitoringStore
             insert.Transaction=tx;write.Transaction=tx;
             var rules=_rules.Concat(ClusterRules(db,src.ClusterId)).ToLookup(rule=>rule.Metric);
             var ids=new HashSet<(string,string)>();
-            foreach(var p in batch.Samples.Append(new JmxPoint(Heartbeat,[],1)))
+            var selectedTopics = topicOnly ? SelectedTopics(src.ClusterId) ?? [] : null;
+            foreach(var p in topicOnly ? batch.Samples : batch.Samples.Append(new JmxPoint(Heartbeat,[],1)))
             {
                 ct.ThrowIfCancellationRequested();
+                if (topicOnly)
+                {
+                    if (!p.Labels.TryGetValue("topic",out var topic)) return Results.BadRequest();
+                    if (!selectedTopics!.Contains(topic, StringComparer.Ordinal)) continue;
+                }
                 var labels=JsonSerializer.Serialize(p.Labels);
                 if (!ids.Add((p.Metric,labels))) return Results.BadRequest();
                 insert.Parameters["$m"].Value=write.Parameters["$m"].Value=p.Metric;
@@ -212,10 +244,13 @@ internal sealed class MonitoringStore
                 foreach(var rule in rules[p.Metric])
                     Evaluate(db,src,rule,labels,p.Value,now);
             }
-            Exec(db,"UPDATE monitor_source SET seen=$t,partial=$p WHERE cluster=$c AND instance=$i",("$t",now),("$p",batch.Partial || !batch.Last),("$c",src.ClusterId),("$i",src.Instance));
-            Exec(db,"DELETE FROM monitor_alert WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown'",("$c",src.ClusterId),("$i",src.Instance));
-            Exec(db,"UPDATE monitor_incident SET ended=$t,reason='recovered' WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown' AND ended IS NULL",
-                ("$c",src.ClusterId),("$i",src.Instance),("$t",now));
+            if (!topicOnly)
+            {
+                Exec(db,"UPDATE monitor_source SET seen=$t,partial=$p WHERE cluster=$c AND instance=$i",("$t",now),("$p",batch.Partial || !batch.Last),("$c",src.ClusterId),("$i",src.Instance));
+                Exec(db,"DELETE FROM monitor_alert WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown'",("$c",src.ClusterId),("$i",src.Instance));
+                Exec(db,"UPDATE monitor_incident SET ended=$t,reason='recovered' WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown' AND ended IS NULL",
+                    ("$c",src.ClusterId),("$i",src.Instance),("$t",now));
+            }
             tx.Commit();
             _cycles[key]=(batch.Cycle,batch.Last ? -1 : batch.Part+1,batch.Part==0 ? now : active.Started);
             return Results.NoContent();
@@ -280,9 +315,11 @@ internal sealed class MonitoringStore
         }
     }
 
-    internal IResult Read(string cluster,string kind,string? metric,string? search,int minutes,string? instance,string? filters,CancellationToken ct)
+    internal IResult Read(string cluster,string kind,string? metric,string? search,int minutes,string? instance,string? filters,CancellationToken ct,
+        string? after=null,string? topic=null,int? partition=null)
     {
         if(kind=="sampling") return Results.Ok(new {seconds=SamplingOverride(cluster)??30});
+        if(kind=="topic-selection") return Results.Ok(new {topics=SelectedTopics(cluster) ?? []});
         var sources=Sources().Where(s=>s.ClusterId==cluster).Select(s=>s.Instance).ToArray();
         if (sources.Length==0) return Results.Ok(new {state="unconfigured"});
         if (minutes is not (15 or 60 or 360 or 1440) || metric?.Length>512 || search?.Length>100 || instance?.Length>160 || filters?.Length>2500) return Results.BadRequest();
@@ -314,7 +351,22 @@ internal sealed class MonitoringStore
         }
         if(kind=="metrics")
         {
-            using var cmd=Sql(db,"SELECT DISTINCT metric FROM monitor_series WHERE "+scope+" AND instr(lower(metric),lower($q))>0 ORDER BY metric LIMIT 501",[..args,("$q",search??"")]);
+            if (after?.Length > 512 || topic?.Length > 249 || partition is < 0 || partition.HasValue && string.IsNullOrEmpty(topic))
+                return Results.BadRequest();
+            var predicate = scope + " AND metric>$after AND instr(lower(metric),lower($q))>0";
+            args.Add(("$after", after ?? "")); args.Add(("$q", search ?? ""));
+            if (!string.IsNullOrEmpty(topic))
+            {
+                predicate += " AND json_extract(labels,'$.topic')=$topic";
+                args.Add(("$topic",topic));
+                if (partition.HasValue)
+                {
+                    predicate += " AND json_extract(labels,'$.partition')=$partition";
+                    args.Add(("$partition",partition.Value.ToString(CultureInfo.InvariantCulture)));
+                }
+                else predicate += " AND json_extract(labels,'$.partition') IS NULL";
+            }
+            using var cmd=Sql(db,"SELECT DISTINCT metric FROM monitor_series WHERE "+predicate+" ORDER BY metric LIMIT 501",args.ToArray());
             using var reader=cmd.ExecuteReader();
             var names=new List<string>();while(reader.Read()) names.Add(reader.GetString(0));
             return Results.Ok(new {state="available",observedAt=now,warning,truncated=names.Count>500,names=names.Take(500)});

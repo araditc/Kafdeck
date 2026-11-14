@@ -3,6 +3,7 @@ import { kafdeckApi, type BrokerAlertRule } from '../../shared/api.js';
 import { t } from '../../shared/i18n.js';
 import { readViewError, readViewProblemText, type ReadViewProblem } from '../readviews/readViewProblem.js';
 import { useObservation } from './useObservation.js';
+import { MetricSelect } from './CatalogSelect.js';
 
 export function AlertRules({clusterId,metric}: {clusterId:string;metric:string}) {
   const empty: BrokerAlertRule = {name:'',metric:'',threshold:0,below:false,seconds:60,severity:'warning'};
@@ -36,8 +37,7 @@ export function AlertRules({clusterId,metric}: {clusterId:string;metric:string})
         <option value="">{t("New rule")}</option>{rules.map(r=><option key={r.name}>{r.name}</option>)}</select></label>
       <label>{t("Rule name")}<input required className="form-control" maxLength={100} readOnly={editing} disabled={busy} value={draft.name}
         onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
-      <label>{t("Metric")}<input required className="form-control" dir="ltr" maxLength={512} disabled={busy} value={selectedMetric}
-        onChange={e=>setMetricInput(e.target.value)}/></label>
+      <MetricSelect clusterId={clusterId} value={selectedMetric} onChange={setMetricInput} disabled={busy}/>
       <label>{t("Comparison")}<select className="form-select" disabled={busy} value={draft.below ? 'below':'above'}
         onChange={e=>setDraft({...draft,below:e.target.value==='below'})}><option value="above">{t("Above")}</option><option value="below">{t("Below")}</option></select></label>
       <label>{t("Threshold")}<input required className="form-control" type="number" step="any" disabled={busy} value={Number.isFinite(draft.threshold)?draft.threshold:''}
@@ -46,7 +46,7 @@ export function AlertRules({clusterId,metric}: {clusterId:string;metric:string})
         value={Number.isFinite(draft.seconds)?draft.seconds:''} onChange={e=>setDraft({...draft,seconds:e.target.valueAsNumber})}/></label>
       <label>{t("Severity")}<select className="form-select" disabled={busy} value={draft.severity} onChange={e=>setDraft({...draft,severity:e.target.value})}>
         <option value="warning">{t("Warning")}</option><option value="critical">{t("Critical")}</option></select></label>
-      <button className="btn btn-primary" disabled={busy || !result.value || !editing && rules.some(r=>r.name===draft.name.trim())}>{t("Save rule")}</button>
+      <button className="btn btn-primary" disabled={busy || !selectedMetric || !result.value || !editing && rules.some(r=>r.name===draft.name.trim())}>{t("Save rule")}</button>
       {editing && <button className="btn btn-outline-danger" type="button" disabled={busy} onClick={()=>void change(true)}>{t("Remove rule")}</button>}
     </form>
     {problem && <p role="alert">{readViewProblemText(problem)}</p>}
