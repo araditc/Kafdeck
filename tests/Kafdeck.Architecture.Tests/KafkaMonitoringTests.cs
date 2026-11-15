@@ -80,6 +80,40 @@ public sealed class KafkaMonitoringTests : IDisposable
         Assert.Equal(400,Status(_store.Ingest(_source,new(false,Guid.NewGuid(),0,false,[Point(1)],valid),default)));
     }
 
+    [Theory]
+    [InlineData("/monitoring/ingest")]
+    [InlineData("/monitoring/client-stats")]
+    public async Task Agent_header_validation_never_bypasses_authentication_or_parses_unauthenticated_bodies(string endpoint)
+    {
+        await using var f=await V1ManagedWorkflowLab.Start(monitoring:_store);
+        f.AddTargets("PLAINTEXT");
+        using var enrolled=await f.Http.PostAsJsonAsync("/api/v1/clusters/connection-a/monitoring/agents",new {instance="auth-proof",action="create"});
+        Assert.Equal(HttpStatusCode.OK,enrolled.StatusCode);
+        var token=(await enrolled.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+        f.Actor=new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity());
+        // A malformed body distinguishes authentication denial from parsing. A
+        // caller-controlled query cannot convert an early denial into a grant.
+        foreach(var values in new string[]?[] {null,[],["short"],[new string('x',257)],[new string('x',64)],[token,token]})
+        {
+            using var post=new HttpRequestMessage(HttpMethod.Post,endpoint+"?authenticated=true&skipAuth=true")
+                {Content=new StringContent("{not-json",Encoding.UTF8,"application/json")};
+            if(values is not null) post.Headers.TryAddWithoutValidation("X-Kafdeck-Agent-Token",values);
+            using var denied=await f.Http.SendAsync(post);
+            Assert.Equal(HttpStatusCode.Unauthorized,denied.StatusCode);
+        }
+        Assert.Empty(Rows("metrics","connection-a").GetProperty("names").EnumerateArray());
+        using var valid=new HttpRequestMessage(HttpMethod.Post,endpoint)
+            {Content=endpoint.EndsWith("/ingest",StringComparison.Ordinal)
+                ? JsonContent.Create(new JmxBatch(false,Guid.NewGuid(),0,true,[Point(123)]))
+                : new StringContent("{not-json",Encoding.UTF8,"application/json")};
+        valid.Headers.Add("X-Kafdeck-Agent-Token",token);
+        using var response=await f.Http.SendAsync(valid);
+        Assert.Equal(endpoint.EndsWith("/ingest",StringComparison.Ordinal)?HttpStatusCode.NoContent:HttpStatusCode.BadRequest,response.StatusCode);
+        if(endpoint.EndsWith("/ingest",StringComparison.Ordinal))
+            Assert.Contains(Rows("metrics","connection-a").GetProperty("names").EnumerateArray(),name=>name.GetString()==Metric);
+        Assert.Empty(Rows("metrics","a").GetProperty("names").EnumerateArray());
+    }
+
     [Fact]
     public void Custom_threshold_survives_restart_tracks_hold_and_recovery_and_records_evidence()
     {
