@@ -35,10 +35,14 @@ for folder in ('app','agent'):
  shutil.copytree(source/folder,payload/folder,dirs_exist_ok=True,ignore=shutil.ignore_patterns('*.pdb'))
 (payload/'scripts').mkdir(parents=True,exist_ok=True);(payload/'docs').mkdir(exist_ok=True)
 for file in (repo/'deploy/windows').glob('*.ps1'):shutil.copyfile(file,payload/'scripts'/file.name)
-for name in ('windows-offline-install.fa.md','kafka-agent-java21.fa.md','windows-server-monitoring-advanced.fa.md'):
+for name in ('windows-offline-install.md','kafka-agent.md','kafka-monitoring.md','windows-offline-install.fa.md','kafka-agent-java21.fa.md','windows-server-monitoring-advanced.fa.md'):
  shutil.copyfile(repo/'docs/operator'/name,payload/'docs'/name)
 shutil.copyfile(repo/'deploy/windows/Install-Offline.ps1',bundle/'Install-Kafdeck.ps1')
 shutil.copyfile(repo/'docs/operator/windows-offline-install.fa.md',bundle/'README.fa.md')
+readme=(repo/'docs/operator/windows-offline-install.md').read_text(encoding='utf-8-sig')
+for name in ('kafka-agent.md','windows-offline-install.fa.md'):
+ readme=readme.replace(']('+name+')','](payload/docs/'+name+')')
+(bundle/'README.md').write_text(readme,encoding='utf-8')
 shutil.copyfile(repo/'LICENSE',bundle/'LICENSE')
 evidence=out/'acceptance-evidence.json'
 if evidence.exists():shutil.copyfile(evidence,bundle/'acceptance-evidence.json')

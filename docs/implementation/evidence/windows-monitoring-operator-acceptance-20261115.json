@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-15",
+  "kind": "operator-reported acceptance",
+  "installerSource": "c638493",
+  "nativeRuntimeSource": "183d98cf024c901c91d0776ff088543ea75782bd",
+  "reportedResult": "Windows Server installation and execution succeeded after the runtime prerequisite reboot",
+  "independentObservation": false,
+  "postInstallRebootOfAllServicesIndependentlyObserved": false,
+  "scope": "monitoring preview; not signed stable release acceptance"
+}
