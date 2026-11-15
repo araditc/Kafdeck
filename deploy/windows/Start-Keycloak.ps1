@@ -16,7 +16,13 @@ try {
     }
     $env:KC_BOOTSTRAP_ADMIN_USERNAME=$null
     $env:KC_BOOTSTRAP_ADMIN_PASSWORD=$null
-    if($BootstrapAdmin){
+    if($settings.PSObject.Properties.Name -contains 'bootstrapPasswordFile' -and (Test-Path -LiteralPath $settings.bootstrapPasswordFile)) {
+        $secure=Get-Content -LiteralPath $settings.bootstrapPasswordFile -Raw | ConvertTo-SecureString
+        try {
+            $env:KC_BOOTSTRAP_ADMIN_USERNAME='kafdeck-bootstrap'
+            $env:KC_BOOTSTRAP_ADMIN_PASSWORD=[Net.NetworkCredential]::new('',$secure).Password
+        } finally {$secure.Dispose()}
+    } elseif($BootstrapAdmin){
         $secure=Read-Host 'Choose a temporary Keycloak administrator password (12+ characters)' -AsSecureString
         try {
             if($secure.Length -lt 12){throw 'Use at least 12 characters.'}

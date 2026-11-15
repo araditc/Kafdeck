@@ -4,7 +4,10 @@ param(
     [Parameter(Mandatory)][string]$ServerAddress,
     [Parameter(Mandatory)][string[]]$KafkaNetworks,
     [Parameter(Mandatory)][string]$KeycloakHome,
-    [string]$JavaHome=$env:JAVA_HOME
+    [string]$JavaHome=$env:JAVA_HOME,
+    [ValidateRange(1024,65535)][int]$AppPort=8080,
+    [ValidateRange(1024,65535)][int]$IdentityPort=8443,
+    [ValidateRange(1024,65535)][int]$DatabasePort=5432
 )
 $ErrorActionPreference='Stop'
 if($ServerAddress -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.-]*$'){throw 'Use an IPv4 address or DNS name, without https:// or a port.'}
@@ -40,16 +43,11 @@ $password=ConvertTo-SecureString (RandomSecret) -AsPlainText -Force
 $browserSecret=RandomSecret
 $managementSecret=RandomSecret
 $databaseSecret=RandomSecret
-$ip=$null
-$san=if([Net.IPAddress]::TryParse($ServerAddress,[ref]$ip)){"IPAddress=$ServerAddress"}else{"DNS=$ServerAddress"}
-$certificate=New-SelfSignedCertificate -Subject "CN=$ServerAddress" -CertStoreLocation Cert:\CurrentUser\My -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -KeyUsage DigitalSignature,KeyEncipherment -NotAfter (Get-Date).AddYears(1) -TextExtension @("2.5.29.17={text}$san",'2.5.29.37={text}1.3.6.1.5.5.7.3.1')
-$pfx=Join-Path $secrets 'server.pfx'
-Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
-Export-Certificate -Cert $certificate -FilePath (Join-Path $secrets 'server-public.cer') | Out-Null
-$pem="-----BEGIN CERTIFICATE-----`n"+[Convert]::ToBase64String($certificate.RawData,[Base64FormattingOptions]::InsertLineBreaks)+"`n-----END CERTIFICATE-----`n"
-[IO.File]::WriteAllText((Join-Path $secrets 'server-public.pem'),$pem,$utf8)
-$origin="https://${ServerAddress}:8080"
-$idpOrigin="https://${ServerAddress}:8443"
+. (Join-Path $PSScriptRoot 'New-InstallCertificate.ps1')
+$tls=New-KafdeckInstallCertificate -ServerAddress $ServerAddress -Secrets $secrets -Password $password
+$certificate=$tls.Certificate;$pfx=$tls.Pfx
+$origin="https://${ServerAddress}:$AppPort"
+$idpOrigin="https://${ServerAddress}:$IdentityPort"
 $profile=@{attributes=@(
     @{name='username';permissions=@{view=@('admin','user');edit=@('admin')};validations=@{length=@{min=3;max=255}}},
     @{name='email';permissions=@{view=@('admin','user');edit=@('admin','user')};validations=@{email=@{}};required=@{roles=@('user')}},
@@ -73,17 +71,17 @@ $sql="\set ON_ERROR_STOP on`nCREATE ROLE kafdeck_keycloak LOGIN PASSWORD '$datab
 [IO.File]::WriteAllText((Join-Path $secrets 'create-keycloak-db.sql'),$sql,$utf8)
 $kcConf=@"
 db=postgres
-db-url=jdbc:postgresql://127.0.0.1:5432/kafdeck_keycloak
+db-url=jdbc:postgresql://127.0.0.1:$DatabasePort/kafdeck_keycloak
 db-username=kafdeck_keycloak
 hostname=$idpOrigin
-https-port=8443
+https-port=$IdentityPort
 https-key-store-file=$((Join-Path $secrets 'https.pfx').Replace('\','/'))
 http-enabled=false
 cache=local
 "@
-[IO.File]::WriteAllText((Join-Path $config 'keycloak.conf'),$kcConf,$utf8)
-[IO.File]::WriteAllText((Join-Path $config 'local-keycloak.json'),(@{home=$KeycloakHome;javaHome=$JavaHome;origin=$idpOrigin;certificateThumbprint=$certificate.Thumbprint}|ConvertTo-Json),$utf8)
+[IO.File]::WriteAllText((Join-Path $config 'keycloak.conf'),$kcConf+[Environment]::NewLine,$utf8)
+[IO.File]::WriteAllText((Join-Path $config 'local-keycloak.json'),(@{home=$KeycloakHome;javaHome=$JavaHome;origin=$idpOrigin;certificateThumbprint=$certificate.Thumbprint;caThumbprint=$tls.Authority.Thumbprint}|ConvertTo-Json),$utf8)
 & (Join-Path $PSScriptRoot 'Initialize-Kafdeck.ps1') -PublicOrigin $origin -KeycloakIssuer "$idpOrigin/realms/kafdeck" -CertificateFile $pfx -RegistrationNetworks $KafkaNetworks -IssuerCaFile (Join-Path $secrets 'server-public.pem') -BrowserSecret (ConvertTo-SecureString $browserSecret -AsPlainText -Force) -ManagementSecret (ConvertTo-SecureString $managementSecret -AsPlainText -Force) -CertificatePassword $password
 $password.Dispose()
-Write-Host "Prepared $origin and $idpOrigin. Public certificate thumbprint: $($certificate.Thumbprint)"
+Write-Host "Prepared $origin and $idpOrigin. Public CA thumbprint: $($tls.Authority.Thumbprint)"
 Write-Host 'Next: create the database using the supplied SQL file, trust server-public.cer, and run Start-Keycloak.ps1 -BootstrapAdmin.'
