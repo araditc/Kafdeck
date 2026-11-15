@@ -1,3 +1,5 @@
+<div dir="rtl">
+
 # نصب عامل Kafdeck روی Kafka با Java 21
 
 فایل `kafdeck-kafka-agent.jar` در بسته، با bytecode نسخهٔ Java 11 ساخته و همین فایل روی Java 21 آزمایش شده است. عامل در همان JVM بروکر اجرا می‌شود؛ JVM را عوض نمی‌کند و JMX remote، exporter یا Prometheus لازم ندارد. نسخهٔ Java بروکر باید در ماتریس پشتیبانی توزیع Kafka خودتان باشد. عامل اصلاح‌شده روی هر سه بروکر واقعی Arad Office با Java 11 نیز بدون restart فعال و دادهٔ واقعی آن بررسی شده است.
@@ -10,6 +12,8 @@
 
 JAR و فایل زیر را در `/opt/kafdeck-monitor` داخل محیط اجرای بروکر قرار دهید:
 
+<div dir="ltr">
+
 ```properties
 endpoint=https://kafdeck.company.local:8080/monitoring/ingest
 tokenFile=/opt/kafdeck-monitor/agent-token
@@ -19,6 +23,8 @@ includeTopicPartitions=false
 # caFile=/opt/kafdeck-monitor/ca.pem
 ```
 
+</div>
+
 فایل properties با مسیرهای Linux نوشته شده؛ برای Kafka روی Windows، در مقدار properties از `C:/...` استفاده کنید تا backslash فرمت Java Properties مسیر را تغییر ندهد. endpoint باید از شبکهٔ بروکر قابل دسترسی و certificate آن معتبر باشد؛ redirect دنبال نمی‌شود. روی سرور مقصد هرگز endpoint را `127.0.0.1` لپ‌تاپ فعلی نگذارید.
 
 مالک `agent-token` و `agent.properties` باید حساب اجرای Kafka باشد و فقط همان حساب بتواند آن‌ها را بخواند، مثلاً mode `0600`. CA و JAR نیاز به write برای Kafka ندارند. کلید را در command line، Docker environment یا image bake نکنید. برای کانتینر UID/GID واقعی را با `docker exec kafka-1 id` بررسی کنید.
@@ -26,6 +32,8 @@ includeTopicPartitions=false
 ## ۳. اجرای Docker Compose
 
 برای هر بروکر یک پوشهٔ خصوصی میزبان، مثلاً `/srv/kafdeck-agent/kafka-1` با چهار فایل JAR، properties، token و در صورت نیاز ca.pem بسازید. mount فقط‌خواندنی اضافه کنید و گزینهٔ agent را **به گزینه‌های فعلی JVM اضافه کنید**. مقادیر SSL/SASL/JAAS و agentهای موجود را حذف نکنید:
+
+<div dir="ltr">
 
 ```yaml
 services:
@@ -35,6 +43,8 @@ services:
     environment:
       KAFKA_OPTS: "${KAFKA1_EXISTING_OPTS:-} -javaagent:/opt/kafdeck-monitor/kafdeck-kafka-agent.jar=/opt/kafdeck-monitor/agent.properties"
 ```
+
+</div>
 
 `KAFKA1_EXISTING_OPTS` را برابر گزینه‌های قبلی همین بروکر بگذارید؛ اگر مقدار قبلی خالی بود خالی بماند. برای kafka-2 و kafka-3 mount و کلید مستقل تعریف کنید. فایل‌ها باید برای UID کانتینر قابل خواندن باشند.
 
@@ -53,3 +63,5 @@ services:
 5. برای تعویض کلید، Rotate همان source را بزنید و فایل token را اتمی جایگزین کنید؛ نیازی به restart Kafka نیست. Revoke داده و اعتبار همان source را حذف می‌کند؛ برای عیب‌یابی معمول آن را نزنید.
 
 حدود هر چرخه: تا ۶۴ packet، هر packet حداکثر ۸۱۹۲ مقدار و کمتر از ۲MB. نام/تعداد متریک‌ها به نسخهٔ Kafka، JVM، workload و replica placement بستگی دارد؛ متریک پشتیبانی‌نشده را نمی‌شود با تغییر UI تولید کرد. لاگ payload پیام‌ها یا credentialها جمع نمی‌شود.
+
+</div>

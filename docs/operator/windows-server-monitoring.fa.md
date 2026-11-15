@@ -1,111 +1,206 @@
-# نصب بستهٔ مانیتورینگ Kafdeck روی Windows Server
+<div dir="rtl">
 
-این بستهٔ مستقل `win-x64` شامل API، داشبورد و runtime دات‌نت است؛ نصب SDK، Node.js یا Prometheus روی سرور لازم نیست. این یک build آزمایشی مانیتورینگ از مسیر `1.0.0-rc.1` است؛ جایگزین امضاشدهٔ انتشار رسمی ۰.۹ نیست. فایل `build-manifest.json` و `SHA256SUMS` هویت فایل‌های همین build را مشخص می‌کنند.
+# نصب Kafdeck از صفر روی Windows Server
 
-پیش‌نیازها: Windows Server پشتیبانی‌شدهٔ x64، گواهی HTTPS معتبر برای نام/IP سرور، یک Keycloak با realm اختصاصی، و دسترسی شبکهٔ سرور به issuer و آدرس‌های advertised بروکرهای Kafka. این publish روی ویندوز محلی آزمایش شده است؛ نصب روی Windows Server مقصد را با مراحل زیر بررسی کنید. [سیستم‌عامل‌ها و پیش‌نیازهای دات‌نت](https://learn.microsoft.com/en-us/dotnet/core/install/windows)
+این راهنما برای **یک سرور خالی** است؛ Keycloak سازمانی لازم نیست. برنامه و سیستم ورود را روی همین ویندوز نصب می‌کنیم. Kafka روی سرورهای خودش باقی می‌ماند.
 
-## ۱. انتقال فایل‌ها
+در پایان، داشبورد در `https://SERVER-IP:8080` و سیستم ورود در `https://SERVER-IP:8443` باز می‌شوند. SERVER-IP یعنی آی‌پی ثابت ویندوزسرور شما.
 
-هش ZIP را با فایل `.sha256` تحویل‌شده مقایسه و بسته را در مسیر دائمی استخراج کنید؛ مثال:
+سه دانلود جانبی داریم: **Java 21، PostgreSQL 17 و Keycloak**. نصب .NET، Node.js، Docker یا Prometheus روی این ویندوز لازم نیست. این بسته build آزمایشی مانیتورینگ است. راهنما برای Windows Server 2019/2022 با معماری x64 است؛ خودکارسازی روی ویندوز محلی بررسی شده و روی سرور مقصد نیز باید مراحل پایانی را بررسی کنید.
+
+## ۱. بسته را استخراج کنید
+
+فایل `kafdeck-monitoring-win-x64.zip` را روی سرور ببرید. راست‌کلیک → **Extract All** → مسیر `C:\Kafdeck`.
+
+داخل این پوشه باید مستقیماً `app`، `scripts`، `docs` و `agent` را ببینید. از اول تا آخر نصب با **همان حساب ویندوز** کار کنید.
+
+## ۲. Java را نصب کنید
+
+[صفحهٔ رسمی Java مایکروسافت](https://learn.microsoft.com/en-us/java/openjdk/download#openjdk-21) را باز کنید. از بخش **OpenJDK 21**، گزینهٔ **Windows / x64 / MSI** را بگیرید. نصب‌کننده را اجرا و Next → Install → Finish را بزنید. گزینهٔ **Set JAVA_HOME** را، اگر نمایش داده شد، فعال کنید. Java بروکرهای Kafka را تغییر ندهید؛ این Java برای ویندوز است.
+
+## ۳. PostgreSQL را نصب کنید
+
+[دانلود PostgreSQL برای ویندوز](https://www.postgresql.org/download/windows/) → **Download the installer** → **PostgreSQL 17 / Windows x86-64**.
+
+نصب‌کننده را اجرا کنید. مسیر پیش‌فرض، **PostgreSQL Server** و **Command Line Tools** را نگه دارید. pgAdmin اختیاری است. برای کاربر `postgres` یک رمز قوی انتخاب و یادداشت کنید. پورت را **5432** بگذارید. نصب Stack Builder لازم نیست.
+
+پورت 5432 را برای شبکه باز نکنید؛ فقط همین ویندوز به دیتابیس متصل می‌شود. اگر PostgreSQL از قبل دارید، نصب دوم انجام ندهید؛ از [راهنمای تکمیلی](windows-server-monitoring-advanced.fa.md) استفاده کنید.
+
+## ۴. Keycloak و تنظیمات ورود را آماده کنید
+
+[ZIP رسمی Keycloak 26.8.1](https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip) را بگیرید و در `C:\Keycloak` استخراج کنید. این فایل باید وجود داشته باشد:
+
+`C:\Keycloak\keycloak-26.8.1\bin\kc.bat`
+
+از Start، **Windows PowerShell** را پیدا و با راست‌کلیک **Run as administrator** را بزنید. کد زیر را کامل کپی کنید. آی‌پی ویندوزسرور و میزبان‌های Kafka را می‌پرسد؛ پورت ننویسید. برای Arad Office فعلی، پاسخ سؤال دوم فقط `192.168.100.33` است.
+
+<div dir="ltr">
 
 ```powershell
-Get-FileHash .\kafdeck-monitoring-win-x64.zip -Algorithm SHA256
-Expand-Archive .\kafdeck-monitoring-win-x64.zip C:\Kafdeck
 Set-Location C:\Kafdeck
+$ServerIP = Read-Host 'Windows Server IPv4 address'
+$KafkaIPs = (Read-Host 'Kafka host IPv4 addresses, separated by comma').Split(',')
+$Networks = @($KafkaIPs | ForEach-Object { $_.Trim() + '/32' })
+.\scripts\Prepare-NewServer.ps1 -ServerAddress $ServerIP `
+  -KafkaNetworks $Networks `
+  -KeycloakHome C:\Keycloak\keycloak-26.8.1
 ```
 
-ساختار بسته `app`، `scripts`، `agent` و `docs` است. اسکریپت مقداردهی اولیه، پوشه‌های خصوصی `config`، `secrets` و `state` را می‌سازد. حساب ویندوز اجرای برنامه را از ابتدا مشخص کنید و تمام مراحل را با همان حساب انجام دهید؛ رمز PFX با DPAPI همان حساب و دستگاه محافظت می‌شود. حساب/پسورد ادمین و داده‌های Arad Office داخل ZIP نیستند.
+</div>
 
-## ۲. آماده‌سازی Keycloak
+اسکریپت، گواهی مخصوص همین سرور، تنظیمات ورود، اتصال دو برنامه و فایل ساخت دیتابیس را می‌سازد. **Realm و Clientها را دستی نمی‌سازید.** ثبت‌نام عمومی و تأیید ایمیل خاموش‌اند. ادمین یا پسورد ثابت داخل بسته نیست.
 
-اگر Keycloak سازمانی دارید از همان سرویس با یک realm اختصاصی مثل `kafdeck` استفاده کنید. در نصب جدا، Java 21 و توزیع رسمی Keycloak و دیتابیس پایدار آن را طبق [راهنمای رسمی](https://www.keycloak.org/server/configuration) آماده کنید. `start-dev` برای استقرار اصلی مناسب نیست. نمونهٔ این مسیر با Keycloak 26.8.1 کار کرده است. Keycloak داخل ZIP برنامه نیست.
+اگر خطای JAVA_HOME گرفتید، در همان پنجره این خط را اجرا و دستور Prepare را تکرار کنید:
 
-در realm اختصاصی:
-
-1. **User registration** و **Verify email** را خاموش کنید. تا قبل از تنظیم SMTP، Verify Email یا بازیابی مبتنی بر ایمیل را required action نکنید.
-2. یک client محرمانه به نام `kafdeck-browser`، با Client authentication روشن، Standard Flow روشن و PKCE S256 بسازید. Direct Access Grants را لازم نداریم.
-3. با فرض آدرس `https://kafdeck.company.local:8080`، callback ورود را دقیقاً `https://kafdeck.company.local:8080/signin-oidc` و callback خروج را `https://kafdeck.company.local:8080/signout-callback-oidc` ثبت کنید؛ return origin خروج را هم ثبت کنید. wildcard عمومی نگذارید.
-4. client محرمانهٔ جدا به نام `kafdeck-user-management`، با Service accounts فعال بسازید. به service account فقط نقش realm-management / `manage-users` در همین realm بدهید؛ `manage-realm` لازم نیست.
-5. در User Profile، ویژگی اختیاری و single-valued به نام `kafdeckProvisioningId` اضافه کنید. View و Edit فقط `admin` باشند؛ این ویژگی را به کاربر یا token mapper نمایش ندهید. این مورد برای ساخت و بازیابی امن کاربران عادی لازم است.
-6. issuer مانند `https://idp.company.local/realms/kafdeck` باید برای مرورگر و سرور قابل دسترسی و قابل اعتماد باشد. realm `master` پشتیبانی نمی‌شود. دو client secret را جداگانه نگه دارید.
-
-## ۳. تنظیم نصب
-
-فایل PFX باید private key و زنجیرهٔ گواهی مناسب داشته باشد و SAN آن نام/IP واقعی داشبورد را پوشش دهد. دستور زیر مثال است؛ issuer، نام سرور، مسیر گواهی و CIDR را برای محیط خود تغییر دهید:
+<div dir="ltr">
 
 ```powershell
-.\scripts\Initialize-Kafdeck.ps1 `
-  -PublicOrigin https://kafdeck.company.local:8080 `
-  -KeycloakIssuer https://idp.company.local/realms/kafdeck `
-  -CertificateFile C:\Certificates\kafdeck.pfx `
-  -RegistrationNetworks '192.168.100.0/24'
+$env:JAVA_HOME = (Get-ChildItem 'C:\Program Files\Microsoft\jdk-21*' -Directory | Select-Object -First 1).FullName
 ```
 
-اسکریپت دو client secret و رمز PFX را با ورودی مخفی می‌گیرد. تنظیمات در `config\appsettings.Production.json` و state در `state` قرار می‌گیرد. دسترسی این سه پوشه به حساب نصب، SYSTEM و Administrators محدود می‌شود. `RegistrationNetworks` شبکه‌های مجاز ثبت Kafka و سرویس‌های همان کلاستر است؛ آن را به شبکه‌های واقعی محدود کنید. CIDR به‌تنهایی جای egress firewall میزبان را نمی‌گیرد؛ advertised address بروکرها هم باید در مرز شبکهٔ آزموده‌شده باشند.
+</div>
 
-برای CA خصوصی issuer، پارامتر `-IssuerCaFile C:\Certificates\idp-ca.pem` را هم بدهید. مرورگر باید CA را از مسیر معمول سازمانی بشناسد. این گزینه اعتبارسنجی TLS را خاموش نمی‌کند.
+اگر ویندوز فایل دانلودشده را بسته است، منبع ZIP را بررسی کنید و در **Properties** خود ZIP گزینهٔ **Unblock** را بزنید؛ سپس دوباره استخراج کنید. اگر پیام «running scripts is disabled» دارید و محدودیت از Group Policy سازمانی نیست، فقط در همان پنجره دستور زیر را اجرا کنید و دوباره ادامه دهید. این تنظیم با بستن پنجره از بین می‌رود. برای Group Policy سازمانی از مسئول ویندوز بخواهید همین فایل‌ها را بررسی و مجاز کند. [توضیح مایکروسافت](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1)
 
-اگر firewall سرور بسته است، فقط ترافیک لازم به پورت 8080 را از شبکه‌های کاربران/بروکرهای مجاز باز کنید؛ مثال زیر را برای محیط خود محدود کنید:
+<div dir="ltr">
 
 ```powershell
-New-NetFirewallRule -DisplayName 'Kafdeck HTTPS' -Direction Inbound `
-  -Action Allow -Protocol TCP -LocalPort 8080 -RemoteAddress 192.168.100.0/24
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 ```
 
-## ۴. ساخت ادمین اول و اجرا
+</div>
 
-با همان حساب نصب، کد یک‌بارمصرف بسازید و برنامه را اجرا کنید:
+## ۵. دیتابیس و گواهی را ثبت کنید
+
+در همان PowerShell اجرا کنید:
+
+<div dir="ltr">
 
 ```powershell
+& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -X -h 127.0.0.1 -U postgres -d postgres -f C:\Kafdeck\secrets\create-keycloak-db.sql
+Import-Certificate -FilePath C:\Kafdeck\secrets\server-public.cer -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+</div>
+
+دستور اول رمز `postgres` مرحلهٔ ۳ را می‌خواهد؛ هنگام تایپ چیزی دیده نمی‌شود. باید **CREATE ROLE** و **CREATE DATABASE** ببینید. این مرحله را برای نصب تازه **یک بار** اجرا کنید.
+
+دستور دوم گواهی همین نصب را به ویندوز معرفی می‌کند. اثر انگشت آن در پایان مرحلهٔ ۴ چاپ شده است. فقط گواهی همان نصب خودتان را اعتماد کنید. این گواهی داخلی یک سال اعتبار دارد.
+
+برای بازکردن داشبورد روی کامپیوتر دیگر، **فقط فایل عمومی** `server-public.cer` را به آن ببرید و همان دستور Import-Certificate را با مسیر فایل عمومی، در PowerShell با دسترسی Administrator اجرا کنید. پوشهٔ secrets و فایل‌های PFX، DPAPI و SQL را به کاربران ندهید. برای انتشار اینترنتی یا گواهی سازمانی، [راهنمای تکمیلی](windows-server-monitoring-advanced.fa.md) را ببینید.
+
+## ۶. سیستم ورود را روشن کنید
+
+<div dir="ltr">
+
+```powershell
+.\scripts\Start-Keycloak.ps1 -BootstrapAdmin
+```
+
+</div>
+
+یک رمز حداقل ۱۲ کاراکتری برای مدیر موقت Keycloak انتخاب کنید؛ نام کاربری او `bootstrap-admin` است. این حساب برای نگهداری سیستم ورود است؛ ادمین Kafdeck را در مرحلهٔ بعد می‌سازید.
+
+اولین اجرا ممکن است چند دقیقه طول بکشد. پس از پیام شروع Keycloak، این پنجره را **باز نگه دارید**. در مرورگر همین سرور، آدرس زیر را با IP واقعی خودتان باز کنید؛ باید متن تنظیمات نمایش داده شود:
+
+`https://SERVER-IP:8443/realms/kafdeck/.well-known/openid-configuration`
+
+## ۷. ادمین اول Kafdeck را بسازید
+
+یک **PowerShell جدید با دسترسی Administrator** و همان حساب ویندوز باز کنید:
+
+<div dir="ltr">
+
+```powershell
+Set-Location C:\Kafdeck
 .\scripts\Start-Kafdeck.ps1 -IssueSetupCode
 .\scripts\Start-Kafdeck.ps1
 ```
 
-اولین دستور فقط کد را چاپ می‌کند و listener دوم ایجاد نمی‌کند. کد ۱۵ دقیقه اعتبار دارد. آدرس HTTPS تنظیم‌شده را باز کنید، کد، ایمیل و پسورد ادمین اول را بدهید؛ پسورد ۱۲ تا ۱۲۸ کاراکتر و مطابق policy realm باشد. تأیید ایمیل لازم نیست. سپس از طریق Keycloak وارد شوید. پس از ساخته‌شدن owner، setup بسته می‌شود و تولید کد جدید مجاز نیست. برای کاربر عادی از **Manage users** استفاده کنید؛ پسورد موقت در اولین ورود عوض می‌شود. owner کافدک با ادمین سرور Keycloak یکی نیست.
+</div>
 
-برای کد منقضی، فقط پیش از ساخته‌شدن owner، دستور IssueSetupCode را دوباره اجرا کنید. برای خطای provisioning یا وضعیت نامعلوم، state را پاک نکنید؛ نتیجه را در realm و لاگ/روند بازیابی بررسی کنید.
+دستور اول کد یک‌بارمصرف می‌دهد؛ آن را بردارید. کد **۱۵ دقیقه** اعتبار دارد. پنجرهٔ برنامه باز بماند.
 
-بررسی اولیه:
+آدرس `https://SERVER-IP:8080` را در مرورگر باز کنید. کد، ایمیل و رمز ادمین اول را بدهید؛ رمز حداقل ۱۲ کاراکتر باشد. **ایمیل تأیید ارسال نمی‌شود.** سپس از صفحهٔ Keycloak با همین حساب وارد شوید.
 
-```powershell
-Invoke-WebRequest https://kafdeck.company.local:8080/healthz -UseBasicParsing
+اگر کد منقضی شد، پیش از ساخت ادمین می‌توانید دستور IssueSetupCode را در پنجره‌ای دیگر تکرار کنید. پس از ساخته‌شدن ادمین، نصب را از اول مقداردهی نکنید و state را پاک نکنید.
+
+## ۸. Kafka و کاربران را اضافه کنید
+
+در داشبورد **Kafka connections** را بزنید، نامی مثل Arad Office بدهید و آدرس بروکرها را وارد کنید. برای اتصال فعلی Arad Office:
+
+<div dir="ltr">
+
+```text
+192.168.100.33:19092,192.168.100.33:19093,192.168.100.33:19094
 ```
 
-پاسخ 200 سلامت listener را ثابت می‌کند؛ ورود، Kafka و agent را جدا با مراحل بعد بررسی کنید. برای اجرای foreground، همین پنجره باز می‌ماند و خطاهای سرور دیده می‌شوند.
+</div>
 
-## ۵. افزودن کلاستر و فعال‌کردن مانیتورینگ
+این IP و پورت‌ها باید از ویندوزسرور قابل دسترسی باشند. Security protocol را مطابق Kafka انتخاب کنید؛ اتصال فعلی Arad Office از **PLAINTEXT** استفاده می‌کند. **Test connection** سپس ذخیره/بازکردن را بزنید. کلاستر بالای داشبورد قابل انتخاب می‌شود.
 
-از **Kafka connections** نام اتصال، bootstrap servers و Security Protocol را بدهید؛ برای SASL/TLS فیلدهای مربوط را کامل کنید. **Test connection** سپس ذخیره/بازکردن را بزنید. کلاستر باید در selector بالا دیده شود و Topics باز شود. Schema Registry، Kafka Connect و ksqlDB آدرس و احراز هویت جدا دارند و از صفحات مربوط تنظیم می‌شوند.
+برای کاربر دیگر **Manage users** را باز کنید. برای نمودارهای CPU/GC و نصب عامل، [راهنمای عامل Java 21](kafka-agent-java21.fa.md) را ادامه دهید. endpoint عامل باید آدرس **همین ویندوزسرور جدید** باشد.
 
-در **Monitoring → Sources** برای هر بروکر منبع جدا با نامی مثل `broker-1` ثبت کنید. کلید هر منبع فقط یک بار نمایش داده می‌شود؛ همان را فقط روی بروکر متناظر قرار دهید. [راهنمای نصب عامل Java 21](kafka-agent-java21.fa.md) را دنبال کنید. `127.0.0.1` ویندوز مقصد و `127.0.0.1` داخل کانتینر Kafka یک میزبان نیستند؛ endpoint عامل باید DNS/IP قابل دسترسی ویندوزسرور باشد.
+برای ورود کاربران از کامپیوتر دیگر و ارسال عامل‌ها، پورت‌ها را فقط برای شبکهٔ داخلی مجاز باز کنید. در PowerShell سرور اجرا کنید؛ مثال شبکهٔ داخلی `192.168.100.0/24` است:
 
-برای جمع‌آوری metadata در اتصال PLAINTEXT، شناسهٔ کلاستر ذخیره‌شده را از پارامتر `cluster` آدرس داشبورد بردارید، در آرایهٔ `Kafdeck.Monitoring.MetadataClusters` فایل تنظیمات بگذارید و فقط Kafdeck را ری‌استارت کنید. مثال مقدار `connection-...` است؛ نام نمایشی کلاستر نیست. برای اتصالات SASL/TLS این sampler فعلی را فعال نکنید؛ agent داخل JVM مستقل از آن متریک‌های بروکر را می‌فرستد. lag از مسیر احراز هویت همان اتصال Kafka خوانده می‌شود.
-
-در Monitoring تب‌های Overview، Brokers، Topics and partitions، Consumers، Alerts، Metric explorer و Sources در دسترس‌اند. Sampling interval را روی ۱۰، ۳۰ یا ۶۰ ثانیه بگذارید. برای موضوع دلخواه از لیست انتخاب و **Monitor this topic** را بزنید؛ به عامل تا دو چرخه فرصت بدهید. CPU/GC/Request queue و جزئیات خطاها را بررسی کنید. تاریخچهٔ محلی متریک‌ها ۲۴ ساعت است؛ حجم state را با تعداد سری‌ها و cadence پایش کنید.
-
-## ۶. شروع خودکار پس از بوت
-
-پس از آزمون موفق foreground، آن را با Ctrl+C متوقف کنید. PowerShell را با همان حساب نصب و مجوز ثبت Task باز کنید:
+<div dir="ltr">
 
 ```powershell
+$AllowedNetwork = Read-Host 'Allowed client and broker network (CIDR)'
+New-NetFirewallRule -DisplayName 'Kafdeck HTTPS' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8080,8443 -RemoteAddress $AllowedNetwork
+```
+
+</div>
+
+## ۹. مدیر دائمی سیستم ورود را بسازید
+
+1. `https://SERVER-IP:8443/admin` را باز و با `bootstrap-admin` وارد شوید. realm همان **master** باشد.
+2. **Users → Add user** را بزنید؛ کاربری مثل `identity-admin` با Enabled روشن بسازید.
+3. در **Credentials → Set password** رمز قوی بدهید و **Temporary** را خاموش کنید.
+4. در **Role mapping → Assign role**، **Filter by realm roles** و نقش **admin** را انتخاب و Assign کنید. این نقش را به کاربران عادی ندهید.
+5. خارج شوید و ورود با `identity-admin` را امتحان کنید. **فقط پس از موفقیت**، کاربر موقت `bootstrap-admin` را حذف کنید.
+
+ادمین Kafdeck در realm **kafdeck** است؛ حساب master برای نگهداری سیستم ورود است.
+
+## ۱۰. اجرای خودکار پس از روشن‌شدن ویندوز
+
+دو پنجرهٔ اجرای Keycloak و Kafdeck را با **Ctrl+C** متوقف کنید. در یک PowerShell با همان حساب نصب و دسترسی Administrator اجرا کنید:
+
+<div dir="ltr">
+
+```powershell
+Set-Location C:\Kafdeck
+.\scripts\Install-StartupTask.ps1 -Keycloak
 .\scripts\Install-StartupTask.ps1
-Start-ScheduledTask -TaskName Kafdeck
-Get-ScheduledTaskInfo -TaskName Kafdeck
+Start-ScheduledTask -TaskName Kafdeck-Keycloak
 ```
 
-این اسکریپت یک **Scheduled Task** با شروع هنگام بوت، اجرای غیرتعاملی و تلاش مجدد پس از شکست می‌سازد. Windows Service مستقیم نیست؛ باینری را با `sc.exe create` ثبت نکنید. credential خواسته‌شده باید همان حسابی باشد که Initialize را اجرا کرده تا DPAPI و Data Protection ثابت بمانند. حساب باید اجازهٔ Log on as a batch job و دسترسی شبکهٔ لازم داشته باشد. Task موجود بازنویسی نمی‌شود. برای ارتقا ابتدا `Stop-ScheduledTask -TaskName Kafdeck` را اجرا کنید و توقف پردازش را بررسی کنید.
+</div>
 
-## ۷. ارتقا و عیب‌یابی
+وقتی credential می‌خواهد، **نام کاربری و رمز همان حساب ویندوز نصب‌کننده** را بدهید؛ رمز ادمین Kafdeck یا postgres نیست. پس از آماده‌شدن آدرس Keycloak مرحلهٔ ۶، اجرا کنید:
 
-قبل از ارتقا، از `config`، `secrets`، کل `state`، realm/دیتابیس Keycloak و کلیدهای Data Protection حساب اجرا، نسخهٔ سازگار و پشتیبان قابل بازیابی تهیه کنید. نویسندهٔ قبلی را متوقف و فقط فایل‌های `app` و اسکریپت‌ها را جایگزین کنید؛ Initialize را روی نصب موجود دوباره اجرا نکنید. rollback به binary و backup متناظر نیاز دارد. کپی فایل DPAPI روی سرور/حساب دیگر به‌تنهایی مهاجرت معتبر نیست.
+<div dir="ltr">
 
-| وضعیت | بررسی |
+```powershell
+Start-ScheduledTask -TaskName Kafdeck
+```
+
+</div>
+
+از این پس دو Task هنگام روشن‌شدن ویندوز اجرا می‌شوند؛ PostgreSQL هم سرویس ویندوز خودش را دارد. از Start، **Task Scheduler** را باز و نام‌های **Kafdeck** و **Kafdeck-Keycloak** را بررسی کنید. پنجرهٔ اجرای دستی را هم‌زمان روشن نگذارید.
+
+## اگر مشکلی دیدید
+
+| مشکل | راه‌حل |
 | --- | --- |
-| صفحه باز نمی‌شود | foreground را اجرا و خطای startup، پورت، firewall و SAN گواهی را بررسی کنید |
-| healthz خوب ولی UI نیست | وجود `app\wwwroot\index.html` و اجرای برنامه از Start-Kafdeck را بررسی کنید |
-| ورود/ساخت ادمین شکست می‌خورد | issuer، دو client secret جدا، callback دقیق، اعتماد CA و manage-users را بررسی کنید |
-| ساخت کاربر عادی بسته است | User Profile / kafdeckProvisioningId با دسترسی admin-only را بررسی کنید |
-| broker تازه ثبت نمی‌شود | CIDR مجاز، advertised listeners، احراز هویت Kafka و egress واقعی را بررسی کنید |
-| agent داده نمی‌دهد | endpoint از داخل کانتینر، کلید همان source، مالکیت فایل‌ها، CA و لاگ Kafka را بررسی کنید |
-| Unsupported by JVM | جزئیات Sources را باز کنید؛ آستانه‌های حافظهٔ پشتیبانی‌نشده خطای جمع‌آوری نیستند |
-| No committed offsets | consumer هنوز offset commit نکرده؛ Kafdeck برای نمایش نمودار offset را تغییر نمی‌دهد |
+| رمز PostgreSQL پذیرفته نشد | رمز مرحلهٔ ۳ را بزنید؛ رمز ادمین Kafdeck نیست |
+| ساخت دیتابیس خطا داد | همان‌جا متوقف شوید؛ دیتابیس یا role موجود را پاک نکنید و متن خطا را برای پشتیبانی بفرستید |
+| مرورگر هشدار گواهی داد | مرحلهٔ ۵ را روی همان کامپیوتری که مرورگر روی آن باز است انجام دهید؛ از IP ثبت‌شده استفاده کنید |
+| پورت 8443 باز نمی‌شود | پنجرهٔ Keycloak و سرویس PostgreSQL را بررسی کنید |
+| پورت 8080 باز نمی‌شود | پنجرهٔ Kafdeck و برای دسترسی از بیرون سرور، firewall مرحلهٔ ۸ را بررسی کنید |
+| بعد از بوت روشن نمی‌شود | دو Task، حساب اجرای آن‌ها و سرویس PostgreSQL را بررسی کنید؛ برنامهٔ مربوط را دستی اجرا کنید تا خطا دیده شود |
+| اتصال Kafka تست نمی‌شود | IP و پورت باید از همین سرور قابل دسترسی و میزبان در فهرست مرحلهٔ ۴ باشد |
+
+**نگهداری:** از state، config و secrets، دیتابیس PostgreSQL و کلیدهای Data Protection حساب اجرا به‌صورت هماهنگ پشتیبان بگیرید. این‌ها را برای نصب مجدد پاک نکنید. جزئیات ارتقا و گواهی سازمانی در [راهنمای تکمیلی](windows-server-monitoring-advanced.fa.md) آمده است.
+
+</div>
