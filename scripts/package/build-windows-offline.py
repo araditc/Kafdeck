@@ -26,6 +26,8 @@ repack(vendor/'java21.zip',bundle/'media/java21.zip')
 repack(vendor/'keycloak.zip',bundle/'media/keycloak.zip')
 repack(vendor/'postgresql17.zip',bundle/'media/postgresql17.zip',lambda name:name.startswith(('bin/','lib/','share/')) or name in ('server_license.txt','commandlinetools_3rd_party_licenses.txt'))
 shutil.copyfile(vendor/'vc_redist.x64.exe',bundle/'media/vc_redist.x64.exe')
+shutil.copyfile(vendor/'winsw.exe',bundle/'media/winsw.exe')
+shutil.copyfile(vendor/'winsw-LICENSE.txt',bundle/'WinSW-LICENSE.txt')
 payload=bundle/'payload'
 # The existing native publish has already passed its focused API/UI/SQLite smoke.
 source=repo/'artifacts/windows-server/payload'
@@ -40,10 +42,12 @@ shutil.copyfile(repo/'docs/operator/windows-offline-install.fa.md',bundle/'READM
 shutil.copyfile(repo/'LICENSE',bundle/'LICENSE')
 evidence=out/'acceptance-evidence.json'
 if evidence.exists():shutil.copyfile(evidence,bundle/'acceptance-evidence.json')
-(bundle/'THIRD-PARTY-NOTICES.txt').write_text('Included components:\nMicrosoft Build of OpenJDK 21.0.13.0.2: upstream license/legal files inside media/java21.zip; GPLv2 with Classpath Exception. Sources: https://github.com/microsoft/openjdk-jdk21u/tree/release/jdk-21.0.13.0.2_1\nPostgreSQL 17.12 (server and command-line tools): upstream server_license.txt and commandlinetools_3rd_party_licenses.txt inside media/postgresql17.zip. Source: https://www.postgresql.org/ftp/source/v17.12/\nKeycloak 26.8.1: upstream LICENSE.txt and notices inside media/keycloak.zip; source: https://github.com/keycloak/keycloak/tree/26.8.1\nMicrosoft Visual C++ Redistributable: original Microsoft-signed installer. Terms: https://visualstudio.microsoft.com/license-terms/\nKafdeck: included LICENSE. This is a local unsigned monitoring build, not an official signed release.\n',encoding='utf-8')
+service_evidence=out/'windows-services-evidence.json'
+if service_evidence.exists():shutil.copyfile(service_evidence,bundle/'windows-services-evidence.json')
+(bundle/'THIRD-PARTY-NOTICES.txt').write_text('Included components:\nMicrosoft Build of OpenJDK 21.0.13.0.2: upstream license/legal files inside media/java21.zip; GPLv2 with Classpath Exception. Sources: https://github.com/microsoft/openjdk-jdk21u/tree/release/jdk-21.0.13.0.2_1\nPostgreSQL 17.12 (server and command-line tools): upstream server_license.txt and commandlinetools_3rd_party_licenses.txt inside media/postgresql17.zip. Source: https://www.postgresql.org/ftp/source/v17.12/\nKeycloak 26.8.1: upstream LICENSE.txt and notices inside media/keycloak.zip; source: https://github.com/keycloak/keycloak/tree/26.8.1\nMicrosoft Visual C++ Redistributable: original Microsoft-signed installer. Terms: https://visualstudio.microsoft.com/license-terms/\nWinSW 2.12.0 (.NET Framework 4.6.1 build): MIT, included WinSW-LICENSE.txt. Source: https://github.com/winsw/winsw/tree/v2.12.0\nKafdeck: included LICENSE. This is a local unsigned monitoring build, not an official signed release.\n',encoding='utf-8')
 files=sorted(p for p in bundle.rglob('*') if p.is_file() and p.name!='bundle-manifest.json')
 assert not any(p.suffix.lower() in ('.pfx','.key','.pem','.cer','.dpapi','.sql','.sqlite','.db') for p in files)
-manifest={'format':1,'version':'1.0.0-rc.1+monitoring.20261115','installerCommit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip(),'nativeRuntimeCommit':'183d98cf024c901c91d0776ff088543ea75782bd','officialRelease':False,'vendors':vendors,'files':[{'path':p.relative_to(bundle).as_posix(),'bytes':p.stat().st_size,'sha256':sha(p)} for p in files]}
+manifest={'format':1,'version':'1.0.0-rc.1+monitoring.20261115','installerCommit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip(),'nativeRuntimeCommit':'183d98cf024c901c91d0776ff088543ea75782bd','deploymentMode':'windows-services','officialRelease':False,'vendors':vendors,'files':[{'path':p.relative_to(bundle).as_posix(),'bytes':p.stat().st_size,'sha256':sha(p)} for p in files]}
 (bundle/'bundle-manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
 if not args.stage_only:
  archive=out/'kafdeck-offline-win-x64.zip'

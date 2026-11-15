@@ -1,4 +1,7 @@
-<div dir="rtl">
+﻿<div dir="rtl">
+
+**این راهنما برای نصب دستی با زیرساخت موجود است.** برای سرور خالی و بستهٔ شامل Java، PostgreSQL و Keycloak با سه Windows Service خودکار، [راهنمای نصب آفلاین](windows-offline-install.fa.md) را دنبال کنید؛ بخش Scheduled Task این سند مربوط به مسیر دستی قدیمی است.
+
 
 # نصب بستهٔ مانیتورینگ Kafdeck روی Windows Server
 

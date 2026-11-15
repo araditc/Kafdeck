@@ -9,7 +9,8 @@ media=[
  ('java21.zip','https://aka.ms/download-jdk/microsoft-jdk-21.0.13.0.2-windows-x64.zip',None),
  ('postgresql17.zip','https://get.enterprisedb.com/postgresql/postgresql-17.12-1-windows-x64-binaries.zip',None),
  ('keycloak.zip','https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip','4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4'),
- ('vc_redist.x64.exe','https://aka.ms/vc14/vc_redist.x64.exe',None)]
+ ('vc_redist.x64.exe','https://aka.ms/vc14/vc_redist.x64.exe',None),
+ ('winsw.exe','https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe','b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f')]
 
 def download(item):
  name,url,expected=item
@@ -32,4 +33,5 @@ def download(item):
  return row
 
 with ThreadPoolExecutor(max_workers=4) as pool:rows=list(pool.map(download,media))
+(root/'winsw-LICENSE.txt').write_bytes(urllib.request.urlopen('https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt',timeout=60).read())
 (root/'vendor-manifest.json').write_text(json.dumps(rows,indent=2))

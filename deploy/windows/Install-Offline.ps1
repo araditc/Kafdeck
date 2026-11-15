@@ -49,33 +49,29 @@ if(Test-Path -LiteralPath $receiptFile){
     $listeners=[Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
     foreach($port in @($AppPort,$IdentityPort,$DatabasePort)){if($listeners.Port -contains $port){throw "Port $port is already in use; no existing service was changed."}}
     foreach($name in @('Kafdeck','Kafdeck-Keycloak')){if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){throw "Task $name already exists."}}
-    if(Get-Service -Name Kafdeck-PostgreSQL -ErrorAction SilentlyContinue){throw 'The PostgreSQL service name is already in use.'}
+    foreach($name in @('Kafdeck-PostgreSQL','Kafdeck-Keycloak','Kafdeck')){if(Get-Service -Name $name -ErrorAction SilentlyContinue){throw "Service $name already exists."}}
     if(([IO.DriveInfo]::new([IO.Path]::GetPathRoot($InstallRoot))).AvailableFreeSpace -lt 4GB){throw 'At least 4 GB free space is required for installation.'}
     New-Item -ItemType Directory -Force -Path $InstallRoot,(Join-Path $InstallRoot 'config')|Out-Null
     $receipt=[pscustomobject]@{root=$InstallRoot;userSid=$identity.User.Value;userName=$identity.Name;packageHash=$packageHash;address=$ServerAddress;appPort=$AppPort;identityPort=$IdentityPort;databasePort=$DatabasePort;origin="https://${ServerAddress}:$AppPort";identityOrigin="https://${ServerAddress}:$IdentityPort";networks=$networks;allowedClientNetworks=$AllowedClientNetworks;phase='created'}
     $receipt|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $receiptFile -Encoding utf8
 }
 function Save-Phase([string]$Phase){$receipt.phase=$Phase;$receipt|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $receiptFile -Encoding utf8;Write-Host $Phase}
-function Task-Owned([string]$Name,[string]$Component){
-    $task=Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
-    $expected="-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File `"$(Join-Path $InstallRoot 'scripts/Offline-Run.ps1')`" -Component $Component"
-    if($task -and ($task.Actions.Count -ne 1 -or $task.Actions.Arguments -ne $expected -or $task.Actions.Execute -ne "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe")){throw "Unexpected task $Name; refusing to overwrite."}
-    return $task
-}
 if($receipt.phase -eq 'complete'){
     Write-Host "Installed at $($receipt.origin)/. To refresh an unused setup code, run $InstallRoot\scripts\New-SetupCode.ps1 using this Windows account."
     return
 }
-if(!$Credential){$Credential=Get-Credential -UserName $identity.Name -Message 'Windows login password for automatic startup (not a Kafka or Kafdeck password).'}
+if(!$Credential){$Credential=Get-Credential -UserName $identity.Name -Message 'Windows login password for Windows Services (not a Kafka or Kafdeck password).'}
 if(!$Credential -or ([Security.Principal.NTAccount]::new($Credential.UserName)).Translate([Security.Principal.SecurityIdentifier]).Value -ne $identity.User.Value){throw 'Use the same Windows account that is running this installer.'}
-# Keep the application account stable: setup-code issuance, DPAPI and scheduled
-# execution use the same identity. Passwords are stored by Task Scheduler, not XML.
+# Keep setup-code issuance, DPAPI and the service account on the same identity.
+# Service credentials are held by Windows SCM, never in XML or command arguments.
 foreach($folder in @('app','scripts','docs','agent')){
     New-Item -ItemType Directory -Force (Join-Path $InstallRoot $folder)|Out-Null
     Copy-Item -Path (Join-Path $mediaRoot "payload/$folder/*") -Destination (Join-Path $InstallRoot $folder) -Recurse -Force
 }
 . (Join-Path $InstallRoot 'scripts/Offline-Tools.ps1')
 foreach($folder in @('runtime','state','logs')){New-Item -ItemType Directory -Force (Join-Path $InstallRoot $folder)|Out-Null}
+Copy-Item -LiteralPath (Join-Path $mediaRoot 'media/winsw.exe') -Destination (Join-Path $InstallRoot 'runtime/winsw.exe') -Force
+. (Join-Path $InstallRoot 'scripts/Windows-Services.ps1')
 # Root-readable binaries; private configuration/state reset inherited access below.
 & icacls.exe $InstallRoot /inheritance:r /grant:r "*$($identity.User.Value):(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-20:(OI)(CI)RX'|Out-Null
 if($LASTEXITCODE){throw 'Failed to secure the application root.'}
@@ -158,20 +154,15 @@ $localFile=Join-Path $InstallRoot 'config/local-keycloak.json'
 $local=Get-Content -LiteralPath $localFile -Raw|ConvertFrom-Json
 $local|Add-Member -NotePropertyName bootstrapPasswordFile -NotePropertyValue $bootstrapFile -Force
 $local|ConvertTo-Json|Set-Content -LiteralPath $localFile -Encoding utf8
-foreach($taskSpec in @(@{name='Kafdeck-Keycloak';component='Keycloak';delay='PT30S'},@{name='Kafdeck';component='Api';delay='PT90S'})){
-    if(!(Task-Owned $taskSpec.name $taskSpec.component)){
-        $action=New-ScheduledTaskAction -Execute "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File `"$(Join-Path $InstallRoot 'scripts/Offline-Run.ps1')`" -Component $($taskSpec.component)" -WorkingDirectory $InstallRoot
-        $trigger=New-ScheduledTaskTrigger -AtStartup;$trigger.Delay=$taskSpec.delay
-        $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-        Register-ScheduledTask -TaskName $taskSpec.name -Action $action -Trigger $trigger -Settings $settings -User $Credential.UserName -Password $Credential.GetNetworkCredential().Password -RunLevel Limited|Out-Null
-    }
-}
+Install-OfflineWindowsServices $InstallRoot $Credential
+$receipt|Add-Member -NotePropertyName servicesInstalledAt -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
+$receipt|Add-Member -NotePropertyName deploymentMode -NotePropertyValue 'windows-services' -Force
 Save-Phase 'Starting Keycloak (first start can take several minutes)'
-if((Get-ScheduledTask -TaskName Kafdeck-Keycloak).State -ne 'Running'){Start-ScheduledTask -TaskName Kafdeck-Keycloak}
+$null=Start-Service Kafdeck-Keycloak
 $null=Wait-OfflineUrl "$($receipt.identityOrigin)/realms/kafdeck/.well-known/openid-configuration" 600
 Complete-OfflineIdentity $InstallRoot $receipt.identityOrigin
 Save-Phase 'Starting Kafdeck'
-if((Get-ScheduledTask -TaskName Kafdeck).State -ne 'Running'){Start-ScheduledTask -TaskName Kafdeck}
+$null=Start-Service Kafdeck
 $null=Wait-OfflineUrl "$($receipt.origin)/healthz" 180
 $ruleName='Kafdeck-Offline-HTTPS'
 if(!(Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue)){
@@ -185,5 +176,6 @@ if($setup.state -eq 'available'){
     Write-Host "The first administrator already exists. Sign in at $($receipt.origin)/"
 }else{throw 'First-owner provisioning requires recovery. Its state was preserved; do not reinitialize.'}
 Save-Phase 'complete'
+& (Join-Path $InstallRoot 'scripts/Test-InstalledServices.ps1')
 Write-Host "Installation complete. Public certificate for other clients: $InstallRoot\public\server-public.cer"
 Write-Host "Keycloak recovery details: $InstallRoot\scripts\Show-RecoveryInfo.ps1"
