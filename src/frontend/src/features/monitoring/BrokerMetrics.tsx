@@ -189,9 +189,9 @@ function PageButtons({page,total,size,onChange}:{page:number;total:number;size:n
   const last=Math.max(0,Math.ceil(total/size)-1),current=Math.min(page,last);
   if(last===0) return null;
   return <div className="monitor-controls">
-    <button className="btn btn-outline-secondary btn-sm" type="button" disabled={current===0} onClick={()=>onChange(current-1)}>{t("Previous")}</button>
+    <button className="btn btn-outline-secondary btn-sm" type="button" disabled={current===0} onClick={()=>onChange(current-1)}>{t("Previous page")}</button>
     <span>{t("Page {0} of {1}",[current+1,last+1])}</span>
-    <button className="btn btn-outline-secondary btn-sm" type="button" disabled={current===last} onClick={()=>onChange(current+1)}>{t("Next")}</button>
+    <button className="btn btn-outline-secondary btn-sm" type="button" disabled={current===last} onClick={()=>onChange(current+1)}>{t("Next page")}</button>
   </div>;
 }
 
