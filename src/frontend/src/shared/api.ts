@@ -102,7 +102,7 @@ export interface NotificationDeliveryHistoryListData {
   nextNotificationId: string | null;
 }
 
-export interface ReadViewLimitation { code: string; message: string; }
+export interface ReadViewLimitation { code: string; message: string; safeMessage?:string; }
 export interface ReadViewEnvelope<T> { data: T; partial: boolean; limitations: ReadViewLimitation[]; }
 
 export interface ConsumerGroupSummary {
@@ -863,7 +863,7 @@ export const kafdeckApi = {
     return postJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',{seconds},signal);
   },
   monitoringSources(clusterId: string, signal: AbortSignal) {
-    return readJson<MonitoringResult<{rows:{instance:string;seen:number|null;health:'waiting'|'stale'|'partial'|'current'}[]}>>(
+    return readJson<MonitoringResult<{rows:{instance:string;seen:number|null;health:'waiting'|'stale'|'partial'|'current';diagnostics?:{collected:number;unsupported:number;failed:number;limited:boolean;issues:{metric:string;bean:string;reason:'unsupported'|'readFailed'|'beanUnavailable'}[]}|null}[]}>>(
       clusterPath(clusterId)+'/monitoring/sources',signal);
   },
   monitoringIncidents(clusterId: string, signal: AbortSignal) {

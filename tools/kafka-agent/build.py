@@ -15,7 +15,7 @@ def tool(name):
 
 args.output.parent.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory() as classes:
-    subprocess.run([tool("javac"), "--release", "11", "-d", classes, str(base/"src/org/kafdeck/monitoring/BrokerMetricsAgent.java")], check=True)
+    subprocess.run([tool("javac"), "--release", "11", "-d", classes, str(base/"src/org/kafdeck/monitoring/KafkaMonitoringAgent.java")], check=True)
     with zipfile.ZipFile(args.output, "w") as jar:
         def add(path, content):
             entry = zipfile.ZipInfo(path, (2000, 1, 1, 0, 0, 0))

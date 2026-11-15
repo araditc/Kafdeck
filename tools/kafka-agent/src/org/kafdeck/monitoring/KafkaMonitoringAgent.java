@@ -26,9 +26,15 @@ import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
 
 /** Loaded by Kafka itself. No JMX remote port, HTTP listener or external collector. */
-public final class BrokerMetricsAgent {
-    private BrokerMetricsAgent() {}
+public final class KafkaMonitoringAgent {
+    private KafkaMonitoringAgent() {}
     private static boolean running;
+    private static java.util.concurrent.ScheduledExecutorService executor;
+    /** An attached update stops only this collector, never Kafka threads. */
+    public static synchronized void stop() {
+        if (executor != null) executor.shutdown();
+        running = false;
+    }
     public static void agentmain(String config, Instrumentation instrumentation) {
         premain(config,instrumentation);
     }
@@ -60,6 +66,7 @@ public final class BrokerMetricsAgent {
             var pool = Executors.newSingleThreadScheduledExecutor(r -> {
                 var t = new Thread(r, topicOnly ? "kafdeck-topic-metrics" : "kafdeck-metrics"); t.setDaemon(true); return t;
             });
+            executor=pool;
             int interval = Integer.parseInt(properties.getProperty("intervalSeconds", "30"));
             if (interval < 10 || interval > 60) throw new IllegalArgumentException();
             boolean perPartition=Boolean.parseBoolean(properties.getProperty("includeTopicPartitions","true"));
@@ -88,7 +95,7 @@ public final class BrokerMetricsAgent {
                         }
                     },perPartition,topicOnly,topics);
                 } catch (Exception e) { System.err.println("Kafdeck monitoring capture failed: " + e.getClass().getSimpleName()); }
-                finally { pool.schedule(this,delay,TimeUnit.SECONDS); }
+                finally { if (!pool.isShutdown()) pool.schedule(this,delay,TimeUnit.SECONDS); }
                 }
             }
             pool.schedule(new Capture(),1,TimeUnit.SECONDS);
@@ -105,9 +112,20 @@ public final class BrokerMetricsAgent {
         final List<String> rows = new ArrayList<>();
         boolean partial;
         int bytes;
+        int collected, unsupported, failed;
+        boolean limited;
+        final List<String> issues = new ArrayList<>();
+        void issue(String metric, ObjectName bean, String reason) {
+            if (reason.equals("unsupported")) unsupported++; else { failed++; partial=true; }
+            if (issues.size()<64) issues.add("{\"metric\":"+quote(metric.substring(0,Math.min(512,metric.length())))+
+                ",\"bean\":"+quote(bean.getCanonicalName().substring(0,Math.min(512,bean.getCanonicalName().length())))+
+                ",\"reason\":"+quote(reason)+"}");
+        }
         void flush(boolean last) throws Exception {
             sink.send("{\"partial\":" + partial + ",\"cycle\":" + quote(cycle) + ",\"part\":" + part +
-                ",\"last\":" + last + ",\"samples\":[" + String.join(",",rows) + "]}");
+                ",\"last\":" + last + ",\"samples\":[" + String.join(",",rows) + "]"+
+                (last ? ",\"diagnostics\":{\"collected\":"+collected+",\"unsupported\":"+unsupported+
+                    ",\"failed\":"+failed+",\"limited\":"+limited+",\"issues\":["+String.join(",",issues)+"]}" : "")+"}");
             part++; rows.clear(); bytes=0;
         }
         void add(String metric, String labels, Number number) throws Exception {
@@ -117,6 +135,7 @@ public final class BrokerMetricsAgent {
             int length = row.getBytes(StandardCharsets.UTF_8).length + 1;
             if (rows.size() >= 8192 || bytes + length > 1950000) flush(false);
             rows.add(row); bytes += length;
+            collected++;
         }
     }
     private static long lastGcMillis=-1, lastTick;
@@ -155,7 +174,7 @@ public final class BrokerMetricsAgent {
                 boolean included = topics == null ? perPartition : topic != null && topics.contains(topic);
                 if (!included) continue;
             }
-            if (batch.part >= 63) { batch.partial = true; break; }
+            if (batch.part >= 63) { batch.partial = true; batch.limited=true; break; }
             try {
                 var labels = new TreeMap<>(bean.getKeyPropertyList());
                 // Keep original JMX identity. Only dimension values from ObjectName, never attribute text.
@@ -172,8 +191,18 @@ public final class BrokerMetricsAgent {
                     String attrType = attribute.getType();
                     if (!numericType(attrType) && !attrType.equals("javax.management.openmbean.CompositeData")) continue;
                     try {
-                        Object value = server.getAttribute(bean, field);
                         String metric = prefix + "/" + field;
+                        // MemoryPoolMXBean advertises these numeric attributes even when its
+                        // pool explicitly does not support threshold monitoring. Never infer
+                        // support from the presence of the attribute, or hide other failures.
+                        if (domain.equals("java.lang") && type.equals("MemoryPool")) {
+                            String capability = field.equals("UsageThreshold") || field.equals("UsageThresholdCount") ? "UsageThresholdSupported" :
+                                field.equals("CollectionUsageThreshold") || field.equals("CollectionUsageThresholdCount") ? "CollectionUsageThresholdSupported" : null;
+                            if (capability != null && Boolean.FALSE.equals(server.getAttribute(bean,capability))) {
+                                batch.issue(metric,bean,"unsupported"); continue;
+                            }
+                        }
+                        Object value = server.getAttribute(bean, field);
                         if (value instanceof Number) batch.add(metric, dimensions, (Number)value);
                         else if (value instanceof CompositeData) {
                             var obj=(CompositeData)value;
@@ -182,9 +211,9 @@ public final class BrokerMetricsAgent {
                                 if (v instanceof Number) batch.add(metric + "/" + k, dimensions, (Number)v);
                             }
                         }
-                    } catch (javax.management.JMException | RuntimeException unavailable) { batch.partial = true; }
+                    } catch (javax.management.JMException | RuntimeException unavailable) { batch.issue(prefix+"/"+field,bean,"readFailed"); }
                 }
-            } catch (javax.management.JMException | RuntimeException disappeared) { batch.partial = true; }
+            } catch (javax.management.JMException | RuntimeException disappeared) { batch.issue(domain+":"+bean.getKeyProperty("type"),bean,"beanUnavailable"); }
         }
         batch.flush(true);
     }

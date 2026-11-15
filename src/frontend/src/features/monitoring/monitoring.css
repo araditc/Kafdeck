@@ -1,5 +1,10 @@
 .monitor-panel { padding: clamp(1rem, 2vw, 1.6rem); margin-block-end: 1rem; display: grid; gap: 1rem; min-width: 0; }
 .monitor-panel h3, .monitor-panel p, .monitor-panel figure { margin: 0; }
+.monitor-sources { display: grid; gap: 1rem; padding-inline-start: 1.25rem; }
+.monitor-source-diagnostics { display: grid; gap: .5rem; margin-block-start: .5rem; }
+.monitor-source-diagnostics details { max-width: 100%; min-width: 0; }
+.monitor-source-diagnostics summary { cursor: pointer; margin-block-end: .5rem; }
+.monitor-source-diagnostics code { white-space: normal; overflow-wrap: anywhere; }
 .monitor-toolbar{padding:.5rem 0 1rem;}
 .monitor-tabs{display:flex;gap:.25rem;overflow-x:auto;border-bottom:1px solid var(--tblr-border-color);margin-bottom:1rem;scrollbar-width:thin;}
 .monitor-tabs [role="tab"]{flex:none;background:transparent;color:var(--tblr-secondary);border:0;border-bottom:3px solid transparent;padding:.75rem 1rem;font:inherit;white-space:nowrap;}

@@ -202,6 +202,17 @@ export function SourceStatus({clusterId,refresh}: {clusterId:string;refresh:numb
   if(result.problem) return <p role="status">{readViewProblemText(result.problem)}</p>;
   if(result.value?.state!=='available') return null;
   return <section className="card monitor-panel"><h3>{t("Reporting sources")}</h3>
-    <ul>{result.value.rows.map(r=><li key={r.instance}><bdi>{r.instance}</bdi> · {display[r.health]}
-      {r.seen!==null && <> · <time dir="ltr">{new Date(r.seen*1000).toISOString()}</time></>}</li>)}</ul></section>;
+    <ul className="monitor-sources">{result.value.rows.map(r=><li key={r.instance}><bdi>{r.instance}</bdi> · {display[r.health]}
+      {r.seen!==null && <> · <time dir="ltr">{new Date(r.seen*1000).toISOString()}</time></>}
+      {r.diagnostics && <div className="monitor-source-diagnostics">
+        <p>{t("Collected values")}: {r.diagnostics.collected} · {t("Unsupported by JVM")}: {r.diagnostics.unsupported} · {t("Collection failures")}: {r.diagnostics.failed}</p>
+        {r.diagnostics.limited && <p role="status">{t("Collection limit reached")}</p>}
+        {r.diagnostics.issues.length>0 && <details><summary>{t("Unavailable metric details")}</summary>
+          <p>{t("Unsupported memory thresholds are JVM capabilities, not collection failures.")}</p>
+          <div className="monitor-table-scroll"><table><thead><tr><th>{t("Metric")}</th><th>{t("JMX bean")}</th><th>{t("Reason")}</th></tr></thead>
+            <tbody>{r.diagnostics.issues.map((issue,i)=><tr key={i}><td><code>{issue.metric}</code></td><td><code>{issue.bean}</code></td><td>{t(issue.reason==='unsupported'?"Unsupported by JVM":issue.reason==='readFailed'?"Attribute read failed":"JMX bean unavailable")}</td></tr>)}</tbody></table></div>
+          {r.diagnostics.issues.length<r.diagnostics.unsupported+r.diagnostics.failed && <p>{t("Showing the first 64 issues")}</p>}
+        </details>}
+      </div>}
+    </li>)}</ul></section>;
 }

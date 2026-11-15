@@ -9,7 +9,16 @@ namespace Kafdeck.Api;
 
 internal sealed record BrokerSource(string ClusterId, string Instance, byte[] Credential);
 internal sealed record JmxPoint(string Metric, SortedDictionary<string, string> Labels, double Value);
-internal sealed record JmxBatch(bool Partial, Guid Cycle, int Part, bool Last, JmxPoint[] Samples);
+internal sealed record JmxIssue(string Metric, string Bean, string Reason);
+internal sealed record JmxDiagnostics(int Collected, int Unsupported, int Failed, bool Limited, JmxIssue[] Issues)
+{
+    internal bool Valid => Collected is >=0 and <=524288 && Unsupported is >=0 and <=1_000_000 && Failed is >=0 and <=1_000_000 &&
+        Issues is {Length:<=64} && Issues.Length <= (long)Unsupported+Failed && Issues.All(i=>i is not null &&
+        i.Metric is {Length:>0 and <=512} && !i.Metric.Any(char.IsControl) &&
+        i.Bean is {Length:>0 and <=512} && !i.Bean.Any(char.IsControl) &&
+        i.Reason is "unsupported" or "readFailed" or "beanUnavailable");
+}
+internal sealed record JmxBatch(bool Partial, Guid Cycle, int Part, bool Last, JmxPoint[] Samples, JmxDiagnostics? Diagnostics=null);
 internal sealed record MonitoringSettings(string Database, BrokerSource[] Sources)
 {
     internal const string MetadataInstance = "kafdeck-metadata";
@@ -71,6 +80,7 @@ internal static class KafkaMetricSources
             JmxBatch? batch;
             try { batch = await context.Request.ReadFromJsonAsync<JmxBatch>(ct); }
             catch (JsonException) { return Results.BadRequest(); }
+            if (batch?.Diagnostics is { } diagnostics && (!batch.Last || !diagnostics.Valid)) return Results.BadRequest();
             if (batch?.Samples is not { Length: <= 8192 } || batch.Cycle==Guid.Empty || batch.Part is < 0 or >= 64 || batch.Samples.Any(p => p is null || string.IsNullOrWhiteSpace(p.Metric) ||
                 p.Metric.Length > 512 || p.Metric.Any(char.IsControl) || !double.IsFinite(p.Value) || p.Labels is null ||
                 p.Labels.Count > 24 || p.Labels.Any(l => l.Key.Length is 0 or >100 || l.Key.Any(char.IsControl) ||

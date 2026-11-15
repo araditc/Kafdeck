@@ -54,6 +54,7 @@ internal sealed class MonitoringStore
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS monitor_enrollment(cluster TEXT, instance TEXT, hash BLOB UNIQUE, PRIMARY KEY(cluster,instance));
             CREATE TABLE IF NOT EXISTS monitor_source(cluster TEXT, instance TEXT, since INTEGER, seen INTEGER, partial INTEGER, PRIMARY KEY(cluster,instance));
+            CREATE TABLE IF NOT EXISTS monitor_diagnostic(cluster TEXT, instance TEXT, data TEXT, PRIMARY KEY(cluster,instance));
             CREATE TABLE IF NOT EXISTS monitor_series(id INTEGER PRIMARY KEY, cluster TEXT, instance TEXT, metric TEXT, labels TEXT, UNIQUE(cluster,instance,metric,labels));
             CREATE INDEX IF NOT EXISTS monitor_names ON monitor_series(cluster,metric);
             CREATE TABLE IF NOT EXISTS monitor_sample(series INTEGER, time INTEGER, value REAL, PRIMARY KEY(series,time)) WITHOUT ROWID;
@@ -186,6 +187,7 @@ internal sealed class MonitoringStore
                 Exec(db,"DELETE FROM monitor_alert WHERE cluster=$c AND instance=$i",scope);
                 Exec(db,"DELETE FROM monitor_incident WHERE cluster=$c AND instance=$i",scope);
                 Exec(db,"DELETE FROM monitor_source WHERE cluster=$c AND instance=$i",scope);
+                Exec(db,"DELETE FROM monitor_diagnostic WHERE cluster=$c AND instance=$i",scope);
                 Exec(db,"DELETE FROM monitor_sample WHERE series IN (SELECT id FROM monitor_series WHERE cluster=$c AND instance=$i)",scope);
                 Exec(db,"DELETE FROM monitor_series WHERE cluster=$c AND instance=$i",scope);
                 tx.Commit();_cycles.Remove((cluster,instance,false));_cycles.Remove((cluster,instance,true));return Results.Ok(new {instance});
@@ -211,6 +213,7 @@ internal sealed class MonitoringStore
 
     internal IResult Ingest(BrokerSource src,JmxBatch batch,CancellationToken ct,bool topicOnly=false)
     {
+        if (batch.Diagnostics is { } diagnostics && (!batch.Last || !diagnostics.Valid)) return Results.BadRequest();
         lock (_writes)
         {
             if (!Sources().Any(s=>s.ClusterId==src.ClusterId && s.Instance==src.Instance && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(s.Credential,src.Credential))) return Results.Unauthorized();
@@ -251,7 +254,9 @@ internal sealed class MonitoringStore
             if (!topicOnly)
             {
                 if (batch.Last) EvaluateRequestLatency(db,src,batch.Part==0 ? now : active.Started,now);
-                Exec(db,"UPDATE monitor_source SET seen=$t,partial=$p WHERE cluster=$c AND instance=$i",("$t",now),("$p",batch.Partial || !batch.Last),("$c",src.ClusterId),("$i",src.Instance));
+                Exec(db,"UPDATE monitor_source SET seen=$t,partial=$p WHERE cluster=$c AND instance=$i",("$t",now),("$p",batch.Partial || !batch.Last || batch.Diagnostics is {Failed:>0} or {Limited:true}),("$c",src.ClusterId),("$i",src.Instance));
+                if(batch.Last)
+                    Exec(db,"INSERT OR REPLACE INTO monitor_diagnostic VALUES($c,$i,$d)",("$c",src.ClusterId),("$i",src.Instance),("$d",JsonSerializer.Serialize(batch.Diagnostics)));
                 Exec(db,"DELETE FROM monitor_alert WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown'",("$c",src.ClusterId),("$i",src.Instance));
                 Exec(db,"UPDATE monitor_incident SET ended=$t,reason='recovered' WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown' AND ended IS NULL",
                     ("$c",src.ClusterId),("$i",src.Instance),("$t",now));
@@ -374,14 +379,15 @@ internal sealed class MonitoringStore
         bool warning=(long)status.ExecuteScalar()!>0;
         if(kind=="sources")
         {
-            using var cmd=Sql(db,"SELECT instance,seen,partial FROM monitor_source WHERE "+scope+" ORDER BY instance",args.ToArray());
+            using var cmd=Sql(db,"SELECT instance,seen,partial,(SELECT data FROM monitor_diagnostic d WHERE d.cluster=monitor_source.cluster AND d.instance=monitor_source.instance) FROM monitor_source WHERE "+scope+" ORDER BY instance",args.ToArray());
             using var reader=cmd.ExecuteReader();
             var targets=new List<object>();
             while(reader.Read())
             {
                 long? seen=reader.IsDBNull(1)?null:reader.GetInt64(1);
                 var health=seen is null ? "waiting" : now-seen>=120 ? "stale" : reader.GetBoolean(2) ? "partial" : "current";
-                targets.Add(new {instance=reader.GetString(0),seen,health});
+                var diagnostics=reader.IsDBNull(3)?null:JsonSerializer.Deserialize<JmxDiagnostics>(reader.GetString(3));
+                targets.Add(new {instance=reader.GetString(0),seen,health,diagnostics});
             }
             return Results.Ok(new {state="available",observedAt=now,warning,truncated=false,rows=targets});
         }

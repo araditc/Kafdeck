@@ -15,7 +15,7 @@ import { readViewError } from '../readviews/readViewProblem.js';
 import { MonitoringControls, MetricCharts, BrokerCharts } from './MonitoringOverview.js';
 import { topicCharts, partitionCharts } from './monitoringCharts.js';
 import { AgentSetup } from './AgentSetup.js';
-import { offsetRates, type OffsetSample } from './offsetRates.js';
+import { independentOffsetRates, comparableConsumerOffsets, type OffsetSample } from './offsetRates.js';
 
 function Observation<T>({ state, children }: {
   state: { value?: T; problem?: ReadViewProblem }; children: (value: T) => ReactNode;
@@ -53,8 +53,9 @@ function GroupMonitoring({ clusterId, group, refresh }: {clusterId: string; grou
       signal.throwIfAborted();
       const at = Date.now();
       const current = {at, lag: response.data};
-      const rates = last.current && !response.partial ? offsetRates(last.current, current) : null;
-      last.current = response.partial ? null : current;
+      const comparable=comparableConsumerOffsets(response.data,response.partial);
+      const rates = last.current && comparable ? independentOffsetRates(last.current, current) : null;
+      last.current = comparable ? current : null;
       const retain = (samples: Sample[], value: number | null) => {
         const next = samples.filter(sample => sample.time >= at - 15 * 60_000);
         if (value !== null && Number.isFinite(value) && value >= 0) next.push({time: at, value});
@@ -80,13 +81,20 @@ function GroupMonitoring({ clusterId, group, refresh }: {clusterId: string; grou
       const lag = response.data;
       const known = lag.partitions.filter(p => p.lag !== null && Number.isSafeInteger(p.lag) && p.lag >= 0)
         .sort((a,b) => b.lag! - a.lag!);
+      const missingCommit=lag.partitions.filter(p=>p.committedOffset===null).length;
+      const missingEnd=lag.partitions.filter(p=>p.endOffset===null).length;
+      const allMissingCommit=lag.partitions.length>0 && missingCommit===lag.partitions.length;
+      const missingLag=allMissingCommit?t("No committed offsets"):t("Offsets unavailable");
+      const noRate=lag.partitions.length===0?t("No assigned or committed partitions"):t("Collecting comparable samples");
       return <>
         <p>{t("Read at {0}", [new Date(at).toISOString()])} · {response.partial || lag.isPartial ? t("Partial observation") : t("Current")}</p>
         <dl className="monitor-kpis">
-          <div><dt>{t("Total lag")}</dt><dd>{lag.totalLag ?? t("Unknown")}</dd></div>
-          <div><dt>{t("End offset growth / s")}</dt><dd>{rates?.end.toFixed(1) ?? t("Unknown")}</dd></div>
-          <div><dt>{t("Committed offset growth / s")}</dt><dd>{rates?.committed.toFixed(1) ?? t("Unknown")}</dd></div>
+          <div><dt>{t(lag.isPartial?"Known partition lag":"Total lag")}</dt><dd>{lag.totalLag ?? missingLag}</dd></div>
+          <div><dt>{t("End offset growth / s")}</dt><dd>{rates?.end?.toFixed(1) ?? (missingEnd?t("End offsets unavailable"):noRate)}</dd></div>
+          <div><dt>{t("Committed offset growth / s")}</dt><dd>{rates?.committed?.toFixed(1) ?? (missingCommit?t("No committed offsets"):noRate)}</dd></div>
         </dl>
+        {missingCommit>0 && <p role="status">{t("No committed offset for {0} partitions. Lag and committed-offset growth require consumer commits; end-offset growth is measured independently.",[missingCommit])}</p>}
+        {lag.limitations.length>0 && <details><summary>{t("Offset availability")}</summary><ul>{lag.limitations.map(l=><li key={l.code}>{l.safeMessage ?? l.message}</li>)}</ul></details>}
         <div className="monitor-grid">
           <TimeChart title={t("Group lag in this session")} unit={t("offsets")} points={samples.lag} />
           <TimeChart title={t("End offset growth / s")} unit={t("offsets/s")} points={samples.end} />

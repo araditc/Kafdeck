@@ -104,3 +104,17 @@ For a deployment without managed enrollment, configure an absolute database path
 ```
 
 The broker interval supports 10–60 seconds. Captures use packets of up to 8,192 observations and at most 64 packets. The client endpoint accepts up to 8,192 numeric observations per snapshot. The catalogue returns up to 500 names per search and 12 series per range query. Partial results are flagged. Refine the search by metric, instance and labels. Charts show actual observations with UTC timestamps, using the last observation per display bucket. The existing consumer-history provider and its sampling permissions determine availability of historical group lag. Current group reads can work independently of that provider.
+
+## Explain partial and unsupported observations
+
+In **Sources → Unavailable metric details**, each broker reports the collected-value count, unsupported-attribute count and real collection failures. Expand a source to see the metric, exact JMX ObjectName and reason. Reports retain up to 64 detail rows with total counts. No exception messages, credentials or attribute text are transmitted.
+
+The agent checks `UsageThresholdSupported` and `CollectionUsageThresholdSupported` before reading a memory pool's threshold/count attributes. JVMs legitimately do not implement all threshold mechanisms. Such attributes are explicitly **Unsupported by JVM** and do not make supported measurements partial. Other attribute/bean read errors and collection limits still produce **Partial observation**. See the [Java 21 MemoryPoolMXBean contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/MemoryPoolMXBean.html).
+
+On the Arad Office Java 11/G1 brokers, the 14 unsupported attributes per broker are: `UsageThreshold` and `UsageThresholdCount` for G1 Eden Space and G1 Survivor Space; `CollectionUsageThreshold` and `CollectionUsageThresholdCount` for the three CodeHeap pools, Compressed Class Space and Metaspace. Kafka/JVM numeric measurements continue to be collected. Unsupported is not zero.
+
+## Explain consumer offset availability
+
+A group can have active members before any partition offset has been committed. **No committed offsets** identifies that condition and gives the partition count. Kafdeck cannot infer the consumer's position or lag from the log end alone. It never commits or resets offsets to make a chart look complete. End-offset growth is computed independently after two comparable captures of the same partition set; committed-offset growth remains unavailable until commits exist. Zero growth is a valid measured result. Authorization failures, changed coverage, counter decreases and missing end offsets do not establish a growth rate. A partial lag total is labelled **Known partition lag**.
+
+For a Windows Server monitoring build, use the [Windows installation guide](windows-server-monitoring.fa.md) and [Java 21 agent guide](kafka-agent-java21.fa.md).

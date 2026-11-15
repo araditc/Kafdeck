@@ -59,7 +59,7 @@ def main():
                     assert "java.lang:Memory/HeapMemoryUsage/used" in values
                 assert first["cycle"] != second["cycle"]
                 assert not any("topic" in row["labels"] for row in first["samples"])
-                scoped = [row["labels"] for row in second["samples"] if "topic" in row["labels"]]
+                scoped = [row["labels"] for row in second["samples"] if "topic" in row["labels"] and row["metric"].endswith("/Value")]
                 assert scoped == [{"partition":"0","topic":"orders"}]
                 assert 0 <= values["kafdeck.jvm/cpu_percent"] <= 100
                 assert values["kafdeck.jvm/gc_time_percent"] >= 0

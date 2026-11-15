@@ -36,6 +36,51 @@ public sealed class KafkaMonitoringTests : IDisposable
     }
 
     [Fact]
+    public void Jmx_diagnostics_explain_unsupported_values_without_partial_and_survive_restart()
+    {
+        var issue=new JmxIssue("java.lang:MemoryPool/UsageThreshold","java.lang:type=MemoryPool,name=G1 Eden Space","unsupported");
+        var diagnostics=new JmxDiagnostics(1,1,0,false,[issue]);
+        Assert.Equal(204,Status(_store.Ingest(_source,new(false,Guid.NewGuid(),0,true,[Point(7)],diagnostics),default)));
+        var source=Body(Open().Read("a","sources",null,null,60,null,null,default)).GetProperty("rows")[0];
+        Assert.Equal("current",source.GetProperty("health").GetString());
+        Assert.Equal("unsupported",source.GetProperty("diagnostics").GetProperty("issues")[0].GetProperty("reason").GetString());
+        Assert.Equal(1,source.GetProperty("diagnostics").GetProperty("unsupported").GetInt32());
+        _clock.Advance(10);
+        // Older agents remain compatible and do not inherit a previous diagnostic report.
+        Assert.Equal(204,Status(Ingest(Point(8))));
+        Assert.Equal(JsonValueKind.Null,Rows("sources").GetProperty("rows")[0].GetProperty("diagnostics").ValueKind);
+    }
+
+    [Theory]
+    [InlineData(1,false)]
+    [InlineData(0,true)]
+    public void Jmx_diagnostics_preserve_real_partial_failures_and_collection_limits(int failures,bool limited)
+    {
+        var diagnostics=new JmxDiagnostics(1,0,failures,limited,failures==0?[]:[new("test/value","kafka.test:type=Probe","readFailed")]);
+        Assert.Equal(204,Status(_store.Ingest(_source,new(false,Guid.NewGuid(),0,true,[Point(7)],diagnostics),default)));
+        Assert.Equal("partial",Rows("sources").GetProperty("rows")[0].GetProperty("health").GetString());
+        Assert.Equal(failures,Rows("sources").GetProperty("rows")[0].GetProperty("diagnostics").GetProperty("failed").GetInt32());
+    }
+
+    [Fact]
+    public async Task Jmx_diagnostics_are_bounded_and_validated_at_the_authenticated_endpoint()
+    {
+        await using var f=await V1ManagedWorkflowLab.Start(monitoring:_store);
+        f.AddTargets("PLAINTEXT");
+        using var enrolled=await f.Http.PostAsJsonAsync("/api/v1/clusters/connection-a/monitoring/agents",new {instance="diagnostic",action="create"});
+        var token=(await enrolled.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString();
+        var valid=new JmxDiagnostics(1,1,0,false,[new("test/value","kafka.test:type=Probe","unsupported")]);
+        foreach(var diagnostic in new[]{valid with {Issues=Enumerable.Repeat(valid.Issues[0],65).ToArray(),Unsupported=65},valid with {Failed=-1},valid with {Issues=[valid.Issues[0] with {Reason="untrusted-message"}]},valid with {Issues=[valid.Issues[0] with {Bean="x\nsecret"}]}})
+        {
+            using var post=new HttpRequestMessage(HttpMethod.Post,"/monitoring/ingest"){Content=JsonContent.Create(new JmxBatch(false,Guid.NewGuid(),0,true,[Point(1)],diagnostic))};
+            post.Headers.Add("X-Kafdeck-Agent-Token",token);
+            using var response=await f.Http.SendAsync(post);
+            Assert.Equal(HttpStatusCode.BadRequest,response.StatusCode);
+        }
+        Assert.Equal(400,Status(_store.Ingest(_source,new(false,Guid.NewGuid(),0,false,[Point(1)],valid),default)));
+    }
+
+    [Fact]
     public void Custom_threshold_survives_restart_tracks_hold_and_recovery_and_records_evidence()
     {
         var rule=new KafkaMetricSources.RuleChange("produce-latency",Metric,20,false,60,"warning",false);
