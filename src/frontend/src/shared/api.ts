@@ -6,6 +6,12 @@ import { boundedBrowserRead } from './browserRead.js';
 import type { KafkaConnectionDraft, KafkaConnectionObservation, KafkaConnectionTarget } from './kafkaConnections.js';
 export { operatorSessionLostEvent } from './operatorSessionSecurity.js';
 export type Freshness = 'fresh' | 'stale';
+export type MonitoringResult<T> = {state: 'unconfigured'} |
+  ({state: 'available'; observedAt: number; truncated: boolean; warning: boolean} & T);
+export interface BrokerMetricSeries { labels: Record<string, string>; points: {time: number; value: number | null}[]; health?:'current'|'stale';latestAt?:number; }
+export interface BrokerAlertRule { name: string; metric: string; threshold: number; below: boolean; seconds: number; severity: string; }
+export interface BrokerMetricAlert { name: string; state: string; severity: string; instance: string;
+  metric: string; labels: Record<string,string>; time: number; since: number; value: number; threshold: number; }
 
 export interface ApiObservation { observedAt: string; freshness: Freshness; cacheAgeMs: number; partial: boolean; }
 export interface ApiLimitation { capability: string | null; state: string; reason: string | null; }
@@ -96,7 +102,7 @@ export interface NotificationDeliveryHistoryListData {
   nextNotificationId: string | null;
 }
 
-export interface ReadViewLimitation { code: string; message: string; }
+export interface ReadViewLimitation { code: string; message: string; safeMessage?:string; }
 export interface ReadViewEnvelope<T> { data: T; partial: boolean; limitations: ReadViewLimitation[]; }
 
 export interface ConsumerGroupSummary {
@@ -844,6 +850,49 @@ function recordParams(query: RecordQuery): URLSearchParams {
 }
 
 export const kafdeckApi = {
+  monitoringSampling(clusterId:string,signal:AbortSignal) {
+    return readJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',signal);
+  },
+  monitoredTopics(clusterId:string,signal:AbortSignal) {
+    return readJson<{topics:string[]}>(clusterPath(clusterId)+'/monitoring/topic-selection',signal);
+  },
+  setTopicMonitoring(clusterId:string,topic:string,enabled:boolean,signal:AbortSignal) {
+    return postJson<{topics:string[]}>(clusterPath(clusterId)+'/monitoring/topic-selection',{topic,enabled},signal);
+  },
+  setMonitoringSampling(clusterId:string,seconds:number,signal:AbortSignal) {
+    return postJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',{seconds},signal);
+  },
+  monitoringSources(clusterId: string, signal: AbortSignal) {
+    return readJson<MonitoringResult<{rows:{instance:string;seen:number|null;health:'waiting'|'stale'|'partial'|'current';diagnostics?:{collected:number;unsupported:number;failed:number;limited:boolean;issues:{metric:string;bean:string;reason:'unsupported'|'readFailed'|'beanUnavailable'}[]}|null}[]}>>(
+      clusterPath(clusterId)+'/monitoring/sources',signal);
+  },
+  monitoringIncidents(clusterId: string, signal: AbortSignal) {
+    return readJson<MonitoringResult<{rows:{name:string;instance:string;metric:string;fired:number;ended:number|null;reason:string|null;value:number;threshold:number;labels:Record<string,string>}[]}>>(
+      clusterPath(clusterId)+'/monitoring/incidents',signal);
+  },
+  monitoringRules(clusterId: string, signal: AbortSignal) {
+    return readJson<MonitoringResult<{rows: BrokerAlertRule[]}>>(clusterPath(clusterId)+'/monitoring/rules',signal);
+  },
+  changeMonitoringRule(clusterId: string, rule: BrokerAlertRule, remove: boolean, signal: AbortSignal) {
+    return postJson<{name:string}>(clusterPath(clusterId)+'/monitoring/rules',{...rule,remove},signal);
+  },
+  enrollMonitor(clusterId: string, instance: string, action: string, signal: AbortSignal) {
+    return postJson<{instance: string;token?: string}>(clusterPath(clusterId)+'/monitoring/agents',{instance,action},signal);
+  },
+  monitoringNames(clusterId: string, search: string, signal: AbortSignal, after='', topic='', partition='') {
+    const query=new URLSearchParams({search,after});
+    if(topic) query.set('topic',topic);
+    if(partition) query.set('partition',partition);
+    return readJson<MonitoringResult<{names: string[]}>>(
+      clusterPath(clusterId) + '/monitoring/metrics?' + query, signal);
+  },
+  monitoringSeries(clusterId: string, metric: string, minutes: number, instance: string, filters: string, signal: AbortSignal, aggregate=false) {
+    return readJson<MonitoringResult<{from: number; to: number; rows: BrokerMetricSeries[]}>>(
+      clusterPath(clusterId) + '/monitoring/series?' + new URLSearchParams({metric, minutes: String(minutes), instance, filters,aggregate:String(aggregate)}), signal);
+  },
+  monitoringAlerts(clusterId: string, signal: AbortSignal) {
+    return readJson<MonitoringResult<{rows: BrokerMetricAlert[]}>>(clusterPath(clusterId) + '/monitoring/alerts', signal);
+  },
   getAccessMode(signal?: AbortSignal) { return readJson<{ authenticationMode: AccessMode; connectionWorkspace?: boolean; setupState?: SetupState | null }>('/api/v1/auth/mode', signal, false); },
   getOperatorSession(signal?: AbortSignal) { return readJson<BrowserSession>('/api/v1/auth/session', signal, false); },
   getGovernanceNavigation(clusterId: string, signal?: AbortSignal) {
@@ -1025,8 +1074,13 @@ export const kafdeckApi = {
     groupId: string,
     maxPoints?: number,
     signal?: AbortSignal,
+    range?: { from: string; to: string },
   ) {
     const params = new URLSearchParams();
+    if (range) {
+      params.set('from', range.from);
+      params.set('to', range.to);
+    }
     if (maxPoints !== undefined) params.set('maxPoints', String(maxPoints));
     const query = params.size > 0 ? `?${params}` : '';
     return readJson<OperationalTrendResult>(

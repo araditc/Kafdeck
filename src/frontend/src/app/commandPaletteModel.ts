@@ -14,6 +14,7 @@ export type ProductCommand = {
 };
 
 export const productCommands: readonly ProductCommand[] = [
+  { id: 'monitoring', label: 'Monitoring', description: 'Inspect lag, replication and workload measurements.', keywords: ['monitor', 'chart', 'lag', 'latency', 'metrics'], targetId: 'monitoring', availability: 'available' },
   { id: 'automation', label: "Governed automation", description: "Inspect ownership, drift, immutable plans and safe compensation.", keywords: ['automation', 'gitops', 'declarative', 'terraform', 'mcp', 'compensation'], targetId: 'automation', availability: 'available' },
   { id: 'catalog', label: 'Ownership catalog', description: 'Review exact operation', keywords: ['catalog', 'owner', 'team', 'application'], targetId: 'ownership-catalog', availability: 'available' },
   { id: 'policy', label: 'Governance policy', description: 'Explain and dry-run current policy', keywords: ['policy', 'governance'], targetId: 'governance-policy', availability: 'available' },

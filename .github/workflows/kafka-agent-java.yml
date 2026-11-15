@@ -1,0 +1,25 @@
+name: Kafka agent Java compatibility
+on:
+  pull_request:
+    paths: ['tools/kafka-agent/**', '.github/workflows/kafka-agent-java.yml']
+  push:
+    branches: [main]
+    paths: ['tools/kafka-agent/**', '.github/workflows/kafka-agent-java.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  packaged-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['11', '17', '21', '25', '27']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - run: python3 tools/kafka-agent/tests/smoke.py

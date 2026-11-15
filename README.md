@@ -34,6 +34,8 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 
 ## Why Kafdeck?
 
+For the **monitoring preview**, download the [offline Windows Server bundle and Java agent](https://github.com/araditc/Kafdeck/releases/tag/monitoring-preview-20261115). The [English offline guide](docs/operator/windows-offline-install.md) covers bundled Java/PostgreSQL/Keycloak, automatic Windows Services and first-admin setup. The [Java agent guide](docs/operator/kafka-agent.md) includes installation, Docker/Windows configuration and [source code](tools/kafka-agent/). This preview is distributed separately from stable v0.9.
+
 - **Safe by default** — bounded work, cancellation, deadlines, rate/byte limits, per-cluster isolation, and fail-closed behavior.
 - **Read access is not data access** — metadata permissions never automatically grant Kafka payload visibility.
 - **Server-side masking** — sensitive record data is redacted before it reaches the browser, API client, or export path.

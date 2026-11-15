@@ -4,9 +4,12 @@ Current stable release: [v0.9](releases/v0.9.md), published 2026-11-12. Start wi
 
 | Task | Guide |
 | --- | --- |
+| Install the monitoring preview offline on a fresh Windows Server; create the first administrator | [English offline installer guide](operator/windows-offline-install.md), [Persian RTL](operator/windows-offline-install.fa.md) |
+| Install the Java 21 Kafka monitoring agent, use Docker/Windows, build its source | [Java agent guide](operator/kafka-agent.md), [agent source](../tools/kafka-agent/) |
 | Install Docker/Podman, native archives or Helm; verify signed media | [v0.9 installation](operator/v0.9-installation-guide.md) |
 | Configure Keycloak, issue/renew setup code, create first owner, manage users | [Managed identity](operator/managed-identity-setup.md) |
 | Register/test Kafka, select clusters, work with topics/consumers and integrations | [v0.9 dashboard](operator/v0.9-dashboard-guide.md) |
+| Monitor brokers, investigate slow requests and set alerts in the development dashboard | [Kafka monitoring](operator/kafka-monitoring.md) |
 | English/Persian UI and accessibility | [Localization/accessibility](development/v0.9-localization-accessibility.md) |
 | Governed write previews, risk and distinct-person approvals | [Administration](operator/v0.5-safe-administration-guide.md) |
 | Human/service CLI, Terraform and MCP | [CLI human OIDC](operator/v0.8-cli-human-oidc-runbook.md), [declarative CLI](operator/v0.8-declarative-cli.md), [MCP](operator/v0.8-mcp.md) |

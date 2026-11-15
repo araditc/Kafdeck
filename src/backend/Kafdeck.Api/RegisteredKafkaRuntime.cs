@@ -134,6 +134,17 @@ internal sealed class RegisteredKafkaRuntime : IDisposable
         ? KafkaConnectionWorkspace.ReadRegistered(_store).SingleOrDefault(target => target.Id == id)
         : null;
 
+    internal AdminClientConfig? ReadOnlyMetadataConfig(string id)
+    {
+        var target=Find(id);
+        if (target is not {Protocol:"PLAINTEXT"} || !KafkaConnectionWorkspace.IsRegistrationNetwork(target.BootstrapServers,_networks))
+            return null;
+        var config=new AdminClientConfig {BootstrapServers=string.Join(",",target.BootstrapServers),SecurityProtocol=SecurityProtocol.Plaintext,
+            ClientId="kafdeck-monitoring",SocketTimeoutMs=5000};
+        config.Set("allow.auto.create.topics","false");
+        return config;
+    }
+
     private CredentialLease? Lease(HttpContext? context, string id) =>
         context is not null && OperatorSessionContextFactory.TryCreate(context.User, out var session) && session is not null &&
         _credentials.TryGetValue((session.SessionId, id), out CredentialLease? lease) ? lease : null;

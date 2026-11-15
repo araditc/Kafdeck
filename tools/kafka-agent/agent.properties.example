@@ -1,0 +1,6 @@
+endpoint=https://YOUR-KAFDECK-SERVER-IP:8080/monitoring/ingest
+tokenFile=/opt/kafdeck-monitor/agent-token
+intervalSeconds=30
+includeTopicPartitions=false
+# For a private CA, copy only the public certificate into this path:
+# caFile=/opt/kafdeck-monitor/ca.pem

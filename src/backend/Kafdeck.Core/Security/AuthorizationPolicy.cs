@@ -78,6 +78,7 @@ public enum AuthorizationAction
     RequestDecide = 70,
     AttributionRead = 71,
     RateCardManage = 72,
+    MonitoringRead = 73,
 }
 
 public enum AuthorizationDecisionReason
