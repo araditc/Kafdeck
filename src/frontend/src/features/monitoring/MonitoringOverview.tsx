@@ -3,22 +3,19 @@ import { kafdeckApi, type BrokerMetricSeries } from '../../shared/api.js';
 import { t } from '../../shared/i18n.js';
 import { readViewError, readViewProblemText } from '../readviews/readViewProblem.js';
 import { useObservation } from './useObservation.js';
+import {type MonitoringChart,overviewCharts,brokerCharts} from './monitoringCharts.js';
 
-const charts = [
-  {title:'Broker CPU',metric:'kafdeck.jvm/cpu_percent',unit:'%'},
-  {title:'GC time',metric:'kafdeck.jvm/gc_time_percent',unit:'%'},
-  {title:'Produce request queue p99',metric:'kafka.network:RequestMetrics/RequestQueueTimeMs/99thPercentile',unit:'ms'},
-  {title:'Metadata response time',metric:'kafka.metadata/response_ms',unit:'ms'},
-  {title:'Offline partitions',metric:'kafka.metadata/offline_partitions',unit:'partitions'},
-  {title:'Under-replicated partitions',metric:'kafka.metadata/under_replicated_partitions',unit:'partitions'},
-] as const;
 const colors=['#1f6bad','#ac4813','#00826f','#8353a4','#765f0a','#595f69'];
 
-function Trend({clusterId,chart,minutes,seconds,refresh}: {clusterId:string;chart:typeof charts[number];minutes:number;seconds:number;refresh:number}) {
+function Trend({clusterId,chart,minutes,seconds,refresh,filters,aggregate,request}: {
+  clusterId:string;chart:MonitoringChart;minutes:number;seconds:number;refresh:number;filters:string;aggregate:boolean;request:string
+}) {
+  const exact=chart.metric.includes('RequestMetrics') ? JSON.stringify({...JSON.parse(filters),request}) : filters;
   const read=useCallback((signal:AbortSignal)=>kafdeckApi.monitoringSeries(clusterId,chart.metric,minutes,'',
-    chart.unit==='ms' && chart.metric.includes('RequestMetrics') ? '{"request":"Produce"}' : '{}',signal),[clusterId,chart,minutes]);
+    exact,signal,aggregate),[clusterId,chart,minutes,exact,aggregate]);
   const {value,problem}=useObservation(read,refresh,seconds*1000);
-  const rows=value?.state==='available'?value.rows:[];
+  const rows=value?.state==='available'?value.rows.map(row=>({...row,
+    points:row.points.map(p=>({...p,value:p.value===null || p.value<0 ? null : p.value*(chart.factor??1)}))})):[];
   const latest=(r:BrokerMetricSeries)=>r.points.at(-1);
   const extent=Math.max(1,...rows.flatMap(r=>r.points.map(p=>p.value??0)));
   const scale=chart.unit==='%' ? Math.max(100,extent) : extent;
@@ -45,21 +42,44 @@ function Trend({clusterId,chart,minutes,seconds,refresh}: {clusterId:string;char
         <div className="d-flex justify-content-between small" dir="ltr"><time>{new Date(start).toLocaleTimeString()}</time><time>{new Date(end).toLocaleTimeString()}</time></div>
         <ul className="monitor-legend">{rows.map((r,i)=><li key={JSON.stringify(r.labels)}><i style={{background:colors[i%colors.length]}}/>
           <bdi>{r.labels.instance}</bdi> <strong>{latest(r)?.value==null?'—':fmt(latest(r)!.value!)}</strong>
-          {latest(r) && end-latest(r)!.time>120000 && <small>{t("No recent data")}</small>}</li>)}</ul>
-        {value.state==='available' && (value.truncated || value.warning) && <small>{t("Partial observation")}</small>}
+          {r.health==='stale' && <small>{t("No recent data")}</small>}</li>)}</ul>
+        {value.state==='available' && value.truncated && <small>{t("Partial response. Narrow the instance or time range.")}</small>}
       </>}
   </figure>;
 }
 
-export function MonitoringOverview({clusterId,manage,refresh,onInterval}: {clusterId:string;manage:boolean;refresh:number;onInterval:(v:number)=>void}) {
-  const [minutes,setMinutes]=useState(15),[revision,setRevision]=useState(0),[saving,setSaving]=useState(false),[error,setError]=useState('');
+export function MetricCharts({clusterId,charts=overviewCharts,minutes,seconds,refresh,filters='{}',aggregate=true,request='Produce'}:{
+  clusterId:string;charts?:MonitoringChart[];minutes:number;seconds:number;refresh:number;filters?:string;aggregate?:boolean;request?:string
+}) {
+  return <div className="monitor-grid">{charts.map(chart=><Trend key={chart.metric}
+    {...{clusterId,chart,minutes,seconds,refresh,filters,aggregate,request}}/>)}</div>;
+}
+
+export function BrokerCharts({clusterId,minutes,seconds,refresh}:{clusterId:string;minutes:number;seconds:number;refresh:number}) {
+  const [view,setView]=useState('Traffic'),[request,setRequest]=useState('Produce');
+  return <section className="card monitor-panel">
+    <div className="monitor-controls"><label>{t("Broker charts")}<select className="form-select" value={view} onChange={e=>setView(e.target.value)}>
+      {Object.keys(brokerCharts).map(v=><option key={v} value={v}>{t(v)}</option>)}</select></label>
+      {view==='Request latency' && <label>{t("Request type")}<select className="form-select" value={request} onChange={e=>setRequest(e.target.value)}>
+        {['Produce','Fetch','FetchConsumer','FetchFollower'].map(r=><option key={r}>{r}</option>)}</select></label>}
+    </div>
+    {view==='Traffic' && <p className="small text-secondary">{t("Rates use Kafka's one-minute moving averages.")}</p>}
+    {view==='Request latency' && request.startsWith('Fetch') && <p className="small text-secondary">{t("Fetch total time includes long polling.")}</p>}
+    <MetricCharts charts={brokerCharts[view]!} {...{clusterId,minutes,seconds,refresh,request}}/>
+  </section>;
+}
+
+export function MonitoringControls({clusterId,manage,refresh,onInterval,minutes,onMinutes,showWindow}: {
+  clusterId:string;manage:boolean;refresh:number;onInterval:(v:number)=>void;minutes:number;onMinutes:(n:number)=>void;showWindow:boolean
+}) {
+  const [revision,setRevision]=useState(0),[saving,setSaving]=useState(false),[error,setError]=useState('');
   const controller=useRef<AbortController|null>(null);
   useEffect(()=>()=>controller.current?.abort(),[]);
   const read=useCallback((s:AbortSignal)=>kafdeckApi.monitoringSampling(clusterId,s),[clusterId]);
   const {value,problem}=useObservation(read,revision+refresh,60000);
   const seconds=value?.seconds??30;
   useEffect(()=>{onInterval(seconds)},[seconds,onInterval]);
-  return <section className="card monitor-panel"><h3>{t("Monitoring overview")}</h3>
+  return <div className="monitor-toolbar">
     <div className="monitor-controls"><label>{t("Sampling interval")}<select className="form-select" value={seconds} disabled={!manage || !value || saving}
       onChange={async e=>{const ctl=new AbortController();controller.current=ctl;setSaving(true);setError('');
         try {await kafdeckApi.setMonitoringSampling(clusterId,Number(e.target.value),ctl.signal);if(!ctl.signal.aborted)setRevision(n=>n+1);}
@@ -67,9 +87,8 @@ export function MonitoringOverview({clusterId,manage,refresh,onInterval}: {clust
         finally{if(!ctl.signal.aborted)setSaving(false);}}}>
       {Array.from(new Set([10,15,20,30,45,60,seconds])).sort((a,b)=>a-b).map(n=><option key={n} value={n}>{t("{0} seconds",[n])}</option>)}
     </select></label>
-    <label>{t("Chart window")}<select className="form-select" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}>
-      {[15,60,360,1440].map(n=><option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label></div>
+    {showWindow && <label>{t("Chart window")}<select className="form-select" value={minutes} onChange={e=>onMinutes(Number(e.target.value))}>
+      {[15,60,360,1440].map(n=><option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label>}</div>
     {(error||problem) && <p role="alert">{error||readViewProblemText(problem!)}</p>}
-    <div className="monitor-grid">{charts.map(chart=><Trend key={chart.metric} {...{chart,minutes,seconds,clusterId,refresh}}/>)}</div>
-  </section>;
+  </div>;
 }

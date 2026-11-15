@@ -1,5 +1,11 @@
 .monitor-panel { padding: clamp(1rem, 2vw, 1.6rem); margin-block-end: 1rem; display: grid; gap: 1rem; min-width: 0; }
 .monitor-panel h3, .monitor-panel p, .monitor-panel figure { margin: 0; }
+.monitor-toolbar{padding:.5rem 0 1rem;}
+.monitor-tabs{display:flex;gap:.25rem;overflow-x:auto;border-bottom:1px solid var(--tblr-border-color);margin-bottom:1rem;scrollbar-width:thin;}
+.monitor-tabs [role="tab"]{flex:none;background:transparent;color:var(--tblr-secondary);border:0;border-bottom:3px solid transparent;padding:.75rem 1rem;font:inherit;white-space:nowrap;}
+.monitor-tabs [role="tab"][aria-selected="true"]{color:var(--tblr-primary);border-bottom-color:var(--tblr-primary);font-weight:600;}
+.monitor-tabs [role="tab"]:focus-visible{outline:2px solid var(--tblr-primary);outline-offset:-3px;}
+#monitoring [role="tabpanel"][hidden]{display:none;}
 .monitor-trend {border:1px solid var(--tblr-border-color);border-radius:.5rem;padding:1rem;min-width:0;display:grid;gap:.55rem;align-content:start;}
 .monitor-trend figcaption span {color:var(--tblr-secondary);font-size:.85em;}
 .monitor-axis {display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:1fr 1fr;column-gap:.4rem;font-variant-numeric:tabular-nums;font-size:.78rem;}

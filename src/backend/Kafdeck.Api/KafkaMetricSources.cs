@@ -130,8 +130,8 @@ internal static class KafkaMetricSources
             .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
             .RequireKafdeckAuthorization(AuthorizationAction.MonitoringRead, "clusterId");
         app.MapGet("/api/v1/clusters/{clusterId}/monitoring/{kind}", (string clusterId, string kind, string? metric, string? search,
-            int? minutes, string? instance, string? filters, string? after, string? topic, int? partition, MonitoringStore store, CancellationToken ct) =>
-            options.Clusters.Any(c=>c.Id==clusterId) ? store.Read(clusterId, kind, metric, search, minutes ?? 60, instance, filters, ct,after,topic,partition) : Results.NotFound())
+            int? minutes, string? instance, string? filters, string? after, string? topic, int? partition, bool? aggregate, MonitoringStore store, CancellationToken ct) =>
+            options.Clusters.Any(c=>c.Id==clusterId) ? store.Read(clusterId, kind, metric, search, minutes ?? 60, instance, filters, ct,after,topic,partition,aggregate??false) : Results.NotFound())
             .RequireKafdeckAuthorization(AuthorizationAction.ClusterRead, "clusterId")
             .RequireKafdeckAuthorization(AuthorizationAction.MonitoringRead, "clusterId");
     }

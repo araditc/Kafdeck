@@ -69,6 +69,9 @@ internal sealed class MonitoringStore
         init.ExecuteNonQuery();
         foreach (var source in settings.Sources.Concat(_metadataSources))
             Exec(db,"INSERT OR IGNORE INTO monitor_source VALUES($c,$i,$t,NULL,0)",("$c",source.ClusterId),("$i",source.Instance),("$t",Now));
+        // The earlier generic total-time rule included Kafka long polls and group joins.
+        Exec(db,"UPDATE monitor_incident SET ended=$t,reason='ruleChanged' WHERE ended IS NULL AND name='KafkaRequestSlow' AND COALESCE(json_extract(labels,'$.request'),'')<>'Produce'",("$t",Now));
+        Exec(db,"DELETE FROM monitor_alert WHERE name='KafkaRequestSlow' AND COALESCE(json_extract(labels,'$.request'),'')<>'Produce'");
     }
 
     private long Now => _clock.GetUtcNow().ToUnixTimeSeconds();
@@ -242,10 +245,12 @@ internal sealed class MonitoringStore
                 write.Parameters["$v"].Value=p.Value;
                 insert.ExecuteNonQuery();write.ExecuteNonQuery();
                 foreach(var rule in rules[p.Metric])
-                    Evaluate(db,src,rule,labels,p.Value,now);
+                    if (rule.Name is not ("KafkaRequestSlow" or "KafkaRequestQueueSlow"))
+                        Evaluate(db,src,rule,labels,p.Value,now);
             }
             if (!topicOnly)
             {
+                if (batch.Last) EvaluateRequestLatency(db,src,batch.Part==0 ? now : active.Started,now);
                 Exec(db,"UPDATE monitor_source SET seen=$t,partial=$p WHERE cluster=$c AND instance=$i",("$t",now),("$p",batch.Partial || !batch.Last),("$c",src.ClusterId),("$i",src.Instance));
                 Exec(db,"DELETE FROM monitor_alert WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown'",("$c",src.ClusterId),("$i",src.Instance));
                 Exec(db,"UPDATE monitor_incident SET ended=$t,reason='recovered' WHERE cluster=$c AND instance=$i AND name='KafkaTargetDown' AND ended IS NULL",
@@ -254,6 +259,42 @@ internal sealed class MonitoringStore
             tx.Commit();
             _cycles[key]=(batch.Cycle,batch.Last ? -1 : batch.Part+1,batch.Part==0 ? now : active.Started);
             return Results.NoContent();
+        }
+    }
+
+    private void EvaluateRequestLatency(SqliteConnection db,BrokerSource source,long cycleStart,long now)
+    {
+        foreach(var rule in _rules.Where(r=>r.Name is "KafkaRequestSlow" or "KafkaRequestQueueSlow"))
+        {
+            using var cmd=Sql(db,"""
+                SELECT s.labels,p.value FROM monitor_series s JOIN monitor_sample p ON p.series=s.id
+                WHERE s.cluster=$c AND s.instance=$i AND s.metric=$m AND p.time BETWEEN $start AND $now
+                """,("$c",source.ClusterId),("$i",source.Instance),("$m",rule.Metric),("$start",cycleStart),("$now",now));
+            var candidates=new List<(string Labels,double Value)>();
+            using(var reader=cmd.ExecuteReader()) while(reader.Read()) candidates.Add((reader.GetString(0),reader.GetDouble(1)));
+            foreach(var (labels,value) in candidates)
+            {
+                var dimensions=JsonSerializer.Deserialize<Dictionary<string,string>>(labels)!;
+                if(rule.Name=="KafkaRequestSlow" && dimensions.GetValueOrDefault("request")!="Produce") continue;
+                var countMetric=rule.Metric[..rule.Metric.LastIndexOf('/')] + "/Count";
+                using var counter=Sql(db,"""
+                    SELECT p.time,p.value FROM monitor_series s JOIN monitor_sample p ON p.series=s.id
+                    WHERE s.cluster=$c AND s.instance=$i AND s.metric=$m AND s.labels=$l
+                    ORDER BY p.time DESC LIMIT 2
+                    """,("$c",source.ClusterId),("$i",source.Instance),("$m",countMetric),("$l",labels));
+                var counts=new List<(long Time,double Value)>();
+                using(var reader=counter.ExecuteReader()) while(reader.Read()) counts.Add((reader.GetInt64(0),reader.GetDouble(1)));
+                bool comparable=counts.Count==2 && counts[0].Time>=cycleStart && counts[1].Time<cycleStart &&
+                    now-counts[1].Time<=120 && counts[0].Value>=counts[1].Value;
+                if(comparable && counts[0].Value>counts[1].Value) Evaluate(db,source,rule,labels,value,now);
+                else
+                {
+                    var args=new (string,object)[]{("$c",source.ClusterId),("$i",source.Instance),("$n",rule.Name),("$l",labels)};
+                    Exec(db,"DELETE FROM monitor_alert WHERE cluster=$c AND instance=$i AND name=$n AND labels=$l",args);
+                    Exec(db,"UPDATE monitor_incident SET ended=$t,reason=$reason WHERE ended IS NULL AND cluster=$c AND instance=$i AND name=$n AND labels=$l",
+                        [..args,("$t",now),("$reason",comparable ? "noTraffic" : "noData")]);
+                }
+            }
         }
     }
 
@@ -316,7 +357,7 @@ internal sealed class MonitoringStore
     }
 
     internal IResult Read(string cluster,string kind,string? metric,string? search,int minutes,string? instance,string? filters,CancellationToken ct,
-        string? after=null,string? topic=null,int? partition=null)
+        string? after=null,string? topic=null,int? partition=null,bool aggregate=false)
     {
         if(kind=="sampling") return Results.Ok(new {seconds=SamplingOverride(cluster)??30});
         if(kind=="topic-selection") return Results.Ok(new {topics=SelectedTopics(cluster) ?? []});
@@ -392,6 +433,7 @@ internal sealed class MonitoringStore
         }
         if(kind!="series" || string.IsNullOrWhiteSpace(metric)) return Results.BadRequest();
         var where=scope+" AND metric=$m";args.Add(("$m",metric));
+        if(aggregate) where+=" AND json_extract(labels,'$.topic') IS NULL AND json_extract(labels,'$.partition') IS NULL";
         if (!string.IsNullOrEmpty(instance)) {where+=" AND instance=$instance"; args.Add(("$instance",instance));}
         if(!string.IsNullOrEmpty(filters))
         {
@@ -409,6 +451,7 @@ internal sealed class MonitoringStore
         var ids=new List<(long Id,string Instance,string Labels)>();
         using(var reader=select.ExecuteReader()) while(reader.Read()) ids.Add((reader.GetInt64(0),reader.GetString(1),reader.GetString(2)));
         var series=new List<object>();
+        bool seriesWarning=false;
         foreach(var entry in ids.Take(12))
         {
             ct.ThrowIfCancellationRequested();
@@ -419,9 +462,13 @@ internal sealed class MonitoringStore
             var points=new List<object>();
             while(reader.Read()) points.Add(new{time=reader.GetInt64(0)*1000,value=reader.GetDouble(1)});
             var labels=JsonSerializer.Deserialize<Dictionary<string,string>>(entry.Labels)!;
-            labels["instance"]=entry.Instance;series.Add(new{labels,points});
+            using var latest=Sql(db,"SELECT MAX(time) FROM monitor_sample WHERE series=$id",("$id",entry.Id));
+            var latestAt=(long)latest.ExecuteScalar()!;
+            var health=now-latestAt>=120 ? "stale" : "current";
+            seriesWarning|=health=="stale";
+            labels["instance"]=entry.Instance;series.Add(new{labels,points,health,latestAt});
         }
-        return Results.Ok(new {state="available",observedAt=now,from=start,to=now,warning,truncated=ids.Count>12,rows=series});
+        return Results.Ok(new {state="available",observedAt=now,from=start,to=now,warning=seriesWarning,truncated=ids.Count>12,rows=series});
     }
 }
 

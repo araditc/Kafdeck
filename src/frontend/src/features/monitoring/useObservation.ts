@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { readViewError, type ReadViewProblem } from '../readviews/readViewProblem.js';
 
 type State<T> = { value?: T; problem?: ReadViewProblem; received?: number };
+export const MonitoringActive = createContext(true);
 
 /** Callers memoize read and key the owning panel by resource and authority. */
 export function useObservation<T>(read: (signal: AbortSignal) => Promise<T>, refresh: number, cadence = 0, background = false) {
+  const active=useContext(MonitoringActive) || background;
   const [state, setState] = useState<State<T>>({});
   useEffect(() => {
+    if(!active) return;
     const controller = new AbortController();
     let timer: number;
     async function tick() {
@@ -25,6 +28,6 @@ export function useObservation<T>(read: (signal: AbortSignal) => Promise<T>, ref
     }
     void tick();
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [read, refresh, cadence, background]);
+  }, [read, refresh, cadence, background, active]);
   return state;
 }

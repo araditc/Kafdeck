@@ -49,7 +49,8 @@ export function SeriesView({clusterId, metric, minutes, instance, filters, refre
   const choice = choices.find(s => s.name === selection) ?? choices[0];
   if (!choice) return <p>{t("No measurements in this interval.")}</p>;
   return <>
-    {(value.truncated || value.warning) && <p role="status">{t("Partial response. Narrow the instance or time range.")}</p>}
+    {value.truncated && <p role="status">{t("Partial response. Narrow the instance or time range.")}</p>}
+    {choice.row.health==='stale' && <p role="status">{t("No recent data")}</p>}
     <div className="monitor-controls"><label>{t("Series labels")}<select className="form-select" value={choice.name}
       onChange={e => setSelection(e.target.value)}>
       {choices.map(s => <option key={s.name} value={s.name}>{s.name || metric}</option>)}</select></label></div>
@@ -58,16 +59,25 @@ export function SeriesView({clusterId, metric, minutes, instance, filters, refre
   </>;
 }
 
-export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId: string; refresh: number; manage: boolean; seconds:number}) {
+export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspect,inspection}: {
+  clusterId:string;refresh:number;manage:boolean;seconds:number;view:'alerts'|'explorer';
+  onInspect:(a:BrokerMetricAlert)=>void;inspection:BrokerMetricAlert|null
+}) {
   const [metric, setMetric] = useState(''), [minutes, setMinutes] = useState(60);
   const [draftInstance, setDraftInstance] = useState(''), [instance, setInstance] = useState('');
   const [notify, setNotify] = useState(false);
   const [showHistory,setShowHistory] = useState(false);
   const [rawFilters, setRawFilters] = useState(''), [filters, setFilters] = useState('');
   const [invalid, setInvalid] = useState(false);
+  const [page,setPage]=useState(0);
   const delivered = useRef(new Set<string>());
-  const alertsRead = useCallback((s: AbortSignal) => kafdeckApi.monitoringAlerts(clusterId, s), [clusterId]);
-  const alerts = useObservation(alertsRead, refresh, Math.min(15,seconds)*1000, notify);
+  const alertsRead = useCallback(async(s: AbortSignal) => view==='alerts' ? kafdeckApi.monitoringAlerts(clusterId, s) : null, [clusterId,view]);
+  const alerts = useObservation(alertsRead, refresh, view==='alerts'?Math.min(15,seconds)*1000:0, notify);
+  useEffect(()=>{
+    if(!inspection || view!=='explorer') return;
+    setMetric(inspection.metric);setFilters(JSON.stringify(inspection.labels));setRawFilters(JSON.stringify(inspection.labels));
+    setInstance(inspection.instance);setDraftInstance(inspection.instance);setInvalid(false);
+  },[inspection,view]);
   useEffect(() => {
     if (!notify || alerts.value?.state !== 'available' || Notification.permission !== 'granted') return;
     const firing = alerts.value.rows.filter(a => a.state === 'firing');
@@ -82,16 +92,20 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
     }
     delivered.current = active;
   }, [alerts.value, notify, clusterId]);
-  return <section className="card monitor-panel"><h3>{t("Cluster alerts")}</h3>
+  const available=view==='explorer'||alerts.value?.state==='available';
+  const alertRows=alerts.value?.state==='available'?alerts.value.rows:[];
+  const firstAlert=Math.min(page,Math.max(0,Math.ceil(alertRows.length/4)-1))*4;
+  return <section className="card monitor-panel"><h3>{view==='alerts'?t("Cluster alerts"):t("Metric explorer")}</h3>
+    {view==='alerts' && <>
     {alerts.problem && <p role="alert">{t("Alert status unavailable.")} {readViewProblemText(alerts.problem)}</p>}
     {!alerts.value && !alerts.problem && <p role="status">{t("Loading…")}</p>}
     {alerts.value?.state === 'unconfigured' && <p>{t("Monitoring source is not configured for this cluster.")}</p>}
     {alerts.value?.state === 'available' && <>
       <p>{t("Read at {0}", [new Date(alerts.value.observedAt*1000).toISOString()])}</p>
-      <SourceStatus clusterId={clusterId} refresh={refresh} />
-      {(alerts.value.truncated || alerts.value.warning) && <p>{t("Partial observation")}</p>}
+      {alerts.value.warning && <p>{t("Some monitoring sources are stale or incomplete. Check the Sources tab.")}</p>}
+      {alerts.value.truncated && <p>{t("Partial observation")}</p>}
       {alerts.value.rows.length === 0 && <p>{t("No active alerts returned by the configured rules.")}</p>}
-      {alerts.value.rows.map((alert, i) => {
+      {alertRows.slice(firstAlert,firstAlert+4).map((alert, i) => {
         const next = advice(alert);
         return <div className={'alert mb-0 ' + (alert.state === 'firing' ? 'alert-danger' : 'alert-warning')} key={i}>
           <strong><bdi>{alert.name}</bdi> · {alert.state === 'firing' ? t("Firing") : t("Pending")}</strong>
@@ -99,11 +113,11 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
           <p>{t("Measured {0}, threshold {1}. First detected {2}.", [alert.value, alert.threshold, new Date(alert.since*1000).toISOString()])}</p>
           {next && <p>{t(next)}</p>}
           <button type="button" className="btn btn-sm btn-outline-primary"
-            onClick={() => {setMetric(alert.metric);const exact=JSON.stringify(alert.labels);
-              setFilters(exact);setRawFilters(exact);setInvalid(false);setInstance(alert.instance);setDraftInstance(alert.instance);}}>
+            onClick={() => onInspect(alert)}>
             {t("Inspect measurement")}</button>
         </div>;
       })}
+      <PageButtons page={page} total={alerts.value.rows.length} size={4} onChange={setPage}/>
       {typeof Notification !== 'undefined' && <button className="btn btn-outline-secondary justify-self-start" type="button"
         onClick={async () => {if (notify) {setNotify(false);delivered.current.clear();} else {
           try {setNotify((await Notification.requestPermission()) === 'granted');} catch { setNotify(false); }
@@ -113,8 +127,10 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
       <summary>{t("Alert history (24 hours)")}</summary>
       {showHistory && <IncidentHistory clusterId={clusterId} refresh={refresh} />}
     </details>}
-    <h3>{t("Metric explorer")}</h3>
-    {alerts.value?.state === 'available' && <div className="monitor-controls">
+    {manage && available && <AlertRules clusterId={clusterId} metric={metric} />}
+    </>}
+    {view==='explorer' && <>
+    {available && <div className="monitor-controls">
       <label>{t("Investigate broker latency")}<select className="form-select" value={diagnostics.some(d=>d[1]===metric)? metric : ''}
         onChange={e=>{
           const target=diagnostics.find(d=>d[1]===e.target.value);
@@ -143,37 +159,49 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds}: {clusterId:
       <button className="btn btn-outline-primary">{t("Search")}</button>
     </form>
     {invalid && <p role="alert">{t("Use up to eight exact label and value pairs.")}</p>}
-    {alerts.value?.state === 'available' && <>
+    {available && <>
       <div className="monitor-controls"><MetricSelect clusterId={clusterId} value={metric} onChange={setMetric} refresh={refresh}/>
       <label>{t("History interval")}<select className="form-select" value={minutes}
         onChange={e => setMinutes(Number(e.target.value))}>{[15,60,360,1440].map(n => <option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label></div>
     </>}
     {metric && <SeriesView key={JSON.stringify([metric,instance,filters,minutes])} {...{clusterId,metric,minutes,instance,filters,refresh,seconds}} />}
-    {manage && alerts.value?.state === 'available' && <AlertRules clusterId={clusterId} metric={metric} />}
+    </>}
   </section>;
 }
 
 function IncidentHistory({clusterId,refresh}: {clusterId:string;refresh:number}) {
+  const [page,setPage]=useState(0);
   const read=useCallback((s: AbortSignal)=>kafdeckApi.monitoringIncidents(clusterId,s),[clusterId]);
   const result=useObservation(read,refresh,30_000);
   if(result.problem) return <p role="alert">{readViewProblemText(result.problem)}</p>;
   if(result.value?.state!=='available') return <p role="status">{t("Loading…")}</p>;
   if(!result.value.rows.length) return <p>{t("No alerts in this interval.")}</p>;
+  const first=Math.min(page,Math.max(0,Math.ceil(result.value.rows.length/6)-1))*6;
   return <>{result.value.truncated && <p>{t("Most recent 50 alerts")}</p>}
-    <ul>{result.value.rows.map((r,i)=><li key={i}>
+    <ul>{result.value.rows.slice(first,first+6).map((r,i)=><li key={i}>
       <bdi>{r.name} · {r.instance} · {r.metric} · {JSON.stringify(r.labels)}</bdi>
       <div>{t("Fired at {0} with value {1} (threshold {2}).",[new Date(r.fired*1000).toISOString(),r.value,r.threshold])}
-        {' · '}{!r.ended ? t("Firing") : <>{r.reason==='recovered' ? t("Recovered") : r.reason==='ruleChanged' ? t("Rule changed") : t("No recent data")} · <bdi>{new Date(r.ended*1000).toISOString()}</bdi></>}</div>
-    </li>)}</ul></>;
+        {' · '}{!r.ended ? t("Firing") : <>{r.reason==='recovered' ? t("Recovered") : r.reason==='ruleChanged' ? t("Rule changed") : r.reason==='noTraffic' ? t("No new request activity") : t("No recent data")} · <bdi>{new Date(r.ended*1000).toISOString()}</bdi></>}</div>
+    </li>)}</ul><PageButtons page={page} total={result.value.rows.length} size={6} onChange={setPage}/></>;
 }
 
-function SourceStatus({clusterId,refresh}: {clusterId:string;refresh:number}) {
+function PageButtons({page,total,size,onChange}:{page:number;total:number;size:number;onChange:(n:number)=>void}) {
+  const last=Math.max(0,Math.ceil(total/size)-1),current=Math.min(page,last);
+  if(last===0) return null;
+  return <div className="monitor-controls">
+    <button className="btn btn-outline-secondary btn-sm" type="button" disabled={current===0} onClick={()=>onChange(current-1)}>{t("Previous")}</button>
+    <span>{t("Page {0} of {1}",[current+1,last+1])}</span>
+    <button className="btn btn-outline-secondary btn-sm" type="button" disabled={current===last} onClick={()=>onChange(current+1)}>{t("Next")}</button>
+  </div>;
+}
+
+export function SourceStatus({clusterId,refresh}: {clusterId:string;refresh:number}) {
   const read=useCallback((s: AbortSignal)=>kafdeckApi.monitoringSources(clusterId,s),[clusterId]);
   const result=useObservation(read,refresh,30_000);
   const display={waiting:t("Awaiting first sample"),stale:t("No recent data"),partial:t("Partial observation"),current:t("Current")};
   if(result.problem) return <p role="status">{readViewProblemText(result.problem)}</p>;
   if(result.value?.state!=='available') return null;
-  return <details><summary>{t("Reporting sources")}</summary>
+  return <section className="card monitor-panel"><h3>{t("Reporting sources")}</h3>
     <ul>{result.value.rows.map(r=><li key={r.instance}><bdi>{r.instance}</bdi> · {display[r.health]}
-      {r.seen!==null && <> · <time dir="ltr">{new Date(r.seen*1000).toISOString()}</time></>}</li>)}</ul></details>;
+      {r.seen!==null && <> · <time dir="ltr">{new Date(r.seen*1000).toISOString()}</time></>}</li>)}</ul></section>;
 }

@@ -132,9 +132,12 @@ public sealed class KafkaMonitoringTests : IDisposable
         const string gc = "kafdeck.jvm/gc_time_percent";
         const string queue = "kafka.network:RequestMetrics/RequestQueueTimeMs/99thPercentile";
         var labels = new SortedDictionary<string, string> { ["request"] = "Produce" };
+        var count = "kafka.network:RequestMetrics/RequestQueueTimeMs/Count";
+        Ingest(new JmxPoint(count,labels,0));
+        _clock.Advance(30);
         for (int seconds = 0; seconds <= 300; seconds += 30)
         {
-            Assert.Equal(204, Status(Ingest(new(cpu, [], 86), new(gc, [], 11), new(queue, labels, 101))));
+            Assert.Equal(204, Status(Ingest(new(cpu, [], 86), new(gc, [], 11), new(queue, labels, 101),new(count,labels,seconds+1))));
             var alerts = Rows("alerts").GetProperty("rows").EnumerateArray().ToDictionary(
                 row => row.GetProperty("name").GetString()!, row => row.GetProperty("state").GetString());
             Assert.Equal(seconds < 300 ? "pending" : "firing", alerts["KafkaBrokerCpuHigh"]);
@@ -142,11 +145,76 @@ public sealed class KafkaMonitoringTests : IDisposable
             Assert.Equal(seconds < 120 ? "pending" : "firing", alerts["KafkaRequestQueueSlow"]);
             _clock.Advance(30);
         }
-        Assert.Equal(204, Status(Ingest(new(cpu, [], 85), new(gc, [], 10), new(queue, labels, 100))));
+        Assert.Equal(204, Status(Ingest(new(cpu, [], 85), new(gc, [], 10), new(queue, labels, 100),new(count,labels,332))));
         Assert.Empty(Rows("alerts").GetProperty("rows").EnumerateArray());
         var incidents = Rows("incidents").GetProperty("rows").EnumerateArray().ToArray();
         Assert.Equal(3, incidents.Length);
         Assert.All(incidents, row => Assert.Equal("recovered", row.GetProperty("reason").GetString()));
+    }
+
+    [Fact]
+    public void Request_latency_requires_new_requests_and_excludes_long_poll_total_time()
+    {
+        const string total="kafka.network:RequestMetrics/TotalTimeMs/";
+        const string queue="kafka.network:RequestMetrics/RequestQueueTimeMs/";
+        JmxPoint[] Packet(int count) => new[]{"Produce","FetchConsumer","FetchFollower","JoinGroup"}.SelectMany(request=>new[]{
+            new JmxPoint(total+"Count",new(){["request"]=request},count),
+            new JmxPoint(total+"99thPercentile",new(){["request"]=request},900),
+            new JmxPoint(queue+"Count",new(){["request"]=request},count),
+            new JmxPoint(queue+"99thPercentile",new(){["request"]=request},3)
+        }).ToArray();
+        Assert.Equal(204,Status(Ingest(Packet(0))));
+        Assert.Empty(Rows("alerts").GetProperty("rows").EnumerateArray());
+        for(int tick=1;tick<=11;tick++)
+        {
+            _clock.Advance(30);
+            Assert.Equal(204,Status(Ingest(Packet(tick))));
+        }
+        var alert=Assert.Single(Rows("alerts").GetProperty("rows").EnumerateArray());
+        Assert.Equal("KafkaRequestSlow",alert.GetProperty("name").GetString());
+        Assert.Equal("Produce",alert.GetProperty("labels").GetProperty("request").GetString());
+        Assert.Equal("firing",alert.GetProperty("state").GetString());
+        _clock.Advance(30);
+        Ingest(Packet(11)); // An unchanged reservoir still reports 900 ms.
+        Assert.Empty(Rows("alerts").GetProperty("rows").EnumerateArray());
+        Assert.Equal("noTraffic",Rows("incidents").GetProperty("rows")[0].GetProperty("reason").GetString());
+        _clock.Advance(30);
+        Ingest(Packet(0)); // Broker counter reset is a new baseline.
+        Assert.Empty(Rows("alerts").GetProperty("rows").EnumerateArray());
+    }
+
+    [Fact]
+    public void Multipart_latency_waits_for_completed_cycle_and_uses_counter_from_another_part()
+    {
+        const string metric="kafka.network:RequestMetrics/RequestQueueTimeMs/";
+        var labels=new SortedDictionary<string,string>{["request"]="Produce"};
+        Ingest(new JmxPoint(metric+"Count",labels,0));
+        _clock.Advance(30);
+        var id=Guid.NewGuid();
+        Assert.Equal(204,Status(_store.Ingest(_source,new(false,id,0,false,[new(metric+"99thPercentile",labels,150)]),default)));
+        Assert.Empty(Rows("alerts").GetProperty("rows").EnumerateArray());
+        _clock.Advance(1);
+        Assert.Equal(204,Status(_store.Ingest(_source,new(false,id,1,true,[new(metric+"Count",labels,1)]),default)));
+        Assert.Equal("KafkaRequestQueueSlow",Assert.Single(Rows("alerts").GetProperty("rows").EnumerateArray()).GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public void Series_health_is_scoped_to_the_returned_measurement_and_broker_charts_exclude_topic_dimensions()
+    {
+        const string metric="kafka.server:BrokerTopicMetrics/BytesInPerSec/OneMinuteRate";
+        var batch=new JmxBatch(true,Guid.NewGuid(),0,true,[
+            new(metric,[],5),new(metric,new(){["topic"]="orders"},9)]);
+        _store.Ingest(_source,batch,default);
+        Assert.True(Rows("sources").GetProperty("warning").GetBoolean());
+        JsonElement Read() => Body(_store.Read("a","series",metric,null,15,null,null,default,aggregate:true));
+        var result=Read();
+        Assert.False(result.GetProperty("warning").GetBoolean());
+        var row=Assert.Single(result.GetProperty("rows").EnumerateArray());
+        Assert.Equal("current",row.GetProperty("health").GetString());
+        Assert.Equal(5,row.GetProperty("points")[0].GetProperty("value").GetDouble());
+        _clock.Advance(120);
+        Assert.True(Read().GetProperty("warning").GetBoolean());
+        Assert.Equal("stale",Read().GetProperty("rows")[0].GetProperty("health").GetString());
     }
 
     [Fact]

@@ -1,18 +1,19 @@
 import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { kafdeckApi } from '../../shared/api.js';
+import { kafdeckApi, type BrokerMetricAlert } from '../../shared/api.js';
 import { t } from '../../shared/i18n.js';
 import { describeObservation } from '../../app/operatorState.js';
 import { StatusBadge } from '../../app/StatusBadge.js';
 import { operationalTrendStatusKind } from '../../app/statusPresentation.js';
 import { readViewProblemText, type ReadViewProblem } from '../readviews/readViewProblem.js';
-import { useObservation } from './useObservation.js';
+import { useObservation, MonitoringActive } from './useObservation.js';
 import { BarChart, TimeChart, type Sample } from './Chart.js';
 import { MeasurementImport } from './MeasurementImport.js';
-import { BrokerMetrics, SeriesView } from './BrokerMetrics.js';
+import { BrokerMetrics, SeriesView, SourceStatus } from './BrokerMetrics.js';
 import { CatalogSelect, MetricSelect } from './CatalogSelect.js';
 import { readViewError } from '../readviews/readViewProblem.js';
-import { MonitoringOverview } from './MonitoringOverview.js';
+import { MonitoringControls, MetricCharts, BrokerCharts } from './MonitoringOverview.js';
+import { topicCharts, partitionCharts } from './monitoringCharts.js';
 import { AgentSetup } from './AgentSetup.js';
 import { offsetRates, type OffsetSample } from './offsetRates.js';
 
@@ -105,14 +106,21 @@ function GroupMonitoring({ clusterId, group, refresh }: {clusterId: string; grou
 
 function TopicMeasurements({clusterId,topic,partition,seconds,refresh}: {clusterId:string;topic:string;partition:string;seconds:number;refresh:number}) {
   const [metric,setMetric]=useState(''),[minutes,setMinutes]=useState(15);
+  const [view,setView]=useState('charts');
   const filters=JSON.stringify(partition ? {topic,partition} : {topic});
   return <>
+    <div className="monitor-controls"><label>{t("View")}<select className="form-select" value={view} onChange={e=>setView(e.target.value)}>
+      <option value="charts">{t("Prepared charts")}</option><option value="explorer">{t("Metric explorer")}</option>
+    </select></label>
+    <label>{t("History interval")}<select className="form-select" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}>
+      {[15,60,360,1440].map(n=><option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label></div>
+    {view==='charts' ? <MetricCharts charts={partition ? partitionCharts : topicCharts}
+      aggregate={false} {...{clusterId,minutes,seconds,refresh,filters}}/> : <>
     <div className="monitor-controls">
       <MetricSelect {...{clusterId,topic,partition,refresh}} polling={seconds*1000} value={metric} onChange={setMetric}/>
-      <label>{t("History interval")}<select className="form-select" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}>
-        {[15,60,360,1440].map(n=><option key={n} value={n}>{t("{0} minutes",[n])}</option>)}</select></label>
     </div>
     {metric && <SeriesView key={JSON.stringify([metric,minutes])} instance="" {...{clusterId,metric,minutes,filters,refresh,seconds}}/>}
+    </>}
   </>;
 }
 
@@ -172,18 +180,11 @@ function TopicMonitoring({clusterId,refresh,manage,seconds}: {clusterId:string;r
   </section>;
 }
 
-export function MonitoringPage({ clusterId, refresh, manage }: {clusterId: string; refresh: number; manage: boolean}) {
-  const [agentRevision,setAgentRevision]=useState(0);
-  const [seconds,setSeconds]=useState(30);
+function ConsumerMonitoring({clusterId,refresh}:{clusterId:string;refresh:number}) {
   const list = useCallback((signal: AbortSignal) => kafdeckApi.listConsumerGroups(clusterId, signal), [clusterId]);
   const groups = useObservation(list, refresh);
   const [group, setGroup] = useState('');
-  return <div id="monitoring">
-    <MonitoringOverview clusterId={clusterId} manage={manage} refresh={refresh+agentRevision} onInterval={setSeconds}/>
-    <TopicMonitoring key={clusterId} {...{clusterId,refresh,manage,seconds}}/>
-    {manage && <AgentSetup clusterId={clusterId} onChanged={()=>setAgentRevision(n=>n+1)} />}
-    <BrokerMetrics clusterId={clusterId} refresh={refresh+agentRevision} manage={manage} seconds={seconds} />
-    <section className="card monitor-panel"><h3>{t("Consumer activity")}</h3>
+  return <section className="card monitor-panel"><h3>{t("Consumer activity")}</h3>
       <Observation state={groups}>{result => <>
         {result.partial && <p>{t("Partial observation")}</p>}
         {result.data.length ? <div className="monitor-controls"><label>{t("Consumer group")}
@@ -193,7 +194,56 @@ export function MonitoringPage({ clusterId, refresh, manage }: {clusterId: strin
           : <p>{t("No visible consumer groups.")}</p>}
         {group && result.data.some(g => g.groupId === group) && <GroupMonitoring key={group} group={group} clusterId={clusterId} refresh={refresh} />}
       </>}</Observation>
-    </section>
-    <MeasurementImport />
+    </section>;
+}
+
+const monitoringTabs=[
+  ['overview','Overview'],['brokers','Brokers'],['topics','Topics and partitions'],['consumers','Consumers'],
+  ['alerts','Alerts'],['metrics','Metric explorer'],['sources','Sources']
+] as const;
+type MonitoringTab=typeof monitoringTabs[number][0];
+
+export function MonitoringPage({clusterId,refresh,manage}:{clusterId:string;refresh:number;manage:boolean}) {
+  const [tab,setTab]=useState<MonitoringTab>('overview'),[visited,setVisited]=useState<MonitoringTab[]>(['overview']);
+  const [seconds,setSeconds]=useState(30),[minutes,setMinutes]=useState(15),[revision,setRevision]=useState(0);
+  const [inspection,setInspection]=useState<BrokerMetricAlert|null>(null);
+  const update=refresh+revision;
+  function activate(next:MonitoringTab) {
+    setTab(next);setVisited(previous=>previous.includes(next)?previous:[...previous,next]);
+  }
+  function inspect(alert:BrokerMetricAlert) {setInspection(alert);activate('metrics');}
+  return <div id="monitoring">
+    <MonitoringControls {...{clusterId,manage,minutes}} showWindow={tab==='overview'||tab==='brokers'}
+      refresh={update} onMinutes={setMinutes} onInterval={setSeconds}/>
+    <div className="monitor-tabs" role="tablist" aria-label={t("Monitoring sections")} onKeyDown={e=>{
+      const buttons=Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+      const current=buttons.indexOf(e.target as HTMLButtonElement);
+      const backwards=document.documentElement.dir==='rtl'?'ArrowRight':'ArrowLeft';
+      let next=current;
+      if(e.key==='Home') next=0;
+      else if(e.key==='End') next=buttons.length-1;
+      else if(e.key===backwards) next=(current+buttons.length-1)%buttons.length;
+      else if(e.key==='ArrowLeft'||e.key==='ArrowRight') next=(current+1)%buttons.length;
+      else return;
+      e.preventDefault();buttons[next]?.focus();activate(monitoringTabs[next]![0]);
+    }}>
+      {monitoringTabs.map(([id,label])=><button type="button" role="tab" key={id} id={'monitor-tab-'+id}
+        aria-selected={tab===id} aria-controls={'monitor-panel-'+id} tabIndex={tab===id?0:-1}
+        onClick={()=>activate(id)}>{t(label)}</button>)}
+    </div>
+    {monitoringTabs.map(([id])=><div role="tabpanel" id={'monitor-panel-'+id} aria-labelledby={'monitor-tab-'+id}
+      hidden={id!==tab} tabIndex={0} key={id}>
+      <MonitoringActive.Provider value={id===tab}>{visited.includes(id) && <>
+        {id==='overview' && <section className="card monitor-panel"><MetricCharts {...{clusterId,minutes,seconds}} refresh={update}/></section>}
+        {id==='brokers' && <BrokerCharts {...{clusterId,minutes,seconds}} refresh={update}/>}
+        {id==='topics' && <TopicMonitoring {...{clusterId,manage,seconds}} refresh={update}/>}
+        {id==='consumers' && <ConsumerMonitoring clusterId={clusterId} refresh={update}/>}
+        {(id==='alerts'||id==='metrics') && <BrokerMetrics view={id==='alerts'?'alerts':'explorer'}
+          {...{clusterId,manage,seconds,inspection}} refresh={update} onInspect={inspect}/>}
+        {id==='metrics' && <details className="card monitor-panel"><summary>{t("Workload and broker measurements")}</summary><MeasurementImport/></details>}
+        {id==='sources' && <><SourceStatus clusterId={clusterId} refresh={update}/>
+          {manage && <AgentSetup clusterId={clusterId} onChanged={()=>setRevision(n=>n+1)}/>}</>}
+      </>}</MonitoringActive.Provider>
+    </div>)}
   </div>;
 }

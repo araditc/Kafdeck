@@ -1,4 +1,5 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useContext, useEffect, useState} from 'react';
+import {MonitoringActive} from './useObservation.js';
 import {kafdeckApi} from '../../shared/api.js';
 import {t} from '../../shared/i18n.js';
 import {readViewError, readViewProblemText} from '../readviews/readViewProblem.js';
@@ -11,9 +12,11 @@ interface Props {
 }
 
 export function CatalogSelect({label,searchLabel,placeholder,value,onChange,disabled,read,refresh=0,polling=0}:Props) {
+  const active=useContext(MonitoringActive);
   const [query,setQuery]=useState(''),[cursor,setCursor]=useState<string|null>(null);
   const [page,setPage]=useState<Page>({names:[],next:null}),[busy,setBusy]=useState(true),[error,setError]=useState('');
   useEffect(()=>{
+    if(!active) return;
     const controller=new AbortController();
     setBusy(true);setError('');
     let retry:number|undefined;
@@ -32,7 +35,7 @@ export function CatalogSelect({label,searchLabel,placeholder,value,onChange,disa
     }
     const timer=window.setTimeout(fetchPage,query && !cursor ? 200 : 0);
     return ()=>{window.clearTimeout(timer);window.clearTimeout(retry);controller.abort();};
-  },[read,query,cursor,refresh,polling]);
+  },[read,query,cursor,refresh,polling,active]);
   return <>
     <label>{searchLabel}<input type="search" className="form-control" maxLength={100} value={query}
       onChange={e=>{setQuery(e.target.value);setCursor(null);setPage({names:[],next:null});}}/></label>

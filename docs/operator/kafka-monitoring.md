@@ -2,6 +2,10 @@
 
 Select a cluster and open **Monitoring**. The dashboard, numeric samples, rule engine and alert timeline run in Kafdeck. A Kafka connection alone provides group offsets, lag and partition metadata. Each broker or controller also exposes measurements inside its own JVM. The Kafdeck agent reads those locally and sends them directly to your Kafdeck instance.
 
+Use the **Overview**, **Brokers**, **Topics and partitions**, **Consumers**, **Alerts**, **Metric explorer** and **Sources** tabs. Selections survive switching tabs. Inactive panels suspend their polling. Desktop alerts, when explicitly enabled, continue polling while the monitoring page stays mounted.
+
+Under **Brokers**, select traffic, request latency, JVM memory, or replication and disk charts. Traffic charts use Kafka's one-minute moving rates. Memory and log-size charts use MiB. The request selector compares Produce or Fetch stages across brokers. Each stage's p99 comes from its own distribution. The **Topics and partitions** tab offers prepared traffic and replica charts alongside the metric explorer.
+
 ## Enable broker measurements
 
 For a saved PLAINTEXT connection, add its cluster ID to `Kafdeck:Monitoring:MetadataClusters` and restart Kafdeck to enable read-only metadata collection. The `kafdeck-metadata` source reports visible brokers, topics, partitions, leader distribution, offline and under-replicated partitions, and response time. Partial observations suppress incomplete topology totals. To adjust sampling for this cluster, sign in as deployment owner and open **Monitoring overview → Sampling interval**. The default is 30 seconds. The metadata sampler and enrolled broker agents adopt the saved setting. Each agent starts its next interval after transmission completes.
@@ -70,7 +74,11 @@ Imported files stay in the tab. Server-side rules evaluate live source measureme
 
 ## Set and investigate alerts
 
-The built-in rules monitor missing source heartbeats (120 seconds), controller offline partitions (above zero immediately), under-replicated partitions (above zero for two minutes), handler idle fraction (below 0.15 for five minutes) and total request p99 (above 250 ms for five minutes). CPU above 85% for five minutes, GC time above 10% for two minutes, and request queue p99 above 100 ms for two minutes also trigger warnings. Queue thresholds apply independently to each request type on each broker. Compare alerts with the workload's latency objective and normal traffic.
+The built-in rules monitor missing source heartbeats (120 seconds), controller offline partitions (above zero immediately), under-replicated partitions (above zero for two minutes), handler idle fraction (below 0.15 for five minutes) and **Produce** total request p99 (above 250 ms for five minutes). CPU above 85% for five minutes, GC time above 10% for two minutes, and request queue p99 above 100 ms for two minutes also trigger warnings. Queue thresholds apply independently to each request type on each broker. Compare alerts with the workload's latency objective and normal traffic.
+
+The two built-in request-latency rules require a rising histogram count across successive captures within 120 seconds. A first capture, counter reset, missing count or idle reservoir cannot establish sustained latency. Multipart captures evaluate these rules after the final part arrives. Inactivity closes an incident as **No new request activity**, preserving its measured firing value. Long-poll Fetch and group joins retain their charts and can have custom thresholds. Kafka's consumer configuration documents the intentional waiting in [fetch.min.bytes](https://kafka.apache.org/35/generated/consumer_config.html#fetch.min.bytes).
+
+Each chart's freshness follows its own returned series. A partial capture from another source is shown under **Sources**. A returned series with no sample for 120 seconds is marked **No recent data**. A missing measurement stays empty, and zero-valued observations remain valid measurements.
 
 Select any collected metric, then open **Custom alert rules** as deployment owner. Choose a name, comparison, threshold in the metric's native units, hold time and severity. The rule applies independently to each instance and label set in that cluster. For a signal that should fire on the first observation, use zero seconds. A change to a rule resets its hold time.
 

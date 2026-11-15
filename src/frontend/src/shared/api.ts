@@ -8,7 +8,7 @@ export { operatorSessionLostEvent } from './operatorSessionSecurity.js';
 export type Freshness = 'fresh' | 'stale';
 export type MonitoringResult<T> = {state: 'unconfigured'} |
   ({state: 'available'; observedAt: number; truncated: boolean; warning: boolean} & T);
-export interface BrokerMetricSeries { labels: Record<string, string>; points: {time: number; value: number | null}[]; }
+export interface BrokerMetricSeries { labels: Record<string, string>; points: {time: number; value: number | null}[]; health?:'current'|'stale';latestAt?:number; }
 export interface BrokerAlertRule { name: string; metric: string; threshold: number; below: boolean; seconds: number; severity: string; }
 export interface BrokerMetricAlert { name: string; state: string; severity: string; instance: string;
   metric: string; labels: Record<string,string>; time: number; since: number; value: number; threshold: number; }
@@ -886,9 +886,9 @@ export const kafdeckApi = {
     return readJson<MonitoringResult<{names: string[]}>>(
       clusterPath(clusterId) + '/monitoring/metrics?' + query, signal);
   },
-  monitoringSeries(clusterId: string, metric: string, minutes: number, instance: string, filters: string, signal: AbortSignal) {
+  monitoringSeries(clusterId: string, metric: string, minutes: number, instance: string, filters: string, signal: AbortSignal, aggregate=false) {
     return readJson<MonitoringResult<{from: number; to: number; rows: BrokerMetricSeries[]}>>(
-      clusterPath(clusterId) + '/monitoring/series?' + new URLSearchParams({metric, minutes: String(minutes), instance, filters}), signal);
+      clusterPath(clusterId) + '/monitoring/series?' + new URLSearchParams({metric, minutes: String(minutes), instance, filters,aggregate:String(aggregate)}), signal);
   },
   monitoringAlerts(clusterId: string, signal: AbortSignal) {
     return readJson<MonitoringResult<{rows: BrokerMetricAlert[]}>>(clusterPath(clusterId) + '/monitoring/alerts', signal);
