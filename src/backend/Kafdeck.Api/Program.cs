@@ -819,7 +819,29 @@ if (declarativeOptions.Enabled)
     builder.Services.AddSingleton<DeclarativeSubscriptionMutationHandler>();
     builder.Services.AddSingleton<IMutationExecutionHandler>(services => services.GetRequiredService<DeclarativeSubscriptionMutationHandler>());
 }
+builder.Services.AddSingleton(MonitoringSettings.Load(builder.Configuration,
+    managedIdentity is null ? null : Path.Combine(Path.GetDirectoryName(managedIdentityOptions.StateFile!)!, "kafdeck-monitoring.sqlite")));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<MonitoringStore>();
+builder.Services.AddHostedService<MonitoringWatchdog>();
+if (managedIdentity is not null && builder.Configuration.GetValue<bool>("Kafdeck:ConnectionWorkspace:Enabled") &&
+    builder.Configuration.GetSection("Kafdeck:Monitoring:MetadataClusters").Exists())
+    builder.Services.AddHostedService<KafkaMetadataMonitor>();
 var app = builder.Build();
+// An optional dedicated Kestrel listener exposes only token-authenticated agent uploads.
+if(builder.Configuration.GetValue<int?>("Kafdeck:Monitoring:IngestOnlyPort") is int ingestPort)
+{
+    app.Use(async (context,next) =>
+    {
+        if(context.Connection.LocalPort==ingestPort &&
+           !(context.Request.IsHttps && HttpMethods.IsPost(context.Request.Method) && context.Request.Path=="/monitoring/ingest"))
+        {
+            context.Response.StatusCode=StatusCodes.Status404NotFound;
+            return;
+        }
+        await next(context);
+    });
+}
 if (governanceGenerationAdmission)
 {
     var previous = Guid.ParseExact(builder.Configuration["Kafdeck:Governance:PreviousDeploymentGeneration"] ?? "", "D");
@@ -1081,6 +1103,7 @@ app.MapKafdeckV07SchemaDeveloperTools(dashboardOptions);
 app.MapKafdeckV07Streaming(kafdeckOptions);
 app.MapKafdeckV07ControlledSerde(kafdeckOptions);
 app.MapKafdeckV08Observability(kafdeckOptions);
+KafkaMetricSources.Map(app,dashboardOptions);
 app.MapKafdeckV08OperationalAnalytics(kafdeckOptions);
 if (dataQualityOptions?.Enabled == true)
 {

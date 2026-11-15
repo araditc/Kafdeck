@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@tabler/core/dist/css/tabler.min.css';
 import './app/kafdeck-theme.css';
+import './features/monitoring/monitoring.css';
 import { AppShell } from './app/AppShell.js';
 
 initializeLocale();

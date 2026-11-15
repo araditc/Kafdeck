@@ -32,6 +32,12 @@ It runs outside the Kafka data path, supports local/on-premise and air-gapped de
 > [!IMPORTANT]
 > **v0.9 was released on 2026-11-12.** See the [official release](https://github.com/araditc/Kafdeck/releases/tag/v0.9), [installation guide](docs/operator/v0.9-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [Exact release evidence](docs/implementation/evidence/v0.9-release-published-20261112.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
 
+For the **monitoring preview**, download the [offline Windows Server bundle and Java agent](https://github.com/araditc/Kafdeck/releases/tag/monitoring-preview-20261115). The [English offline guide](docs/operator/windows-offline-install.md) covers bundled Java/PostgreSQL/Keycloak, automatic Windows Services and first-admin setup. The [Java agent guide](docs/operator/kafka-agent.md) includes installation, Docker/Windows configuration and [source code](tools/kafka-agent/). This preview is distributed separately from stable v0.9.
+
+![Kafdeck monitoring dashboard with CPU, GC, request queue latency, metadata response time and partition health charts](docs/images/monitoring-overview.png)
+
+*Monitoring preview with live observations from a three-broker Kafka cluster. Chart availability depends on the configured sources and Kafka/JVM metrics.*
+
 ## Why Kafdeck?
 
 - **Safe by default** — bounded work, cancellation, deadlines, rate/byte limits, per-cluster isolation, and fail-closed behavior.

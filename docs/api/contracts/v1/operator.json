@@ -25,6 +25,9 @@
     "Kafdeck:Governance:PreviousDeploymentGeneration",
     "Kafdeck:Governance:RestoreEvidenceSha256",
     "Kafdeck:ManagedIdentity",
+    "Kafdeck:Monitoring",
+    "Kafdeck:Monitoring:IngestOnlyPort",
+    "Kafdeck:Monitoring:MetadataClusters",
     "Kafdeck:NonBrowserRead",
     "Kafdeck:Notifications",
     "Kafdeck:Notifications:Governance",
@@ -910,6 +913,59 @@
       "accesses": []
     },
     {
+      "file": "src/backend/Kafdeck.Api/KafkaMetadataMonitor.cs",
+      "accesses": []
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/KafkaMetricSources.cs",
+      "accesses": [
+        {
+          "receiver": "Headers",
+          "key": "X-Kafdeck-Agent-Token"
+        },
+        {
+          "receiver": "Headers",
+          "key": "X-Kafdeck-Interval-Seconds"
+        },
+        {
+          "receiver": "Headers",
+          "key": "X-Kafdeck-Topic-Only"
+        },
+        {
+          "receiver": "Headers",
+          "key": "X-Kafdeck-Topics"
+        },
+        {
+          "receiver": "config",
+          "key": "Kafdeck:Monitoring"
+        },
+        {
+          "receiver": "row",
+          "key": "ClusterId"
+        },
+        {
+          "receiver": "row",
+          "key": "Instance"
+        },
+        {
+          "receiver": "row",
+          "key": "Token"
+        },
+        {
+          "receiver": "section",
+          "key": "DatabasePath"
+        },
+        {
+          "receiver": "section",
+          "key": "MetadataClusters"
+        },
+        {
+          "receiver": "section",
+          "key": "Sources"
+        }
+      ]
+    },
+    {
       "file": "src/backend/Kafdeck.Api/ManagedBrowserOpenApi.cs",
       "accesses": [
         {
@@ -919,6 +975,51 @@
         {
           "receiver": "operation",
           "key": "operationId"
+        }
+      ]
+    },
+    {
+      "file": "src/backend/Kafdeck.Api/MonitoringStore.cs",
+      "accesses": [
+        {
+          "receiver": "Parameters",
+          "key": "$l"
+        },
+        {
+          "receiver": "Parameters",
+          "key": "$m"
+        },
+        {
+          "receiver": "Parameters",
+          "key": "$v"
+        },
+        {
+          "receiver": "configuration",
+          "key": "Kafdeck:Monitoring"
+        },
+        {
+          "receiver": "labels",
+          "key": "instance"
+        },
+        {
+          "receiver": "row",
+          "key": "Comparison"
+        },
+        {
+          "receiver": "row",
+          "key": "Metric"
+        },
+        {
+          "receiver": "row",
+          "key": "Name"
+        },
+        {
+          "receiver": "row",
+          "key": "Severity"
+        },
+        {
+          "receiver": "section",
+          "key": "Rules"
         }
       ]
     },
@@ -1002,6 +1103,10 @@
         {
           "receiver": "Configuration",
           "key": "Kafdeck:ManagedIdentity"
+        },
+        {
+          "receiver": "Configuration",
+          "key": "Kafdeck:Monitoring:MetadataClusters"
         }
       ]
     },
@@ -1919,13 +2024,16 @@
     "src/backend/Kafdeck.Api/KafdeckDeclarativeEndpoints.cs": "f20270f449ef45ada703c50c116b2ca3894bcb6933b6f1ad36cca68fd43682ce",
     "src/backend/Kafdeck.Api/KafdeckDeclarativeSourceEndpoints.cs": "59440a5985d1661e9d9557b72c1bbc534c0f87b0021d934f793e9d2469622036",
     "src/backend/Kafdeck.Api/KafdeckNotificationReadEndpoints.cs": "5907f72f4a9e352bc88d36a3faafbf87260706729988e0b9bd13234d78a10075",
+    "src/backend/Kafdeck.Api/KafkaMetadataMonitor.cs": "844737caaa36a2b4567de121615c93015d17e7fa937c7786a8184d2e9c75c206",
+    "src/backend/Kafdeck.Api/KafkaMetricSources.cs": "f14f5b4c20ef50edcbb4ffe3c3c9e4ae22d675e87da0d968dac3b0c23bd727ce",
     "src/backend/Kafdeck.Api/ManagedBrowserOpenApi.cs": "3b26054b84eebbc03add8cba83e4f7f84f264237e42446bd42792f8359fc683f",
+    "src/backend/Kafdeck.Api/MonitoringStore.cs": "9d4ac50f08a8389c174baa014ac11e1e1d24fb5663a582430d409829ee8abdf6",
     "src/backend/Kafdeck.Api/NonBrowserReadAuthentication.cs": "d5c843d96e3dc641d0b006a7b88361de39a1807fcf306b7a6b89c1e002bf7963",
     "src/backend/Kafdeck.Api/NotificationProductEventHosting.cs": "706317233b7aa68c7a55e19379bd14c0aea8f46b4453ea38af33f770388c611a",
     "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs": "15f1d50ce6e3c0124dd862571ddecfca1db3e56a735ac3f0364eda664efaef7a",
-    "src/backend/Kafdeck.Api/Program.cs": "12703ff53f1e0585de1701950afa3c7288662e9ff48d88695ebff8d4c8013d40",
+    "src/backend/Kafdeck.Api/Program.cs": "33a062d96c442a1ec0b3d92dfec120c06ae07e65caf3dcac4e1e0e98b3523671",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",
-    "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs": "a3eb952a4d6b6e94f376d965f4cfd607949813ee6eef1cbae84dc7b63c900661",
+    "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs": "c967f96b4b397409bc01e29cdd9211397c51a39e25a89c99eefb2436c5c296d8",
     "deploy/helm/kafdeck/Chart.yaml": "d6946564c70ff989bdd79fdb891b92b29ba7433f82e887b889eba5be1cc093be",
     "deploy/helm/kafdeck/templates/_helpers.tpl": "fe5f97cfd9b6d4d5c30002a0504d480423f7ec92c2c36d07a19e6fa2947f913c",
     "deploy/helm/kafdeck/templates/deployment.yaml": "e9378dd98b80404bf1be859add74fd1eee5eb9ea28fd4cba45f1effe9b7ad27e",
