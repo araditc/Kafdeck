@@ -1,4 +1,18 @@
 # Shared by the installer and its isolated acceptance test. Windows PowerShell 5.1.
+function Get-OfflineWindowsCredential([PSCredential]$Credential) {
+    $current=[Security.Principal.WindowsIdentity]::GetCurrent()
+    if(!$Credential){
+        Write-Host "Windows Services will use the current account: $($current.Name)"
+        $password=Read-Host -Prompt 'Enter the Windows login password for this account (not a PIN or Kafdeck password)' -AsSecureString
+        if(!$password -or !$password.Length){throw 'No Windows password was entered. Run the installer again and enter the current Windows account password.'}
+        try {$Credential=[PSCredential]::new($current.Name,$password.Copy())} finally {$password.Dispose()}
+    }
+    if(!$Credential.Password.Length){throw 'The Windows service account password cannot be empty.'}
+    try {$sid=([Security.Principal.NTAccount]::new($Credential.UserName)).Translate([Security.Principal.SecurityIdentifier]).Value}
+    catch {throw "Cannot resolve Windows account '$($Credential.UserName)'. Use '$($current.Name)'."}
+    if($sid -ne $current.User.Value){throw "Windows account mismatch: received '$($Credential.UserName)', expected '$($current.Name)'. Use the installer account; existing state was preserved."}
+    return $Credential
+}
 function New-OfflineSecret {
     $bytes=New-Object byte[] 32;$rng=[Security.Cryptography.RandomNumberGenerator]::Create()
     try {$rng.GetBytes($bytes)} finally {$rng.Dispose()}

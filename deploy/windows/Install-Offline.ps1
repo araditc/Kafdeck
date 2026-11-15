@@ -60,8 +60,7 @@ if($receipt.phase -eq 'complete'){
     Write-Host "Installed at $($receipt.origin)/. To refresh an unused setup code, run $InstallRoot\scripts\New-SetupCode.ps1 using this Windows account."
     return
 }
-if(!$Credential){$Credential=Get-Credential -UserName $identity.Name -Message 'Windows login password for Windows Services (not a Kafka or Kafdeck password).'}
-if(!$Credential -or ([Security.Principal.NTAccount]::new($Credential.UserName)).Translate([Security.Principal.SecurityIdentifier]).Value -ne $identity.User.Value){throw 'Use the same Windows account that is running this installer.'}
+$Credential=Get-OfflineWindowsCredential $Credential
 # Keep setup-code issuance, DPAPI and the service account on the same identity.
 # Service credentials are held by Windows SCM, never in XML or command arguments.
 foreach($folder in @('app','scripts','docs','agent')){

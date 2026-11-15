@@ -44,6 +44,8 @@ evidence=out/'acceptance-evidence.json'
 if evidence.exists():shutil.copyfile(evidence,bundle/'acceptance-evidence.json')
 service_evidence=out/'windows-services-evidence.json'
 if service_evidence.exists():shutil.copyfile(service_evidence,bundle/'windows-services-evidence.json')
+credential_evidence=out/'credential-prompt-evidence.json'
+if credential_evidence.exists():shutil.copyfile(credential_evidence,bundle/'credential-prompt-evidence.json')
 (bundle/'THIRD-PARTY-NOTICES.txt').write_text('Included components:\nMicrosoft Build of OpenJDK 21.0.13.0.2: upstream license/legal files inside media/java21.zip; GPLv2 with Classpath Exception. Sources: https://github.com/microsoft/openjdk-jdk21u/tree/release/jdk-21.0.13.0.2_1\nPostgreSQL 17.12 (server and command-line tools): upstream server_license.txt and commandlinetools_3rd_party_licenses.txt inside media/postgresql17.zip. Source: https://www.postgresql.org/ftp/source/v17.12/\nKeycloak 26.8.1: upstream LICENSE.txt and notices inside media/keycloak.zip; source: https://github.com/keycloak/keycloak/tree/26.8.1\nMicrosoft Visual C++ Redistributable: original Microsoft-signed installer. Terms: https://visualstudio.microsoft.com/license-terms/\nWinSW 2.12.0 (.NET Framework 4.6.1 build): MIT, included WinSW-LICENSE.txt. Source: https://github.com/winsw/winsw/tree/v2.12.0\nKafdeck: included LICENSE. This is a local unsigned monitoring build, not an official signed release.\n',encoding='utf-8')
 files=sorted(p for p in bundle.rglob('*') if p.is_file() and p.name!='bundle-manifest.json')
 assert not any(p.suffix.lower() in ('.pfx','.key','.pem','.cer','.dpapi','.sql','.sqlite','.db') for p in files)
