@@ -141,4 +141,3 @@ function Invoke-OfflineUpgradeTransaction {
         throw "Upgrade failed and the original installation was recovered. $($failure.Exception.Message)"
     }
 }
-
