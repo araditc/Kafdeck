@@ -2,7 +2,7 @@
 
 The Kafdeck agent runs **inside each Kafka broker JVM** and reads local platform/Kafka JMX MBeans. It sends bounded batches over HTTPS directly to Kafdeck. No remote JMX port, Prometheus or exporter process is required. It does not collect Kafka message payloads or log credentials.
 
-Download `kafdeck-kafka-agent-java21.zip` and its checksum from the [monitoring preview release](https://github.com/araditc/Kafdeck/releases/tag/monitoring-preview-20261115). The full Windows offline ZIP also contains the JAR under `payload/agent`. Source, build script and focused tests are in [`tools/kafka-agent`](https://github.com/araditc/Kafdeck/tree/monitoring-preview-20261115/tools/kafka-agent). The source license is the repository [LICENSE](https://github.com/araditc/Kafdeck/blob/monitoring-preview-20261115/LICENSE).
+Download `kafdeck-kafka-agent-java21.zip` and its checksum from the [1.0.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). The full Windows offline ZIP also contains the JAR under `payload/agent`. Source, build script and focused tests are in [`tools/kafka-agent`](https://github.com/araditc/Kafdeck/tree/v1.0.0/tools/kafka-agent). The source license is the repository [LICENSE](https://github.com/araditc/Kafdeck/blob/v1.0.0/LICENSE).
 
 ## JVM compatibility and build
 

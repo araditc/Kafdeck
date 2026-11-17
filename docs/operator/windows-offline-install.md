@@ -1,8 +1,8 @@
-# Offline Windows Server installation (monitoring preview)
+# Offline Windows Server installation (Kafdeck 1.0.0)
 
-This preview includes Kafdeck, Microsoft OpenJDK **21.0.13**, PostgreSQL **17.12**, Keycloak **26.8.1**, WinSW **2.12.0**, the Microsoft Visual C++ runtime installer, and the Kafka monitoring agent. No existing identity server, Java installation, .NET installation or Internet connection is required on the target server. The API is self-contained. This unsigned monitoring preview has its own download and does not replace the signed stable v0.9 distribution.
+This package includes Kafdeck **1.0.0**, Microsoft OpenJDK **21.0.13**, PostgreSQL **17.12**, Keycloak **26.8.1**, WinSW **2.12.0**, the Microsoft Visual C++ runtime installer, and the Kafka monitoring agent. No existing identity server, Java installation, .NET installation or Internet connection is required on the target server. The API is self-contained. The original signed native archive and its signature are included. The supplementary installer has a separate SHA256 inventory covering scripts and vendor media.
 
-Download the ZIP and its `.sha256` file from the [monitoring preview release](https://github.com/araditc/Kafdeck/releases/tag/monitoring-preview-20261115). Keep both files together. The checksum file is for verifying the outer ZIP; the installer verifies the extracted files against `bundle-manifest.json`.
+Download the ZIP and its `.sha256` file from the [1.0.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). Keep both files together. The checksum file is for verifying the outer ZIP; the installer verifies the extracted files against `bundle-manifest.json`.
 
 ## Requirements
 
@@ -17,14 +17,14 @@ Download the ZIP and its `.sha256` file from the [monitoring preview release](ht
 1. Copy the ZIP and checksum to the server. Verify the hash against the accompanying file:
 
    ```powershell
-   Get-FileHash C:\Downloads\kafdeck-offline-win-x64.zip -Algorithm SHA256
-   Get-Content C:\Downloads\kafdeck-offline-win-x64.zip.sha256
+   Get-FileHash C:\Downloads\kafdeck-offline-1.0.0-win-x64.zip -Algorithm SHA256
+   Get-Content C:\Downloads\kafdeck-offline-1.0.0-win-x64.zip.sha256
    ```
 
 2. After verifying the source and hash, unblock the downloaded ZIP in its Properties if Windows marked it as downloaded. Extract into a **new, empty** directory:
 
    ```powershell
-   Expand-Archive -LiteralPath C:\Downloads\kafdeck-offline-win-x64.zip -DestinationPath C:\Kafdeck-Setup
+   Expand-Archive -LiteralPath C:\Downloads\kafdeck-offline-1.0.0-win-x64.zip -DestinationPath C:\Kafdeck-Setup
    ```
 
 3. Open **Windows PowerShell → Run as administrator** and run:
@@ -42,7 +42,11 @@ Download the ZIP and its `.sha256` file from the [monitoring preview release](ht
 
 Ports can be selected for a fresh install, for example `./Install-Kafdeck.ps1 -IdentityPort 18443`. An existing installation resumes with its recorded ports. Never stop an unrelated process merely to free an installer port.
 
-The script refuses existing foreign services, tasks or a nonempty unknown target directory. It does not migrate an older Scheduled Task installation or overwrite an existing installation with another package. Do not extract a different package over an in-progress installation.
+Fresh installation requires an empty target directory. Use the upgrade command below for an existing Windows Services installation. Resume an interrupted first install with its original extracted package.
+
+## Upgrade an existing installation
+
+Run `Upgrade-Kafdeck.ps1` from the new extracted medium. It verifies the package, takes a cold backup, upgrades the application, checks all three services and restores the original installation if validation fails. See the [one-command upgrade guide](windows-offline-upgrade.md).
 
 ## Create the first administrator
 
@@ -117,6 +121,6 @@ Back up **config, secrets, state** and a consistent backup of the Keycloak Postg
 
 ## Validation record
 
-Automated evidence shipped in the ZIP covers real Java/PostgreSQL/Keycloak startup, TLS, first-owner creation without email verification, setup closure and temporary-admin removal. Focused checks cover WinSW parsing, registration parameters and masked account-bound credential input. A user reported successful installation and execution on Windows Server on **2026-11-15**, after the required runtime reboot. This is operator-reported acceptance; a full server reboot of all three installed services was not independently observed. Use the post-reboot check above on each target deployment.
+Historical component acceptance covers real Java/PostgreSQL/Keycloak startup, TLS, first-owner creation without email verification, setup closure and temporary-admin removal. Focused checks cover WinSW parsing, registration parameters and masked account-bound credential input. A user reported successful installation and execution on Windows Server on **2026-11-15**, after the required runtime reboot. The 2026-11-15 result is operator-reported acceptance of the original preview; a full server reboot of all three installed services was not independently observed. Use the post-reboot check above on each target deployment.
 
 See also the [Persian RTL guide](windows-offline-install.fa.md).

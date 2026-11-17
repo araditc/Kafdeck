@@ -1,0 +1,213 @@
+{
+  "indexDigest": "sha256:826c4d63b34c1c1197b3333481a50e3340897ab97f4bacba3ab7adebc0de9d4b",
+  "manifestSha256": "0cefda57cdef623f96739439b426a60321727ffebff2c1e4509feccc5a3f75bc",
+  "platforms": {
+    "amd64": {
+      "configDigest": "sha256:d255030d23ed58101cf235756fd6730a5cd8009b93ac7c3f7af8f63ece30de0b",
+      "layers": [
+        {
+          "digest": "sha256:fd4eee9077660515033c137e8084ddd4120678ef93c1fb35da3fb6da4446db53",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 31456771
+        },
+        {
+          "digest": "sha256:734126691da775567229ad118bef1a001b6bc9871ce7a44286d959388578a971",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 17167198
+        },
+        {
+          "digest": "sha256:f114a316aaad16d9b77709445c9d91a30107104c2f398f84b4c352ab233044ac",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 3611
+        },
+        {
+          "digest": "sha256:4a24e434c4859b6e60d08b9536f86ddf69b6ef63b4628ebf8a49221e002e8683",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 37603376
+        },
+        {
+          "digest": "sha256:8096913cc4ddaef66e68ca22727f807a16c3a861a35314cfe1fae3c033b0f466",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 163
+        },
+        {
+          "digest": "sha256:eba17da862f51406b29bbc2768fe7d7a4a97a145d17784ed0118d35311e1f33c",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 13115016
+        },
+        {
+          "digest": "sha256:c9098690c7dff0a7afae4f517bdaf312cd4a95a7c3a46bb5d18b339d07747505",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 76166
+        },
+        {
+          "digest": "sha256:71d613a67264afebe5e1c8706cebca69fc81ec8da638585fe4e46032fe95ddef",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 97
+        },
+        {
+          "digest": "sha256:1cc7d78ddefccc2b211f859844042173c27ab49aeed6b41cfaa80e30901de8ff",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 67822693
+        },
+        {
+          "digest": "sha256:f86e4dd1d54f2cca186f2f634f6b6e3a4ad7172b088a4ff3c6118ae46b20925e",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 327505
+        }
+      ],
+      "manifestDigest": "sha256:414d712a7f672ba41bcef4c79f7e2753a5278182b2ddd4744c43363b016e05ce",
+      "manifestSize": 1818,
+      "signedUncompressedLayerDiffIds": [
+        "sha256:2a1540e17053e0aeaa9f63faf49c0d9f521fad78dffef178cc8a8ae410317b7e",
+        "sha256:50fb3b081b3d31e19e1eb97a38a724b0c1b06f81cfedc3bdc3341fa088a39d09",
+        "sha256:5a20d494b82e7782826e43f6e2e72ab6ee3c134b97846f4a0b3f495a068a74a2",
+        "sha256:b650975a0925365091928bd09e9eaeabe8ce3ac827b0957e38d4db8395100fd6",
+        "sha256:2359926d619672e10a53f6d56520bb5d7330752ac7f527dffb13d2b4122a0249",
+        "sha256:d5aa249d0753c1df063a273c97f02788428a637d4a941756cf9e84f962b4e698",
+        "sha256:e76e4d8ea6b6a07d8537e688877e406ba5e4113e294f95cfa5653f9b511d3926",
+        "sha256:161d34542661a88f6eb01e4d601a6cdfd1d2e4c70268abe494998dbf7e28f0c8",
+        "sha256:11d9112dff79623b8a21e6422256f9ad15794c8d39be286a1d42c53ba3538b0f",
+        "sha256:d5b0709c594ee07d650bc384cba4f17e255c8ec857c2d8c991872d7ef06e747c"
+      ]
+    },
+    "arm64": {
+      "configDigest": "sha256:72cf4e6c6277edbfb1fbb6cacdd9c81144f79327a0acff28612aa2f028088b13",
+      "layers": [
+        {
+          "digest": "sha256:5b8f88ca09ba86b44856afaea3209789fe4a96c6782b29c4dcd1ffe588c0c50a",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 30546189
+        },
+        {
+          "digest": "sha256:717d4bdbf596026371694c35efebb3344c0d338c4de6409693ab85b1732a460d",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 17112528
+        },
+        {
+          "digest": "sha256:1c26a59d6d54bd16776c108701dee90f1227012b239267b19c965311738aa333",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 3615
+        },
+        {
+          "digest": "sha256:0a913e6703bb0cbb04d7df6f7de0d8c482307ed3fc6fc0a40eb66afd9744c19b",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 35176143
+        },
+        {
+          "digest": "sha256:e1a0cf3cc49c535d14069a4882365017644ccdb93ae2d451013c1af8d901283e",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 161
+        },
+        {
+          "digest": "sha256:0a9d1aba6170d2dca1bb5dcdc8252855e8027832450f70d725d149ccc57fb4d2",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 12567867
+        },
+        {
+          "digest": "sha256:333ec0302736785dc7d66aa6519e0dcd1eebd4e3c2b506e91de0a269bd62c0f1",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 76194
+        },
+        {
+          "digest": "sha256:4e9db15664b8d12a4c70a0b27647f9b2a450d056671568cdd3919f7d8d01289a",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 97
+        },
+        {
+          "digest": "sha256:17ec27e8af2cadd023b159fc8bb4d9a477f9e69b5a1427360cfee316583e838a",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 67850208
+        },
+        {
+          "digest": "sha256:70d12a10b139afd24b6822e2831df8e9b96c06395a7e616edb1c6c72fff6a396",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 327507
+        }
+      ],
+      "manifestDigest": "sha256:0b2f4dee59088cedb0f308fc08f70781622565023e6097d8af7e404d6cc62560",
+      "manifestSize": 1818,
+      "signedUncompressedLayerDiffIds": [
+        "sha256:d142c034da13bc1892cec64571cb8f2263102deed173eaf1a82649f3ac52111d",
+        "sha256:aa71a98d87aa08881b65b2b2635e35f89c41a13cbb15c1fb82c5bfd4ec7d1168",
+        "sha256:a565359abc9089ba8ccd4897d25b8f23f5283c208a6e7629c24a7abb63a0a552",
+        "sha256:90796ebdc34f6b41e00842af3478802f09ffac588ffaf78ff7ea9f3bd3d56d43",
+        "sha256:e1b33a458c54a64ac71d0b5c3612c236355310e06b7ab8c7b21a7c159e67359b",
+        "sha256:3edd30dec48e68761b343623a0eba613eddf24f089b5c5ed4530107a907f1059",
+        "sha256:a79a8916523925926c9722ba5363d9fcf29dce811d90a1438f4199bf24df971a",
+        "sha256:bf90b1f046da81da7050b2fa72fcf9cfe831293c90ee5243fe4e6d6bbd13c63b",
+        "sha256:7092335f6969bfe1a4823577079686a66bcddb3fe79104626488760f8086262b",
+        "sha256:835259a4d332d9b7e4ab257bd5f36e8b9e76dc19576fb9626bb6f69c866599da"
+      ]
+    }
+  },
+  "published": true,
+  "publisherCommit": "a7e4953d1d38fd2ce13cc214c2a4a41da6c9b715",
+  "registryTagSnapshotPreserved": true,
+  "registryVisibility": {
+    "packageId": 15216057,
+    "visibility": "private"
+  },
+  "release": "https://github.com/araditc/Kafdeck/releases/tag/v1.0.0",
+  "remoteAssetsVerified": {
+    "SHA256SUMS": "3e7743bfb14208e81ea313926030dda7e64737588c11494d7960d64a081f699e",
+    "kafdeck-1.0.0-full-distribution.zip": "2562a7650fa4c2b4fdc56b392ab0f16077af53d8869cb03231d38f47c7ab5698",
+    "manifest.json": "0cefda57cdef623f96739439b426a60321727ffebff2c1e4509feccc5a3f75bc",
+    "manifest.sigstore.json": "8f228dc679edc4217a6ae5206d3781834ee69ab4be98e4a266b1d57c4c337590",
+    "media__helm__helm-lifecycle.json": "9c254a56826d91548e1fc9a786b54d53ad0444b754cf16e19896047a0a61cdbb",
+    "media__helm__kafdeck-1.0.0.tgz": "1efe012e244bc811071923828034657ab3b1d06ce48537536a57c8c2827b58df",
+    "media__integrations__mcp__Kafdeck.Mcp.1.0.0.nupkg": "7ebda42c310c210335ef437c5a13d47791b19ea668403f3705a651121577adbc",
+    "media__integrations__terraform__build-modules.txt": "4fb27b7e17d6daf99f172db7742be6db58e7ba3199339dfca9253e76e63ebd70",
+    "media__integrations__terraform__terraform-provider-kafdeck_0.8.0_SHA256SUMS": "a39a526693b89120b5576daa9c43cb17492a56b50d3a4486ed5dbaad09228b12",
+    "media__integrations__terraform__terraform-provider-kafdeck_0.8.0_darwin_amd64.zip": "cc68890f39837362ba50624f889d40500aa818776cfeb33c3e9d924c234fd5fb",
+    "media__integrations__terraform__terraform-provider-kafdeck_0.8.0_darwin_arm64.zip": "ad3869fd1e954ce9521320dff5d85ac141a77255a600c61d4e40c98c4d098f49",
+    "media__integrations__terraform__terraform-provider-kafdeck_0.8.0_linux_amd64.zip": "f61c8820a93919ae3e876a81d55eeccbe1e726d84fe057725ef5ac0eebba6ac6",
+    "media__integrations__terraform__terraform-provider-kafdeck_0.8.0_linux_arm64.zip": "4aa581ced02323250d2d9c6df14ee19553a15ddf903b4b3658f33436d2dbea60",
+    "media__integrations__terraform__terraform-provider-kafdeck_0.8.0_windows_amd64.zip": "c1c4161cb560d6e0992ea9404af118ecc86a0fa69081d903f457f4db5ae11876",
+    "media__native__linux-arm64__kafdeck-api-ui-1.0.0-linux-arm64.tar.gz": "2800588d76c800d3145d57309c4466704340df503602815df2d255948dfc1396",
+    "media__native__linux-arm64__kafdeck-cli-1.0.0-linux-arm64.tar.gz": "e1d9f0a05269405d74fc7cb129835ba56fe700bf46f392153b5e76c8723121b3",
+    "media__native__linux-arm64__kafdeck-mcp-1.0.0-linux-arm64.tar.gz": "7a80b8c3b36679a2e31eb474fd960ff14616200d5fe876bfedfd21f0db5e52ae",
+    "media__native__linux-arm64__native-evidence.json": "8f726d48fb959b2659578db271599b0e04d9179239bfe48c8c1be2bec0997a7f",
+    "media__native__linux-arm64__rc-manifest.json": "215e56c396059d01c56f418964305166c7207a8629f84e73727803ff0f4b781a",
+    "media__native__linux-x64__kafdeck-api-ui-1.0.0-linux-x64.tar.gz": "dd9bef0a4f5f134276d2ade16941646df97ad91137397dad1f906da6a41ca8c1",
+    "media__native__linux-x64__kafdeck-cli-1.0.0-linux-x64.tar.gz": "ec60a42ea411160170e96cea7c96af1a361f074a38a1f9de4034ce56f6dce2df",
+    "media__native__linux-x64__kafdeck-mcp-1.0.0-linux-x64.tar.gz": "8f87addc5573c8849eb57b75ae51c02933b2904eb742948969d029652c46eaa7",
+    "media__native__linux-x64__native-evidence.json": "b701e782318dd5eb1faecd79c4f5b214ff9a311a347e5978c5a1547e10613c04",
+    "media__native__linux-x64__rc-manifest.json": "d0446cf11feb0253e53d6f59d63b6357a387820c65ed2b470a0b54d6c0cf75d7",
+    "media__native__osx-arm64__kafdeck-api-ui-1.0.0-osx-arm64.tar.gz": "2fd5aaf6a685daf6efb84ace336bfd93facc62f2af59418dde286e0e7645b0df",
+    "media__native__osx-arm64__kafdeck-cli-1.0.0-osx-arm64.tar.gz": "489b1886c064b864755bbcfa1a1bba94971d970ddc6188be1479a45c542b9c28",
+    "media__native__osx-arm64__kafdeck-mcp-1.0.0-osx-arm64.tar.gz": "7cbb94dda05c5903b16993fe29f229e1b9b4a384726d06a92a9b4f5f2a7c0453",
+    "media__native__osx-arm64__native-evidence.json": "64bedf04fa5cae0a069084b96836c0b3117443bbe79bd85b66e4e3f708d4cc5e",
+    "media__native__osx-arm64__rc-manifest.json": "4e888c80b9b1b442c0d500413aec124621430718f8fab951f489ce2ce2ba9206",
+    "media__native__osx-x64__kafdeck-api-ui-1.0.0-osx-x64.tar.gz": "7e06f96da5f8552ad9e232916588758e16f3fede08ea514fca803c88b72f99bc",
+    "media__native__osx-x64__kafdeck-cli-1.0.0-osx-x64.tar.gz": "9f897a49ab9c3d7c30388c9a944b8d7478ba194105a70309950280b0f95dfb44",
+    "media__native__osx-x64__kafdeck-mcp-1.0.0-osx-x64.tar.gz": "2c5e7cc7359c8668d7d203c07f8fcc2cdeabb4d0829aae9a7640d9dd899dca4c",
+    "media__native__osx-x64__native-evidence.json": "aceadfad92e5ae43d52008b9efd7e9e6f5a57eccb0b0b6e32ea54c0d7cefbdc7",
+    "media__native__osx-x64__rc-manifest.json": "a9c69717c8ed96be95fdb393ed77b83aa49d34da0a492e4ad4b34fed3d4b6973",
+    "media__native__win-x64__kafdeck-api-ui-1.0.0-win-x64.tar.gz": "bd8007b74015e74079d5ef3f04c2ce1a48088913d02fe62523e77b6ffd7b7075",
+    "media__native__win-x64__kafdeck-cli-1.0.0-win-x64.tar.gz": "6870cba57de1e9da10b45893810ebbd8864ec8ffacca8abfd5c227b0a81dc81d",
+    "media__native__win-x64__kafdeck-mcp-1.0.0-win-x64.tar.gz": "0b8888156bfcda6af29d4dc30847d4b022724dd5aa53a7ae1aa5f73c7b5a7585",
+    "media__native__win-x64__native-evidence.json": "e22341e621146b71f762ba737d28ddbff6b0f0f098aa361eb8482f27e65e595a",
+    "media__native__win-x64__rc-manifest.json": "9c116711304888470fd348b38928d34e3fc3970c01a20a6004624d4744734930",
+    "media__oci__amd64__kafdeck-linux-amd64.docker.tar.gz": "3ac9931471c670a7be224620949a5b66abb8cb4edf7a4e5f4eae4164cbe28a59",
+    "media__oci__amd64__oci-native-startup.json": "e52443b1b96992e6c8f5f19a90a301563deabcdda2989e9835a716bb33b82474",
+    "media__oci__amd64__sbom.spdx.json": "f2d16d5c652cf6e8eeabc539e918bfe7a600443910665bcb404f731ed4f225a4",
+    "media__oci__amd64__trivy-results.sarif": "59a24479d5ca0baddb14a698496952ca576566926680757837b2f7cdfe7dcf07",
+    "media__oci__arm64__kafdeck-linux-arm64.docker.tar.gz": "38afd27f5cb3e138cf6bd43467a58209a008260e3401d45e6671d1114e61ebb9",
+    "media__oci__arm64__oci-native-startup.json": "51c1d5c449eeb042dd7f2b8164ef786d6c14fc528849abf8b9d7d7dacf805ac2",
+    "media__oci__arm64__sbom.spdx.json": "b6a94ebdd48041de1e6a7fe54cdbff718222f2006937a4d020b3ef7b792a6f64",
+    "media__oci__arm64__trivy-results.sarif": "b4c7bc630e355bf62b13b431089a070d114b6d4bd7f7ca855ada825997931166",
+    "publication-selection.json": "00633b314cbf650fb56049e538205bd45f04da538c3cafb42965efcc58a46c5b",
+    "release-notes.md": "9006c48ac0ee5695c5ae7818efc25926cbe10b471e823b08819759d6c7e96b83",
+    "trusted-root.json": "0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724"
+  },
+  "remoteImageConfigsAndLayersVerified": true,
+  "source": "0617a87ddc176b8255ca1452fc53c097008d9a51",
+  "tag": "v1.0.0",
+  "publicationRun": "https://github.com/araditc/Kafdeck/actions/runs/44160652345",
+  "initialDraftRecovery": {
+    "failedRun": 44154195135,
+    "fixPr": 495,
+    "verifiedOriginalAssets": 50
+  }
+}

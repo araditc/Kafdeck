@@ -30,13 +30,13 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **v0.9 was released on 2026-11-12.** See the [official release](https://github.com/araditc/Kafdeck/releases/tag/v0.9), [installation guide](docs/operator/v0.9-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [Exact release evidence](docs/implementation/evidence/v0.9-release-published-20261112.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
+> **Stable v1.0.0 is released.** See the [official release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0), [installation guide](docs/operator/v1.0-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [Exact release evidence](docs/implementation/evidence/v1.0-release-published-20261117.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
 
-For the **monitoring preview**, download the [offline Windows Server bundle and Java agent](https://github.com/araditc/Kafdeck/releases/tag/monitoring-preview-20261115). The [English offline guide](docs/operator/windows-offline-install.md) covers bundled Java/PostgreSQL/Keycloak, automatic Windows Services and first-admin setup. The [Java agent guide](docs/operator/kafka-agent.md) includes installation, Docker/Windows configuration and [source code](tools/kafka-agent/). This preview is distributed separately from stable v0.9.
+For **offline Windows Server installation and upgrades**, download the [offline Windows Server bundle and Java agent](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). The [English offline guide](docs/operator/windows-offline-install.md) covers bundled Java/PostgreSQL/Keycloak, automatic Windows Services and first-admin setup. The [Java agent guide](docs/operator/kafka-agent.md) includes installation, Docker/Windows configuration and [source code](tools/kafka-agent/). Upgrade an existing installation with [one PowerShell script](docs/operator/windows-offline-upgrade.md).
 
 ![Kafdeck monitoring dashboard with CPU, GC, request queue latency, metadata response time and partition health charts](docs/images/monitoring-overview.png)
 
-*Monitoring preview with live observations from a three-broker Kafka cluster. Chart availability depends on the configured sources and Kafka/JVM metrics.*
+*Monitoring dashboard with live observations from a three-broker Kafka cluster. Chart availability depends on the configured sources and Kafka/JVM metrics.*
 
 ## Why Kafdeck?
 
@@ -53,7 +53,7 @@ For the capability roadmap and release history, see [ROADMAP.md](ROADMAP.md) and
 
 ## Feature matrix
 
-The sections below describe **v0.9 capabilities**, retaining explicit provider and authorization boundaries. The [Roadmap](ROADMAP.md) records capability history and future direction.
+The sections below describe **v1.0 capabilities**, retaining explicit provider and authorization boundaries. The [Roadmap](ROADMAP.md) records capability history and future direction.
 
 ### Cluster and broker operations
 
@@ -226,13 +226,13 @@ A typical request flows like this:
 
 ## Getting started
 
-1. [Install v0.9](docs/operator/v0.9-installation-guide.md) using Docker/Podman, a native archive or Helm. Verify signed media, configure HTTPS and persistent state, and prepare a dedicated Keycloak realm.
+1. [Install v1.0.0](docs/operator/v1.0-installation-guide.md) using Docker/Podman, a native archive or Helm. Verify signed media, configure HTTPS and persistent state, and prepare a dedicated Keycloak realm.
 2. [Issue the one-time setup code and create the first administrator](docs/operator/managed-identity-setup.md). The code expires after 15 minutes; initial setup does not require email verification.
 3. Sign in through Keycloak. Open **Kafka connections**, enter the brokers and Kafka authentication, **Test connection**, then save/open the successful target.
 4. The target appears in the cluster selector and opens **Topics**. Follow the [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md) for topics/messages, consumers/offsets, Schemas, Kafka Connect and ksqlDB.
 5. Use **Manage users** to create users and assign roles/clusters. Kafka ACLs and governed mutation controls remain separate from sign-in.
 
-The [installation guide](docs/operator/v0.9-installation-guide.md) includes image access, native content/web roots, persistent storage, signed/offline verification and deployment-tested egress requirements. An [optional static-cluster Token-mode evaluation](docs/operator/static-token-evaluation.md) is available for isolated laboratories.
+The [installation guide](docs/operator/v1.0-installation-guide.md) includes image access, native content/web roots, persistent storage, signed/offline verification and deployment-tested egress requirements. An [optional static-cluster Token-mode evaluation](docs/operator/static-token-evaluation.md) is available for isolated laboratories.
 
 ## Building from source
 
@@ -868,7 +868,7 @@ The roadmap is public and capability-driven:
 
 [**View the Kafdeck Roadmap →**](ROADMAP.md)
 
-v0.9 is [released](https://github.com/araditc/Kafdeck/releases/tag/v0.9) with governance, managed onboarding, dashboard workflows, hardening and verified distribution/recovery. Future scope remains owner-governed; v1.0 stability is a roadmap theme, not an automatically authorized implementation plan.
+v0.9 is [released](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0) with governance, managed onboarding, dashboard workflows, hardening and verified distribution/recovery. Future scope remains owner-governed; v1.0 stability is a roadmap theme, not an automatically authorized implementation plan.
 
 Nothing in the roadmap should be interpreted as currently available until it is implemented, validated, and released.
 
