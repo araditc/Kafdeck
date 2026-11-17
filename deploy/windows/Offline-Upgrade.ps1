@@ -1,6 +1,35 @@
 ﻿# Windows PowerShell 5.1 transaction primitives. Service adapters are supplied by Upgrade-Offline.ps1.
 $OfflineUpgradeFolders = @('app','scripts','docs','agent','config','secrets','state','runtime','services','public')
 
+function Assert-UpgradeConfiguration([object]$Settings, [string]$Root) {
+    foreach ($property in $Settings.PSObject.Properties) {
+        if ($null -eq $property.Value) { continue }
+        if ($property.Value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+            Assert-UpgradeConfiguration $property.Value $Root
+        } elseif ($property.Value -is [array]) {
+            foreach ($item in $property.Value) {
+                if ($null -ne $item -and $item.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') { Assert-UpgradeConfiguration $item $Root }
+            }
+        } elseif ($property.Value -is [string]) {
+            $value = $property.Value
+            if ($property.Name -match 'ConnectionString' -and $value) { throw 'External database configuration requires its own consistent backup plan.' }
+            $isFileReference = $value.StartsWith('file:')
+            if ($isFileReference) { $value = $value.Substring(5) }
+            if (!$value -or $value.StartsWith('env:')) { continue }
+            if ($isFileReference -or [IO.Path]::IsPathRooted($value) -or $property.Name -match '(Path|Directory|File)$') {
+                if (![IO.Path]::IsPathRooted($value)) { $value = Join-Path (Join-Path $Root 'config') $value }
+                $path = [IO.Path]::GetFullPath($value).TrimEnd('\')
+                $covered = $false
+                foreach ($folder in $OfflineUpgradeFolders) {
+                    $directory = [IO.Path]::GetFullPath((Join-Path $Root $folder))
+                    if ($path -eq $directory -or $path.StartsWith($directory+'\',[StringComparison]::OrdinalIgnoreCase)) { $covered = $true; break }
+                }
+                if (!$covered) { throw "Configured path is outside the cold snapshot: $($property.Name)." }
+            }
+        }
+    }
+}
+
 function Write-UpgradeJournal([string]$Path, [object]$Value) {
     $bytes = [Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Depth 12))
     $temporary = $Path + '.new'

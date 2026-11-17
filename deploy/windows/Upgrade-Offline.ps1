@@ -52,18 +52,16 @@ try {
         (Get-Content -LiteralPath (Join-Path $InstallRoot 'state/postgresql/PG_VERSION') -Raw).Trim() -ne '17' -or
         !(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'runtime/keycloak/lib/lib/main') -Filter '*keycloak-core-26.8.1.jar')) { throw 'This package requires the admitted Java 21.0.13 / PostgreSQL 17 / Keycloak 26.8.1 stack. Use a release with an explicit vendor migration for other stacks.' }
     $settings = Get-Content -LiteralPath (Join-Path $InstallRoot 'config/appsettings.Production.json') -Raw | ConvertFrom-Json
-    function Check-LocalState($Value) {
-        foreach ($property in $Value.PSObject.Properties) {
-            if ($property.Value -is [pscustomobject]) { Check-LocalState $property.Value }
-            elseif ($property.Value -is [string]) {
-                $valueText = $property.Value
-                if ($property.Name -match 'ConnectionString' -and $valueText) { throw 'External database configuration requires its own consistent backup plan.' }
-                if ($valueText.StartsWith('file:')) { $valueText = $valueText.Substring(5) }
-                if ([IO.Path]::IsPathRooted($valueText) -and !$valueText.StartsWith($InstallRoot+'\',[StringComparison]::OrdinalIgnoreCase)) { throw "Configured state outside installation: $($property.Name)." }
+    Assert-UpgradeConfiguration $settings $InstallRoot
+    # Windows Services inherit machine configuration and the installation identity.
+    foreach ($scope in @('Machine','User')) {
+        $overrides = [Environment]::GetEnvironmentVariables($scope)
+        foreach ($name in $overrides.Keys) {
+            if ($name -like 'Kafdeck__*' -or $name -like 'ConnectionStrings__*') {
+                Assert-UpgradeConfiguration ([pscustomobject]@{([string]$name)=[string]$overrides[$name]}) $InstallRoot
             }
         }
     }
-    Check-LocalState $settings
     $localIdentity = Get-Content -LiteralPath (Join-Path $InstallRoot 'config/local-keycloak.json') -Raw | ConvertFrom-Json
     if ($localIdentity.home -ne (Join-Path $InstallRoot 'runtime/keycloak') -or $localIdentity.javaHome -ne (Join-Path $InstallRoot 'runtime/java')) { throw 'Identity runtime directories differ from the bundled installation.' }
     $identityConfig = Get-Content -LiteralPath (Join-Path $InstallRoot 'config/keycloak.conf')

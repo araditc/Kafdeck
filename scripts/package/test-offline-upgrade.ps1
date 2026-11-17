@@ -88,6 +88,16 @@ Scenario 'exclusive-lock' {
         catch { Assert ($_.Exception.Message -ne 'Lock failed') 'Concurrent upgrade was admitted' }
     } finally { $handle.Dispose() }
 }
+Scenario 'configured-path-snapshot-coverage' {
+    Assert-UpgradeConfiguration ([pscustomobject]@{DatabasePath=(Join-Path $root 'state/history.sqlite')}) $root
+    Assert-UpgradeConfiguration ([pscustomobject]@{StateFile='../state/identity.json'}) $root
+    foreach ($path in @((Join-Path $root 'data/history.sqlite'), (Join-Path $root 'state/../../external.db'), '../../external.db')) {
+        try { Assert-UpgradeConfiguration ([pscustomobject]@{DatabasePath=$path}) $root; throw "Expected rejection for $path" }
+        catch { Assert ($_.Exception.Message -like 'Configured path is outside the cold snapshot:*') $_.Exception.Message }
+    }
+    try { Assert-UpgradeConfiguration ([pscustomobject]@{Profiles=@([pscustomobject]@{Path=(Join-Path $root 'custom/private.key')})}) $root; throw 'Expected rejection' }
+    catch { Assert ($_.Exception.Message -like 'Configured path is outside the cold snapshot:*') $_.Exception.Message }
+}
 $errors = @()
 foreach ($file in Get-ChildItem (Join-Path $repo 'deploy/windows') -Filter '*.ps1') {
     $tokens = $null; $parseErrors = $null
