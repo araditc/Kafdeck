@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 [CmdletBinding()]
 param(
     [string]$InstallRoot='C:\Kafdeck',
@@ -52,7 +52,7 @@ if(Test-Path -LiteralPath $receiptFile){
     foreach($name in @('Kafdeck-PostgreSQL','Kafdeck-Keycloak','Kafdeck')){if(Get-Service -Name $name -ErrorAction SilentlyContinue){throw "Service $name already exists."}}
     if(([IO.DriveInfo]::new([IO.Path]::GetPathRoot($InstallRoot))).AvailableFreeSpace -lt 4GB){throw 'At least 4 GB free space is required for installation.'}
     New-Item -ItemType Directory -Force -Path $InstallRoot,(Join-Path $InstallRoot 'config')|Out-Null
-    $receipt=[pscustomobject]@{root=$InstallRoot;userSid=$identity.User.Value;userName=$identity.Name;packageHash=$packageHash;address=$ServerAddress;appPort=$AppPort;identityPort=$IdentityPort;databasePort=$DatabasePort;origin="https://${ServerAddress}:$AppPort";identityOrigin="https://${ServerAddress}:$IdentityPort";networks=$networks;allowedClientNetworks=$AllowedClientNetworks;phase='created'}
+    $receipt=[pscustomobject]@{root=$InstallRoot;userSid=$identity.User.Value;userName=$identity.Name;packageHash=$packageHash;address=$ServerAddress;appPort=$AppPort;identityPort=$IdentityPort;databasePort=$DatabasePort;origin="https://${ServerAddress}:$AppPort";identityOrigin="https://${ServerAddress}:$IdentityPort";networks=$networks;allowedClientNetworks=$AllowedClientNetworks;phase='created';version=$manifest.version}
     $receipt|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $receiptFile -Encoding utf8
 }
 function Save-Phase([string]$Phase){$receipt.phase=$Phase;$receipt|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $receiptFile -Encoding utf8;Write-Host $Phase}

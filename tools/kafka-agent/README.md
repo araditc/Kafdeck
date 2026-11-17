@@ -2,7 +2,7 @@
 
 Java source: [`src/org/kafdeck/monitoring/KafkaMonitoringAgent.java`](src/org/kafdeck/monitoring/KafkaMonitoringAgent.java).
 
-Read the [complete agent installation, security, Docker/Windows, verification and build guide](../../docs/operator/kafka-agent.md). Download the JAR/source bundle from the [monitoring preview](https://github.com/araditc/Kafdeck/releases/tag/monitoring-preview-20261115).
+Read the [complete agent installation, security, Docker/Windows, verification and build guide](../../docs/operator/kafka-agent.md). Download the JAR/source bundle from the [1.0.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0).
 
 The packaged agent targets Java 11 bytecode and is tested on Java 21. It runs within the Kafka JVM, reads local JMX metrics and sends bounded batches to Kafdeck over HTTPS. Create one dashboard source/token per broker. Do not commit tokens or private keys. See [agent.properties.example](agent.properties.example) for a template, not a working credential.
 

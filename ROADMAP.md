@@ -1,6 +1,6 @@
 # Kafdeck Product Roadmap
 
-Status: **Gates 0–9 accepted; v0.1–v0.9 released; v0.9 is the active release line**
+Status: **Gates 0–9 accepted; v0.1–v1.0 released; v1.0 is the active release line**
 Baseline approval: **Gate 0 — 2026-09-16**  
 v0.1 design approval: **Gate 1 — 2026-09-16**  
 Long-term capability roadmap approval: **Gate 2 — 2026-09-16**
@@ -268,7 +268,9 @@ Extension model:
 
 ## v1.0 — Stable Release
 
-The owner requested the [bounded v1.0 checklist](docs/releases/v1.0-readiness-checklist.md) and [targeted code-gap audit](docs/implementation/v1.0-code-gap-audit.md) on 2026-11-13; tracker [#469](https://github.com/araditc/Kafdeck/issues/469). This is stabilization planning against the existing criteria below, not new feature scope or publication authorization.
+**RELEASED.** [Stable 1.0.0](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0) passed V1-0–V1-7. [Publication evidence](docs/implementation/evidence/v1.0-release-published-20261117.json) records the signed source, 50 verified original assets and registry digests. The original criteria follow.
+
+The owner requested the [bounded v1.0 checklist](docs/releases/v1.0-readiness-checklist.md) and [targeted code-gap audit](docs/implementation/v1.0-code-gap-audit.md) on 2026-11-13; tracker [#469](https://github.com/araditc/Kafdeck/issues/469). The bounded stabilization and publication are complete. Version 1.1 host management follows its separately accepted RFC and issues.
 
 v1.0 requires:
 - Stable public contracts or an explicit compatibility policy

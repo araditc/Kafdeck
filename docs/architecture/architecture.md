@@ -1,6 +1,6 @@
 # Kafdeck architecture
 
-Status: **Gate 0 baseline retained; current v0.9 overview below**. The [ADR index](../adr/README.md), [runtime contracts](v0.9-governance-contracts.md) and [release record](../implementation/evidence/v0.9-release-published-20261112.json) distinguish original decisions from released acceptance.
+Status: **Gate 0 baseline retained; current v1.0 overview below**. The [ADR index](../adr/README.md), [runtime contracts](v0.9-governance-contracts.md) and [release record](../implementation/evidence/v1.0-release-published-20261117.json) distinguish original decisions from released acceptance.
 
 ## 1. Architecture style
 

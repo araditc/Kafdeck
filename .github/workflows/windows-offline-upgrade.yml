@@ -1,0 +1,26 @@
+name: windows-offline-upgrade
+on:
+  pull_request:
+    paths: ['deploy/windows/**', 'scripts/package/**', '.github/workflows/windows-offline-upgrade.yml']
+  push:
+    branches: [main]
+    paths: ['deploy/windows/**', 'scripts/package/**', '.github/workflows/windows-offline-upgrade.yml']
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise upgrade, rollback, interruption and ACL copies
+        shell: powershell
+        run: ./scripts/package/test-offline-upgrade.ps1
+      - name: Exercise real Windows Services and locked database recovery
+        shell: powershell
+        run: ./scripts/package/test-offline-upgrade-services.ps1
+      - name: Parse the offline media builder
+        shell: powershell
+        run: python -m py_compile scripts/package/build-windows-offline.py
