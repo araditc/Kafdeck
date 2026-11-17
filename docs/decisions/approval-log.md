@@ -418,3 +418,9 @@ This accepts policy and authorizes its finite inventory/compatibility implementa
 ## V1-6 RC full-distribution signing decision — 2026-11-17
 
 The product owner authorized signing the reviewed `1.0.0-rc.1` manifest in the release conversation. The scope was `full-distribution`, product source `da35a011081ad0b7cb73f3ca41cf5b90e5faceab`, manifest SHA256 `5c34ca4ea57092cab93fbdddf916da5ea1941710f0a7922a88b42896589957be`. The protected workflow matched the owner identity and exact decision string. Its isolated Sigstore verification succeeded. Stable publication requires a separate decision for the stable files. [Run and verification log](https://github.com/araditc/Kafdeck/actions/runs/44091309066/job/134068027592).
+
+## Stable 1.0.0 signature and publication authorization — 2026-11-17
+
+The owner approved signing the stable manifest `0cefda57cdef623f96739439b426a60321727ffebff2c1e4509feccc5a3f75bc` from product source `0617a87ddc176b8255ca1452fc53c097008d9a51`. Signing and network-isolated verification succeeded in [run 44134707888](https://github.com/araditc/Kafdeck/actions/runs/44134707888).
+
+The owner subsequently authorized official publication of this exact signed 1.0.0 distribution, finalizing its publication procedure on main, checking the tag, Release assets and registry digests, synchronizing local main and closing V1-7. The [stable publication decision](../releases/v1.0-stable-publication-decision.md) records the exact input and procedure. Product acceptance evidence is reused with its recorded identities and limits.
