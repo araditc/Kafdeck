@@ -29,7 +29,7 @@ def targets(source, rids):
             "g4-external-integration-packages": ("integrations", "integrations")}
 
 
-def check_image(folder, arch, source):
+def check_image(folder, arch, source, version):
     report = read(folder / "oci-native-startup.json")
     archive = folder / f"kafdeck-linux-{arch}.docker.tar.gz"
     require(report["sourceSha"] == source and report["architecture"] == arch
@@ -48,6 +48,9 @@ def check_image(folder, arch, source):
             and all(report[p][k] is True for p in ("startup", "restart")
                     for k in ("networkNone", "health", "staticFrontend")), "Missing isolated startup evidence")
     sbom, sarif = folder / "sbom.spdx.json", folder / "trivy-results.sarif"
+    if version == "1.0.0":
+        require(all(report[phase].get("packageVersion") == version for phase in ("startup", "restart")),
+                "Installed OCI application version mismatch")
     require(digest(sbom) == report["sbomSha256"] and read(sbom)["spdxVersion"].startswith("SPDX-"), "Invalid SBOM")
     scans = read(sarif)["runs"]
     require(digest(sarif) == report["scanSha256"] and scans and all(s["results"] == [] for s in scans),
@@ -57,7 +60,7 @@ def check_image(folder, arch, source):
 
 def check_media(media, policy, version):
     source = policy["source"]
-    chosen = v1_rc.selection()
+    chosen = v1_rc.selection(stable=version == "1.0.0")
     expected = set()
 
     def include(folder, names):
@@ -73,7 +76,7 @@ def check_media(media, policy, version):
     configs = {}
     for arch in ("amd64", "arm64"):
         folder = media / "oci" / arch
-        configs[arch] = check_image(folder, arch, source)
+        configs[arch] = check_image(folder, arch, source, version)
         include(folder, [f"kafdeck-linux-{arch}.docker.tar.gz", "oci-native-startup.json", "sbom.spdx.json", "trivy-results.sarif"])
 
     folder = media / "helm"
@@ -111,12 +114,18 @@ def check_media(media, policy, version):
             for p in sorted(expected, key=lambda path: path.relative_to(media).as_posix())]
 
 
+def image_config_digests(media):
+    return {arch: read(media / "oci" / arch / "oci-native-startup.json")["configDigest"]
+            for arch in ("amd64", "arm64")}
+
+
 def prepare(output, policy):
     require(not output.exists(), "Use a fresh output directory")
     source = policy["source"]
     subprocess.run(["git", "merge-base", "--is-ancestor", source, "HEAD"], check=True)
-    version = v1_rc.selection()["version"]
-    expected = targets(source, v1_rc.selection()["nativeRids"])
+    chosen = v1_rc.selection(stable=policy.get("version") == "1.0.0")
+    version = chosen["version"]
+    expected = targets(source, chosen["nativeRids"])
     receipts = []
     output.mkdir(parents=True)
     for kind, run_id in policy["runs"].items():
@@ -136,9 +145,24 @@ def prepare(output, policy):
             receipts.append({"artifact": name, "id": artifact["id"], "zipDigest": artifact["digest"],
                              "run": run_id, "attempt": run["run_attempt"], "workflow": RUNS[kind][1]})
     require(not expected, f"Missing artifacts: {list(expected)}")
-    write(output / "manifest.json", {"schemaVersion": 1, "repository": REPOSITORY, "version": version,
+    manifest = {"schemaVersion": 1, "repository": REPOSITORY, "version": version,
           "source": source, "scope": "full-distribution", "producers": sorted(receipts, key=lambda x: x["artifact"]),
-          "files": check_media(output / "media", policy, version)})
+          "files": check_media(output / "media", policy, version)}
+    if version == "1.0.0":
+        manifest["nativeInputSha256"] = policy["nativeInputSha256"]
+        manifest["imageConfigDigests"] = image_config_digests(output / "media")
+    write(output / "manifest.json", manifest)
+
+
+def stable_policy(run_ids):
+    require(re.fullmatch(r"[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*", run_ids), "Expected native,distribution,integrations run IDs")
+    runs = dict(zip(("native", "distribution", "integrations"), map(int, run_ids.split(",")), strict=True))
+    run = api(f"actions/runs/{runs['native']}")
+    source = run["head_sha"]
+    require(re.fullmatch(r"[0-9a-f]{40}", source) and validate_run(run, source, RUNS) == "native", "Invalid native source")
+    projection = v1_rc.inputs(revision=source, stable=True)
+    return {"source": source, "version": "1.0.0", "runs": runs,
+            "nativeInputSha256": hashlib.sha256(v1_rc.canonical(projection)).hexdigest()}
 
 
 def main():
@@ -146,15 +170,21 @@ def main():
     parser.add_argument("operation", choices=["prepare", "verify"])
     parser.add_argument("directory", type=Path)
     parser.add_argument("--manifest-sha256")
+    parser.add_argument("--stable-runs", help="Prepare stable media from three successful protected-main producers")
     args = parser.parse_args()
     policy = read(SELECTION)
     manifest = args.directory / "manifest.json"
     if args.operation == "prepare":
+        if args.stable_runs:
+            policy = stable_policy(args.stable_runs)
         prepare(args.directory, policy)
     else:
         require(digest(manifest) == args.manifest_sha256, "Manifest differs from independently pinned SHA256")
         value = read(manifest)
-        version = v1_rc.selection()["version"]
+        version = v1_rc.selection(stable=value["version"] == "1.0.0")["version"]
+        if version == "1.0.0":
+            policy = {"source": value["source"], "nativeInputSha256": value["nativeInputSha256"]}
+            require(value["imageConfigDigests"] == image_config_digests(args.directory / "media"), "Image digest inventory mismatch")
         require(value["source"] == policy["source"] and value["version"] == version and value["repository"] == REPOSITORY
                 and value["scope"] == "full-distribution" and value["files"] == check_media(args.directory / "media", policy, version),
                 "Selected media differs from manifest")

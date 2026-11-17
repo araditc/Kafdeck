@@ -8,13 +8,13 @@
       "kafdeck.infrastructure.configuration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0-rc.1, )"
+          "Kafdeck.Core": "[1.0.0, )"
         }
       },
       "kafdeck.modules.administration": {
         "type": "Project",
         "dependencies": {
-          "Kafdeck.Core": "[1.0.0-rc.1, )"
+          "Kafdeck.Core": "[1.0.0, )"
         }
       }
     },

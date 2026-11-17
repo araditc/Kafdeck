@@ -9,17 +9,18 @@ namespace Kafdeck.Architecture.Tests;
 public sealed class ReleaseIdentityTests
 {
     [Fact]
-    public void Packaged_versions_match_the_active_rc_without_rewriting_publication_history()
+    public void Packaged_versions_match_the_stable_build_without_rewriting_publication_history()
     {
         var root = FindRepositoryRoot();
 
         // release.json is the immutable v0.9 publication input, not the current
         // development build selector. Its independent historical checks below remain.
         using var selectionDocument = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(root, ".github", "release", "v1.0-rc.json")));
+            File.ReadAllText(Path.Combine(root, ".github", "release", "v1.0.json")));
         var selection = selectionDocument.RootElement;
         var expectedPackageVersion = selection.GetProperty("version").GetString()
                                      ?? throw new InvalidOperationException("RC version is missing.");
+        Assert.Equal("1.0.0", expectedPackageVersion);
         Assert.Equal("v" + expectedPackageVersion, selection.GetProperty("candidate").GetString());
         Assert.False(selection.GetProperty("signed").GetBoolean());
         Assert.False(selection.GetProperty("releaseReady").GetBoolean());

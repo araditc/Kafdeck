@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "candidate": "v1.0.0",
+  "version": "1.0.0",
+  "assemblyVersion": "1.0.0.0",
+  "mcpProtocol": "2025-06-18",
+  "terraformVersion": "0.8.0",
+  "nativeRids": [
+    "win-x64",
+    "linux-x64",
+    "linux-arm64",
+    "osx-x64",
+    "osx-arm64"
+  ],
+  "nativeProducer": ".github/workflows/v1-rc-native.yml",
+  "signed": false,
+  "releaseReady": false,
+  "publicationAuthorized": false,
+  "scope": "Unsigned stable-version artifacts for exact-manifest owner signing review"
+}

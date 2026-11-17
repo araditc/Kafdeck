@@ -15,7 +15,13 @@ while (!deadline.IsCancellationRequested)
             using var index = await client.GetAsync("/", deadline.Token);
             if (index.StatusCode != HttpStatusCode.OK || !(await index.Content.ReadAsStringAsync(deadline.Token)).Contains("<html", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Offline frontend unavailable.");
-            Console.WriteLine("{\"networkNone\":true,\"health\":true,\"staticFrontend\":true,\"scope\":\"isolated startup only; external brokers and identity require separate fixtures\"}");
+            var productVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo("/app/Kafdeck.Api.dll").ProductVersion;
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                networkNone = true, health = true, staticFrontend = true,
+                packageVersion = productVersion?.Split('+')[0],
+                scope = "isolated startup only; external brokers and identity require separate fixtures"
+            }));
             return 0;
         }
     }
