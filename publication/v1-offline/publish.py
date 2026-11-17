@@ -66,7 +66,7 @@ def main():
     jdk = next((OUT / 'jdk').iterdir())
     native_name = 'media__native__win-x64__kafdeck-api-ui-1.0.0-win-x64.tar.gz'
     run('gh', 'release', 'download', TAG, '--repo', REPO, '--pattern', native_name, '--dir', str(OUT))
-    run('python', '-X', 'utf8', '--vendor-dir', str(OUT / 'vendor'), '--native-archive', str(OUT / native_name), '--jdk', str(jdk), '--output', str(OUT / 'package'))
+    run('python', '-X', 'utf8', 'scripts/package/build-windows-offline.py', '--vendor-dir', str(OUT / 'vendor'), '--native-archive', str(OUT / native_name), '--jdk', str(jdk), '--output', str(OUT / 'package'))
     package = OUT / 'package'
     run('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(package / 'bundle/Install-Kafdeck.ps1'), '-VerifyOnly')
     original = json.loads((ROOT / 'docs/implementation/evidence/v1.0-release-published-20261117.json').read_text())
