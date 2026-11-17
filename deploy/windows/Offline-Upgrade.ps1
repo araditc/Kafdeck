@@ -23,6 +23,7 @@ function Copy-UpgradeTree([string]$Source, [string]$Destination) {
     # Preserve PostgreSQL NetworkService ACLs and private DPAPI/configuration ACLs.
     & robocopy.exe $Source $Destination /E /COPY:DATS /DCOPY:DAT /XJ /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "Backup/copy failed ($LASTEXITCODE): $Source" }
+    $global:LASTEXITCODE = 0
 }
 
 function Get-UpgradeInventory([string]$Root) {

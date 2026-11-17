@@ -91,12 +91,17 @@ public sealed class ReleaseIdentityTests
         Assert.True(publication.RootElement.GetProperty("releaseReady").GetBoolean());
         Assert.Empty(publication.RootElement.GetProperty("missing").EnumerateArray());
         var readme = File.ReadAllText(Path.Combine(root, "README.md"));
-        foreach (var target in new[] { "ROADMAP.md", "docs/operator/v0.9-installation-guide.md",
+        foreach (var target in new[] { "ROADMAP.md", "docs/operator/v1.0-installation-guide.md",
                      "docs/operator/managed-identity-setup.md", "docs/operator/v0.9-dashboard-guide.md" })
         {
             Assert.Contains($"]({target})", readme, StringComparison.Ordinal);
             Assert.True(File.Exists(Path.Combine(root, target)));
         }
+        using var stable = JsonDocument.Parse(File.ReadAllText(Path.Combine(root,
+            "docs", "implementation", "evidence", "v1.0-release-published-20261117.json")));
+        Assert.True(stable.RootElement.GetProperty("published").GetBoolean());
+        Assert.Equal("v1.0.0", stable.RootElement.GetProperty("tag").GetString());
+        Assert.Contains("releases/tag/v1.0.0", readme, StringComparison.Ordinal);
         var notes = manifest.GetProperty("notes").GetString()!;
         Assert.Equal($"docs/releases/{selected}.md", notes);
         Assert.True(File.Exists(Path.Combine(root, notes)));
