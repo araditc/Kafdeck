@@ -1,6 +1,7 @@
 """Publish the separately checksummed Windows supplement from protected main."""
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,14 @@ def api(path):
 def sha(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def jar_payload(content):
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        names = archive.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError('Duplicate JAR entry')
+        return {name: hashlib.sha256(archive.read(name)).hexdigest() for name in sorted(names)}
 
 
 def authority():
@@ -99,7 +108,15 @@ def main():
         proof['assets'][name] = sha(package / name)
         assert remote[name] == 'sha256:' + proof['assets'][name]
     with zipfile.ZipFile(package / agent_names[0]) as archive:
-        assert hashlib.sha256(archive.read('kafdeck-kafka-agent.jar')).hexdigest() == sha(package / 'bundle/payload/agent/kafdeck-kafka-agent.jar')
+        published_jar = archive.read('kafdeck-kafka-agent.jar')
+    rebuilt_jar = package / 'bundle/payload/agent/kafdeck-kafka-agent.jar'
+    published_payload = jar_payload(published_jar)
+    assert published_payload == jar_payload(rebuilt_jar.read_bytes()), 'Agent JAR content differs'
+    proof['agentVerification'] = {
+        'publishedJarSha256': hashlib.sha256(published_jar).hexdigest(),
+        'rebuiltJarSha256': sha(rebuilt_jar),
+        'verifiedEntries': published_payload,
+    }
     provenance = package / 'windows-offline-1.0.0-provenance.json'
     provenance.write_text(json.dumps(proof, indent=2) + '\n', encoding='utf-8')
     assets.append(provenance)
