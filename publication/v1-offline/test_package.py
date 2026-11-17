@@ -1,6 +1,7 @@
 """Focused determinism checks for retrying supplementary Release uploads."""
 import ast
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import subprocess
@@ -12,8 +13,24 @@ spec = importlib.util.spec_from_file_location('offline_builder', path)
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 
+publisher_spec = importlib.util.spec_from_file_location('offline_publisher', Path(__file__).with_name('publish.py'))
+publisher = importlib.util.module_from_spec(publisher_spec)
+publisher_spec.loader.exec_module(publisher)
+
 
 class ArchiveIdentityTests(unittest.TestCase):
+    def test_agent_payload_verification_ignores_compression_but_detects_changed_entries(self):
+        jars = []
+        for compression, content in ((zipfile.ZIP_STORED, b'bytecode'), (zipfile.ZIP_DEFLATED, b'bytecode'), (zipfile.ZIP_DEFLATED, b'changed')):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w', compression=compression) as archive:
+                archive.writestr('Agent.class', content)
+                archive.writestr('META-INF/MANIFEST.MF', b'Premain-Class: Agent\r\n')
+            jars.append(buffer.getvalue())
+        self.assertNotEqual(jars[0], jars[1])
+        self.assertEqual(publisher.jar_payload(jars[0]), publisher.jar_payload(jars[1]))
+        self.assertNotEqual(publisher.jar_payload(jars[0]), publisher.jar_payload(jars[2]))
+
     def test_publisher_invokes_the_builder_entry_point(self):
         publisher = Path(__file__).with_name('publish.py')
         tree = ast.parse(publisher.read_text())
