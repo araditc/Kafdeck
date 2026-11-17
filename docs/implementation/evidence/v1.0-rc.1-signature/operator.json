@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0-rc.1",
+  "source": "da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+  "manifestSha256": "5c34ca4ea57092cab93fbdddf916da5ea1941710f0a7922a88b42896589957be",
+  "rid": "win-x64",
+  "apiArchiveSha256": "39c8654a000f82a549715bb64b03fef6b24d4e7c3743677ebf429d8d4956e168",
+  "installedFileCount": 408,
+  "distributionArtifact": 14331043678,
+  "database": "SQLite",
+  "brokerFixture": "Apache Kafka 4.3.1, single KRaft broker, two-partition topic",
+  "realKeycloak": true,
+  "firstOwnerViaBrowser": true,
+  "phases": [
+    {
+      "phase": "install",
+      "browser": "157.0.8103.52",
+      "keycloakLogin": true,
+      "ownerListed": true,
+      "savedConnectionVisible": true,
+      "clusterId": "connection-077d51050b4641699274b3f1569fbdff",
+      "topicRendered": "v17-operator-b45eb9",
+      "topicOpened": true,
+      "monitoring": {},
+      "route": "#topics"
+    },
+    {
+      "phase": "restart",
+      "browser": "157.0.8103.52",
+      "keycloakLogin": true,
+      "ownerListed": true,
+      "savedConnectionVisible": true,
+      "clusterId": "connection-077d51050b4641699274b3f1569fbdff",
+      "topicRendered": "v17-operator-b45eb9",
+      "topicOpened": true,
+      "monitoring": {
+        "Metadata response time": "kafdeck-metadata · 2026-11-17T13:48:07.000Z · 64.98 ms",
+        "Offline partitions": "kafdeck-metadata · 2026-11-17T13:48:07.000Z · 0 partitions",
+        "Under-replicated partitions": "kafdeck-metadata · 2026-11-17T13:48:07.000Z · 0 partitions"
+      },
+      "route": "#monitoring"
+    }
+  ],
+  "keycloakVersion": "26.8.1",
+  "fixtures": "Disposable loopback services. The application trusted a dedicated CA. Headless Chrome accepted the fixture certificate.",
+  "restart": "Kafdeck process restart with the same managed state, keys and SQLite database, fresh browser context and new Keycloak login.",
+  "diagnostics": [
+    "An incomplete Confluent lab classpath, an incorrectly named realm-import file and an expired legacy fixture certificate were corrected before the accepted run.",
+    "A browser assertion initially assumed a cluster query parameter after reopening the dashboard. The resumed restart observation used the cluster directory ID. The successful first-install session was retained."
+  ],
+  "screenshots": {
+    "operator-install.png": "754be19de60b1ce23da6b719760c1e98c2756e00d85009b2d620ba321d4af670",
+    "operator-restart.png": "0873dc411f37653cd60ff70af5b30912678119fa5b41aebfb3afe23592c948ea"
+  }
+}
