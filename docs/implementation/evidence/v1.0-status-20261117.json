@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-17",
+  "kind": "repository-status-and-support-preparation",
+  "auditedMain": "7889285eb04844acc2b44abdf45f0fd396b52fe7",
+  "stableRelease": {
+    "tag": "v0.9",
+    "source": "01c7553425fbc61ba4a7a21918265c562086ba02"
+  },
+  "preview": "monitoring-preview-20261115",
+  "existingOpenIssue": 469,
+  "existingOpenPullRequest": {
+    "number": 480,
+    "head": "0fc823eceb193be16f4db6e66b7e708cef4f0f66",
+    "sourceTreePreservedDuringMetadataFix": true,
+    "ci": "running; not declared passed"
+  },
+  "gates": {
+    "V1-0": "admitted",
+    "V1-1": "admitted",
+    "V1-2": "admitted",
+    "V1-3": "admitted",
+    "V1-4": "finite source-bound reference admitted via #478/8956b9c; final changed candidate not accepted by inference",
+    "V1-5": "support preparation; open",
+    "V1-6": "open",
+    "V1-7": "open"
+  },
+  "repositorySecuritySnapshot": {
+    "openDependabotAlerts": 0,
+    "openSecretScanningAlerts": 0,
+    "openCodeScanningAlerts": [
+      {
+        "number": 3,
+        "severity": "high",
+        "source": "d5f0a6203e8ba176a95296b23867477fd358d5b1",
+        "path": "src/backend/Modules/Kafdeck.Modules.Schemas/SchemaMutationPlanner.cs",
+        "disposition": "requires explicit triage; no accepted risk or false-positive claim"
+      }
+    ],
+    "finalCandidateMediaScans": "not selected or admitted by this snapshot"
+  },
+  "validation": {
+    "localDocumentLinksChecked": 69,
+    "productTestsManuallyRerun": false,
+    "signedHistoricalEvidenceModified": false,
+    "signingAuthorized": false,
+    "publicationAuthorized": false
+  }
+}

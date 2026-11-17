@@ -2,6 +2,8 @@
 
 Current stable release: [v0.9](releases/v0.9.md), published 2026-11-12. Start with the current guides below. Older numbered runbooks remain applicable where linked; their release dates and historical evidence are preserved.
 
+For current v1.0 progress and the bounded next steps, see the [2026-11-17 status](releases/v1.0-status-20261117.md) and [support/security cell selection](operator/v1.0-support-matrix.md). These are readiness records, not a stable v1.0 announcement.
+
 | Task | Guide |
 | --- | --- |
 | Install the monitoring preview offline on a fresh Windows Server; create the first administrator | [English offline installer guide](operator/windows-offline-install.md), [Persian RTL](operator/windows-offline-install.fa.md) |
