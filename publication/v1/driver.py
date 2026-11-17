@@ -163,6 +163,15 @@ def verify_existing(tag, release, expected, body):
                     for a in release["assets"]), "Existing asset bytes differ")
 
 
+def existing_release():
+    # GitHub's by-tag endpoint returns 404 for drafts. The authenticated inventory
+    # includes drafts, allowing a failed upload or finalization to resume safely.
+    pages = json.loads(transport.run("gh", "api", f"repos/{REPOSITORY}/releases?per_page=100", "--paginate", "--slurp"))
+    matches = [release for page in pages for release in page if release["tag_name"] == TAG]
+    require(len(matches) <= 1, "Multiple release records target the stable tag")
+    return matches[0] if matches else None
+
+
 def publish(selection):
     publisher = authority()
     assets = OUT / "assets"
@@ -171,7 +180,7 @@ def publish(selection):
     body += f"\n\nSigned manifest SHA256 `{MANIFEST}`.\n\nOCI multi-architecture image `{IMAGE}@{selection['indexDigest']}`.\n"
     body += f"\n[Publication inventory](https://github.com/{REPOSITORY}/releases/download/{TAG}/publication-selection.json).\n"
     tag = transport.repo_api("git/ref/tags/" + TAG, optional=True)
-    release = transport.repo_api("releases/tags/" + TAG, optional=True)
+    release = existing_release()
     verify_existing(tag, release, expected, body)
     privacy = transport.privacy()
     subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"], "--password-stdin"],
@@ -197,7 +206,7 @@ def publish(selection):
     transport.run("gh", "release", "download", TAG, "--repo", REPOSITORY, "--dir", str(downloaded))
     require({p.name: digest(p) for p in downloaded.iterdir()} == expected, "Downloaded Release assets differ")
     tag = transport.repo_api("git/ref/tags/" + TAG)
-    release = transport.repo_api("releases/tags/" + TAG)
+    release = transport.repo_api("releases/" + str(release["id"]))
     verify_existing(tag, release, expected, body)
     require({a["name"] for a in release["assets"]} == set(expected), "Release inventory incomplete")
     authority()

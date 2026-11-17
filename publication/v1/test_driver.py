@@ -94,6 +94,17 @@ class PublicationGuards(unittest.TestCase):
                        "assets": [{"name": "publication-selection.json", "digest": "sha256:" + checksums[0]}]}
             driver.verify_existing(tag, release, {"publication-selection.json": checksums[1]}, "body")
 
+    def test_release_lookup_finds_drafts_across_pages_and_rejects_duplicates(self):
+        draft = {"id": 449072989, "tag_name": driver.TAG, "draft": True}
+        cases = [([[{"tag_name": "v0.9"}], [draft]], draft), ([[{**draft, "draft": False}]], {**draft, "draft": False}),
+                 ([[{"tag_name": "v0.9"}]], None)]
+        for pages, expected in cases:
+            with self.subTest(pages=pages), patch.object(driver.transport, "run", return_value=json.dumps(pages)) as command:
+                self.assertEqual(driver.existing_release(), expected)
+                command.assert_called_once_with("gh", "api", f"repos/{driver.REPOSITORY}/releases?per_page=100", "--paginate", "--slurp")
+        with patch.object(driver.transport, "run", return_value=json.dumps([[draft], [draft]])), self.assertRaises(ValueError):
+            driver.existing_release()
+
 
 if __name__ == "__main__":
     unittest.main()
