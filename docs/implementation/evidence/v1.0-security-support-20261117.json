@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-17",
+  "gate": "V1-5",
+  "status": "prepared; effective on required CI/review and protected-main PR admission",
+  "candidateSource": "1881aaf5a49f1ab0fc3d3ec99a27ade0882f9e4c",
+  "runtimeChangesInThisAdmission": false,
+  "image": {
+    "platform": "linux/amd64",
+    "producerRun": 44052436185,
+    "runUrl": "https://github.com/araditc/Kafdeck/actions/runs/44052436185",
+    "manifestDigest": "sha256:7da94d47fb4f9e5eb7199bd924c01bbe5b1db25443503486f7f7b2743935aefb",
+    "configurationDigest": "sha256:d58c73ec0504d97bfe4a96102a2c66b76a5f3f442c39d83246f68e800fa77283",
+    "archiveSha256": "54a40cb691f4f38f84f00159c99b8e670a1ec49ae9aff43fb65a96158c7196e3",
+    "sbomSha256": "5a13c3ff0e5c2cf639e3775d04888d4c860ea7362703abdc795fa58f9f7c5f05",
+    "sarifSha256": "9628be1b6fea1fab6e835e39e2b0ab6494a713d80bff8a785421803c1d8f4951",
+    "provenanceSha256": "dc9b356ef7c752f46cd2cecfb33e5a761aecdf84527caa1370b7caa9aa3aac50",
+    "offlineStartupSha256": "81703d7a514689f04d4659dd3f55902824e798a88af93fd5ff7397a131d532f1",
+    "githubArtifactId": 14313913750,
+    "githubArtifactArchiveSha256": "b6f515c26905856f4be4f0809981d27343e505b8b5ea4bc494aa006601e7bdc0",
+    "scan": {
+      "scanner": "Trivy",
+      "version": "0.70.0",
+      "severities": [
+        "HIGH",
+        "CRITICAL"
+      ],
+      "includeUnfixed": true,
+      "vulnerabilityAndSecretScannersEnabled": true,
+      "sarifResults": 0
+    },
+    "offlineStartup": {
+      "networkNone": true,
+      "health": true,
+      "staticFrontend": true,
+      "scope": "isolated startup only; external brokers and identity require separate fixtures"
+    },
+    "published": false,
+    "signed": false
+  },
+  "dependencies": {
+    "nuget": {
+      "version": 1,
+      "parameters": "--vulnerable --include-transitive",
+      "sources": [
+        "https://api.nuget.org/v3/index.json",
+        "C:/Program Files (x86)/Microsoft SDKs/NuGetPackages",
+        "C:/Program Files (x86)/Microsoft SDKs/NuGetPackages/"
+      ],
+      "projects": [
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.Configuration/Kafdeck.Infrastructure.Configuration.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.Ecosystem/Kafdeck.Infrastructure.Ecosystem.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka/Kafdeck.Infrastructure.Kafka.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.Persistence/Kafdeck.Infrastructure.Persistence.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.SchemaRegistry/Kafdeck.Infrastructure.SchemaRegistry.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.Security/Kafdeck.Infrastructure.Security.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Infrastructure/Kafdeck.Infrastructure.SerDe/Kafdeck.Infrastructure.SerDe.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Kafdeck.Api/Kafdeck.Api.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Kafdeck.Core/Kafdeck.Core.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Administration/Kafdeck.Modules.Administration.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Clusters/Kafdeck.Modules.Clusters.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Connect/Kafdeck.Modules.Connect.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Consumers/Kafdeck.Modules.Consumers.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Generator/Kafdeck.Modules.Generator.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Records/Kafdeck.Modules.Records.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Schemas/Kafdeck.Modules.Schemas.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/backend/Modules/Kafdeck.Modules.Topics/Kafdeck.Modules.Topics.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/cli/Kafdeck.Cli/Kafdeck.Cli.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/src/mcp/Kafdeck.Mcp/Kafdeck.Mcp.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj"
+        },
+        {
+          "path": "D:/MyDocuments/SourceCode/Kafdeck/artifacts/kafka-monitoring/tests/Kafdeck.NotificationSender.Lab/Kafdeck.NotificationSender.Lab.csproj"
+        }
+      ]
+    },
+    "npm": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {},
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        },
+        "dependencies": {
+          "prod": 6,
+          "dev": 71,
+          "optional": 54,
+          "peer": 0,
+          "peerOptional": 0,
+          "total": 76
+        }
+      }
+    }
+  },
+  "codeql3": {
+    "rule": "cs/user-controlled-bypass",
+    "disposition": "false positive: pure resource formatter, not authorization",
+    "newPlannerCases": 9,
+    "failed": 0,
+    "skipped": 0,
+    "provider": "controlled observations; not real Schema Registry",
+    "priorScanRun": 44046194064,
+    "state": "dismissed"
+  },
+  "codeql9": {
+    "disposition": "previous false-positive review and HTTP regression reused",
+    "review": "docs/security/monitoring-agent-token-codeql-review.md"
+  },
+  "repositorySecuritySnapshot": {
+    "openDependabotAlerts": 0,
+    "openSecretAlerts": 0,
+    "secretScanning": "enabled",
+    "pushProtection": "enabled",
+    "scanSettingsChanged": false,
+    "openCodeScanningAlerts": 0
+  },
+  "nativeComparability": {
+    "candidateSource": "1881aaf5a49f1ab0fc3d3ec99a27ade0882f9e4c",
+    "nativeProducerSource": "7889285eb04844acc2b44abdf45f0fd396b52fe7",
+    "nativeProducerRun": 44046194159,
+    "selectedInputCount": 722,
+    "selectedInputSha256": "084c95a0cd99ef1b1149cf364aa811da139fb3b5bc7b874abefc3f34c811afbe",
+    "changedProjectedInputs": [],
+    "proofUse": "support-cell comparability only; no native archive, producer identity or signature relabeled to candidate",
+    "finalNativeMediaAcceptance": "requires exact final native packet in V1-6/V1-7"
+  },
+  "backendProviderAgentComparability": {
+    "originalAdmittedMain": "82026c3",
+    "selectedPaths": [
+      "src/backend",
+      "Directory.Build.props",
+      "Directory.Build.targets",
+      "Directory.Packages.props",
+      "global.json",
+      "deploy/dev",
+      "scripts/ci/kafka-smoke.sh",
+      ".github/workflows/kafka-compatibility.yml",
+      ".github/workflows/v09-w77-provider-profiles.yml",
+      "tools"
+    ],
+    "changedPaths": [],
+    "javaRun": 44047184465,
+    "javaVersions": [
+      11,
+      17,
+      21,
+      25,
+      27
+    ],
+    "kafkaCompatibilityRun": 43759483248,
+    "provider": {
+      "run": 43582284429,
+      "source": "8956b9c702318f78fbd1472b899d98d15b455fb1",
+      "selectedPaths": [
+        "src/backend/Infrastructure/Kafdeck.Infrastructure.Kafka",
+        "src/backend/Kafdeck.Core/Kafka",
+        "Directory.Build.props",
+        "Directory.Build.targets",
+        "Directory.Packages.props",
+        "global.json",
+        "tests/Kafdeck.Architecture.Tests/V09W77ProviderCapabilityLiveTests.cs",
+        ".github/workflows/v09-w77-provider-profiles.yml"
+      ],
+      "changedPaths": []
+    }
+  },
+  "monitoring": {
+    "source": "unchanged since #479",
+    "resourceAndRefreshReview": "docs/releases/v1.0-security-support-admission.md",
+    "w82MonitoringEnabledNumericalEquivalenceClaimed": false,
+    "finalDeploymentAcceptanceGate": "V1-7"
+  },
+  "remainingGates": [
+    "V1-6 final media/signing selection and verification",
+    "V1-7 final candidate/operator/publication admission"
+  ],
+  "historicalSignedEvidenceChanged": false,
+  "signingAuthorized": false,
+  "publicationAuthorized": false
+}
