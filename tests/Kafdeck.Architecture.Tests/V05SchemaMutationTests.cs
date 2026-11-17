@@ -14,6 +14,56 @@ public sealed class V05SchemaMutationTests
     private static readonly DateTimeOffset Now =
         new(2026, 9, 22, 0, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(-1, 1, null)]
+    [InlineData(999, 1, null)]
+    [InlineData(1, 0, "orders-value")]
+    [InlineData(1, 999, "orders-value")]
+    public async Task Codeql3_invalid_scope_or_mode_cannot_create_authorization_targets(int scope,int mode,string? subject)
+    {
+        var observation=new FakeMutationObservation();
+        using var digest=new HmacMutationMaterialDigestService("0123456789abcdef0123456789abcdef");
+        var planner=new SchemaMutationPlanner(ExistingSubjectCatalog(),observation,digest);
+        var result=await planner.PlanCompatibilityAsync(new("prod",(SchemaCompatibilityScope)scope,subject,(SchemaCompatibilityMode)mode));
+        Assert.False(result.IsSuccess);
+        Assert.Equal(SchemaMutationPlanningFailureCode.InvalidInput,result.Failure!.Code);
+        Assert.Null(result.Plan);
+        Assert.Null(result.ExecutionMaterial);
+        Assert.Equal(0,observation.CapabilityCalls);
+    }
+
+    [Theory]
+    [InlineData(SchemaCompatibilityScope.Subject,"orders-value","schema/orders-value",SchemaCompatibilityMode.Full)]
+    [InlineData(SchemaCompatibilityScope.Global,null,"schema-compatibility/global",SchemaCompatibilityMode.Full)]
+    [InlineData(SchemaCompatibilityScope.Subject,"orders-value","schema/orders-value",SchemaCompatibilityMode.None)]
+    [InlineData(SchemaCompatibilityScope.Global,null,"schema-compatibility/global",SchemaCompatibilityMode.None)]
+    public async Task Codeql3_valid_scopes_always_retain_explicit_schema_alter_authority(SchemaCompatibilityScope scope,string? subject,string resource,SchemaCompatibilityMode mode)
+    {
+        var observation=new FakeMutationObservation();
+        using var digest=new HmacMutationMaterialDigestService("0123456789abcdef0123456789abcdef");
+        var planner=new SchemaMutationPlanner(ExistingSubjectCatalog(),observation,digest);
+        var result=await planner.PlanCompatibilityAsync(new("prod",scope,subject,mode));
+        Assert.True(result.IsSuccess,result.Failure?.SafeMessage);
+        var target=Assert.Single(result.Plan!.Intent.AuthorizationTargets!);
+        Assert.Equal(AuthorizationAction.SchemaAlter,target.Action);
+        Assert.Equal("prod",target.ClusterId);
+        Assert.Equal(resource,target.ResourceName);
+        Assert.True(result.Plan.Risk.RiskClass>=MutationRiskClass.High);
+        Assert.True(observation.CapabilityCalls>0);
+    }
+
+    [Fact]
+    public async Task Codeql3_global_scope_with_subject_is_rejected_before_provider_reads()
+    {
+        var observation=new FakeMutationObservation();
+        using var digest=new HmacMutationMaterialDigestService("0123456789abcdef0123456789abcdef");
+        var result=await new SchemaMutationPlanner(ExistingSubjectCatalog(),observation,digest)
+            .PlanCompatibilityAsync(new("prod",SchemaCompatibilityScope.Global,"orders-value",SchemaCompatibilityMode.Full));
+        Assert.Equal(SchemaMutationPlanningFailureCode.InvalidInput,result.Failure!.Code);
+        Assert.Null(result.Plan);
+        Assert.Equal(0,observation.CapabilityCalls);
+    }
+
     [Fact]
     public async Task Create_planner_binds_compatibility_references_and_keeps_schema_ephemeral()
     {
@@ -575,6 +625,7 @@ public sealed class V05SchemaMutationTests
     private sealed class FakeMutationObservation :
         ISchemaMutationObservationPort
     {
+        public int CapabilityCalls { get; private set; }
         public SchemaMutationCapabilities Capabilities { get; set; } =
             new(
                 true,
@@ -600,10 +651,13 @@ public sealed class V05SchemaMutationTests
             GetCapabilitiesAsync(
                 string clusterId,
                 ReadViewOperationContext operation,
-                CancellationToken cancellationToken) =>
-            Task.FromResult(
+            CancellationToken cancellationToken)
+        {
+            CapabilityCalls++;
+            return Task.FromResult(
                 SchemaMutationObservationResult<SchemaMutationCapabilities>.Success(
                     Capabilities));
+        }
 
         public Task<
             SchemaMutationObservationResult<SchemaCompatibilityCheckObservation>>
