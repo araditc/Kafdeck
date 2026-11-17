@@ -1,0 +1,298 @@
+{
+  "files": [
+    {
+      "path": "helm/helm-lifecycle.json",
+      "sha256": "49ebe45b7007345b4380815aacc85dd419bd579cd3da69476f40b95969735545",
+      "size": 822
+    },
+    {
+      "path": "helm/kafdeck-1.0.0-rc.1.tgz",
+      "sha256": "f60c3dc3ce24632cbaea1eef61689eb7795d5344685e59400fbee30ce8e3aa32",
+      "size": 5027
+    },
+    {
+      "path": "integrations/mcp/Kafdeck.Mcp.1.0.0-rc.1.nupkg",
+      "sha256": "05c4c8d998c3eebba69b98d29b6292622018592bbbb741ef05b38692f6bb5135",
+      "size": 546176
+    },
+    {
+      "path": "integrations/terraform/build-modules.txt",
+      "sha256": "4fb27b7e17d6daf99f172db7742be6db58e7ba3199339dfca9253e76e63ebd70",
+      "size": 2519
+    },
+    {
+      "path": "integrations/terraform/terraform-provider-kafdeck_0.8.0_SHA256SUMS",
+      "sha256": "a39a526693b89120b5576daa9c43cb17492a56b50d3a4486ed5dbaad09228b12",
+      "size": 579
+    },
+    {
+      "path": "integrations/terraform/terraform-provider-kafdeck_0.8.0_darwin_amd64.zip",
+      "sha256": "cc68890f39837362ba50624f889d40500aa818776cfeb33c3e9d924c234fd5fb",
+      "size": 7314180
+    },
+    {
+      "path": "integrations/terraform/terraform-provider-kafdeck_0.8.0_darwin_arm64.zip",
+      "sha256": "ad3869fd1e954ce9521320dff5d85ac141a77255a600c61d4e40c98c4d098f49",
+      "size": 6768744
+    },
+    {
+      "path": "integrations/terraform/terraform-provider-kafdeck_0.8.0_linux_amd64.zip",
+      "sha256": "f61c8820a93919ae3e876a81d55eeccbe1e726d84fe057725ef5ac0eebba6ac6",
+      "size": 7136427
+    },
+    {
+      "path": "integrations/terraform/terraform-provider-kafdeck_0.8.0_linux_arm64.zip",
+      "sha256": "4aa581ced02323250d2d9c6df14ee19553a15ddf903b4b3658f33436d2dbea60",
+      "size": 6449607
+    },
+    {
+      "path": "integrations/terraform/terraform-provider-kafdeck_0.8.0_windows_amd64.zip",
+      "sha256": "c1c4161cb560d6e0992ea9404af118ecc86a0fa69081d903f457f4db5ae11876",
+      "size": 7386242
+    },
+    {
+      "path": "native/linux-arm64/kafdeck-api-ui-1.0.0-rc.1-linux-arm64.tar.gz",
+      "sha256": "fccdd18b43d759bbe704293f4b6cd3efb793fe8703644e56525bb5ce36ca1661",
+      "size": 60513392
+    },
+    {
+      "path": "native/linux-arm64/kafdeck-cli-1.0.0-rc.1-linux-arm64.tar.gz",
+      "sha256": "fc67465ced1f8634a0117b58e173736b94b29a4e71cd67e3cd2baa05bc227205",
+      "size": 33888389
+    },
+    {
+      "path": "native/linux-arm64/kafdeck-mcp-1.0.0-rc.1-linux-arm64.tar.gz",
+      "sha256": "8f5aabb0cc327e2f04722dd54e845742758ade8e3b38e2d1185940f4b4eff515",
+      "size": 33967246
+    },
+    {
+      "path": "native/linux-arm64/native-evidence.json",
+      "sha256": "c153091ba2f934cd12d632d9089e2ef7bae44451a794c28316734b372539f038",
+      "size": 1443
+    },
+    {
+      "path": "native/linux-arm64/rc-manifest.json",
+      "sha256": "e2ce0880ae42b006a74ee99a77aa619a6b30dc456144e7b0a72988d42a850ffa",
+      "size": 190447
+    },
+    {
+      "path": "native/linux-x64/kafdeck-api-ui-1.0.0-rc.1-linux-x64.tar.gz",
+      "sha256": "b392a8efff90db9e64b7caf4bbd9208a2060e73e13381827c0cfc2bbee3f48d6",
+      "size": 67095971
+    },
+    {
+      "path": "native/linux-x64/kafdeck-cli-1.0.0-rc.1-linux-x64.tar.gz",
+      "sha256": "3d52f462b0e288edd0e1d8f1135713bec374945a13b9db4a23c218c2603a5796",
+      "size": 36027382
+    },
+    {
+      "path": "native/linux-x64/kafdeck-mcp-1.0.0-rc.1-linux-x64.tar.gz",
+      "sha256": "e303de0891e8c38d8d3cfff733240aa48b0e98dd98471a7e8e7bca31a33c103c",
+      "size": 36099586
+    },
+    {
+      "path": "native/linux-x64/native-evidence.json",
+      "sha256": "24b5a219bb8d8b2b0a98f74a3ebeb272e251246546a40fd1c0b92095636a202f",
+      "size": 1435
+    },
+    {
+      "path": "native/linux-x64/rc-manifest.json",
+      "sha256": "cefa32a69c023fb13413f82ab59a4d94ff74115dffce3064621b8f3bdf986143",
+      "size": 190540
+    },
+    {
+      "path": "native/osx-arm64/kafdeck-api-ui-1.0.0-rc.1-osx-arm64.tar.gz",
+      "sha256": "77d448e7eb83df64ef12bf07a39fa5627a9ac26adbe295d5b2b14d356bb2d6fb",
+      "size": 54118541
+    },
+    {
+      "path": "native/osx-arm64/kafdeck-cli-1.0.0-rc.1-osx-arm64.tar.gz",
+      "sha256": "89d6c9ba4e6a5e76c3246bcdc1ee87177bf48929544c98c88fff01802515ea6d",
+      "size": 32748046
+    },
+    {
+      "path": "native/osx-arm64/kafdeck-mcp-1.0.0-rc.1-osx-arm64.tar.gz",
+      "sha256": "65a3c0acbc4dfc01566bd95e427c2251b50dcf9d5924e8c303e21aa38510676c",
+      "size": 32834577
+    },
+    {
+      "path": "native/osx-arm64/native-evidence.json",
+      "sha256": "9ad559aa81d3f6289d6e5e712ef0ef4c3a4780ac491309832d0e8077688cf50e",
+      "size": 1429
+    },
+    {
+      "path": "native/osx-arm64/rc-manifest.json",
+      "sha256": "07ca1ca27aa1e1f47624e86fd8350999a910249df0c7216dc020aa9588b07391",
+      "size": 190132
+    },
+    {
+      "path": "native/osx-x64/kafdeck-api-ui-1.0.0-rc.1-osx-x64.tar.gz",
+      "sha256": "eabf3acc96c5883461e4a6d61a3351999717f772f5d10de7a45cb4b0c0052da7",
+      "size": 56773920
+    },
+    {
+      "path": "native/osx-x64/kafdeck-cli-1.0.0-rc.1-osx-x64.tar.gz",
+      "sha256": "310f3b356676c43aac74c0818464a0d3a8ba49827e4901c943381d27a6fbc817",
+      "size": 34958667
+    },
+    {
+      "path": "native/osx-x64/kafdeck-mcp-1.0.0-rc.1-osx-x64.tar.gz",
+      "sha256": "69e18f92c442fa34a5caf835582c7aeba59d35147e7d019dcc2db501bee31e0f",
+      "size": 35046783
+    },
+    {
+      "path": "native/osx-x64/native-evidence.json",
+      "sha256": "16328978a6ef16d1c857052c398dca71f916653915809be8b905121126ab52a8",
+      "size": 1421
+    },
+    {
+      "path": "native/osx-x64/rc-manifest.json",
+      "sha256": "a1ab1f051a0cbffc810513865e77201eadfe9f6909e1d18fee64f31c2c6e867f",
+      "size": 190124
+    },
+    {
+      "path": "native/win-x64/kafdeck-api-ui-1.0.0-rc.1-win-x64.tar.gz",
+      "sha256": "39c8654a000f82a549715bb64b03fef6b24d4e7c3743677ebf429d8d4956e168",
+      "size": 58662226
+    },
+    {
+      "path": "native/win-x64/kafdeck-cli-1.0.0-rc.1-win-x64.tar.gz",
+      "sha256": "729dc8daa96a4faa2bd5b100ddb33da97fcc05d3bcdd86c776045360b9e58ba2",
+      "size": 35780510
+    },
+    {
+      "path": "native/win-x64/kafdeck-mcp-1.0.0-rc.1-win-x64.tar.gz",
+      "sha256": "57b29f2ad152ce64de96ff0ad1067dadd64f797655bf29c772354e8d1a725973",
+      "size": 35893473
+    },
+    {
+      "path": "native/win-x64/native-evidence.json",
+      "sha256": "defa1b55e088ae0ec87efda4e3bc1ec10c8cb8ceb296753051216a4d9133b699",
+      "size": 1473
+    },
+    {
+      "path": "native/win-x64/rc-manifest.json",
+      "sha256": "586c9dd388bd034bb4d4038b82f429cbe07d9218854c399668ea3813e3293475",
+      "size": 191241
+    },
+    {
+      "path": "oci/amd64/kafdeck-linux-amd64.docker.tar.gz",
+      "sha256": "74895807601e895f85196bbed1dd2d3a483122f1848d7f6c14789643b6a418e4",
+      "size": 159475070
+    },
+    {
+      "path": "oci/amd64/oci-native-startup.json",
+      "sha256": "9d1c1f270f28c6f3c008560f5ef3d03f5a77bfef246f029afa33c23e7e306265",
+      "size": 981
+    },
+    {
+      "path": "oci/amd64/sbom.spdx.json",
+      "sha256": "a2afa250489aba8de3bd960cf6be6f353dd2bb17fea57a5d2400de6b0666233e",
+      "size": 3127471
+    },
+    {
+      "path": "oci/amd64/trivy-results.sarif",
+      "sha256": "3dd31eabe1a648caadc668e09e32acc39f09bfd9ac8420c25b383cc15f110bef",
+      "size": 745
+    },
+    {
+      "path": "oci/arm64/kafdeck-linux-arm64.docker.tar.gz",
+      "sha256": "ab7d7bf55837c3c2f9d7cd4933adb6fda09260430a82139b85cd736c212cfe30",
+      "size": 155820294
+    },
+    {
+      "path": "oci/arm64/oci-native-startup.json",
+      "sha256": "51f0b5baa15b1ca6b664c0c633129d6c3c685e61ac89a11d8f995f64c8e71a2e",
+      "size": 981
+    },
+    {
+      "path": "oci/arm64/sbom.spdx.json",
+      "sha256": "cfa8566a690ed7cac69f6b2a4715d4cfdcb5720db8600e0bc526811c3137acf1",
+      "size": 3128862
+    },
+    {
+      "path": "oci/arm64/trivy-results.sarif",
+      "sha256": "cdc99494bd19d462decb2ad74a6e58c78733e064eff8a68bae3a8059c67831c2",
+      "size": 745
+    }
+  ],
+  "producers": [
+    {
+      "artifact": "g4-external-integration-packages",
+      "attempt": 1,
+      "id": 14329266616,
+      "run": 44082300264,
+      "workflow": ".github/workflows/v08-g2-live-acceptance.yml",
+      "zipDigest": "sha256:f3731f8111dd5220a76ee61f8bceb740e57072c2701a36c6cdef1227d89f4f0c"
+    },
+    {
+      "artifact": "v1-rc-native-linux-arm64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14326894567,
+      "run": 44083160667,
+      "workflow": ".github/workflows/v1-rc-native.yml",
+      "zipDigest": "sha256:e0d0740568a87d7685a8fc3a3ce0729d386cfc004744a6e234d4c3a6079c8fcb"
+    },
+    {
+      "artifact": "v1-rc-native-linux-x64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14328880367,
+      "run": 44083160667,
+      "workflow": ".github/workflows/v1-rc-native.yml",
+      "zipDigest": "sha256:345432cd5996b710186c9027613c705fd59dd529c77ad5d94927b9ab6b73597c"
+    },
+    {
+      "artifact": "v1-rc-native-osx-arm64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14327168258,
+      "run": 44083160667,
+      "workflow": ".github/workflows/v1-rc-native.yml",
+      "zipDigest": "sha256:5708af592291ca27cce840b8e62a33f579fa6ea279bba63632a410ca4b03efbe"
+    },
+    {
+      "artifact": "v1-rc-native-osx-x64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14329115264,
+      "run": 44083160667,
+      "workflow": ".github/workflows/v1-rc-native.yml",
+      "zipDigest": "sha256:64099781b6c042d23c1e6261447d363a39319541b19ffe52b59fca25ba43445f"
+    },
+    {
+      "artifact": "v1-rc-native-win-x64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14327618638,
+      "run": 44083160667,
+      "workflow": ".github/workflows/v1-rc-native.yml",
+      "zipDigest": "sha256:445f648567327ebee12c597f56021d37fa4ece54a0836385205a0abe25415b69"
+    },
+    {
+      "artifact": "w81-helm-lifecycle-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14328845475,
+      "run": 44083165695,
+      "workflow": ".github/workflows/v09-w81-distribution-candidate.yml",
+      "zipDigest": "sha256:cb53c0e4e37d62c02f5497edfed0af888ca1daebc2f7aa5832975627dc8f41f9"
+    },
+    {
+      "artifact": "w81-oci-amd64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14329045230,
+      "run": 44083165695,
+      "workflow": ".github/workflows/v09-w81-distribution-candidate.yml",
+      "zipDigest": "sha256:1d2ba9202d941ffaf56c73c58bc700f91641eaa5eab2dea5402cb20ea4e2be07"
+    },
+    {
+      "artifact": "w81-oci-arm64-da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+      "attempt": 1,
+      "id": 14326729839,
+      "run": 44083165695,
+      "workflow": ".github/workflows/v09-w81-distribution-candidate.yml",
+      "zipDigest": "sha256:c0f2c679c82a9a6e068512a428554d88c41c15377933c942324762fd95119cfc"
+    }
+  ],
+  "repository": "araditc/Kafdeck",
+  "schemaVersion": 1,
+  "scope": "full-distribution",
+  "source": "da35a011081ad0b7cb73f3ca41cf5b90e5faceab",
+  "version": "1.0.0-rc.1"
+}

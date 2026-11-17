@@ -414,3 +414,7 @@ Protected-main readiness [43230886146](https://github.com/araditc/Kafdeck/action
 > سیاست پیشنهادی را می‌پذیرم؛ V1-1 را تکمیل کن
 
 This accepts policy and authorizes its finite inventory/compatibility implementation. It does not authorize v1.0 signing/publication, expand deployment/provider support or remove the KAF-02 tested-egress condition. Independently versioned components retain their explicit selection. Historical/signed v0.9 evidence is unchanged.
+
+## V1-6 RC full-distribution signing decision — 2026-11-17
+
+The product owner authorized signing the reviewed `1.0.0-rc.1` manifest in the release conversation. The scope was `full-distribution`, product source `da35a011081ad0b7cb73f3ca41cf5b90e5faceab`, manifest SHA256 `5c34ca4ea57092cab93fbdddf916da5ea1941710f0a7922a88b42896589957be`. The protected workflow matched the owner identity and exact decision string. Its isolated Sigstore verification succeeded. Stable publication requires a separate decision for the stable files. [Run and verification log](https://github.com/araditc/Kafdeck/actions/runs/44091309066/job/134068027592).
