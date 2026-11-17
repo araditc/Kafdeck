@@ -8,7 +8,7 @@ This document consolidates the requested feature inventory into a product-safe t
 
 ## Historical direction, current availability
 
-The Gate 2 inventory and acceptance date above are preserved. Its TARGET/DEFER labels describe the original long-term direction, not the current release. Use [released v0.9 availability](current-capabilities.md), [Roadmap](../../ROADMAP.md) and [final release evidence](../implementation/evidence/v0.9-release-published-20261112.json) for today's implementation and retained limits. Several originally deferred capabilities now ship: Terraform, bounded CBOR/XML/MessagePack, data-quality monitoring, catalog/policy/requests and measured attribution. Apicurio remains Unsupported despite appearing in this target inventory. The original list below is not rewritten to imply that every target shipped.
+The Gate 2 inventory and acceptance date above are preserved. Its TARGET/DEFER labels describe the original long-term direction, not the current release. Use [released v1.0 availability](current-capabilities.md), [Roadmap](../../ROADMAP.md) and [final release evidence](../implementation/evidence/v1.0-release-published-20261117.json) for today's implementation and retained limits. Several originally deferred capabilities now ship: Terraform, bounded CBOR/XML/MessagePack, data-quality monitoring, catalog/policy/requests and measured attribution. Apicurio remains Unsupported despite appearing in this target inventory. The original list below is not rewritten to imply that every target shipped.
 
 Legend:
 - **TARGET** — accepted as a long-term Kafdeck capability.
