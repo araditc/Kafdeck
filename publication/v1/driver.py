@@ -115,7 +115,7 @@ def image_layout(media, manifest):
 
 
 def prepare():
-    publisher = authority()
+    authority()
     require(not OUT.exists(), "Use a fresh publication working directory")
     producer = transport.repo_api(f"actions/runs/{SIGN_RUN}")
     validate_run(producer, SOURCE, {"signed": ("v1-candidate-media", ".github/workflows/v1-candidate-media.yml")})
@@ -139,13 +139,19 @@ def prepare():
     for path, name in selected:
         require(re.fullmatch(r"[A-Za-z0-9_.-]+", name) and path.stat().st_size < 2 * 1024**3, "Invalid asset")
         os.link(path, assets / name)
-    selection = {"version": "1.0.0", "source": SOURCE, "manifestSha256": MANIFEST, "signatureBundleSha256": BUNDLE,
-                 "publisherCommit": publisher, "signingRun": SIGN_RUN, "image": IMAGE, "indexDigest": index, "platforms": platforms,
-                 "assets": [{"name": p.name, "sha256": digest(p), "bytes": p.stat().st_size} for p in sorted(assets.iterdir())]}
+    selection = release_inventory(assets, index, platforms)
     write(assets / "publication-selection.json", selection)
     (assets / "SHA256SUMS").write_text("".join(digest(p) + "  " + p.name + "\n" for p in sorted(assets.iterdir())), encoding="utf-8")
     write(OUT / "publication-selection.json", selection)
     return selection
+
+
+def release_inventory(assets, index, platforms):
+    # Release assets retain their identity across retries from a newer protected main.
+    # The attempt's publisher commit belongs in publication-result.json.
+    return {"version": "1.0.0", "source": SOURCE, "manifestSha256": MANIFEST, "signatureBundleSha256": BUNDLE,
+            "signingRun": SIGN_RUN, "image": IMAGE, "indexDigest": index, "platforms": platforms,
+            "assets": [{"name": p.name, "sha256": digest(p), "bytes": p.stat().st_size} for p in sorted(assets.iterdir())]}
 
 
 def verify_existing(tag, release, expected, body):
@@ -158,7 +164,7 @@ def verify_existing(tag, release, expected, body):
 
 
 def publish(selection):
-    authority()
+    publisher = authority()
     assets = OUT / "assets"
     expected = {p.name: digest(p) for p in assets.iterdir()}
     body = Path("publication/v1/release-notes.md").read_text(encoding="utf-8")
@@ -199,7 +205,7 @@ def publish(selection):
     public = transport.repo_api("releases/tags/" + TAG)
     require(not public["draft"] and not public["prerelease"] and transport.privacy() == privacy, "Final publication state differs")
     write(OUT / "publication-result.json", {"published": True, "tag": TAG, "source": SOURCE, "manifestSha256": MANIFEST,
-          "release": public["html_url"], "publisherCommit": selection["publisherCommit"], "indexDigest": selection["indexDigest"],
+          "release": public["html_url"], "publisherCommit": publisher, "indexDigest": selection["indexDigest"],
           "platforms": selection["platforms"], "remoteAssetsVerified": expected, "registryVisibility": privacy,
           "registryTagSnapshotPreserved": True, "remoteImageConfigsAndLayersVerified": True})
 

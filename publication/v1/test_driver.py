@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import unittest
+import tempfile
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("stable_publication", Path(__file__).with_name("driver.py"))
@@ -70,6 +71,28 @@ class PublicationGuards(unittest.TestCase):
                         {**item, "workflow_run": {"head_sha": driver.SOURCE, "id": 1}}]:
             with self.subTest(item=changed), patch.object(driver.transport, "repo_api", return_value=changed), self.assertRaises(ValueError):
                 driver.artifact(driver.SIGN_ARTIFACT, driver.SIGN_ZIP)
+
+    def test_partial_release_inventory_survives_publisher_main_advancement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            assets = Path(temporary) / "assets"
+            assets.mkdir()
+            (assets / "manifest.json").write_text("fixed signed manifest", encoding="utf-8")
+            inventories = []
+            checksums = []
+            for publisher in ("a" * 40, "b" * 40):
+                with patch.dict(os.environ, {"GITHUB_SHA": publisher}):
+                    inventory = driver.release_inventory(assets, "sha256:" + "c" * 64, {})
+                    target = Path(temporary) / (publisher + ".json")
+                    driver.write(target, inventory)
+                    inventories.append(inventory)
+                    checksums.append(driver.digest(target))
+            self.assertEqual(inventories[0], inventories[1])
+            self.assertEqual(checksums[0], checksums[1])
+            self.assertNotIn("publisherCommit", inventories[0])
+            tag = {"object": {"type": "commit", "sha": driver.SOURCE}}
+            release = {"tag_name": driver.TAG, "body": "body", "name": "Kafdeck 1.0.0", "prerelease": False,
+                       "assets": [{"name": "publication-selection.json", "digest": "sha256:" + checksums[0]}]}
+            driver.verify_existing(tag, release, {"publication-selection.json": checksums[1]}, "body")
 
 
 if __name__ == "__main__":
