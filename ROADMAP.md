@@ -298,6 +298,10 @@ Compatibility is recorded as tested capability profiles:
 - Strimzi — an Apache Kafka deployment/operator environment, not a separate Kafka wire protocol dialect
 - Azure Event Hubs — Kafka-compatible service profile with explicit feature limitations; never assumed equivalent to full Apache Kafka administration
 
+## v1.1 — Broker host management
+
+The owner approved the five-step Fleet roadmap on 2026-11-17. The [design and acceptance issues](docs/rfcs/0011-v1.1-broker-host-management.md) cover host registration, broker logs, offline agent installation and upgrade, dynamic Kafka settings and operational recovery. Host workflows require real acceptance on Linux with systemd and Docker absent, and on Docker Compose in Arad Office.
+
 ## Post-v1.0 candidate themes
 
 Subject to RFC approval:
