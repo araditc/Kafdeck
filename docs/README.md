@@ -2,7 +2,7 @@
 
 Current stable release: [v1.0.0](releases/v1.0.md). Start with the current guides below. Older numbered runbooks remain applicable where linked; their release dates and historical evidence are preserved.
 
-For current v1.0 progress and the bounded next steps, see the [2026-11-17 status](releases/v1.0-status-20261117.md) and [support/security cell selection](operator/v1.0-support-matrix.md) with its [candidate admission packet](releases/v1.0-security-support-admission.md). The bounded checklist is complete. [Final publication](releases/v1.0.md) records the outcome.
+The [final publication record](releases/v1.0.md) and [completed checklist](releases/v1.0-readiness-checklist.md) record 1.0.0 acceptance. The [support matrix](operator/v1.0-support-matrix.md) defines supported deployments. The [dated status](releases/v1.0-status-20261117.md) and [security admission packet](releases/v1.0-security-support-admission.md) retain the source-bound decisions.
 
 | Task | Guide |
 | --- | --- |
