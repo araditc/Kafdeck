@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path "$PSScriptRoot/../..").Path
 $source = (& git -C $root rev-parse HEAD).Trim()
-$selection = Get-Content (Join-Path $root ".github/release/v1.0-rc.json") -Raw | ConvertFrom-Json
-if ($selection.version -ne "1.0.0-rc.1" -or $selection.signed -or $selection.publicationAuthorized) { throw "Unexpected RC selection." }
+$selection = Get-Content (Join-Path $root ".github/release/v1.0.json") -Raw | ConvertFrom-Json
+if ($selection.version -ne "1.0.0" -or $selection.signed -or $selection.publicationAuthorized) { throw "Unexpected RC selection." }
 $platform = if ($IsWindows) { 'win' } elseif ($IsMacOS) { 'osx' } else { 'linux' }
 $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
 if ($Rid -ne "$platform-$architecture") { throw 'Runner does not match the native package RID.' }
@@ -174,18 +174,18 @@ try {
 
     $mcp=Launch $installed.mcp @('--base-url',$origin,'--service-profile',$profile) $private
     $mcpError=$mcp.StandardError.ReadToEndAsync()
-    $initialized=Request-Rpc $mcp @{jsonrpc='2.0';id=1;method='initialize';params=@{protocolVersion='2025-06-18';capabilities=@{};clientInfo=@{name='native-acceptance';version='1.0.0-rc.1'}}}
-    if ($initialized.result.serverInfo.version -ne '1.0.0-rc.1') { throw 'Native MCP version mismatch.' }
+    $initialized=Request-Rpc $mcp @{jsonrpc='2.0';id=1;method='initialize';params=@{protocolVersion='2025-06-18';capabilities=@{};clientInfo=@{name='native-acceptance';version=$selection.version}}}
+    if ($initialized.result.serverInfo.version -ne $selection.version) { throw 'Native MCP version mismatch.' }
     $mcp.StandardInput.WriteLine('{"jsonrpc":"2.0","method":"notifications/initialized"}')
     $mcp.StandardInput.Flush()
     $read=Request-Rpc $mcp @{jsonrpc='2.0';id=2;method='tools/call';params=@{name='read_v08_bearer_read_capabilities';arguments=@{}}}
     if ($read.result.isError -or $read.result.structuredContent.httpStatus -ne 200) { throw 'Native MCP authenticated read failed.' }
     $components.mcp.started=$true; $components.mcp.authenticatedOperation=$true
-    @{schemaVersion=1;sourceSha=$source;version='1.0.0-rc.1';rid=$Rid;components=$components;installedFromArchives=$true;
+    @{schemaVersion=1;sourceSha=$source;version=$selection.version;rid=$Rid;components=$components;installedFromArchives=$true;
         identity='Keycloak 26.8.1 HTTPS private_key_jwt';runtime=[Runtime.InteropServices.RuntimeInformation]::OSDescription;
         scope='native archive install, API/frontend startup and service-authenticated reads; effect and restore acceptance is separate'} |
         ConvertTo-Json -Depth 10 | Set-Content (Join-Path $evidence 'native-evidence.json') -Encoding utf8
-    & $python (Join-Path $root "scripts/release/v1_rc.py") prepare-native --directory $evidence --rid $Rid
+    & $python (Join-Path $root "scripts/release/v1_rc.py") prepare-native --stable --directory $evidence --rid $Rid
     Native-Ok "source-bound-rc-manifest"
 } finally {
     foreach ($process in $owned) {
