@@ -143,7 +143,8 @@
     "failed": 0,
     "skipped": 0,
     "provider": "controlled observations; not real Schema Registry",
-    "priorScanRun": 44046194064
+    "priorScanRun": 44046194064,
+    "state": "dismissed"
   },
   "codeql9": {
     "disposition": "previous false-positive review and HTTP regression reused",
@@ -154,7 +155,8 @@
     "openSecretAlerts": 0,
     "secretScanning": "enabled",
     "pushProtection": "enabled",
-    "scanSettingsChanged": false
+    "scanSettingsChanged": false,
+    "openCodeScanningAlerts": 0
   },
   "nativeComparability": {
     "candidateSource": "1881aaf5a49f1ab0fc3d3ec99a27ade0882f9e4c",
@@ -200,7 +202,7 @@
         "Directory.Build.targets",
         "Directory.Packages.props",
         "global.json",
-        "tests/Kafdeck.Architecture.Tests/V09W77ProviderProfileLiveTests.cs",
+        "tests/Kafdeck.Architecture.Tests/V09W77ProviderCapabilityLiveTests.cs",
         ".github/workflows/v09-w77-provider-profiles.yml"
       ],
       "changedPaths": []
