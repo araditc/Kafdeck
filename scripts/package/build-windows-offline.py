@@ -20,6 +20,13 @@ def sha(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def add_zip_file(archive, name, content, compression=zipfile.ZIP_DEFLATED):
+    entry = zipfile.ZipInfo(name, (2000, 1, 1, 0, 0, 0))
+    entry.create_system = 3
+    entry.external_attr = 0o100644 << 16
+    archive.writestr(entry, content, compress_type=compression, compresslevel=6)
+
+
 def repack(source, destination, select=None):
     with zipfile.ZipFile(source) as archive, zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as target:
         files = [row for row in archive.infolist() if not row.is_dir()]
@@ -32,7 +39,7 @@ def repack(source, destination, select=None):
             if not name or '..' in Path(name).parts or name.startswith('/'):
                 raise ValueError('Unsafe vendor archive path')
             if select is None or select(name):
-                target.writestr(name, archive.read(row))
+                add_zip_file(target, name, archive.read(row))
 
 
 def build(args):
@@ -118,7 +125,7 @@ This supplementary installer has a separate SHA256 inventory and is not covered 
     with zipfile.ZipFile(target, 'w') as archive:
         for path in sorted(bundle.rglob('*')):
             if path.is_file():
-                archive.write(path, path.relative_to(bundle).as_posix(), compress_type=zipfile.ZIP_STORED if path.suffix in ('.zip', '.gz') else zipfile.ZIP_DEFLATED, compresslevel=6)
+                add_zip_file(archive, path.relative_to(bundle).as_posix(), path.read_bytes(), zipfile.ZIP_STORED if path.suffix in ('.zip', '.gz') else zipfile.ZIP_DEFLATED)
     with zipfile.ZipFile(target) as archive:
         for row in result['files']:
             if hashlib.sha256(archive.read(row['path'])).hexdigest() != row['sha256']:
