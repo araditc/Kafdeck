@@ -1,0 +1,5 @@
+2026-11-17T17:15:53.7376503Z [36;1msudo unshare --net "$(command -v cosign)" verify-blob --offline \[0m
+2026-11-17T17:15:53.7377628Z [36;1m  --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \[0m
+2026-11-17T17:15:53.7378074Z [36;1m  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \[0m
+2026-11-17T17:15:53.7378562Z [36;1m  --certificate-github-workflow-sha "$GITHUB_SHA" staging/manifest.json[0m
+2026-11-17T17:15:56.8435390Z Verified OK
