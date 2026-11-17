@@ -1,8 +1,9 @@
-# Kafdeck Helm v0.9
+# Kafdeck Helm chart
 
 This chart packages the Kafdeck API and bundled UI as one TLS-serving
-workload. Real signed-chart lifecycle acceptance passed on Kubernetes 1.34.3 / Helm 3.21.4 with real Keycloak and Kafka. See the [released installation guide](../../../docs/operator/v0.9-installation-guide.md) and [final evidence](../../../docs/implementation/evidence/v0.9-release-published-20261112.json). The current
-release uses one replica for both SQLite and PostgreSQL because the browser
+workload. The chart and application versions are recorded in [Chart.yaml](Chart.yaml).
+The signed v0.9 chart passed lifecycle acceptance on Kubernetes 1.34.3 / Helm 3.21.4 with real Keycloak and Kafka. See the [v0.9 installation guide](../../../docs/operator/v0.9-installation-guide.md) and [v0.9 evidence](../../../docs/implementation/evidence/v0.9-release-published-20261112.json). The chart
+uses one replica for both SQLite and PostgreSQL because the browser
 OIDC ticket store lives in process memory. A restarted pod requires a fresh
 login. PostgreSQL multi-replica admission is separate work.
 
