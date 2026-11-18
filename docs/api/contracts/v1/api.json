@@ -1,5 +1,6 @@
 {
   "mappingMethods": [
+    "MapBrokerAgents",
     "MapBrokerHosts",
     "MapBrokerLogs",
     "MapGovernanceOpenApi",
@@ -2063,6 +2064,52 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/fleet/hosts/agent/apply",
+      "name": "managed-broker-agent-apply",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerAgentPlanInput"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-broker-agent-apply"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fleet/hosts/agent/preview",
+      "name": "managed-broker-agent-preview",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerAgentPreviewInput"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-broker-agent-preview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fleet/hosts/agent/status",
+      "name": "managed-broker-agent-status",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerAgentPlanInput"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-broker-agent-status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/fleet/hosts/agent/targets",
+      "name": "managed-broker-agent-targets",
+      "request": null,
+      "governance": null,
+      "declarative": null,
+      "antiforgery": false,
+      "managed": "managed-broker-agent-targets"
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/fleet/hosts/bindings",
       "name": "managed-hosts-bind",
       "request": {
@@ -3435,6 +3482,38 @@
     }
   ],
   "schemas": {
+    "FamilyBrokerAgentPreviewInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clusterId": {
+          "type": "string"
+        },
+        "brokerId": {
+          "type": "integer"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "clusterId",
+        "brokerId",
+        "version"
+      ]
+    },
+    "FamilyBrokerAgentPlanInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan"
+      ]
+    },
     "FamilyBrokerHostWrite": {
       "type": "object",
       "additionalProperties": false,
@@ -9820,6 +9899,10 @@
       "POST /api/v1/data-jobs/{operationId}/reconcile/preview",
       "GET /api/v1/fleet/hosts",
       "POST /api/v1/fleet/hosts",
+      "POST /api/v1/fleet/hosts/agent/apply",
+      "POST /api/v1/fleet/hosts/agent/preview",
+      "POST /api/v1/fleet/hosts/agent/status",
+      "GET /api/v1/fleet/hosts/agent/targets",
       "POST /api/v1/fleet/hosts/bindings",
       "GET /api/v1/fleet/hosts/log-targets",
       "POST /api/v1/fleet/hosts/logs",
@@ -9873,9 +9956,12 @@
     "src/backend/Kafdeck.Api/BearerReadOpenApi.cs": "460300e18740a9a1334611467115e400bc02e4925e14373acf8b483fe9acb6b0",
     "src/backend/Kafdeck.Api/BearerRuntimeAuthorization.cs": "3d3a3d7ee9c47f8ab0b86b1a7fbade9ff08e343c44fc876ecbccca99d876a4ec",
     "src/backend/Kafdeck.Api/BearerTopicMutationScope.cs": "9c9d423836d01f7c79a650dabf3d87b3be5fb96196703de631f289ae42cc9c45",
+    "src/backend/Kafdeck.Api/BrokerAgentEndpoints.cs": "e7bf60206412d298eeff3891d54dca629b496607a82f405580e352340e811e44",
+    "src/backend/Kafdeck.Api/BrokerAgentHealth.cs": "e394cfe64e8792883ca3881a6def29539ca4aebb63480eff81ae9fc6638887b2",
+    "src/backend/Kafdeck.Api/BrokerAgentModels.cs": "dae85d24bb6a4b836f6b8a7831bf14ef652ad1a8ee72cadce361198433e31a8e",
     "src/backend/Kafdeck.Api/BrokerHostEndpoints.cs": "0a4493f65c4545cf85ae88b6ecaf811052e752fbfe7614274eabbe46955e470c",
-    "src/backend/Kafdeck.Api/BrokerHostModels.cs": "5e5e7684416444b43df2b04c5278c1c82a71e315f3ec1c6ba45e4fc2ba5f1b0e",
-    "src/backend/Kafdeck.Api/BrokerHostSsh.cs": "f1b5ec00942f76565f7a25b74213ad83e57c175ad0cd8d1d5ad5df247c578603",
+    "src/backend/Kafdeck.Api/BrokerHostModels.cs": "6adeaa7df218f283286a82cd12b72b62cb790c6b94af9058d76ced912411c296",
+    "src/backend/Kafdeck.Api/BrokerHostSsh.cs": "f89b822d83db60b186bd0407f3f8671391e4e479b182b2a2c7227e27acf842e5",
     "src/backend/Kafdeck.Api/BrokerHostStore.cs": "01b71b92c0676aac333a1f57cd17d05b71e46aadbf4c779394f2ce3659bc73e2",
     "src/backend/Kafdeck.Api/BrokerLogEndpoints.cs": "c2aeb0fa008a61eac02128151121d7faadea9229a275a45ba4d81145d61fa184",
     "src/backend/Kafdeck.Api/BrowserNavigationEndpoints.cs": "e4577241a77f51096090bfbd9f0896d89fd4c5fb3693dffbaff9d3d771950c65",
@@ -9955,7 +10041,7 @@
     "src/backend/Kafdeck.Api/ManagedKeycloakUsers.cs": "7e4b356a217f6a33979988cce54f776bb98da058876feb5e3cea52499fb3129f",
     "src/backend/Kafdeck.Api/ManagedStateDataProtection.cs": "11916cd445c153ebf1658db2167401bb5561596dcd74d2ada8a5d67401f2719d",
     "src/backend/Kafdeck.Api/ManagedUserProvisioningService.cs": "19558d4b9414304a4cfd6f7ca1545231002df36ce7c47736f41aae35a8ca44b2",
-    "src/backend/Kafdeck.Api/MonitoringStore.cs": "9d4ac50f08a8389c174baa014ac11e1e1d24fb5663a582430d409829ee8abdf6",
+    "src/backend/Kafdeck.Api/MonitoringStore.cs": "808ae52b1819094efb63c7c5b6fdfa17e6c60f660d7f5d252ec149d97f7a89a4",
     "src/backend/Kafdeck.Api/MutationActor.cs": "40ff52e2a58d59e012a63f33e8a2bdd6e7c5a4deef11d73c4a7038d96f44bc59",
     "src/backend/Kafdeck.Api/MutationAdmissionService.cs": "a7b8f4b1c668178ef3da792cc860495befd60b8aecb3a241527790118fc3d56f",
     "src/backend/Kafdeck.Api/MutationCommandService.cs": "f9d6d00c82dc3aae83609496cfcbe21251c385a8577631986e6f1ae7ba1a0ff6",
@@ -9976,7 +10062,7 @@
     "src/backend/Kafdeck.Api/OperationalAnalyticsRuntimeService.cs": "1ec5bedacc264e80a292b04575d4c4daba5f11cfe682a619bc6ce54b19b88e23",
     "src/backend/Kafdeck.Api/OperationalTelemetryProviderDecorators.cs": "a7b6ddd558024bfffd1158792c4de5fe95388a356e8e58f3ba84d9b83a637359",
     "src/backend/Kafdeck.Api/OperatorSessionUiScope.cs": "797c89a4469577d242d165debeb48d575be544fcb2f846592a0bbd2fdff0940d",
-    "src/backend/Kafdeck.Api/Program.cs": "5b52a0af5e79ae6b314543ba0068f5960e3e5a943268aca86b452c0b634df30a",
+    "src/backend/Kafdeck.Api/Program.cs": "4d03933f0da6db0917e7709af5eb883158847e5d2fd1dbfd9705f1034c7d167a",
     "src/backend/Kafdeck.Api/Properties/AssemblyInfo.cs": "b9c93f92157f9dfb4beae4203e5d6269aeac684818affb4def98a2667b703494",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceEndpoints.cs": "31accbee49239759fdb252a285c0b6c60a4038190f353c7ac72a0db96fcdc734",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",

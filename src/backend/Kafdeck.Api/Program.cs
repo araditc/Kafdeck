@@ -1082,6 +1082,7 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
         var hostSsh = new BrokerHostSsh(brokerHostOptions);
         app.MapBrokerHosts(managedIdentity, brokerHostOptions, hostStore, hostSsh);
         app.MapBrokerLogs(managedIdentity, brokerHostOptions, hostStore, hostSsh);
+        app.MapBrokerAgents(managedIdentity, brokerHostOptions, hostStore, hostSsh);
         if (app.Services.GetService<RegisteredHttpServiceRuntime>() is { } registered)
             app.MapRegisteredHttpServices(managedIdentity, registered);
     }

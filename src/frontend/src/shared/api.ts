@@ -15,6 +15,20 @@ export interface BrokerMetricAlert { name: string; state: string; severity: stri
 export interface BrokerLogTargets { allowed: boolean; targets: { brokerId: number; monitoringInstance: string | null }[]; }
 export interface BrokerLogPage { brokerId: number; from: number; to: number; adapter: 'systemd' | 'compose';
   lines: { timeMs: number; text: string }[]; truncated: boolean; }
+export interface BrokerAgentPackage { version: string; digest: string; }
+export interface BrokerAgentHealth { healthy: boolean; brokerCount: number; topics: number; affectedPartitions: number; blockedPartitions: string[]; }
+export interface BrokerAgentPreview {
+  plan: string | null; operationId: string; brokerId: number; package: BrokerAgentPackage;
+  adapter: 'systemd' | 'compose'; currentVersion: string | null; currentDigest: string | null;
+  launchMode: 'argfile' | 'existingJvmArgument'; restartRequired: boolean;
+  maintenanceFrom: number; maintenanceTo: number; requiresWindow: boolean; health: BrokerAgentHealth;
+}
+export interface BrokerAgentProgress {
+  operationId: string; stage: 'unknown' | 'publishing' | 'awaitingRestart' | 'awaitingMetrics' |
+    'awaitingHealth' | 'reconcile' | 'complete' | 'alreadyInstalled';
+  version?: string; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
+  processStartedAt?: number; monitoringInstance?: string; health?: BrokerAgentHealth;
+}
 
 export interface ApiObservation { observedAt: string; freshness: Freshness; cacheAgeMs: number; partial: boolean; }
 export interface ApiLimitation { capability: string | null; state: string; reason: string | null; }
@@ -865,6 +879,16 @@ export const kafdeckApi = {
   },
   brokerLogs(clusterId: string, brokerId: number, from: number, to: number, signal?: AbortSignal) {
     return postJson<BrokerLogPage>('/api/v1/fleet/hosts/logs', {clusterId, brokerId, from, to}, signal);
+  },
+  brokerAgentTargets(clusterId: string, signal?: AbortSignal) {
+    return readJson<{brokerId: number | null; packages: BrokerAgentPackage[]}>(
+      '/api/v1/fleet/hosts/agent/targets?' + new URLSearchParams({clusterId}), signal);
+  },
+  previewBrokerAgent(clusterId: string, brokerId: number, version: string, signal?: AbortSignal) {
+    return postJson<BrokerAgentPreview>('/api/v1/fleet/hosts/agent/preview', {clusterId, brokerId, version}, signal);
+  },
+  brokerAgentProgress(plan: string, apply: boolean, signal?: AbortSignal) {
+    return postJson<BrokerAgentProgress>('/api/v1/fleet/hosts/agent/' + (apply ? 'apply' : 'status'), {plan}, signal);
   },
   registerBrokerHost(expectedRevision: number, host: BrokerHostDraft, signal?: AbortSignal) {
     return postJson<{ revision: number; host: BrokerHost; targets: BrokerServiceTarget[] }>('/api/v1/fleet/hosts', { expectedRevision, host }, signal);

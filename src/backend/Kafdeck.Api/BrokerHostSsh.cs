@@ -16,7 +16,12 @@ internal interface IBrokerLogReader
     Task<BrokerLogObservation> ReadAsync(BrokerHostDraft host, BrokerLogCommand request, CancellationToken cancellation);
 }
 
-internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProbe, IBrokerLogReader
+internal interface IBrokerAgentLifecycle
+{
+    Task<BrokerAgentHostResult> CallAsync(BrokerHostDraft host, BrokerAgentCommand input, CancellationToken cancellation);
+}
+
+internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProbe, IBrokerLogReader, IBrokerAgentLifecycle
 {
     private readonly SemaphoreSlim _slots = new(4);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -38,21 +43,28 @@ internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProb
         return Parse<BrokerLogObservation>(bytes, "broker_log_response_invalid");
     }
 
+    public async Task<BrokerAgentHostResult> CallAsync(BrokerHostDraft host, BrokerAgentCommand input, CancellationToken cancellation)
+    {
+        var bytes = await RunAsync(host, "kafdeck-agent-lifecycle-v1", JsonSerializer.SerializeToUtf8Bytes(input, Json),
+            cancellation, input.Action == "apply" ? 90 : 20);
+        return Parse<BrokerAgentHostResult>(bytes, "agent_response_invalid");
+    }
+
     private static T Parse<T>(byte[] bytes, string code)
     {
         try { return JsonSerializer.Deserialize<T>(bytes, Json) ?? throw new BrokerHostFailure(code); }
         catch (JsonException) { throw new BrokerHostFailure(code); }
     }
 
-    private async Task<byte[]> RunAsync(BrokerHostDraft host, string operation, byte[]? input, CancellationToken cancellation)
+    private async Task<byte[]> RunAsync(BrokerHostDraft host, string operation, byte[]? input, CancellationToken cancellation, int seconds = 20)
     {
         if (!BrokerHostValidation.Draft(host, options)) throw new BrokerHostFailure("host_configuration_invalid");
         if (!await _slots.WaitAsync(0, cancellation)) throw new BrokerHostFailure("host_probe_busy");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        timeout.CancelAfter(TimeSpan.FromSeconds(seconds));
         try
         {
-            return await ConnectAsync(host, operation, input, timeout.Token);
+            return await ConnectAsync(host, operation, input, seconds - 8, timeout.Token);
         }
         catch (BrokerHostFailure) { throw; }
         catch (Exception) when (!cancellation.IsCancellationRequested)
@@ -62,7 +74,7 @@ internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProb
         finally { _slots.Release(); }
     }
 
-    private async Task<byte[]> ConnectAsync(BrokerHostDraft host, string operation, byte[]? input, CancellationToken cancellation)
+    private async Task<byte[]> ConnectAsync(BrokerHostDraft host, string operation, byte[]? input, int commandSeconds, CancellationToken cancellation)
     {
         var binding = options.Credentials.Single(value => value.Id == host.CredentialId);
         var resolver = new SecretResolver();
@@ -87,7 +99,7 @@ internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProb
         try { await client.ConnectAsync(cancellation); }
         catch (Exception) when (mismatched) { throw new BrokerHostFailure("host_key_mismatch"); }
         using var command = client.CreateCommand(operation);
-        command.CommandTimeout = TimeSpan.FromSeconds(12);
+        command.CommandTimeout = TimeSpan.FromSeconds(commandSeconds);
         // Stream both channels with one shared cancellation deadline. A remote
         // helper cannot force unbounded output into a command Result string.
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellation);

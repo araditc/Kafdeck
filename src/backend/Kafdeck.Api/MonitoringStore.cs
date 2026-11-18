@@ -202,6 +202,26 @@ internal sealed class MonitoringStore
         }
     }
     private SqliteConnection Open() { var db = new SqliteConnection(_connection); db.Open(); return db; }
+
+    internal long? AgentMetricAfter(string cluster, string instance, long processStartedAt, long previewedAt)
+    {
+        if (_settings.Database.Length == 0 || instance == MonitoringSettings.MetadataInstance ||
+            !Sources().Any(source => source.ClusterId == cluster && source.Instance == instance && source.Credential.Length != 0))
+            return null;
+        using var db = Open();
+        using var query = Sql(db, """
+            SELECT max(p.time) FROM monitor_series s JOIN monitor_sample p ON p.series=s.id
+            WHERE s.cluster=$c AND s.instance=$i AND s.metric='java.lang:Runtime/StartTime'
+              AND p.time >= $after AND p.time <= $now AND p.value BETWEEN $low AND $high
+              AND EXISTS (
+                SELECT 1 FROM monitor_series k JOIN monitor_sample m ON m.series=k.id
+                WHERE k.cluster=s.cluster AND k.instance=s.instance AND m.time BETWEEN p.time-1 AND p.time+1
+                  AND k.metric='kafka.server:ReplicaManager/PartitionCount/Value'
+              )
+            """, ("$c",cluster), ("$i",instance), ("$after",Math.Max(Now-120,Math.Max(processStartedAt,previewedAt)+1)),
+            ("$now",Now), ("$low",(processStartedAt-2)*1000), ("$high",(processStartedAt+20)*1000));
+        return query.ExecuteScalar() as long?;
+    }
     private static SqliteCommand Sql(SqliteConnection db,string text, params (string Key,object Value)[] args)
     {
         var cmd=db.CreateCommand(); cmd.CommandText=text;
