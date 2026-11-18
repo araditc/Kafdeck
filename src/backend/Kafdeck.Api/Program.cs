@@ -597,6 +597,14 @@ if (mutationOptions?.Enabled == true)
     builder.Services.AddSingleton<MutationExecutionRequestContextAccessor>();
     builder.Services.AddSingleton<MutationDispatchService>();
 
+    builder.Services.AddSingleton<IDynamicConfigurationPort>(services =>
+        new ConfluentKafkaDynamicConfigurationAdapter(kafdeckOptions.Clusters, secretResolver,
+            registeredClient: RegisteredKafkaClient(services)));
+    builder.Services.AddSingleton<DynamicConfigurationRegistry>();
+    builder.Services.AddSingleton<DynamicConfigurationPlanner>();
+    builder.Services.AddSingleton<DynamicConfigurationPreconditionValidator>();
+    builder.Services.AddSingleton<IMutationExecutionHandler, DynamicBrokerConfigExecutionHandler>();
+
     builder.Services.AddSingleton<TopicMutationPlanner>();
     builder.Services.AddSingleton<TopicMutationPreconditionValidator>();
     builder.Services.AddSingleton<ITopicMutationPort>(services =>
@@ -1130,7 +1138,7 @@ if (notificationReadOptions?.Enabled == true)
         if (notificationRecovery is not null) app.MapKafdeckNotificationRecovery();
     }
 }
-app.MapKafdeckFleetCapabilities();
+app.MapKafdeckFleetCapabilities(brokerConfigEnabled: mutationOptions?.Enabled == true);
 app.MapKafdeckV06OpenApi();
 app.MapKafdeckV07OpenApi();
 app.MapKafdeckV08BearerOpenApi();
@@ -1145,6 +1153,7 @@ if (mutationOptions?.Enabled == true)
 {
     app.MapKafdeckMutationEndpoints();
     app.MapKafdeckTopicMutationEndpoints();
+    app.MapKafdeckBrokerConfigEndpoints();
     app.MapKafdeckBearerMutations();
     app.MapKafdeckRecordProductionEndpoints();
     app.MapKafdeckDataJobEndpoints();

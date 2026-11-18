@@ -9,8 +9,11 @@ sudo systemctl stop docker.service docker.socket 2>/dev/null || true
 mapfile -t docker_packages < <(dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'docker*' 'moby*' 2>/dev/null | awk '$2=="installed" {print $1}')
 if ((${#docker_packages[@]})); then sudo apt-get purge -y "${docker_packages[@]}"; fi
 if command -v docker; then echo 'Docker is still present; native acceptance is invalid.' >&2; exit 1; fi
-if ! test -x /usr/sbin/sshd; then sudo apt-get update -qq; sudo apt-get install -y openssh-server; fi
-sudo systemctl start ssh
+config_fixture="${KAFDECK_NATIVE_CONFIG_FIXTURE:-}"
+if [[ "$config_fixture" != 1 ]]; then
+  if ! test -x /usr/sbin/sshd; then sudo apt-get update -qq; sudo apt-get install -y openssh-server; fi
+  sudo systemctl start ssh
+fi
 verified=0
 for base in https://downloads.apache.org/kafka https://dlcdn.apache.org/kafka https://archive.apache.org/dist/kafka; do
   if curl --fail --location --retry 1 --connect-timeout 15 --max-time 180 "$base/4.3.1/kafka_2.13-4.3.1.tgz" -o "$lab/kafka.tgz"; then
@@ -99,6 +102,16 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 test "$ready" = 1
+if [[ "$config_fixture" == 1 ]]; then
+  {
+    echo KAFDECK_RUN_BROKER_CONFIG_LIVE=1
+    echo KAFDECK_BROKER_CONFIG_TEST_BOOTSTRAP=127.0.0.1:19092
+    echo "KAFDECK_BROKER_CONFIG_TEST_CLUSTER_ID=$cluster_id"
+    echo KAFDECK_BROKER_CONFIG_TEST_ENVIRONMENT=Linux-systemd
+    echo "KAFDECK_BROKER_CONFIG_TEST_EVIDENCE=$GITHUB_WORKSPACE/artifacts/broker-config"
+  } >> "$GITHUB_ENV"
+  exit 0
+fi
 ssh-keygen -q -t ed25519 -N '' -f "$lab/probe-key"
 printf '%s\n' '{"version":1,"targets":[{"id":"native-broker-1","adapter":"systemd","unit":"kafdeck-v11-kafka.service"}]}' > "$lab/targets.json"
 if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then

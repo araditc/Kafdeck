@@ -12,8 +12,12 @@ public sealed class V06W44DynamicConfigurationTests
     {
         var registry = new DynamicConfigurationRegistry();
 
+        Assert.True(registry.IsAdmitted(KafkaCompatibilityLine.RuntimeBrokerConfig, DynamicConfigurationRegistry.FleetKey));
+        Assert.False(registry.IsAdmitted(KafkaCompatibilityLine.RuntimeBrokerConfig, "log.cleaner.threads"));
+        Assert.False(registry.IsAdmitted(KafkaCompatibilityLine.RuntimeBrokerConfig, "message.max.bytes"));
+
         foreach (var version in
-                 Enum.GetValues<KafkaCompatibilityLine>())
+                 Enum.GetValues<KafkaCompatibilityLine>().Where(version => version != KafkaCompatibilityLine.RuntimeBrokerConfig))
         {
             Assert.True(
                 registry.IsAdmitted(

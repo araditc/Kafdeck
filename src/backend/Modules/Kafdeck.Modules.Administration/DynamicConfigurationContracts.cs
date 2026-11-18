@@ -18,6 +18,7 @@ public enum KafkaCompatibilityLine
     Kafka412 = 2,
     Kafka421 = 3,
     Kafka431 = 4,
+    RuntimeBrokerConfig = 5,
 }
 
 public sealed record DynamicConfigurationTarget(
@@ -36,7 +37,8 @@ public sealed record DynamicConfigurationObservation(
     string EffectiveSource,
     bool IsSensitive,
     bool IsReadOnly,
-    IReadOnlyList<DynamicConfigurationSynonym> Synonyms);
+    IReadOnlyList<DynamicConfigurationSynonym> Synonyms,
+    string? KafkaClusterId = null);
 
 public sealed record DynamicConfigurationMutation(
     DynamicConfigurationTarget Target,
@@ -112,12 +114,16 @@ public sealed class DynamicConfigurationRegistry
                 MaxValue: int.MaxValue),
         };
 
+    public const string FleetKey = "log.cleaner.backoff.ms";
+
     private static readonly IReadOnlyDictionary<KafkaCompatibilityLine, IReadOnlySet<string>>
         KeysByVersion =
             Enum.GetValues<KafkaCompatibilityLine>()
                 .ToDictionary(
                     version => version,
-                    _ => (IReadOnlySet<string>)Common.Keys.ToHashSet(StringComparer.Ordinal));
+                    version => (IReadOnlySet<string>)(version == KafkaCompatibilityLine.RuntimeBrokerConfig
+                        ? new HashSet<string>(StringComparer.Ordinal) { FleetKey }
+                        : Common.Keys.ToHashSet(StringComparer.Ordinal)));
 
     public DynamicConfigurationKeyPolicy Require(
         KafkaCompatibilityLine compatibility,
@@ -170,7 +176,10 @@ public sealed record DynamicConfigurationPlan(
     DynamicConfigurationMutation Mutation,
     string ObservedFingerprint,
     string? InheritedValue,
-    string? InheritedSource);
+    string? InheritedSource,
+    string? PreviousValue = null,
+    string? PreviousSource = null,
+    string? KafkaClusterId = null);
 
 public static class DynamicConfigurationPolicy
 {
@@ -272,6 +281,8 @@ public static class DynamicConfigurationPolicy
         var normalized = NormalizeObservation(observation);
         var builder = new StringBuilder();
         Append(builder, "cluster", normalized.Target.ClusterId);
+        if (normalized.KafkaClusterId is { } identity)
+            Append(builder, "kafka-cluster", RequireExact(identity, "Kafka cluster ID", 256));
         Append(builder, "scope", ((int)normalized.Target.Scope).ToString(CultureInfo.InvariantCulture));
         Append(builder, "broker", normalized.Target.BrokerId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
         Append(builder, "key", normalized.Target.Key);

@@ -166,7 +166,8 @@ public static class KafdeckTopicMutationEndpoints
         MutationIntentDescriptor intent,
         MutationRiskDecision risk,
         CancellationToken cancellationToken,
-        Func<Guid, string>? statusLocation = null)
+        Func<Guid, string>? statusLocation = null,
+        Func<MutationOperationSnapshot, object>? responseData = null)
     {
         var idempotencyKey = context.Request.Headers[IdempotencyHeader].ToString();
         var result = await admission
@@ -183,9 +184,9 @@ public static class KafdeckTopicMutationEndpoints
             MutationAdmissionOutcome.Created when result.Operation is not null =>
                 Results.Created(
                     statusLocation?.Invoke(result.Operation.OperationId) ?? $"/api/v1/mutations/{result.Operation.OperationId:D}",
-                    MutationStatusData.From(result.Operation)),
+                    responseData?.Invoke(result.Operation) ?? MutationStatusData.From(result.Operation)),
             MutationAdmissionOutcome.ExistingSameIntent when result.Operation is not null =>
-                Results.Ok(MutationStatusData.From(result.Operation)),
+                Results.Ok(responseData?.Invoke(result.Operation) ?? MutationStatusData.From(result.Operation)),
             MutationAdmissionOutcome.IdempotencyConflict =>
                 Results.Problem(
                     statusCode: StatusCodes.Status409Conflict,

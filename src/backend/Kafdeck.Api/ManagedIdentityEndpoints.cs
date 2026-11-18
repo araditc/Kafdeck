@@ -169,7 +169,8 @@ internal static class ManagedIdentityEndpoints
             AuthorizationAction.RecordProduce or AuthorizationAction.RecordsPurge or
             AuthorizationAction.ConsumerOffsetAlter or AuthorizationAction.ConsumerDelete or
             AuthorizationAction.SchemaCreate or AuthorizationAction.ConnectCreate or AuthorizationAction.ConnectAlter or
-            AuthorizationAction.ConnectDelete or AuthorizationAction.MutationApprove;
+            AuthorizationAction.ConnectDelete or AuthorizationAction.MutationApprove or
+            AuthorizationAction.ClusterConfigRead or AuthorizationAction.ClusterConfigAlter;
 
     internal static bool IsRegisteredTarget(ManagedIdentityStore store, string? id) =>
         id?.StartsWith("connection-", StringComparison.Ordinal) == true &&

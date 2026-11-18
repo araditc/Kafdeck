@@ -6,6 +6,7 @@ import { SignInPage } from './SignInPage.js';
 import { KafkaConnectionPage } from './KafkaConnectionPage.js';
 import { ManagedUsersPage } from './ManagedUsersPage.js';
 import { BrokerHostsPanel } from './BrokerHostsPanel.js';
+import { BrokerConfigPanel } from './BrokerConfigPanel.js';
 import { BrokerAgentPanel } from './BrokerAgentPanel.js';
 import { clearDeploymentAccessToken, deploymentAccessToken, setDeploymentAccessToken } from '../shared/deploymentAccess.js';
 import { rememberSignIn } from '../shared/recentSignIns.js';
@@ -796,6 +797,9 @@ export function AppShell() {
           {activePage === 'fleet' && operator?.canManageUsers && selectedClusterId && <BrokerHostsPanel key={`hosts:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {activePage === 'fleet' && operator && operatorScope && selectedClusterId &&
             <BrokerAgentPanel key={`agent:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
+          {activePage === 'fleet' && operatorScope && selectedClusterId &&
+            fleetCapabilities.some(item => item.id === 'dynamic-configuration' && item.state === 'supported') &&
+            <BrokerConfigPanel key={`broker-config:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {activePage === 'fleet' && <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
             <h2 id="fleet-title" className="card-title">{t("Fleet Operations")}</h2>
             <p className="text-secondary">{t("Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.")}</p>

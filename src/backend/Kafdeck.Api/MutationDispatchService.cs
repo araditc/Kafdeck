@@ -512,6 +512,7 @@ public sealed class MutationDispatchService
     private static bool IsAdmittedWithoutExecutionMaterial(
         MutationOperationKind kind) =>
         kind is
+            MutationOperationKind.ClusterConfigAlter or
             MutationOperationKind.TopicCreate or
             MutationOperationKind.TopicAlter or
             MutationOperationKind.TopicIncreasePartitions or

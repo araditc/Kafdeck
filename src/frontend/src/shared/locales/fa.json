@@ -1806,5 +1806,21 @@
   "Checking agent operation…": "در حال بررسی عملیات عامل…",
   "Fresh metric at {0}": "متریک تازه در {0}",
   "The plan expired before dispatch. Preview again.": "طرح پیش از ارسال فرمان منقضی شد. دوباره پیش‌نمایش بگیرید.",
-  "Preview pending change in the current maintenance window": "پیش‌نمایش تغییر نیمه‌تمام در بازهٔ نگهداری فعلی"
+  "Preview pending change in the current maintenance window": "پیش‌نمایش تغییر نیمه‌تمام در بازهٔ نگهداری فعلی",
+  "Configuration request failed.": "درخواست تنظیمات ناموفق بود.",
+  "Dynamic broker settings": "تنظیمات پویای بروکر",
+  "Wait time in milliseconds when the log cleaner finds no work.": "زمان انتظار پاک‌کنندهٔ لاگ وقتی کاری برای انجام ندارد، بر حسب میلی‌ثانیه.",
+  "New value": "مقدار جدید",
+  "Remove override and inherit": "حذف تنظیم اختصاصی و بازگشت به مقدار موروثی",
+  "Preview configuration change": "پیش‌نمایش تغییر تنظیمات",
+  "Configuration preview": "پیش‌نمایش تنظیمات",
+  "Effective value and source": "مقدار و منبع فعلی",
+  "Expected value and source": "مقدار و منبع مورد انتظار",
+  "Verified value and source": "مقدار و منبع تأییدشده",
+  "The setting changed after preview. Create a fresh preview.": "تنظیم پس از پیش‌نمایش تغییر کرده است. پیش‌نمایش تازه‌ای بگیرید.",
+  "Type {0} to confirm": "برای تأیید {0} را وارد کنید",
+  "Confirm configuration preview": "تأیید پیش‌نمایش تنظیمات",
+  "Apply configuration change": "اعمال تغییر تنظیمات",
+  "Preview restore": "پیش‌نمایش بازیابی",
+  "Target": "هدف"
 }

@@ -42,13 +42,13 @@ public static class FleetCapabilityCatalog
                 "Typed SCRAM provider/domain contracts are admitted, but the v0.6 production API/runtime does not register the W43 mutation handler surface; secret-changing activation remains fail-closed.",
                 "Confluent.Kafka 2.16.0: DescribeUserScramCredentialsAsync/AlterUserScramCredentialsAsync",
                 "production Program.cs has no W43 handler registration"),
-            Blocked(
+            Supported(
                 "dynamic-configuration",
                 "Allowlisted dynamic configuration",
-                "W44",
-                "Typed dynamic-config provider/domain contracts are admitted, but the v0.6 production API/runtime does not register the W44 mutation handler surface; public mutation activation remains fail-closed.",
+                "v1.1 #488",
+                "Preview, apply and restore supported settings through the governed Kafka Admin API. Kafka must expose the configured scope and the operator needs configuration read and change permission.",
                 "Confluent.Kafka 2.16.0: DescribeConfigsAsync/IncrementalAlterConfigsAsync",
-                "production Program.cs has no W44 handler registration"),
+                "Fleet broker configuration preview and verified readback"),
             Unsupported(
                 "client-quotas",
                 "Client quotas",

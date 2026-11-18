@@ -35,6 +35,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
     private readonly JobReconciliationService? _reconciliation;
     private readonly DeclarativeSubscriptionMutationHandler? _declarative;
     private readonly CatalogMutationHandler? _catalog;
+    private readonly DynamicConfigurationPreconditionValidator? _brokerConfig;
 
     public W39MutationPreDispatchGuard(
         MutationExecutionRequestContextAccessor requestContext,
@@ -53,7 +54,8 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         ScramMutationPreconditionValidator? scram = null,
         IScramEffectAuthorizationGuard? scramAuthorization = null, JobReconciliationService? reconciliation = null,
         DeclarativeSubscriptionMutationHandler? declarative = null,
-        CatalogMutationHandler? catalog = null)
+        CatalogMutationHandler? catalog = null,
+        DynamicConfigurationPreconditionValidator? brokerConfig = null)
     {
         _requestContext = requestContext ?? throw new ArgumentNullException(nameof(requestContext));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
@@ -73,6 +75,7 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
         _reconciliation = reconciliation;
         _declarative = declarative;
         _catalog = catalog;
+        _brokerConfig = brokerConfig;
     }
 
     public async Task<MutationPreDispatchGuardResult> ValidateAsync(
@@ -102,6 +105,11 @@ public sealed class W39MutationPreDispatchGuard : IMutationPreDispatchGuard
             case MutationOperationKind.FleetUncertaintyDisposition:
                 if (_reconciliation is null) return Unsupported();
                 preconditions = await _reconciliation.ValidateAsync(operation, cancellationToken).ConfigureAwait(false);
+                break;
+            case MutationOperationKind.ClusterConfigAlter:
+                if (_brokerConfig is null || !DynamicBrokerConfigExecutionHandler.IsAdmitted(operation))
+                    return Unsupported();
+                preconditions = await _brokerConfig.ValidateAsync(operation, cancellationToken).ConfigureAwait(false);
                 break;
             case MutationOperationKind.TopicCreate:
             case MutationOperationKind.TopicAlter:

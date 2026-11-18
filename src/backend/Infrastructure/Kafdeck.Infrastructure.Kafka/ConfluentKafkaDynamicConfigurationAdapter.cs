@@ -22,13 +22,14 @@ public sealed class ConfluentKafkaDynamicConfigurationAdapter :
     public ConfluentKafkaDynamicConfigurationAdapter(
         IReadOnlyList<ClusterProfile> clusterProfiles,
         SecretResolver secretResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<string, IAdminClient?>? registeredClient = null)
     {
         _clients = new KafkaAdminClientRegistry(
             clusterProfiles ??
             throw new ArgumentNullException(nameof(clusterProfiles)),
             secretResolver ??
-            throw new ArgumentNullException(nameof(secretResolver)));
+            throw new ArgumentNullException(nameof(secretResolver)), registeredClient);
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -67,6 +68,16 @@ public sealed class ConfluentKafkaDynamicConfigurationAdapter :
 
         try
         {
+            var cluster = await client!.DescribeClusterAsync(new DescribeClusterOptions { RequestTimeout = remaining })
+                .WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(cluster.ClusterId))
+                return FailedObservation(new KafkaFailure(KafkaFailureCategory.NotSupported,
+                    "dynamic_config_cluster_identity_unknown", "Kafka did not identify the configuration target.", IsRetryable: false));
+
+            remaining = operation.Remaining(_timeProvider.GetUtcNow());
+            if (remaining <= TimeSpan.Zero)
+                return FailedObservation(KafkaFailureMapper.DeadlineExceeded());
+
             var resource = Resource(normalized);
             var results = await client!.DescribeConfigsAsync(
                     new[] { resource },
@@ -105,7 +116,7 @@ public sealed class ConfluentKafkaDynamicConfigurationAdapter :
                     entry.Source.ToString(),
                     entry.IsSensitive,
                     entry.IsReadOnly,
-                    Array.AsReadOnly(synonyms)),
+                    Array.AsReadOnly(synonyms), cluster.ClusterId),
                 LiveObservation());
         }
         catch (DescribeConfigsException exception)
