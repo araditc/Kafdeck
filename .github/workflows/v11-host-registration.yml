@@ -1,0 +1,54 @@
+name: v11-host-registration
+on:
+  pull_request:
+    paths: ['tools/broker-host/**', 'src/backend/Kafdeck.Api/BrokerHost*.cs', 'tests/Kafdeck.Architecture.Tests/V11BrokerHostTests.cs', 'deploy/dev/broker-host-native.sh', '.github/workflows/v11-host-registration.yml']
+  push:
+    branches: [main]
+    paths: ['tools/broker-host/**', 'src/backend/Kafdeck.Api/BrokerHost*.cs', 'tests/Kafdeck.Architecture.Tests/V11BrokerHostTests.cs', 'deploy/dev/broker-host-native.sh', '.github/workflows/v11-host-registration.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v11-host-registration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  systemd-without-docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify bounded helper behavior
+        run: python3 -m unittest discover -s tools/broker-host -p 'test_*.py'
+      - name: Provision native systemd Kafka and restricted SSH probe
+        run: bash deploy/dev/broker-host-native.sh
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Prepare production Fleet component browser harness
+        run: |
+          npm ci --prefix src/frontend --ignore-scripts --no-audit --no-fund
+          node src/frontend/tests/host-harness/build.mjs
+          npm ci --prefix deploy/dev/browser-g2 --ignore-scripts --no-audit --no-fund
+          deploy/dev/browser-g2/node_modules/.bin/playwright install --with-deps chromium
+          echo "KAFDECK_HOST_UI_DIST=$GITHUB_WORKSPACE/src/frontend/dist/host-harness" >> "$GITHUB_ENV"
+          echo "KAFDECK_HOST_BROWSER_SCRIPT=$GITHUB_WORKSPACE/deploy/dev/broker-host-browser.cjs" >> "$GITHUB_ENV"
+      - name: Validate browser API against real SSH and Kafka
+        run: |
+          dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-restore --filter 'FullyQualifiedName~V11BrokerHost' --logger 'trx;LogFileName=host-acceptance.trx' --results-directory artifacts/host-acceptance
+          python3 scripts/ci/require-complete-trx.py artifacts/host-acceptance/host-acceptance.trx V11BrokerHostTests:14 V11BrokerHostLiveTests:2
+      - name: Stop owned native fixture
+        if: always()
+        run: sudo systemctl stop kafdeck-v11-kafka.service || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: v11-native-host-acceptance
+          path: artifacts/host-acceptance/
+          retention-days: 30

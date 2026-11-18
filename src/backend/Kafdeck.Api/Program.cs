@@ -55,6 +55,10 @@ KafdeckConfigurationValidator.ValidateAndThrow(kafdeckOptions);
 builder.Services.ConfigureManagedStateDataProtection(builder.Configuration);
 var managedIdentityOptions = builder.Configuration.GetSection("Kafdeck:ManagedIdentity").Get<ManagedIdentityOptions>() ?? new();
 var managedIdentity = managedIdentityOptions.Enabled ? managedIdentityOptions.ValidateAndCreate(kafdeckOptions) : null;
+var brokerHostOptions = builder.Configuration.GetSection("Kafdeck:BrokerHosts").Get<BrokerHostOptions>() ?? new();
+brokerHostOptions.Validate();
+if (brokerHostOptions.Enabled && managedIdentity is null)
+    throw new KafdeckConfigurationException("Broker host management requires managed operator identity.");
 if (managedIdentity is not null) _ = managedIdentity.Read();
 if (issueSetupCode)
 {
@@ -1074,6 +1078,8 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
     {
         _ = app.Services.GetRequiredService<ManagedKeycloakUsers>();
         app.MapManagedIdentity(managedIdentity, kafdeckOptions);
+        app.MapBrokerHosts(managedIdentity, brokerHostOptions,
+            new BrokerHostStore(managedIdentityOptions.StateFile! + ".hosts.json"), new BrokerHostSsh(brokerHostOptions));
         if (app.Services.GetService<RegisteredHttpServiceRuntime>() is { } registered)
             app.MapRegisteredHttpServices(managedIdentity, registered);
     }

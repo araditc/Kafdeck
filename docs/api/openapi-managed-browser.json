@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kafdeck experimental managed-browser API",
-    "version": "1.0.0-experimental.2",
-    "description": "G03 contract revision, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
+    "version": "1.0.0-experimental.3",
+    "description": "Managed-browser contract revision including v1.1 host registration, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
   },
   "servers": [
     {
@@ -2651,6 +2651,445 @@
           "ksql_table_rejected"
         ]
       }
+    },
+    "/api/v1/fleet/hosts": {
+      "get": {
+        "operationId": "managed-hosts-list",
+        "summary": "List host registry and credential aliases",
+        "description": "Current installation owner only. Explicit CIDR allowlist and server-side credential aliases. Pinned SHA256 SSH host key. Fixed read-only helper; no arbitrary shell. Binding compares live service metadata with Kafka cluster and broker identity. Registry changes use expectedRevision CAS and a durable audit outbox.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "List host registry and credential aliases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerHostRegistry"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "managed-hosts-register",
+        "summary": "Verify trusted SSH host and register it",
+        "description": "Current installation owner only. Explicit CIDR allowlist and server-side credential aliases. Pinned SHA256 SSH host key. Fixed read-only helper; no arbitrary shell. Binding compares live service metadata with Kafka cluster and broker identity. Registry changes use expectedRevision CAS and a durable audit outbox.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Verify trusted SSH host and register it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerHostRegistration"
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 8192,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerHostWrite"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "BrokerHostWrite"
+      }
+    },
+    "/api/v1/fleet/hosts/{hostId}/probe": {
+      "post": {
+        "operationId": "managed-hosts-probe",
+        "summary": "Observe approved running services",
+        "description": "Current installation owner only. Explicit CIDR allowlist and server-side credential aliases. Pinned SHA256 SSH host key. Fixed read-only helper; no arbitrary shell. Binding compares live service metadata with Kafka cluster and broker identity. Registry changes use expectedRevision CAS and a durable audit outbox.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Observe approved running services",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerHostObservation"
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 1024,
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hostId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/fleet/hosts/bindings": {
+      "post": {
+        "operationId": "managed-hosts-bind",
+        "summary": "Reverify and bind broker identity",
+        "description": "Current installation owner only. Explicit CIDR allowlist and server-side credential aliases. Pinned SHA256 SSH host key. Fixed read-only helper; no arbitrary shell. Binding compares live service metadata with Kafka cluster and broker identity. Registry changes use expectedRevision CAS and a durable audit outbox.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Reverify and bind broker identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerHostBindResult"
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 4096,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerHostBind"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "BrokerHostBind"
+      }
     }
   },
   "components": {
@@ -3450,6 +3889,353 @@
         "required": [
           "name",
           "status"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostDraft": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 45
+          },
+          "user": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "credentialId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
+        },
+        "required": [
+          "name",
+          "address",
+          "user",
+          "fingerprint",
+          "credentialId",
+          "port"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostWrite": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "host": {
+            "$ref": "#/components/schemas/BrokerHostDraft"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "host"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostBind": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "clusterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "brokerId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hostId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "clusterId",
+          "brokerId",
+          "hostId",
+          "targetId"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connection": {
+            "$ref": "#/components/schemas/BrokerHostDraft"
+          },
+          "verifiedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "connection",
+          "verifiedAtUtc"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerServiceTarget": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "systemd",
+              "compose"
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kafkaClusterId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brokerId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "identity_unavailable"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "adapter",
+          "unit",
+          "project",
+          "service",
+          "kafkaClusterId",
+          "instance",
+          "brokerId",
+          "status"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostBinding": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "brokerId": {
+            "type": "integer"
+          },
+          "hostId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kafkaClusterId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "instance": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "verifiedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "clusterId",
+          "brokerId",
+          "hostId",
+          "targetId",
+          "kafkaClusterId",
+          "instance",
+          "verifiedAtUtc"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostRegistry": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer"
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerHost"
+            }
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerHostBinding"
+            }
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "authentication": {
+                  "type": "string",
+                  "enum": [
+                    "password",
+                    "privateKey"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "authentication"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "revision",
+          "hosts",
+          "bindings",
+          "credentials"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostRegistration": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer"
+          },
+          "host": {
+            "$ref": "#/components/schemas/BrokerHost"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerServiceTarget"
+            }
+          }
+        },
+        "required": [
+          "revision",
+          "host",
+          "targets"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostObservation": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerServiceTarget"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "targets"
+        ],
+        "additionalProperties": true
+      },
+      "BrokerHostBindResult": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/BrokerHostBinding"
+          }
+        },
+        "required": [
+          "revision",
+          "binding"
         ],
         "additionalProperties": true
       }

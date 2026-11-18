@@ -3,6 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="SSH.NET" Version="2026.0.1" />
     <PackageVersion Include="Apache.Avro" Version="1.12.2" />
     <PackageVersion Include="Confluent.Kafka" Version="2.16.0" />
     <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
