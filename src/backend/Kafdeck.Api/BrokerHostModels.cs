@@ -11,6 +11,9 @@ internal sealed class BrokerHostOptions
     public BrokerHostCredential[] Credentials { get; init; } = [];
     public Guid[] LogReaderUserIds { get; init; } = [];
     public BrokerLogSource[] LogSources { get; init; } = [];
+    public Guid[] AgentInstallerUserIds { get; init; } = [];
+    public BrokerAgentTarget[] AgentTargets { get; init; } = [];
+    public BrokerAgentPackage[] AgentPackages { get; init; } = [];
 
     internal void Validate()
     {
@@ -34,6 +37,17 @@ internal sealed class BrokerHostOptions
             LogSources.Select(source => (source.ClusterId, source.BrokerId)).Distinct().Count() != LogSources.Length ||
             LogSources.Select(source => (source.ClusterId, source.MonitoringInstance)).Distinct().Count() != LogSources.Length)
             throw new KafdeckConfigurationException("Invalid broker log readers or monitoring source mappings.");
+        if (AgentInstallerUserIds.Length > 256 || AgentInstallerUserIds.Contains(Guid.Empty) ||
+            AgentInstallerUserIds.Distinct().Count() != AgentInstallerUserIds.Length ||
+            AgentTargets.Length > 32 || AgentTargets.Select(t => t.ClusterId).Distinct().Count() != AgentTargets.Length ||
+            AgentTargets.Any(t => !BrokerHostValidation.ClusterId(t.ClusterId) || t.BrokerId < 0 ||
+                !BrokerHostValidation.Name(t.MonitoringInstance) || t.MonitoringInstance == MonitoringSettings.MetadataInstance ||
+                !Credentials.Any(c => c.Id == t.CredentialId && c.Authentication == "privateKey") ||
+                t.ExpectedBrokers is < 1 or > 128) ||
+            AgentPackages.Length > 64 || AgentPackages.Select(p => p.Version).Distinct().Count() != AgentPackages.Length ||
+            AgentPackages.Select(p => p.Digest).Distinct().Count() != AgentPackages.Length ||
+            AgentPackages.Any(p => !BrokerAgentModels.ValidVersion(p.Version) || !BrokerAgentModels.ValidDigest(p.Digest)))
+            throw new KafdeckConfigurationException("Invalid broker agent lifecycle configuration.");
     }
 
     internal bool Allows(string address) => IPAddress.TryParse(address, out var ip) &&

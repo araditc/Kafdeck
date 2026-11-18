@@ -44,12 +44,28 @@ launch() {
   sudo systemd-run --unit="$unit" --property="User=$(id -un)" --property="WorkingDirectory=$lab" \
     --setenv="JAVA_HOME=$JAVA_HOME" --setenv="KAFKA_HEAP_OPTS=$KAFKA_HEAP_OPTS" "$@"
 }
-if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then
+agent_fixture="${KAFDECK_NATIVE_AGENT_FIXTURE:-}"
+if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 || "$agent_fixture" == 1 ]]; then
   sed -e 's/process.roles=broker,controller/process.roles=broker/' -e 's/node.id=1/node.id=2/' \
     -e 's/:19092/:19094/g' -e 's/,CONTROLLER:\/\/127.0.0.1:19093//' -e 's|/data$|/data-sibling|' \
     "$lab/server.properties" > "$lab/sibling.properties"
   "$kafka/bin/kafka-storage.sh" format --cluster-id "$cluster_id" --config "$lab/sibling.properties"
-  cat > "$lab/launch-logged" <<'EOF'
+  if [[ "$agent_fixture" == 1 ]]; then
+    agent=/var/lib/kafdeck-agent/native-broker-2
+    sudo install -d -m 0755 "$agent"
+    openssl rand -hex 32 > "$lab/agent-token"
+    chmod 0600 "$lab/agent-token"
+    printf '%s\n' 'endpoint=http://127.0.0.1:18090/monitoring/ingest' "tokenFile=$agent/agent-token" 'intervalSeconds=10' 'includeTopicPartitions=false' > "$lab/agent.properties"
+    sudo install -m 0600 -o "$(id -un)" "$lab/agent-token" "$agent/agent-token"
+    sudo install -m 0644 "$lab/agent.properties" "$agent/agent.properties"
+    sudo install -m 0644 /dev/null "$agent/jvm.args"
+    launch kafdeck-v11-kafka "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
+    sudo systemd-run --unit=kafdeck-v11-kafka-sibling --property="User=$(id -un)" --property="WorkingDirectory=$lab" \
+      --setenv="JAVA_HOME=$JAVA_HOME" --setenv="KAFKA_HEAP_OPTS=$KAFKA_HEAP_OPTS" \
+      --setenv="JDK_JAVA_OPTIONS=-Dkafdeck.fixture.preserved=true @$agent/jvm.args" \
+      "$kafka/bin/kafka-server-start.sh" "$lab/sibling.properties"
+  else
+    cat > "$lab/launch-logged" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 marker=$1
@@ -70,9 +86,10 @@ shift 3
 ) &
 exec "$@"
 EOF
-  chmod 0755 "$lab/launch-logged"
-  launch kafdeck-v11-kafka "$lab/launch-logged" native-486-primary "$lab/time-1" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
-  launch kafdeck-v11-kafka-sibling "$lab/launch-logged" native-486-sibling "$lab/time-2" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/sibling.properties"
+    chmod 0755 "$lab/launch-logged"
+    launch kafdeck-v11-kafka "$lab/launch-logged" native-486-primary "$lab/time-1" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
+    launch kafdeck-v11-kafka-sibling "$lab/launch-logged" native-486-sibling "$lab/time-2" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/sibling.properties"
+  fi
 else
   launch kafdeck-v11-kafka "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
 fi
@@ -98,9 +115,21 @@ if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then
     echo KAFDECK_HOST_LOG_MARKER=native-486-primary
     echo KAFDECK_HOST_LOG_SIBLING=native-486-sibling
   } >> "$GITHUB_ENV"
+elif [[ "$agent_fixture" == 1 ]]; then
+  deadline=$((SECONDS + 90))
+  until timeout 3 bash -c 'echo >/dev/tcp/127.0.0.1/19094' 2>/dev/null; do
+    test "$SECONDS" -lt "$deadline"
+    sleep 1
+  done
+  printf '%s\n' '{"version":1,"targets":[{"id":"native-broker-1","adapter":"systemd","unit":"kafdeck-v11-kafka.service"},{"id":"native-broker-2","adapter":"systemd","unit":"kafdeck-v11-kafka-sibling.service"}]}' > "$lab/targets.json"
 fi
 sudo sh tools/broker-host/install.sh "$lab/targets.json" "$lab/probe-key.pub"
 pin=$(sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | awk '{print $2}')
+if [[ "$agent_fixture" == 1 ]]; then
+  "$kafka/bin/kafka-topics.sh" --bootstrap-server 127.0.0.1:19092,127.0.0.1:19094 \
+    --create --topic kafdeck-agent-fixture --partitions 3 --replication-factor 2 --config min.insync.replicas=1
+  bash deploy/dev/stage-broker-agent-fixture.sh "$lab" "$agent" "$cluster_id"
+fi
 {
   echo KAFDECK_RUN_HOST_LIVE=1
   echo KAFDECK_HOST_ADDRESS=127.0.0.1

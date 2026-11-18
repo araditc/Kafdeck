@@ -1,0 +1,74 @@
+name: v11-broker-agent
+on:
+  pull_request:
+    paths:
+      - 'tools/broker-host/**'
+      - 'tools/kafka-agent/**'
+      - 'src/backend/Kafdeck.Api/BrokerAgent*.cs'
+      - 'src/frontend/src/app/BrokerAgentPanel.tsx'
+      - 'tests/Kafdeck.Architecture.Tests/V11BrokerAgentTests.cs'
+      - 'deploy/dev/broker-host-native.sh'
+      - 'deploy/dev/stage-broker-agent-fixture.sh'
+      - 'deploy/dev/broker-agent-browser.cjs'
+      - '.github/workflows/v11-broker-agent.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v11-broker-agent-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  systemd-offline-agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check restart recovery boundaries
+        run: python3 -m unittest discover -s tools/broker-host -p 'test_agent_lifecycle.py'
+      - name: Provision native Kafka brokers and stage offline agent artifacts
+        env:
+          KAFDECK_NATIVE_AGENT_FIXTURE: '1'
+        run: bash deploy/dev/broker-host-native.sh
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Build Fleet harness
+        run: |
+          npm ci --prefix src/frontend --ignore-scripts --no-audit --no-fund
+          node src/frontend/tests/host-harness/build.mjs
+          npm ci --prefix deploy/dev/browser-g2 --ignore-scripts --no-audit --no-fund
+          deploy/dev/browser-g2/node_modules/.bin/playwright install --with-deps chromium
+          echo "KAFDECK_HOST_UI_DIST=$GITHUB_WORKSPACE/src/frontend/dist/host-harness" >> "$GITHUB_ENV"
+          echo "KAFDECK_AGENT_BROWSER_SCRIPT=$GITHUB_WORKSPACE/deploy/dev/broker-agent-browser.cjs" >> "$GITHUB_ENV"
+      - name: Verify offline install and upgrade, including restart and fresh metrics
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/v11-host-native"
+          target=/var/lib/kafdeck-agent/native-broker-2
+          primary_before=$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)
+          token_before=$(sudo sha256sum "$target/agent-token" | cut -d ' ' -f 1)
+          props_before=$(sudo sha256sum "$target/agent.properties" | cut -d ' ' -f 1)
+          dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-restore --filter 'FullyQualifiedName~V11BrokerAgent' --logger 'trx;LogFileName=agent-acceptance.trx' --results-directory artifacts/host-acceptance
+          python3 scripts/ci/require-complete-trx.py artifacts/host-acceptance/agent-acceptance.trx V11BrokerAgentTests:3 V11BrokerAgentLiveTests:1
+          test "$primary_before" = "$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)"
+          test "$token_before" = "$(sudo sha256sum "$target/agent-token" | cut -d ' ' -f 1)"
+          test "$props_before" = "$(sudo sha256sum "$target/agent.properties" | cut -d ' ' -f 1)"
+          sibling_pid=$(systemctl show --property MainPID --value kafdeck-v11-kafka-sibling.service)
+          sudo cat "/proc/$sibling_pid/environ" | tr '\0' '\n' | grep -Fx "JDK_JAVA_OPTIONS=-Dkafdeck.fixture.preserved=true @$target/jvm.args" >/dev/null
+          printf '%s\n' '{"primaryBrokerUnchanged":true,"tokenAndPropertiesPreserved":true,"existingJvmOptionsPreserved":true}' > artifacts/host-acceptance/agent-preservation.json
+      - name: Stop only owned lab units
+        if: always()
+        run: sudo systemctl stop kafdeck-v11-kafka.service kafdeck-v11-kafka-sibling.service || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: v11-native-agent-acceptance
+          path: artifacts/host-acceptance/
+          retention-days: 30

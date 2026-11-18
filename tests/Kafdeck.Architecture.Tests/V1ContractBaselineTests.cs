@@ -63,7 +63,9 @@ public sealed class V1ContractBaselineTests
                 p.ParameterType == typeof(KafdeckOptions) ? options : p.ParameterType == typeof(ManagedIdentityStore) ? store :
                 p.ParameterType == typeof(BrokerHostOptions) ? new BrokerHostOptions() :
                 p.ParameterType == typeof(BrokerHostStore) ? new BrokerHostStore(Path.Combine(Path.GetTempPath(), "kafdeck-host-contract-" + Guid.NewGuid().ToString("N"))) :
-                p.ParameterType == typeof(IBrokerHostProbe) || p.ParameterType == typeof(IBrokerLogReader) ? new BrokerHostSsh(new BrokerHostOptions()) :
+                p.ParameterType == typeof(BrokerAgentRecoveryStore) ? new BrokerAgentRecoveryStore(Path.Combine(Path.GetTempPath(), "kafdeck-agent-contract-" + Guid.NewGuid().ToString("N"))) :
+                p.ParameterType == typeof(IBrokerHostProbe) || p.ParameterType == typeof(IBrokerLogReader) ||
+                p.ParameterType == typeof(IBrokerAgentLifecycle) ? new BrokerHostSsh(new BrokerHostOptions()) :
                 p.ParameterType == typeof(RegisteredHttpServiceRuntime) ? runtime : p.HasDefaultValue ? p.DefaultValue :
                 p.ParameterType == typeof(bool) ? true : throw new InvalidOperationException("Inventory argument unclassified: " + name + "/" + p.Name)).ToArray();
             // Feature switches are enabled; recursive browser/bearer switches retain their defaults.

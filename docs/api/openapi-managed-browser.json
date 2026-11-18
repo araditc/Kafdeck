@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kafdeck experimental managed-browser API",
-    "version": "1.0.0-experimental.4",
+    "version": "1.0.0-experimental.5",
     "description": "Managed-browser contract revision including v1.1 host registration, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
   },
   "servers": [
@@ -3272,6 +3272,488 @@
           }
         }
       }
+    },
+    "/api/v1/fleet/hosts/agent/targets": {
+      "get": {
+        "operationId": "managed-broker-agent-targets",
+        "summary": "List the authorized broker and approved offline packages",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "explicit managed agent-install grant and live cluster scope",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped broker agent operation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerAgentTargets"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fleet/hosts/agent/preview": {
+      "post": {
+        "operationId": "managed-broker-agent-preview",
+        "summary": "Preview an offline broker agent install or upgrade",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "explicit managed agent-install grant and live cluster scope",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "x-runtime-request-schema": "BrokerAgentPreviewInput",
+        "x-declared-body-limit-bytes": 2048,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerAgentPreviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scoped broker agent operation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerAgentPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fleet/hosts/agent/apply": {
+      "post": {
+        "operationId": "managed-broker-agent-apply",
+        "summary": "Apply the same authorized plan safely or reconcile a dispatched restart",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "explicit managed agent-install grant and live cluster scope",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "x-runtime-request-schema": "BrokerAgentPlanInput",
+        "x-declared-body-limit-bytes": 8192,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerAgentPlanInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scoped broker agent operation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerAgentProgress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fleet/hosts/agent/status": {
+      "post": {
+        "operationId": "managed-broker-agent-status",
+        "summary": "Reconcile the recorded broker and verify health and fresh metrics",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "explicit managed agent-install grant and live cluster scope",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "x-runtime-request-schema": "BrokerAgentPlanInput",
+        "x-declared-body-limit-bytes": 8192,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerAgentPlanInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scoped broker agent operation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerAgentProgress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The operation was denied, blocked or could not be observed. A restart safety conflict may include the blocked partitions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4553,6 +5035,309 @@
           "text": {
             "type": "string",
             "maxLength": 2048
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentPackage": {
+        "type": "object",
+        "required": [
+          "version",
+          "digest"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 72
+          },
+          "digest": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentHealth": {
+        "type": "object",
+        "required": [
+          "healthy",
+          "brokerCount",
+          "topics",
+          "affectedPartitions",
+          "blockedPartitions"
+        ],
+        "properties": {
+          "healthy": {
+            "type": "boolean"
+          },
+          "brokerCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "topics": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "affectedPartitions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blockedPartitions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 260
+            },
+            "maxItems": 20
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentTargets": {
+        "type": "object",
+        "required": [
+          "brokerId",
+          "packages",
+          "pendingPlan"
+        ],
+        "properties": {
+          "brokerId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerAgentPackage"
+            },
+            "maxItems": 64
+          },
+          "pendingPlan": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentPreviewInput": {
+        "type": "object",
+        "required": [
+          "clusterId",
+          "brokerId",
+          "version"
+        ],
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "brokerId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 72
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentPlanInput": {
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "properties": {
+          "plan": {
+            "type": "string",
+            "maxLength": 7000
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentPreview": {
+        "type": "object",
+        "required": [
+          "plan",
+          "operationId",
+          "brokerId",
+          "package",
+          "adapter",
+          "currentVersion",
+          "currentDigest",
+          "launchMode",
+          "restartRequired",
+          "maintenanceFrom",
+          "maintenanceTo",
+          "requiresWindow",
+          "health"
+        ],
+        "properties": {
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "brokerId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "package": {
+            "$ref": "#/components/schemas/BrokerAgentPackage"
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "systemd",
+              "compose"
+            ]
+          },
+          "currentVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 72
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "launchMode": {
+            "type": "string",
+            "enum": [
+              "argfile",
+              "existingJvmArgument"
+            ]
+          },
+          "restartRequired": {
+            "type": "boolean"
+          },
+          "maintenanceFrom": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "maintenanceTo": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "requiresWindow": {
+            "type": "boolean"
+          },
+          "health": {
+            "$ref": "#/components/schemas/BrokerAgentHealth"
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerAgentProgress": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "stage"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "publishing",
+              "awaitingRestart",
+              "awaitingMetrics",
+              "awaitingHealth",
+              "reconcile",
+              "complete",
+              "alreadyInstalled",
+              "expired"
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 72
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "metricSeenAt": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "processStartedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "dispatchedAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "format": "int64"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monitoringInstance": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "health": {
+            "$ref": "#/components/schemas/BrokerAgentHealth"
+          },
+          "requiresRenewal": {
+            "type": "boolean"
           }
         },
         "additionalProperties": true

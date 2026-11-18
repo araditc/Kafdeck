@@ -1,0 +1,18 @@
+{
+  "issue": 487,
+  "environment": "Arad Office (existing Compose cluster)",
+  "observedAtUtc": "2026-11-18T09:03:24.3112126Z",
+  "method": "Read-only Kafka metadata, cluster and topic min.insync.replicas inspection",
+  "brokers": 3,
+  "topics": 157,
+  "partitions": 6878,
+  "unavailable": 0,
+  "underReplicated": 0,
+  "partitionsWithInsufficientSurvivingIsrByBroker": {
+    "1": 216,
+    "2": 211,
+    "3": 214
+  },
+  "cause": "All affected partitions are single-replica partitions.",
+  "restart": false
+}

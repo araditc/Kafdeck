@@ -26,6 +26,7 @@ The [final publication record](releases/v1.0.md) and [completed checklist](relea
 | Architecture and project direction | [Architecture](architecture/), [ADRs](adr/), [RFCs](rfcs/), [Roadmap](../ROADMAP.md) |
 | v1.1 development: SSH hosts and verified broker/service mappings | [Broker host registration](operator/v1.1-broker-host-registration.md) — not in the v1.0.0 release packages |
 | v1.1 development: Bounded service logs from Brokers, Fleet and Monitoring | [Broker service logs](operator/v1.1-broker-service-logs.md) |
+| v1.1 development: Offline agent install and upgrade for a verified broker | [Offline broker agent](operator/v1.1-offline-broker-agent.md) |
 
 Development scaffolds/laboratories under `deploy/dev` are isolated fixtures. They are not turnkey production deployments, and historical candidate reports are not replacements for the final v1.0 release evidence.
 
