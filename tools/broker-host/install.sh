@@ -16,6 +16,7 @@ for t in c['targets']:
     names.add(t['id'])
     fields=['unit'] if t['adapter']=='systemd' else ['project','service'] if t['adapter']=='compose' else []
     assert fields
+    assert type(t.get('logs', False)) is bool
     for field in fields: assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}',t[field])
     if t['adapter']=='systemd': assert t['unit'].endswith('.service')
 key=Path(sys.argv[2]).read_text().strip()
@@ -36,7 +37,7 @@ printf 'restrict,command="/usr/local/libexec/kafdeck-host-entry" %s\n' "$(cat "$
 chown root:root /var/lib/kafdeck-probe /var/lib/kafdeck-probe/.ssh/authorized_keys
 chmod 0755 /var/lib/kafdeck-probe
 chmod 0644 /var/lib/kafdeck-probe/.ssh/authorized_keys
-printf 'kafdeck-probe ALL=(root) NOPASSWD: /usr/local/libexec/kafdeck-host-probe ""\n' > /etc/sudoers.d/kafdeck-probe
+printf 'kafdeck-probe ALL=(root) NOPASSWD: /usr/local/libexec/kafdeck-host-probe "", /usr/local/libexec/kafdeck-host-probe --logs-v1\n' > /etc/sudoers.d/kafdeck-probe
 chmod 0440 /etc/sudoers.d/kafdeck-probe
 /usr/sbin/visudo -cf /etc/sudoers.d/kafdeck-probe
 echo 'Read-only host probe installed. No broker service was changed or restarted.'

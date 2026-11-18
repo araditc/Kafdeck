@@ -9,6 +9,8 @@ internal sealed class BrokerHostOptions
     public bool Enabled { get; init; }
     public string[] AllowedNetworks { get; init; } = [];
     public BrokerHostCredential[] Credentials { get; init; } = [];
+    public Guid[] LogReaderUserIds { get; init; } = [];
+    public BrokerLogSource[] LogSources { get; init; } = [];
 
     internal void Validate()
     {
@@ -23,6 +25,15 @@ internal sealed class BrokerHostOptions
             _ = SecretReference.Parse(credential.Secret);
             if (credential.Passphrase is not null) _ = SecretReference.Parse(credential.Passphrase);
         }
+        if (LogReaderUserIds.Length > 256 || LogReaderUserIds.Contains(Guid.Empty) ||
+            LogReaderUserIds.Distinct().Count() != LogReaderUserIds.Length ||
+            LogSources.Length > 1024 || LogSources.Any(source => !BrokerHostValidation.ClusterId(source.ClusterId) ||
+                source.BrokerId < 0 || string.IsNullOrWhiteSpace(source.MonitoringInstance) ||
+                source.MonitoringInstance.Length > 160 || source.MonitoringInstance.Any(char.IsControl) ||
+                source.MonitoringInstance == MonitoringSettings.MetadataInstance) ||
+            LogSources.Select(source => (source.ClusterId, source.BrokerId)).Distinct().Count() != LogSources.Length ||
+            LogSources.Select(source => (source.ClusterId, source.MonitoringInstance)).Distinct().Count() != LogSources.Length)
+            throw new KafdeckConfigurationException("Invalid broker log readers or monitoring source mappings.");
     }
 
     internal bool Allows(string address) => IPAddress.TryParse(address, out var ip) &&
@@ -47,12 +58,18 @@ internal sealed record BrokerHostBinding(string ClusterId, int BrokerId, Guid Ho
     string KafkaClusterId, string Instance, DateTimeOffset VerifiedAtUtc);
 internal sealed record BrokerHostWrite(long ExpectedRevision, BrokerHostDraft Host);
 internal sealed record BrokerHostBind(long ExpectedRevision, string ClusterId, int BrokerId, Guid HostId, string TargetId);
+internal sealed record BrokerLogSource(string ClusterId, int BrokerId, string MonitoringInstance);
+internal sealed record BrokerLogRead(string ClusterId, int BrokerId, long From, long To);
+internal sealed record BrokerLogCommand(string TargetId, int BrokerId, string KafkaClusterId, long From, long To);
+internal sealed record BrokerLogLine(long TimeMs, string Text);
+internal sealed record BrokerLogObservation(int Version, string Adapter, BrokerLogLine[] Lines, bool Truncated);
 
 internal static partial class BrokerHostValidation
 {
     [GeneratedRegex("\\A[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\\z", RegexOptions.CultureInvariant)]
     private static partial Regex Names();
     internal static bool Name(string? value) => value is not null && Names().IsMatch(value);
+    internal static bool ClusterId(string? value) => value is { Length: > 0 and <= 128 } && !value.Any(char.IsControl);
     internal static bool Draft(BrokerHostDraft? draft, BrokerHostOptions options) => draft is not null &&
         !string.IsNullOrWhiteSpace(draft.Name) && draft.Name.Length <= 100 && !draft.Name.Any(char.IsControl) &&
         options.Allows(draft.Address) && draft.Port is >= 1 and <= 65535 && Name(draft.User) &&

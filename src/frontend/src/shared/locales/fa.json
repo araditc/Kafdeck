@@ -1757,5 +1757,19 @@
   "Verified broker bindings": "ارتباط‌های تأییدشدهٔ بروکرها",
   "Verification is a dated observation. Reverify the binding after service, host key or cluster changes.": "تأیید، مشاهده‌ای در زمان مشخص است. پس از تغییر سرویس، کلید میزبان یا کلاستر، ارتباط را دوباره تأیید کنید.",
   "Last verified": "آخرین تأیید",
-  "No verified host bindings for this cluster.": "برای این کلاستر ارتباط تأییدشده‌ای ثبت نشده است."
+  "No verified host bindings for this cluster.": "برای این کلاستر ارتباط تأییدشده‌ای ثبت نشده است.",
+  "Choose a log window of up to one hour.": "بازه‌ای حداکثر یک‌ساعته برای لاگ انتخاب کنید.",
+  "Broker logs are unavailable for this account or deployment.": "لاگ بروکر برای این حساب یا استقرار در دسترس نیست.",
+  "Broker service logs": "لاگ سرویس بروکر",
+  "The requested broker has no verified service binding.": "برای بروکر درخواستی ارتباط تأییدشده‌ای با سرویس ثبت نشده است.",
+  "From (UTC)": "از زمان (UTC)",
+  "To (UTC)": "تا زمان (UTC)",
+  "Read service logs": "خواندن لاگ سرویس",
+  "Reading service logs…": "در حال خواندن لاگ سرویس…",
+  "Verified service source": "منبع سرویس تأییدشده",
+  "Log limit reached. Narrow the time window.": "به سقف لاگ رسیدید. بازهٔ زمانی را کوتاه‌تر کنید.",
+  "No log entries in this time window.": "در این بازهٔ زمانی لاگی پیدا نشد.",
+  "Broker log entries": "رکوردهای لاگ بروکر",
+  "Open broker logs": "باز کردن لاگ بروکر",
+  "Open logs for broker {0}": "باز کردن لاگ بروکر {0}"
 }

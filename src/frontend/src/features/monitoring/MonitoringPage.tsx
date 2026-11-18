@@ -211,7 +211,7 @@ const monitoringTabs=[
 ] as const;
 type MonitoringTab=typeof monitoringTabs[number][0];
 
-export function MonitoringPage({clusterId,refresh,manage}:{clusterId:string;refresh:number;manage:boolean}) {
+export function MonitoringPage({clusterId,refresh,manage,logLinks=false}:{clusterId:string;refresh:number;manage:boolean;logLinks?:boolean}) {
   const [tab,setTab]=useState<MonitoringTab>('overview'),[visited,setVisited]=useState<MonitoringTab[]>(['overview']);
   const [seconds,setSeconds]=useState(30),[minutes,setMinutes]=useState(15),[revision,setRevision]=useState(0);
   const [inspection,setInspection]=useState<BrokerMetricAlert|null>(null);
@@ -247,7 +247,7 @@ export function MonitoringPage({clusterId,refresh,manage}:{clusterId:string;refr
         {id==='topics' && <TopicMonitoring {...{clusterId,manage,seconds}} refresh={update}/>}
         {id==='consumers' && <ConsumerMonitoring clusterId={clusterId} refresh={update}/>}
         {(id==='alerts'||id==='metrics') && <BrokerMetrics view={id==='alerts'?'alerts':'explorer'}
-          {...{clusterId,manage,seconds,inspection}} refresh={update} onInspect={inspect}/>}
+          {...{clusterId,manage,seconds,inspection,logLinks}} refresh={update} onInspect={inspect}/>}
         {id==='metrics' && <details className="card monitor-panel"><summary>{t("Workload and broker measurements")}</summary><MeasurementImport/></details>}
         {id==='sources' && <><SourceStatus clusterId={clusterId} refresh={update}/>
           {manage && <AgentSetup clusterId={clusterId} onChanged={()=>setRevision(n=>n+1)}/>}</>}

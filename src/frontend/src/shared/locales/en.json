@@ -1757,5 +1757,19 @@
   "Verified broker bindings": "Verified broker bindings",
   "Verification is a dated observation. Reverify the binding after service, host key or cluster changes.": "Verification is a dated observation. Reverify the binding after service, host key or cluster changes.",
   "Last verified": "Last verified",
-  "No verified host bindings for this cluster.": "No verified host bindings for this cluster."
+  "No verified host bindings for this cluster.": "No verified host bindings for this cluster.",
+  "Choose a log window of up to one hour.": "Choose a log window of up to one hour.",
+  "Broker logs are unavailable for this account or deployment.": "Broker logs are unavailable for this account or deployment.",
+  "Broker service logs": "Broker service logs",
+  "The requested broker has no verified service binding.": "The requested broker has no verified service binding.",
+  "From (UTC)": "From (UTC)",
+  "To (UTC)": "To (UTC)",
+  "Read service logs": "Read service logs",
+  "Reading service logs…": "Reading service logs…",
+  "Verified service source": "Verified service source",
+  "Log limit reached. Narrow the time window.": "Log limit reached. Narrow the time window.",
+  "No log entries in this time window.": "No log entries in this time window.",
+  "Broker log entries": "Broker log entries",
+  "Open broker logs": "Open broker logs",
+  "Open logs for broker {0}": "Open logs for broker {0}"
 }

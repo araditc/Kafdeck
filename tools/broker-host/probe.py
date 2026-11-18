@@ -1,20 +1,28 @@
 #!/usr/bin/python3 -I
 """Read approved broker service identities through a restricted SSH command."""
 import json
+from datetime import datetime
 import os
 from pathlib import Path
 import re
 import stat
 import selectors
+import signal
 import time
 import subprocess
 import sys
 
 CONFIG = Path('/etc/kafdeck/host-targets.json')
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\Z')
+DOCKER_TIMESTAMP = re.compile(rb'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z (.*)')
 
 
 def command(arguments):
+    stdout, _, _ = capture(arguments)
+    return stdout.decode('utf-8', errors='strict').strip()
+
+
+def capture(arguments, log_read=False):
     with subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'}) as process:
         with selectors.DefaultSelector() as selector:
@@ -31,12 +39,15 @@ def command(arguments):
                         if not chunk:
                             selector.unregister(key.fileobj)
                             continue
+                        if log_read and len(output['out']) + len(output['err']) + len(chunk) > 256 * 1024:
+                            # Discard any incomplete record on either channel.
+                            return (*(bytes(output[stream]).rpartition(b'\n')[0] for stream in ('out', 'err')), True)
                         output[key.data].extend(chunk)
-                        if len(output[key.data]) > 65536:
+                        if not log_read and len(output[key.data]) > 65536:
                             raise ValueError('output_limit')
                 if process.wait(timeout=max(0.01, deadline-time.monotonic())) != 0:
                     raise ValueError('command_failed')
-                return output['out'].decode('utf-8', errors='strict').strip()
+                return bytes(output['out']), bytes(output['err']), False
             finally:
                 if process.poll() is None:
                     process.kill()
@@ -195,9 +206,7 @@ def observe(target):
     return result
 
 
-def main():
-    if os.geteuid() != 0 or len(sys.argv) != 1:
-        raise ValueError('command_denied')
+def load_targets():
     for path in (CONFIG, CONFIG.parent):
         info = path.lstat()
         if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
@@ -208,12 +217,111 @@ def main():
         raise ValueError('invalid_catalog')
     if len({target['id'] for target in targets}) != len(targets):
         raise ValueError('duplicate_target')
-    print(json.dumps({'version': 1, 'targets': [observe(target) for target in targets]}, separators=(',', ':')))
+    return targets
+
+
+def docker_lines(*streams):
+    for stream in streams:
+        for line in stream.split(b'\n'):
+            match = DOCKER_TIMESTAMP.fullmatch(line)
+            if not match:
+                continue
+            timestamp, fraction, message = match.groups()
+            seconds = int(datetime.fromisoformat(timestamp.decode('ascii') + '+00:00').timestamp())
+            milliseconds = int(((fraction or b'') + b'000')[:3])
+            yield seconds * 1000 + milliseconds, message.decode('utf-8', errors='replace')
+
+
+def journal_lines(stream):
+    for line in stream.splitlines():
+        if not line:
+            continue
+        item = json.loads(line)
+        timestamp = int(item['__REALTIME_TIMESTAMP']) // 1000
+        message = item.get('MESSAGE')
+        yield timestamp, message if isinstance(message, str) else '[REDACTED]'
+
+
+def bounded_lines(lines, start, end, truncated):
+    selected = sorted(
+        ((at, text) for at, text in lines if start * 1000 <= at < end * 1000),
+        key=lambda item: item[0], reverse=True)
+    truncated |= len(selected) > 200
+    result, encoded_bytes = [], 0
+    for at, text in selected[:200]:
+        if len(text) > 2048 or text.startswith((' ', '\t', 'Caused by:', 'Suppressed:')):
+            text = '[REDACTED]'
+        row = {'timeMs': at, 'text': text}
+        encoded_bytes += len(json.dumps(row, separators=(',', ':'))) + 1
+        if encoded_bytes > 48 * 1024:
+            truncated = True
+            break
+        result.append(row)
+    return result, truncated
+
+
+def read_logs(targets, request):
+    if set(request) != {'targetId', 'brokerId', 'kafkaClusterId', 'from', 'to'}:
+        raise ValueError('invalid_request')
+    target_id, broker, cluster = request['targetId'], request['brokerId'], request['kafkaClusterId']
+    start, end, now = request['from'], request['to'], int(time.time())
+    if (not isinstance(target_id, str) or not NAME.fullmatch(target_id) or type(broker) is not int or broker < 0
+            or not isinstance(cluster, str) or not 1 <= len(cluster) <= 128
+            or type(start) is not int or type(end) is not int or not 0 < end - start <= 3600
+            or start < now - 48 * 3600 - 30 or end > now + 150):
+        raise ValueError('invalid_request')
+    target = next((item for item in targets if item['id'] == target_id and item.get('logs') is True), None)
+    if target is None:
+        raise ValueError('log_source_not_approved')
+    observed = observe(target)
+    if observed['status'] != 'verified' or observed['brokerId'] != broker or observed['kafkaClusterId'] != cluster:
+        raise ValueError('log_identity_mismatch')
+    if observed['adapter'] == 'systemd':
+        stdout, _, cut = capture(['/usr/bin/journalctl', '--no-pager', '--quiet', '--output=json',
+                                  '--output-fields=MESSAGE', '--lines=201', f'--since=@{start}', f'--until=@{end}',
+                                  f"_SYSTEMD_UNIT={observed['unit']}"], log_read=True)
+        lines = journal_lines(stdout)
+    else:
+        container = observed['instance'].split(':')[0]
+        if not re.fullmatch('[a-f0-9]{64}', container):
+            raise ValueError('invalid_container')
+        stdout, stderr, cut = capture(['/usr/bin/docker', 'logs', '--timestamps', '--tail', '201',
+                                       '--since', str(start), '--until', str(end), container], log_read=True)
+        lines = docker_lines(stdout, stderr)
+    result, truncated = bounded_lines(lines, start, end, cut)
+    if observe(target) != observed:
+        raise ValueError('log_identity_changed')
+    return {'version': 1, 'adapter': observed['adapter'], 'lines': result, 'truncated': truncated}
+
+
+class LogDeadline(Exception):
+    pass
+
+
+def log_deadline(_signal, _frame):
+    raise LogDeadline()
+
+
+def main():
+    if os.geteuid() != 0:
+        raise ValueError('command_denied')
+    if sys.argv[1:] == ['--logs-v1']:
+        signal.signal(signal.SIGALRM, log_deadline)
+        signal.alarm(10)
+        request_bytes = sys.stdin.buffer.read(1025)
+        if len(request_bytes) > 1024:
+            raise ValueError('request_limit')
+        result = read_logs(load_targets(), json.loads(request_bytes))
+    elif len(sys.argv) == 1:
+        result = {'version': 1, 'targets': [observe(target) for target in load_targets()]}
+    else:
+        raise ValueError('command_denied')
+    print(json.dumps(result, separators=(',', ':')))
 
 
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, LogDeadline):
         print('{"error":"host_probe_unavailable"}')
         sys.exit(1)

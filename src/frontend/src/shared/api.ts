@@ -12,6 +12,9 @@ export interface BrokerMetricSeries { labels: Record<string, string>; points: {t
 export interface BrokerAlertRule { name: string; metric: string; threshold: number; below: boolean; seconds: number; severity: string; }
 export interface BrokerMetricAlert { name: string; state: string; severity: string; instance: string;
   metric: string; labels: Record<string,string>; time: number; since: number; value: number; threshold: number; }
+export interface BrokerLogTargets { allowed: boolean; targets: { brokerId: number; monitoringInstance: string | null }[]; }
+export interface BrokerLogPage { brokerId: number; from: number; to: number; adapter: 'systemd' | 'compose';
+  lines: { timeMs: number; text: string }[]; truncated: boolean; }
 
 export interface ApiObservation { observedAt: string; freshness: Freshness; cacheAgeMs: number; partial: boolean; }
 export interface ApiLimitation { capability: string | null; state: string; reason: string | null; }
@@ -857,6 +860,12 @@ export interface BrokerHostRegistry { revision: number; hosts: BrokerHost[]; bin
 
 export const kafdeckApi = {
   brokerHosts(signal?: AbortSignal) { return readJson<BrokerHostRegistry>('/api/v1/fleet/hosts', signal); },
+  brokerLogTargets(clusterId: string, signal?: AbortSignal) {
+    return readJson<BrokerLogTargets>('/api/v1/fleet/hosts/log-targets?' + new URLSearchParams({clusterId}), signal);
+  },
+  brokerLogs(clusterId: string, brokerId: number, from: number, to: number, signal?: AbortSignal) {
+    return postJson<BrokerLogPage>('/api/v1/fleet/hosts/logs', {clusterId, brokerId, from, to}, signal);
+  },
   registerBrokerHost(expectedRevision: number, host: BrokerHostDraft, signal?: AbortSignal) {
     return postJson<{ revision: number; host: BrokerHost; targets: BrokerServiceTarget[] }>('/api/v1/fleet/hosts', { expectedRevision, host }, signal);
   },

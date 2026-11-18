@@ -1078,8 +1078,10 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
     {
         _ = app.Services.GetRequiredService<ManagedKeycloakUsers>();
         app.MapManagedIdentity(managedIdentity, kafdeckOptions);
-        app.MapBrokerHosts(managedIdentity, brokerHostOptions,
-            new BrokerHostStore(managedIdentityOptions.StateFile! + ".hosts.json"), new BrokerHostSsh(brokerHostOptions));
+        var hostStore = new BrokerHostStore(managedIdentityOptions.StateFile! + ".hosts.json");
+        var hostSsh = new BrokerHostSsh(brokerHostOptions);
+        app.MapBrokerHosts(managedIdentity, brokerHostOptions, hostStore, hostSsh);
+        app.MapBrokerLogs(managedIdentity, brokerHostOptions, hostStore, hostSsh);
         if (app.Services.GetService<RegisteredHttpServiceRuntime>() is { } registered)
             app.MapRegisteredHttpServices(managedIdentity, registered);
     }
