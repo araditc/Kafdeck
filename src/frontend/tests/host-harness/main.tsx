@@ -8,7 +8,7 @@ import { BrokerMetrics } from '../../src/features/monitoring/BrokerMetrics';
 import { BrokerAgentPanel } from '../../src/app/BrokerAgentPanel';
 
 const clusterId = 'test-cluster';
-const page = location.hash === '#agent' ? <BrokerAgentPanel clusterId={clusterId} scope="fixture" /> :
+const page = location.hash === '#agent' ? <BrokerAgentPanel clusterId={clusterId} /> :
   location.hash === '#brokers' ? <BrokerLogs clusterId={clusterId} /> :
   location.hash === '#monitoring' ? <BrokerMetrics clusterId={clusterId} refresh={0} manage={false} seconds={30}
     view="alerts" onInspect={() => {}} inspection={null} logLinks /> : <BrokerHostsPanel clusterId={clusterId} />;

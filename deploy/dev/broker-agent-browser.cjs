@@ -27,6 +27,7 @@ async function main() {
       let progress = await observe('Apply agent change', 'apply');
       if (lost) {
         assert.equal(progress.stage, 'reconcile');
+        await page.reload();
         progress = await observe('Retry the same agent request', 'apply');
       }
       const end = Date.now() + 120_000;

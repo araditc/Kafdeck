@@ -2,6 +2,7 @@
 """Fixed offline agent lifecycle protocol for the dedicated SSH account."""
 import fcntl
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -86,7 +87,7 @@ def admitted_package(catalog, version, digest):
     package = protected(PACKAGES / (digest + '.jar'))
     content = read_file(package, MAX_JAR)
     require(sha(content) == digest, 'agent_package_integrity_failed')
-    with zipfile.ZipFile(package) as jar:
+    with zipfile.ZipFile(io.BytesIO(content)) as jar:
         manifest_info = jar.getinfo('META-INF/MANIFEST.MF')
         require(manifest_info.file_size <= 4096, 'agent_package_invalid')
         manifest = jar.read(manifest_info).decode('ascii')
@@ -120,6 +121,16 @@ def process(service, request, probe):
         pid = int(probe['command'](['/usr/bin/docker', 'inspect', '--format', '{{.State.Pid}}', selector]))
         restart = ['/usr/bin/docker', 'restart', '--time', '30', selector]
     return observed, pid, restart
+
+
+def require_runtime_mount(observed, runtime, probe):
+    if observed['adapter'] != 'compose':
+        return
+    container = observed['instance'].split(':', 1)[0]
+    mounts = json.loads(probe['command'](['/usr/bin/docker', 'inspect', '--format', '{{json .Mounts}}', container]))
+    matches = [mount for mount in mounts if mount['Destination'] == runtime]
+    require(len(matches) == 1 and matches[0]['Type'] == 'bind' and matches[0]['RW'] is False,
+            'agent_runtime_mount_not_read_only')
 
 
 def installed_files(directory, runtime, pid):
@@ -165,6 +176,7 @@ def status(directory, runtime, service, request, probe, state):
     if state['phase'] in ('intent', 'complete'):
         try:
             observed, pid, _ = process(service, request, probe)
+            require_runtime_mount(observed, runtime, probe)
             digest, mode, args, arg = installed_files(directory, runtime, pid)
             if observed['instance'] != plan['instance'] and digest == plan['digest'] and (mode != 'argfile' or args == arg):
                 result.update(stage='restartObserved' if state['phase'] == 'intent' else 'complete',
@@ -201,6 +213,7 @@ def handle(catalog, request, probe):
                 'agent_previous_operation_pending')
         package = admitted_package(catalog, request['version'], request['digest'])
         observed, pid, restart = process(service, request, probe)
+        require_runtime_mount(observed, runtime, probe)
         digest, mode, args, argument = installed_files(directory, runtime, pid)
         if action == 'preview':
             current = next((name for name, value in catalog['packages'].items() if value == digest), None)

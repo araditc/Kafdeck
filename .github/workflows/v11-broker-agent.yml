@@ -55,7 +55,7 @@ jobs:
           token_before=$(sudo sha256sum "$target/agent-token" | cut -d ' ' -f 1)
           props_before=$(sudo sha256sum "$target/agent.properties" | cut -d ' ' -f 1)
           dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
-          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-restore --filter 'FullyQualifiedName~V11BrokerAgent' +            --logger 'trx;LogFileName=agent-acceptance.trx' --results-directory artifacts/host-acceptance
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-restore --filter 'FullyQualifiedName~V11BrokerAgent' --logger 'trx;LogFileName=agent-acceptance.trx' --results-directory artifacts/host-acceptance
           python3 scripts/ci/require-complete-trx.py artifacts/host-acceptance/agent-acceptance.trx V11BrokerAgentTests:1 V11BrokerAgentLiveTests:1
           test "$primary_before" = "$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)"
           test "$token_before" = "$(sudo sha256sum "$target/agent-token" | cut -d ' ' -f 1)"

@@ -93,7 +93,7 @@ public sealed class V11BrokerAgentLiveTests
         app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
         KafkaMetricSources.Map(app, kafdeck);
         var ssh = new LostApplyReply(new BrokerHostSsh(options));
-        app.MapBrokerAgents(fixture.Store, options, registry, ssh);
+        app.MapBrokerAgents(fixture.Store, options, registry, ssh, new(fixture.StatePath + ".agent-operations.json"));
         await app.StartAsync();
         try
         {

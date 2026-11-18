@@ -58,7 +58,7 @@ class LifecycleTests(unittest.TestCase):
             }
             with patch.object(agent, 'scope', return_value=({'maintenanceFrom':now-60,'maintenanceTo':now-1}, {}, directory, '/opt/kafdeck')), \
                  patch.object(agent, 'admitted_package', return_value=b'agent'), \
-                 patch.object(agent, 'process', return_value=({'instance':'4:100'}, 4, ['restart'])), \
+                 patch.object(agent, 'process', return_value=({'instance':'4:100','adapter':'systemd'}, 4, ['restart'])), \
                  patch.object(agent, 'installed_files', return_value=(None, 'argfile', '', 'arg')), \
                  patch.object(agent.subprocess, 'run') as restart:
                 with self.assertRaisesRegex(agent.Rejected, 'agent_outside_maintenance'):
@@ -66,3 +66,11 @@ class LifecycleTests(unittest.TestCase):
                 self.assertFalse((directory / agent.JAR).exists())
                 self.assertFalse((directory / agent.STATE).exists())
                 restart.assert_not_called()
+
+    def test_compose_requires_a_read_only_directory_mount(self):
+        observed = {'adapter': 'compose', 'instance': 'a' * 64 + ':10'}
+        call = {'command': lambda _args: json.dumps([{'Destination':'/opt/kafdeck', 'Type':'bind', 'RW':True}])}
+        with self.assertRaisesRegex(agent.Rejected, 'agent_runtime_mount_not_read_only'):
+            agent.require_runtime_mount(observed, '/opt/kafdeck', call)
+        accepted = {'command': lambda _args: json.dumps([{'Destination':'/opt/kafdeck', 'Type':'bind', 'RW':False}])}
+        agent.require_runtime_mount(observed, '/opt/kafdeck', accepted)

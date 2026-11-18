@@ -1804,5 +1804,6 @@
   "Retry the same agent request": "تلاش دوباره با همان درخواست عامل",
   "Preview another package": "پیش‌نمایش بستهٔ دیگر",
   "Checking agent operation…": "در حال بررسی عملیات عامل…",
-  "Fresh metric at {0}": "متریک تازه در {0}"
+  "Fresh metric at {0}": "متریک تازه در {0}",
+  "The plan expired before dispatch. Preview again.": "طرح پیش از ارسال فرمان منقضی شد. دوباره پیش‌نمایش بگیرید."
 }

@@ -11,7 +11,7 @@ namespace Kafdeck.Api;
 internal static class BrokerAgentEndpoints
 {
     internal static void MapBrokerAgents(this WebApplication app, ManagedIdentityStore identity,
-        BrokerHostOptions options, BrokerHostStore registry, IBrokerAgentLifecycle host)
+        BrokerHostOptions options, BrokerHostStore registry, IBrokerAgentLifecycle host, BrokerAgentRecoveryStore recovery)
     {
         var group = app.MapGroup("/api/v1/fleet/hosts/agent");
         var dispatch = new SemaphoreSlim(1);
@@ -30,8 +30,10 @@ internal static class BrokerAgentEndpoints
             var target = options.AgentTargets.SingleOrDefault(item => item.ClusterId == clusterId);
             if (allowed is null || target is null || !registry.Read().Bindings.Any(row =>
                     row.ClusterId == clusterId && row.BrokerId == target.BrokerId))
-                return Results.Ok(new { brokerId = (int?)null, packages = Array.Empty<BrokerAgentPackage>() });
-            return Results.Ok(new { brokerId = (int?)target.BrokerId, packages = options.AgentPackages });
+                return Results.Ok(new { brokerId = (int?)null, packages = Array.Empty<BrokerAgentPackage>(), pendingPlan = (string?)null });
+            var pending = recovery.Find(clusterId);
+            return Results.Ok(new { brokerId = (int?)target.BrokerId, packages = options.AgentPackages,
+                pendingPlan = pending is { } item && item.Principal == allowed ? item.Token : null });
         }).WithManagedBrowserContract("managed-broker-agent-targets");
 
         group.MapPost("/preview", async (BrokerAgentPreviewInput input, HttpContext http, IKafkaAdministrationPort kafka,
@@ -39,6 +41,7 @@ internal static class BrokerAgentEndpoints
         {
             var principal = Installer(http, identity, options, input.ClusterId);
             if (principal is null) return Problem(403, "agent_install_denied");
+            if (recovery.Find(input.ClusterId) is not null) return Problem(409, "agent_previous_operation_pending");
             var target = options.AgentTargets.SingleOrDefault(item => item.ClusterId == input.ClusterId && item.BrokerId == input.BrokerId);
             var package = options.AgentPackages.SingleOrDefault(item => item.Version == input.Version);
             if (target is null || package is null || !HasSource(metrics, target)) return Problem(409, "agent_target_unconfigured");
@@ -88,6 +91,7 @@ internal static class BrokerAgentEndpoints
                     var observed = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, true, cancellation);
                     if (!observed.Healthy) return Results.Conflict(new { stage = "blocked", code = "agent_restart_not_safe", health = observed });
                     if (!Authorized()) return Problem(403, "agent_install_denied");
+                    recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan));
                     await Audit(audit, plan, SecurityAuditOutcome.Succeeded, "agent_dispatch_authorized", cancellation);
                     try { status = await host.CallAsync(plan.Connection, plan.Command with { Action = "apply" }, cancellation); }
                     catch (BrokerHostFailure e) when (e.Code is "host_probe_unavailable" or "host_helper_unavailable" or "agent_response_invalid")
@@ -98,6 +102,12 @@ internal static class BrokerAgentEndpoints
                     CheckStatus(status);
                 }
                 if (!Authorized()) return Problem(403, "agent_install_denied");
+                if (status.Stage == "unknown" && Timestamp() >= plan.Command.ApplyUntil!.Value)
+                {
+                    recovery.Finish(plan.ClusterId, plan.Command.OperationId);
+                    return Results.Ok(new { stage = "expired", operationId = plan.Command.OperationId });
+                }
+                if (status.Stage == "alreadyInstalled") recovery.Finish(plan.ClusterId, plan.Command.OperationId);
                 if (status.Stage is not ("restartObserved" or "complete"))
                     return Results.Ok(new { status.Stage, operationId = plan.Command.OperationId, status.DispatchedAt });
                 if (status.ProcessStartedAt is not { } started || status.DispatchedAt is not { } dispatched ||
@@ -119,6 +129,7 @@ internal static class BrokerAgentEndpoints
                     if (completed.Stage != "complete" || completed.Instance != status.Instance || completed.Digest != status.Digest)
                         return Problem(409, "agent_restart_evidence_changed");
                 }
+                recovery.Finish(plan.ClusterId, plan.Command.OperationId);
                 return Results.Ok(new { stage = "complete", operationId = plan.Command.OperationId, status.Version,
                     status.Digest, dispatchedAt = dispatched, processStartedAt = started, metricSeenAt = seen,
                     monitoringInstance = plan.Target.MonitoringInstance, health = recovered });

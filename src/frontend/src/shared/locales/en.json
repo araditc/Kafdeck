@@ -1804,5 +1804,6 @@
   "Retry the same agent request": "Retry the same agent request",
   "Preview another package": "Preview another package",
   "Checking agent operation…": "Checking agent operation…",
-  "Fresh metric at {0}": "Fresh metric at {0}"
+  "Fresh metric at {0}": "Fresh metric at {0}",
+  "The plan expired before dispatch. Preview again.": "The plan expired before dispatch. Preview again."
 }

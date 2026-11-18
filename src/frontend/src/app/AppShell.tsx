@@ -795,7 +795,7 @@ export function AppShell() {
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">{t("No authorized clusters are available.")}</div>}
           {activePage === 'fleet' && operator?.canManageUsers && selectedClusterId && <BrokerHostsPanel key={`hosts:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {activePage === 'fleet' && operator && operatorScope && selectedClusterId &&
-            <BrokerAgentPanel key={`agent:${operatorScope}:${selectedClusterId}`} scope={operatorScope} clusterId={selectedClusterId} />}
+            <BrokerAgentPanel key={`agent:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {activePage === 'fleet' && <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
             <h2 id="fleet-title" className="card-title">{t("Fleet Operations")}</h2>
             <p className="text-secondary">{t("Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.")}</p>

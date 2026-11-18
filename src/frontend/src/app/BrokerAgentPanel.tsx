@@ -12,6 +12,7 @@ const stageLabel = {
   reconcile: 'The SSH response was interrupted. Check operation status.',
   complete: 'Broker healthy and fresh metric verified.',
   alreadyInstalled: 'The approved package is already installed.',
+  expired: 'The plan expired before dispatch. Preview again.',
 } satisfies Record<BrokerAgentProgress['stage'], string>;
 
 function Health({value}: {value: BrokerAgentHealth}) {
@@ -23,11 +24,8 @@ function Health({value}: {value: BrokerAgentHealth}) {
   </div>;
 }
 
-export function BrokerAgentPanel({clusterId, scope}: {clusterId: string; scope: string}) {
-  const storageKey = JSON.stringify(['kafdeck-agent-operation', scope, clusterId]);
-  const [saved, setSaved] = useState(() => {
-    try { return sessionStorage.getItem(storageKey); } catch { return null; }
-  });
+export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
+  const [saved, setSaved] = useState<string | null>(null);
   const [target, setTarget] = useState<{brokerId:number|null;packages:BrokerAgentPackage[]} | null>(null);
   const [version, setVersion] = useState('');
   const [preview, setPreview] = useState<BrokerAgentPreview | null>(null);
@@ -39,7 +37,10 @@ export function BrokerAgentPanel({clusterId, scope}: {clusterId: string; scope: 
   useEffect(() => {
     const abort = new AbortController();
     void kafdeckApi.brokerAgentTargets(clusterId, abort.signal).then(value => {
-      if (!abort.signal.aborted) setTarget(value);
+      if (!abort.signal.aborted) {
+        setTarget(value);
+        setSaved(value.pendingPlan);
+      }
     }).catch(() => { /* This feature can be absent on a deployment. */ });
     return () => { abort.abort(); request.current?.abort(); };
   }, [clusterId]);
@@ -58,22 +59,14 @@ export function BrokerAgentPanel({clusterId, scope}: {clusterId: string; scope: 
     }
   }
 
-  function save(plan: string | null) {
-    setSaved(plan);
-    try {
-      if (plan === null) sessionStorage.removeItem(storageKey);
-      else sessionStorage.setItem(storageKey, plan);
-    } catch { /* The in-memory plan still works when storage is unavailable. */ }
-  }
-
   const observe = (plan: string, apply: boolean) => run(async signal => {
-    if (apply) save(plan);
+    if (apply) setSaved(plan);
     const result = await kafdeckApi.brokerAgentProgress(plan, apply, signal);
     if (!signal.aborted) setProgress(result);
   });
   const brokerId = target?.brokerId;
   if (brokerId === undefined || brokerId === null || !target?.packages.length) return null;
-  const finished = progress?.stage === 'complete' || progress?.stage === 'alreadyInstalled';
+  const finished = progress?.stage === 'complete' || progress?.stage === 'alreadyInstalled' || progress?.stage === 'expired';
   return <section className="card kafdeck-card p-3" aria-labelledby="broker-agent-heading">
     <h2 id="broker-agent-heading" className="card-title">{t("Offline broker agent")}</h2>
     <p>{t("Broker")} <bdi>{brokerId}</bdi></p>
@@ -124,7 +117,7 @@ export function BrokerAgentPanel({clusterId, scope}: {clusterId: string; scope: 
       {!finished && <button className="btn btn-outline-secondary" type="button" disabled={busy}
         onClick={() => void observe(saved, true)}>{t("Retry the same agent request")}</button>}
       {finished && <button className="btn btn-outline-secondary" type="button" disabled={busy}
-        onClick={() => { save(null); setPreview(null); setProgress(null); }}>{t("Preview another package")}</button>}
+       onClick={() => { setSaved(null); setPreview(null); setProgress(null); }}>{t("Preview another package")}</button>}
     </div>}
     {busy && <p role="status">{t("Checking agent operation…")}</p>}
     {!!error && <p role="alert">{readViewProblemText(readViewError(error))}</p>}

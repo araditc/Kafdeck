@@ -25,7 +25,7 @@ export interface BrokerAgentPreview {
 }
 export interface BrokerAgentProgress {
   operationId: string; stage: 'unknown' | 'publishing' | 'awaitingRestart' | 'awaitingMetrics' |
-    'awaitingHealth' | 'reconcile' | 'complete' | 'alreadyInstalled';
+    'awaitingHealth' | 'reconcile' | 'complete' | 'alreadyInstalled' | 'expired';
   version?: string; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
   processStartedAt?: number; monitoringInstance?: string; health?: BrokerAgentHealth;
 }
@@ -881,7 +881,7 @@ export const kafdeckApi = {
     return postJson<BrokerLogPage>('/api/v1/fleet/hosts/logs', {clusterId, brokerId, from, to}, signal);
   },
   brokerAgentTargets(clusterId: string, signal?: AbortSignal) {
-    return readJson<{brokerId: number | null; packages: BrokerAgentPackage[]}>(
+    return readJson<{brokerId: number | null; packages: BrokerAgentPackage[]; pendingPlan: string | null}>(
       '/api/v1/fleet/hosts/agent/targets?' + new URLSearchParams({clusterId}), signal);
   },
   previewBrokerAgent(clusterId: string, brokerId: number, version: string, signal?: AbortSignal) {
