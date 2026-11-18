@@ -46,6 +46,26 @@ jobs:
           deploy/dev/browser-g2/node_modules/.bin/playwright install --with-deps chromium
           echo "KAFDECK_HOST_UI_DIST=$GITHUB_WORKSPACE/src/frontend/dist/host-harness" >> "$GITHUB_ENV"
           echo "KAFDECK_HOST_LOG_BROWSER_SCRIPT=$GITHUB_WORKSPACE/deploy/dev/broker-log-browser.cjs" >> "$GITHUB_ENV"
+      - name: Emit diagnostics after both Kafka units are ready
+        run: |
+          set -euo pipefail
+          lab="$GITHUB_WORKSPACE/deploy/dev/.generated/v11-host-native"
+          touch "$lab/emit-logs"
+          deadline=$((SECONDS + 15))
+          until test -s "$lab/time-1" && test -s "$lab/time-2"; do
+            test "$SECONDS" -lt "$deadline"
+            sleep 1
+          done
+          sudo journalctl --sync
+          for broker in 1 2; do
+            if [[ "$broker" == 1 ]]; then unit=kafdeck-v11-kafka; marker=native-486-primary
+            else unit=kafdeck-v11-kafka-sibling; marker=native-486-sibling; fi
+            at=$(cat "$lab/time-$broker")
+            sudo journalctl --no-pager --output=cat --since="@$at" "_SYSTEMD_UNIT=$unit.service" |
+              grep -F -- "$marker" >/dev/null
+          done
+          echo "KAFDECK_HOST_LOG_TIME=$(cat "$lab/time-1")" >> "$GITHUB_ENV"
+          echo "KAFDECK_HOST_LOG_SIBLING_TIME=$(cat "$lab/time-2")" >> "$GITHUB_ENV"
       - name: Verify permission, redaction and real journal isolation from the dashboard
         run: |
           dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode

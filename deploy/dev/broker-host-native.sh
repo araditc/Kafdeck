@@ -54,15 +54,25 @@ if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then
 set -euo pipefail
 marker=$1
 timefile=$2
-shift 2
-date +%s > "$timefile"
-printf 'INFO Kafdeck diagnostics: %s\n' "$marker"
-printf 'INFO Kafdeck diagnostics: password=v11-example-value\n'
+trigger=$3
+shift 3
+(
+  # Stay in the broker unit so journald attaches its trusted unit field.
+  deadline=$((SECONDS + 1200))
+  until test -e "$trigger"; do
+    test "$SECONDS" -lt "$deadline"
+    sleep 1
+  done
+  at=$(date +%s)
+  printf 'INFO Kafdeck diagnostics: %s\n' "$marker"
+  printf 'INFO Kafdeck diagnostics: password=v11-example-value\n'
+  printf '%s\n' "$at" > "$timefile"
+) &
 exec "$@"
 EOF
   chmod 0755 "$lab/launch-logged"
-  launch kafdeck-v11-kafka "$lab/launch-logged" native-486-primary "$lab/time-1" "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
-  launch kafdeck-v11-kafka-sibling "$lab/launch-logged" native-486-sibling "$lab/time-2" "$kafka/bin/kafka-server-start.sh" "$lab/sibling.properties"
+  launch kafdeck-v11-kafka "$lab/launch-logged" native-486-primary "$lab/time-1" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
+  launch kafdeck-v11-kafka-sibling "$lab/launch-logged" native-486-sibling "$lab/time-2" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/sibling.properties"
 else
   launch kafdeck-v11-kafka "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
 fi
@@ -83,8 +93,6 @@ if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then
   printf '%s\n' '{"version":1,"targets":[{"id":"native-broker-1","adapter":"systemd","unit":"kafdeck-v11-kafka.service","logs":true},{"id":"native-broker-2","adapter":"systemd","unit":"kafdeck-v11-kafka-sibling.service","logs":true}]}' > "$lab/targets.json"
   {
     echo KAFDECK_RUN_BROKER_LOG_LIVE=1
-    echo "KAFDECK_HOST_LOG_TIME=$(cat "$lab/time-1")"
-    echo "KAFDECK_HOST_LOG_SIBLING_TIME=$(cat "$lab/time-2")"
     echo "KAFDECK_HOST_LOG_CLUSTER_ID=$cluster_id"
     echo KAFDECK_HOST_LOG_TARGET_PREFIX=native-broker
     echo KAFDECK_HOST_LOG_MARKER=native-486-primary
