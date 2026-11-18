@@ -68,6 +68,33 @@ export interface MutationApprovalInbox {
   items: MutationStatus[];
 }
 
+export type BrokerConfigScope = 'brokerOverride' | 'clusterDefault';
+
+export interface BrokerConfigSetting {
+  key: string;
+  minValue: number;
+  maxValue: number;
+  scopes: BrokerConfigScope[];
+}
+
+export interface BrokerConfigPreviewInput {
+  key: string;
+  scope: BrokerConfigScope;
+  brokerId: number | null;
+  command: 'set' | 'inherit' | 'restore';
+  value?: string;
+  restoreOperationId?: string;
+}
+
+export interface BrokerConfigPreview {
+  operation: MutationStatus;
+  target: Pick<BrokerConfigPreviewInput, 'key' | 'scope' | 'brokerId'> & { clusterId: string };
+  effectiveValue: string;
+  effectiveSource: string;
+  expectedValue: string;
+  expectedSource: string;
+}
+
 export interface TopicCreatePreviewInput {
   partitionCount: number;
   replicationFactor: number;
@@ -570,6 +597,19 @@ export const mutationApi = {
       `${mutationPath(operation.operationId)}/execute`,
       {},
       { signal },
+    );
+  },
+
+  brokerConfigSettings(clusterId: string, signal?: AbortSignal) {
+    return readJson<BrokerConfigSetting[]>(
+      `/api/v1/clusters/${encodeURIComponent(clusterId)}/broker-config/settings`, signal,
+    );
+  },
+
+  previewBrokerConfig(clusterId: string, request: BrokerConfigPreviewInput, signal?: AbortSignal) {
+    return postJson<BrokerConfigPreview>(
+      `/api/v1/clusters/${encodeURIComponent(clusterId)}/broker-config/preview`, request,
+      { idempotencyKey: crypto.randomUUID(), signal },
     );
   },
 

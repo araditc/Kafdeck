@@ -1,0 +1,58 @@
+name: v11-broker-config
+on:
+  pull_request:
+    paths:
+      - 'src/backend/**/Dynamic*Config*.cs'
+      - 'src/backend/Kafdeck.Api/KafdeckBrokerConfigEndpoints.cs'
+      - 'src/backend/Kafdeck.Api/W39MutationPreDispatchGuard.cs'
+      - 'src/backend/Kafdeck.Api/MutationDispatchService.cs'
+      - 'src/backend/Kafdeck.Api/Program.cs'
+      - 'src/frontend/src/app/BrokerConfigPanel.tsx'
+      - 'deploy/dev/broker-host-native.sh'
+      - 'tests/Kafdeck.Architecture.Tests/V11BrokerConfigLiveTests.cs'
+      - '.github/workflows/v11-broker-config.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v11-broker-config-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-systemd-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Start the native Kafka unit
+        env:
+          KAFDECK_NATIVE_CONFIG_FIXTURE: '1'
+        run: bash deploy/dev/broker-host-native.sh
+      - name: Apply, restore and reject stale broker configuration over HTTP
+        run: |
+          set -euo pipefail
+          test "$(ps -p 1 -o comm= | xargs)" = systemd
+          if command -v docker; then exit 1; fi
+          unit=kafdeck-v11-kafka.service
+          before=$(systemctl show "$unit" --property MainPID --value)
+          test "$before" -gt 0
+          dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-restore --filter 'FullyQualifiedName~V11BrokerConfigLiveTests' --logger 'trx;LogFileName=broker-config.trx' --results-directory artifacts/broker-config
+          python3 scripts/ci/require-complete-trx.py artifacts/broker-config/broker-config.trx V11BrokerConfigLiveTests:1
+          test "$before" = "$(systemctl show "$unit" --property MainPID --value)"
+          systemctl is-active --quiet "$unit"
+          printf '%s\n' '{"pid1":"systemd","dockerExecutablePresent":false,"unitActive":true,"brokerRestarted":false}' > artifacts/broker-config/native-environment.json
+      - name: Stop the disposable native unit
+        if: always()
+        run: sudo systemctl stop kafdeck-v11-kafka.service || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: v11-native-broker-config
+          path: artifacts/broker-config/
+          retention-days: 30

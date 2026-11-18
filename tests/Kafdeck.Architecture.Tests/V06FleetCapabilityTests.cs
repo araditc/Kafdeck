@@ -61,7 +61,6 @@ public sealed class V06FleetCapabilityTests
                  {
                      "acl-administration",
                      "scram-administration",
-                     "dynamic-configuration",
                      "finite-cluster-transfer",
                      "preferred-leader-election",
                  })
@@ -83,12 +82,9 @@ public sealed class V06FleetCapabilityTests
                 ' ',
                 FleetCapabilityCatalog.Require("scram-administration").Evidence),
             StringComparison.Ordinal);
-        Assert.Contains(
-            "no W44 handler registration",
-            string.Join(
-                ' ',
-                FleetCapabilityCatalog.Require("dynamic-configuration").Evidence),
-            StringComparison.Ordinal);
+        Assert.Equal(
+            FleetCapabilityState.Supported,
+            FleetCapabilityCatalog.Require("dynamic-configuration").State);
     }
 
     [Fact]

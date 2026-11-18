@@ -18,6 +18,7 @@ public static class MutationProviderEvidence
         PositiveInt64 = 9,
         DeleteScope = 10,
         LocalActivationFailureCode = 11,
+        BrokerConfigurationSource = 12,
     }
 
     private static readonly IReadOnlyDictionary<string, EvidenceValueKind> AllowedKeys =
@@ -52,6 +53,8 @@ public static class MutationProviderEvidence
             ["verification.state"] = EvidenceValueKind.VerificationState,
             ["resource.fingerprint"] = EvidenceValueKind.Sha256,
             ["configuration.fingerprint"] = EvidenceValueKind.Sha256,
+            ["configuration.value"] = EvidenceValueKind.NonNegativeInt64,
+            ["configuration.source"] = EvidenceValueKind.BrokerConfigurationSource,
             ["reconciliation.parent"] = EvidenceValueKind.CanonicalGuid,
             ["reconciliation.batch"] = EvidenceValueKind.CanonicalGuid,
             ["reconciliation.before"] = EvidenceValueKind.Sha256,
@@ -190,6 +193,9 @@ public static class MutationProviderEvidence
                 ["RUNNING", "PAUSED", "STOPPED", "FAILED", "UNASSIGNED", "DESTROYED", "RESTARTING", "UNKNOWN", "MISSING"]),
             EvidenceValueKind.CanonicalGuid => Guid.TryParseExact(normalized, "D", out var id) && id != Guid.Empty
                 ? id.ToString("D") : throw InvalidValue(key),
+            EvidenceValueKind.BrokerConfigurationSource => normalized is
+                "DynamicBrokerConfig" or "DynamicDefaultBrokerConfig" or "StaticBrokerConfig" or "DefaultConfig"
+                ? normalized : throw InvalidValue(key),
             EvidenceValueKind.LocalActivationFailureCode =>
                 normalized.Length is > 0 and <= 96 &&
                 (normalized.StartsWith("data_job_", StringComparison.Ordinal) ||

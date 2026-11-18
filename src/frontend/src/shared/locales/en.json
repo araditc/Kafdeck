@@ -1806,5 +1806,21 @@
   "Checking agent operation…": "Checking agent operation…",
   "Fresh metric at {0}": "Fresh metric at {0}",
   "The plan expired before dispatch. Preview again.": "The plan expired before dispatch. Preview again.",
-  "Preview pending change in the current maintenance window": "Preview pending change in the current maintenance window"
+  "Preview pending change in the current maintenance window": "Preview pending change in the current maintenance window",
+  "Configuration request failed.": "Configuration request failed.",
+  "Dynamic broker settings": "Dynamic broker settings",
+  "Wait time in milliseconds when the log cleaner finds no work.": "Wait time in milliseconds when the log cleaner finds no work.",
+  "New value": "New value",
+  "Remove override and inherit": "Remove override and inherit",
+  "Preview configuration change": "Preview configuration change",
+  "Configuration preview": "Configuration preview",
+  "Effective value and source": "Effective value and source",
+  "Expected value and source": "Expected value and source",
+  "Verified value and source": "Verified value and source",
+  "The setting changed after preview. Create a fresh preview.": "The setting changed after preview. Create a fresh preview.",
+  "Type {0} to confirm": "Type {0} to confirm",
+  "Confirm configuration preview": "Confirm configuration preview",
+  "Apply configuration change": "Apply configuration change",
+  "Preview restore": "Preview restore",
+  "Target": "Target"
 }

@@ -116,6 +116,9 @@ public sealed class DynamicConfigurationPlanner
             keyPolicy = _registry.Require(
                 compatibility,
                 normalizedTarget.Key);
+            if (compatibility == KafkaCompatibilityLine.RuntimeBrokerConfig &&
+                normalizedTarget.Scope != DynamicConfigurationScope.BrokerOverride)
+                throw new DynamicConfigurationPolicyException("This Kafka client supports named broker overrides.");
             if (!reset)
             {
                 normalizedValue = keyPolicy.NormalizeValue(value!);
@@ -166,6 +169,15 @@ public sealed class DynamicConfigurationPlanner
                     "Kafka dynamic configuration evidence is invalid."));
         }
 
+        if (compatibility == KafkaCompatibilityLine.RuntimeBrokerConfig &&
+            (safeObservation.Target != normalizedTarget ||
+             string.IsNullOrWhiteSpace(safeObservation.KafkaClusterId) ||
+             safeObservation.EffectiveValue is null ||
+             safeObservation.EffectiveSource is not ("DefaultConfig" or "StaticBrokerConfig" or "DynamicDefaultBrokerConfig" or "DynamicBrokerConfig")))
+        {
+            return Failed(null);
+        }
+
         if (safeObservation.IsSensitive)
         {
             return DynamicConfigurationPlanningResult.Failed(
@@ -180,6 +192,18 @@ public sealed class DynamicConfigurationPlanner
                 new DynamicConfigurationPlanningFailure(
                     DynamicConfigurationPlanningFailureCode.ReadOnlyValue,
                     "Kafka reports the requested configuration as read-only."));
+        }
+
+        if (compatibility == KafkaCompatibilityLine.RuntimeBrokerConfig && !reset &&
+            safeObservation.EffectiveSource == DynamicConfigurationPolicy.ExpectedDynamicSource(normalizedTarget.Scope))
+        {
+            try { _ = keyPolicy.NormalizeValue(safeObservation.EffectiveValue!); }
+            catch (ArgumentException)
+            {
+                return DynamicConfigurationPlanningResult.Failed(new(
+                    DynamicConfigurationPlanningFailureCode.ValueRejected,
+                    "The previous override is outside the supported range for a verified restore."));
+            }
         }
 
         string? inheritedValue = null;
@@ -211,7 +235,10 @@ public sealed class DynamicConfigurationPlanner
             DynamicConfigurationPolicy.Fingerprint(
                 safeObservation),
             inheritedValue,
-            inheritedSource);
+            inheritedSource,
+            safeObservation.EffectiveValue,
+            safeObservation.EffectiveSource,
+            safeObservation.KafkaClusterId);
 
         try
         {
