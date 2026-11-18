@@ -8,6 +8,7 @@
     "MapKafdeckAttribution",
     "MapKafdeckBearerCapabilities",
     "MapKafdeckBearerMutations",
+    "MapKafdeckBrokerConfigEndpoints",
     "MapKafdeckCatalog",
     "MapKafdeckConnectAutoRestartEndpoints",
     "MapKafdeckConnectMutationEndpoints",
@@ -748,6 +749,28 @@
       "method": "GET",
       "path": "/api/v1/clusters/{clusterId}",
       "name": "v01-clusters-detail",
+      "request": null,
+      "governance": null,
+      "declarative": null,
+      "antiforgery": false,
+      "managed": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/clusters/{clusterId}/broker-config/preview",
+      "name": "v11-broker-config-preview",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerConfigPreviewRequest"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/clusters/{clusterId}/broker-config/settings",
+      "name": "v11-broker-config-settings",
       "request": null,
       "governance": null,
       "declarative": null,
@@ -4887,6 +4910,75 @@
       },
       "required": [
         "previewHash"
+      ]
+    },
+    "FamilyBrokerConfigPreviewRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "clusterDefault",
+                "brokerOverride"
+              ]
+            },
+            {
+              "type": "integer",
+              "enum": [
+                1,
+                2
+              ]
+            }
+          ]
+        },
+        "brokerId": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "command": {
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restoreOperationId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "scope",
+        "brokerId",
+        "command",
+        "value",
+        "restoreOperationId"
       ]
     },
     "FamilyCatalogPageOfCatalogRecord": {
@@ -9865,6 +9957,8 @@
       "GET /api/v1/automation/notifications/recovery/{operationId}",
       "POST /api/v1/automation/notifications/recovery/{operationId}/apply",
       "POST /api/v1/automation/notifications/recovery/{operationId}/approve",
+      "POST /api/v1/clusters/{clusterId}/broker-config/preview",
+      "GET /api/v1/clusters/{clusterId}/broker-config/settings",
       "POST /api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/control/preview",
       "POST /api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/create/preview",
       "POST /api/v1/clusters/{clusterId}/connect/connectors/{connectorName}/mutations/delete/preview",
@@ -9982,7 +10076,7 @@
     "src/backend/Kafdeck.Api/DeclarativeRouteContract.cs": "03e5431aaa6dd1becde7db55d1d29e3b24bacf8db9e0d7e61f39111a7d3089fc",
     "src/backend/Kafdeck.Api/DeclarativeRuntimeAuthorizer.cs": "b9ad8048b4bbadcbc5502c386f046f4a290cf6345f977fb48e0b24dc9d70c064",
     "src/backend/Kafdeck.Api/DeclarativeSubscriptionMutation.cs": "b91d569e847a8953ce57f1660e22d8625b8bf20bfa35ce737cb9fede7a4a3f6e",
-    "src/backend/Kafdeck.Api/FleetCapabilityCatalog.cs": "b6176494b86468222da3074981edd9dd3aa84c4ef89ac6349f4f8a497d9f360f",
+    "src/backend/Kafdeck.Api/FleetCapabilityCatalog.cs": "9244ab7781fde3ea00a30e205e2f04a5c2f1012b9c8230f81b102068bc062f75",
     "src/backend/Kafdeck.Api/GovernanceOpenApi.cs": "783d1f296dfdbf2ba5f4668e5941d5af998f69c629ed462187ae692881ecf2ea",
     "src/backend/Kafdeck.Api/GovernancePolicyMutationService.cs": "53adf36fd04680c0a4d793d9fce3c1f69c3a62045b7c28d5ffff200cfa69fd3e",
     "src/backend/Kafdeck.Api/GovernancePolicyRuntime.cs": "531aac79fa780fa5b67d290b471af6710a1ca2628938529be5c1d46092d6ae2d",
@@ -9996,6 +10090,7 @@
     "src/backend/Kafdeck.Api/KafdeckAttributionEndpoints.cs": "b08d3366c1b92168ee06a4535037031dd9cc8ddad5a9e7e559b64e4d4d786260",
     "src/backend/Kafdeck.Api/KafdeckBearerCapabilities.cs": "3b74cfdc6302dc543d8cc96f9605761af2c298c280c118b6ca12467c324206ee",
     "src/backend/Kafdeck.Api/KafdeckBearerMutationEndpoints.cs": "3e9ebe21f93c37f92bc371770e0a08a1559274e0e5e36f2e8837658d9653f5a4",
+    "src/backend/Kafdeck.Api/KafdeckBrokerConfigEndpoints.cs": "de399cd31742f91293fb20944b1e2301596d0e2cfb5e21af6a70c290c5531258",
     "src/backend/Kafdeck.Api/KafdeckCatalogEndpoints.cs": "69968566850d6b788d11161bb4e2ca88c42824bcc801da970d5b29440747795d",
     "src/backend/Kafdeck.Api/KafdeckCompensationEndpoints.cs": "f06026587628ae99848f6f73e2726b9aca994b5af0b0fc8e0ba3c99904639e72",
     "src/backend/Kafdeck.Api/KafdeckConnectAutoRestartEndpoints.cs": "e32a3ccff4312d7c4f1f5eea99aec62f2e2415ae16ae10eb10ec86b792f7586c",
@@ -10007,7 +10102,7 @@
     "src/backend/Kafdeck.Api/KafdeckDataQualityEndpoints.cs": "ac9a54bae6509d85039904f4e94ed5fcd695d381bade7b4e2d820767d2d2e711",
     "src/backend/Kafdeck.Api/KafdeckDeclarativeEndpoints.cs": "f20270f449ef45ada703c50c116b2ca3894bcb6933b6f1ad36cca68fd43682ce",
     "src/backend/Kafdeck.Api/KafdeckDeclarativeSourceEndpoints.cs": "59440a5985d1661e9d9557b72c1bbc534c0f87b0021d934f793e9d2469622036",
-    "src/backend/Kafdeck.Api/KafdeckFleetCapabilityEndpoints.cs": "025a2f775c4618e858bdce9de338d90385d4b0e015abdbc1179ee93be3f97998",
+    "src/backend/Kafdeck.Api/KafdeckFleetCapabilityEndpoints.cs": "4ff40aa0e6518b3fea59228306f4668a89650cae101d4fa65246142762c85a25",
     "src/backend/Kafdeck.Api/KafdeckGovernancePolicyEndpoints.cs": "7875fd5d3df576fc86b8f487f4aabd72ac759445f26222449d8a7167ab8ce572",
     "src/backend/Kafdeck.Api/KafdeckMutationApprovalEndpoints.cs": "93f84551db4d30b083dd1ea3189cf77b33ac1e6962bce5f53687c305dfd2cad1",
     "src/backend/Kafdeck.Api/KafdeckMutationEndpoints.cs": "573e60ecbdba5b9ba0a62efa94e837aaf7506703bfdf7cf17537a45bf445b672",
@@ -10027,7 +10122,7 @@
     "src/backend/Kafdeck.Api/KafdeckSchemaMutationEndpoints.cs": "b83a823afd097bce2e506e5137c84f67d700d711e565e330cda2f9eed608dcc5",
     "src/backend/Kafdeck.Api/KafdeckServiceRequestEndpoints.cs": "b1c640e91bf307604eed5b3979779f7b205074b5d3ddbad6ae7a2ea12af141f8",
     "src/backend/Kafdeck.Api/KafdeckStreamingEndpoints.cs": "94b442c8ab69dd27c9477f691414b238155e3edeef1c643e78a58e402bcbd517",
-    "src/backend/Kafdeck.Api/KafdeckTopicMutationEndpoints.cs": "a5f37d192d547952599fab689d0c604aa363f87c1a854d3cf7c56a85ed88eb3c",
+    "src/backend/Kafdeck.Api/KafdeckTopicMutationEndpoints.cs": "78807b529797df3be7f3f4ab7d016db8e6198d450c15771bef2ce9dc7bf4319f",
     "src/backend/Kafdeck.Api/KafdeckV05OpenApi.cs": "1ec8d5eccd3aa421c5fc65acda847f0379d6579c4b6b6e0bcb462bc59fe99891",
     "src/backend/Kafdeck.Api/KafdeckV06OpenApi.cs": "25d957ede958121ddb4e46d06fc8618d0cb43098bbb5e16350550ceb3721fbc0",
     "src/backend/Kafdeck.Api/KafdeckV07OpenApi.cs": "d95c4383c733601ab730b6be3b709cd64decfecc908d7409c342fd7eae8d32a3",
@@ -10037,7 +10132,7 @@
     "src/backend/Kafdeck.Api/KafkaMetadataMonitor.cs": "844737caaa36a2b4567de121615c93015d17e7fa937c7786a8184d2e9c75c206",
     "src/backend/Kafdeck.Api/KafkaMetricSources.cs": "f14f5b4c20ef50edcbb4ffe3c3c9e4ae22d675e87da0d968dac3b0c23bd727ce",
     "src/backend/Kafdeck.Api/ManagedBrowserOpenApi.cs": "3b26054b84eebbc03add8cba83e4f7f84f264237e42446bd42792f8359fc683f",
-    "src/backend/Kafdeck.Api/ManagedIdentityEndpoints.cs": "3e975d2bf8a2996d807e1473bb2136bdad5355ad4487dab244aa57ee8f752849",
+    "src/backend/Kafdeck.Api/ManagedIdentityEndpoints.cs": "c5e02582b94a08f08817e7e8659fb00ec7afc4ac7c4db4e955aca7184028211f",
     "src/backend/Kafdeck.Api/ManagedIdentityStore.cs": "d15b2d6887f88bbd925cc39389448f52099a78a3f726becb86244c30e27e2faa",
     "src/backend/Kafdeck.Api/ManagedKeycloakUsers.cs": "7e4b356a217f6a33979988cce54f776bb98da058876feb5e3cea52499fb3129f",
     "src/backend/Kafdeck.Api/ManagedStateDataProtection.cs": "11916cd445c153ebf1658db2167401bb5561596dcd74d2ada8a5d67401f2719d",
@@ -10048,7 +10143,7 @@
     "src/backend/Kafdeck.Api/MutationCommandService.cs": "f9d6d00c82dc3aae83609496cfcbe21251c385a8577631986e6f1ae7ba1a0ff6",
     "src/backend/Kafdeck.Api/MutationCurrentRequesterAuthorization.cs": "26412937702356379b7b5e48ebb4297eecf6222716f840cac781d78871e76e8d",
     "src/backend/Kafdeck.Api/MutationDirectRouteAuthorization.cs": "f3edfa71568c46b81b77162d71c01feec765bcf71960f3f25e9233f3da65e213",
-    "src/backend/Kafdeck.Api/MutationDispatchService.cs": "a950b1207192668911afde75eae78f3e2adde4edfccc6af8d5fb5efb641b7c8e",
+    "src/backend/Kafdeck.Api/MutationDispatchService.cs": "e29d0514a2aadb26305e27d039f2e4cce77a6bd2f1c68975162f3adb6126ab2c",
     "src/backend/Kafdeck.Api/MutationExecutionRequestContext.cs": "96f680d8e12a00f0a1a2c38dcf7dfd9fe40e21c667f94aff18b22d4d7c3a5c41",
     "src/backend/Kafdeck.Api/MutationRecoveryHostedService.cs": "1387014a211d3dbc9a9d90106f78f17d57051d39fe2f9937badf9a09866d386c",
     "src/backend/Kafdeck.Api/MutationRequestAuthorization.cs": "bf628032fd6f65a7fdc3991cd9b1568ef911af35edb85d8c353b103a79d14d16",
@@ -10063,7 +10158,7 @@
     "src/backend/Kafdeck.Api/OperationalAnalyticsRuntimeService.cs": "1ec5bedacc264e80a292b04575d4c4daba5f11cfe682a619bc6ce54b19b88e23",
     "src/backend/Kafdeck.Api/OperationalTelemetryProviderDecorators.cs": "a7b6ddd558024bfffd1158792c4de5fe95388a356e8e58f3ba84d9b83a637359",
     "src/backend/Kafdeck.Api/OperatorSessionUiScope.cs": "797c89a4469577d242d165debeb48d575be544fcb2f846592a0bbd2fdff0940d",
-    "src/backend/Kafdeck.Api/Program.cs": "88c6cd6766b4ba6939feca46c12096398d4a8851e978c0d05fa5d9794423bd6f",
+    "src/backend/Kafdeck.Api/Program.cs": "7094ec43856eaf6baa71c33db9aec15bacc0fb8579c6ba6035c3b88e5d4859b0",
     "src/backend/Kafdeck.Api/Properties/AssemblyInfo.cs": "b9c93f92157f9dfb4beae4203e5d6269aeac684818affb4def98a2667b703494",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceEndpoints.cs": "31accbee49239759fdb252a285c0b6c60a4038190f353c7ac72a0db96fcdc734",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",
@@ -10073,7 +10168,7 @@
     "src/backend/Kafdeck.Api/V01ApiContract.cs": "940df28094faf6e28d8100c0cb955830b6ea019149967c8cff077e808537ce73",
     "src/backend/Kafdeck.Api/V03RecordApiContract.cs": "f32a570b8699bf81c41a90181f85b880eec63c306a110c1ad2e98b7339a7c911",
     "src/backend/Kafdeck.Api/V04ReadViewApiContract.cs": "a8d4987f3e2f9372a39273a42fceae9bed70d3a791942c8d27b8071460c0a553",
-    "src/backend/Kafdeck.Api/W39MutationPreDispatchGuard.cs": "65a9f905404fa94848db288182d95ad0940c6d0641643509957e5815fa008c6f",
+    "src/backend/Kafdeck.Api/W39MutationPreDispatchGuard.cs": "7d45a9cf8bf1b98920a4822e898db562a339a94218f27d3af66b586dcb631b90",
     "src/backend/Kafdeck.Api/W57GovernedDataJobEffectGuard.cs": "badbc1b01918a39d67193148a1917e23e8beab6fac10b7486ff0c629b6bf61f8",
     "src/shared/KafdeckReadContracts.cs": "812dcc52cce3f6d69e2b36904b96c9401649cac7af529c22dcd0bd1142383165"
   }
