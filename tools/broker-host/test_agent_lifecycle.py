@@ -20,7 +20,7 @@ class LifecycleTests(unittest.TestCase):
             request = {
                 'action': 'apply', 'operationId': 'a' * 32, 'targetId': 'broker-2', 'brokerId': 2,
                 'kafkaClusterId': 'cluster', 'instance': '4:100', 'currentDigest': None,
-                'version': '1.1.0', 'digest': 'a' * 64, 'launchMode': 'argfile', 'applyUntil': now + 120,
+                'version': '1.1.0', 'digest': 'a' * 64, 'launchMode': 'argfile', 'applyUntil': now + 120, 'expectRestart': True,
             }
             service = {'adapter': 'systemd'}
             settings = {'maintenanceFrom': now - 60, 'maintenanceTo': now + 180}
@@ -54,7 +54,7 @@ class LifecycleTests(unittest.TestCase):
             request = {
                 'action': 'apply', 'operationId': 'a' * 32, 'targetId': 'broker-2', 'brokerId': 2,
                 'kafkaClusterId': 'cluster', 'instance': '4:100', 'currentDigest': None,
-                'version': '1.1.0', 'digest': 'a' * 64, 'launchMode': 'argfile', 'applyUntil': now - 1,
+                'version': '1.1.0', 'digest': 'a' * 64, 'launchMode': 'argfile', 'applyUntil': now - 1, 'expectRestart': True,
             }
             with patch.object(agent, 'scope', return_value=({'maintenanceFrom':now-60,'maintenanceTo':now-1}, {}, directory, '/opt/kafdeck')), \
                  patch.object(agent, 'admitted_package', return_value=b'agent'), \
@@ -74,3 +74,48 @@ class LifecycleTests(unittest.TestCase):
             agent.require_runtime_mount(observed, '/opt/kafdeck', call)
         accepted = {'command': lambda _args: json.dumps([{'Destination':'/opt/kafdeck', 'Type':'bind', 'RW':False}])}
         agent.require_runtime_mount(observed, '/opt/kafdeck', accepted)
+
+    def test_expired_publication_is_resumed_without_republishing_or_restarting_twice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            now = int(time.time())
+            request = {'action':'apply', 'operationId':'a'*32, 'targetId':'broker-2', 'brokerId':2,
+                       'kafkaClusterId':'cluster', 'instance':'4:100', 'currentDigest':'b'*64,
+                       'version':'1.1.0', 'digest':'a'*64, 'launchMode':'argfile',
+                       'applyUntil':now-1, 'expectRestart':True}
+            agent.state_write(directory, agent.journal_plan(request), 'publishing')
+            with patch.object(agent, 'scope', return_value=({'maintenanceFrom':now-60,'maintenanceTo':now+180}, {}, directory, '/opt/kafdeck')), \
+                 patch.object(agent, 'read_json', side_effect=lambda path: json.loads(path.read_text())), \
+                 patch.object(agent, 'admitted_package', return_value=b'agent'), \
+                 patch.object(agent, 'process', return_value=({'instance':'4:100','adapter':'systemd'}, 4, ['restart'])), \
+                 patch.object(agent, 'installed_files', return_value=('a'*64, 'argfile', 'arg', 'arg')), \
+                 patch.object(agent, 'atomic', wraps=agent.atomic) as write, patch.object(agent.subprocess, 'run') as restart:
+                with self.assertRaisesRegex(agent.Rejected, 'agent_outside_maintenance'):
+                    agent.handle({}, request, {})
+                preview = agent.handle({'packages':{}}, {**request, 'action':'preview'}, {})
+                self.assertTrue(preview['restartRequired'])
+                self.assertEqual('b'*64, preview['currentDigest'])
+                renewed = {**request, 'applyUntil':now+120}
+                self.assertEqual('awaitingRestart', agent.handle({}, renewed, {})['stage'])
+                self.assertEqual('awaitingRestart', agent.handle({}, renewed, {})['stage'])
+                self.assertEqual([directory / agent.STATE], [call.args[0] for call in write.call_args_list])
+                restart.assert_called_once()
+
+    def test_installed_package_needs_no_maintenance_but_cannot_grant_a_restart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            now = int(time.time())
+            request = {'action':'apply', 'operationId':'a'*32, 'targetId':'broker-2', 'brokerId':2,
+                       'kafkaClusterId':'cluster', 'instance':'4:100', 'currentDigest':'a'*64,
+                       'version':'1.1.0', 'digest':'a'*64, 'launchMode':'argfile',
+                       'applyUntil':now+120, 'expectRestart':False}
+            with patch.object(agent, 'scope', return_value=({'maintenanceFrom':now-60,'maintenanceTo':now-1}, {}, directory, '/opt/kafdeck')), \
+                 patch.object(agent, 'admitted_package', return_value=b'agent'), \
+                 patch.object(agent, 'process', return_value=({'instance':'4:100','adapter':'systemd'}, 4, ['restart'])), \
+                 patch.object(agent, 'installed_files', side_effect=[('a'*64,'argfile','arg','arg'), ('a'*64,'argfile','','arg')]), \
+                 patch.object(agent, 'atomic') as write, patch.object(agent.subprocess, 'run') as restart:
+                self.assertEqual('alreadyInstalled', agent.handle({}, request, {})['stage'])
+                with self.assertRaisesRegex(agent.Rejected, 'agent_preview_stale'):
+                    agent.handle({}, request, {})
+                write.assert_not_called()
+                restart.assert_not_called()

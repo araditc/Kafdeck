@@ -8,7 +8,8 @@ internal sealed record BrokerAgentPackage(string Version, string Digest);
 internal sealed record BrokerAgentPreviewInput(string ClusterId, int BrokerId, string Version);
 internal sealed record BrokerAgentPlanInput(string Plan);
 internal sealed record BrokerAgentCommand(string Action, string OperationId, string TargetId, int BrokerId, string KafkaClusterId,
-    string Version, string Digest, string? Instance = null, string? CurrentDigest = null, string? LaunchMode = null, long? ApplyUntil = null);
+    string Version, string Digest, string? Instance = null, string? CurrentDigest = null, string? LaunchMode = null, long? ApplyUntil = null,
+    bool? ExpectRestart = null);
 internal sealed record BrokerAgentHostResult(string Stage, string? Code, string? Version, string? Digest, string? Adapter,
     string? CurrentVersion, string? CurrentDigest, string? Instance, string? LaunchMode, bool RestartRequired,
     long? MaintenanceFrom, long? MaintenanceTo, long? DispatchedAt, long? ProcessStartedAt);

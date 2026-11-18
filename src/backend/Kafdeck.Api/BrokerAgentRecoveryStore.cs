@@ -22,6 +22,8 @@ internal sealed class BrokerAgentRecoveryStore(string path)
         {
             if (previous.OperationId != entry.OperationId || previous.Principal != entry.Principal)
                 throw new BrokerHostFailure("agent_previous_operation_pending");
+            if (previous.Token != entry.Token)
+                Write(rows.Select(row => row == previous ? entry : row).ToArray());
             return;
         }
         if (rows.Length >= 32) throw new BrokerHostFailure("agent_recovery_limit");

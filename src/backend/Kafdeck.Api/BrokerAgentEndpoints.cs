@@ -41,7 +41,6 @@ internal static class BrokerAgentEndpoints
         {
             var principal = Installer(http, identity, options, input.ClusterId);
             if (principal is null) return Problem(403, "agent_install_denied");
-            if (recovery.Find(input.ClusterId) is not null) return Problem(409, "agent_previous_operation_pending");
             var target = options.AgentTargets.SingleOrDefault(item => item.ClusterId == input.ClusterId && item.BrokerId == input.BrokerId);
             var package = options.AgentPackages.SingleOrDefault(item => item.Version == input.Version);
             if (target is null || package is null || !HasSource(metrics, target)) return Problem(409, "agent_target_unconfigured");
@@ -50,17 +49,35 @@ internal static class BrokerAgentEndpoints
             var (binding, connection) = selected.Value;
             var command = new BrokerAgentCommand("preview", Guid.NewGuid().ToString("N"), binding.TargetId, binding.BrokerId,
                 binding.KafkaClusterId, package.Version, package.Digest);
+            var pending = recovery.Find(input.ClusterId);
+            if (pending is not null)
+            {
+                var previous = pending.Principal == principal ? ReadPlan(http, pending.Token) : null;
+                if (previous is null || previous.Principal != principal || previous.Command.OperationId != pending.OperationId ||
+                    previous.Target != target || previous.Package != package || previous.Binding != binding ||
+                    previous.Connection != connection || previous.Command.ExpectRestart != true ||
+                    previous.Command.ApplyUntil is not { } deadline || Timestamp() < deadline)
+                    return Problem(409, "agent_previous_operation_pending");
+                var stage = await host.CallAsync(connection, previous.Command with { Action = "status" }, cancellation);
+                CheckStatus(stage);
+                if (stage.Stage != "publishing") return Problem(409, "agent_previous_operation_pending");
+                command = previous.Command with { Action = "preview" };
+            }
             var before = await host.CallAsync(connection, command, cancellation);
             CheckPreview(before);
+            if (pending is not null && (!before.RestartRequired || before.Instance != command.Instance ||
+                before.CurrentDigest != command.CurrentDigest || before.LaunchMode != command.LaunchMode))
+                return Problem(409, "agent_preview_stale");
             var health = await BrokerAgentHealthCheck.CheckAsync(kafka, binding, target.ExpectedBrokers, before.RestartRequired, cancellation);
             var now = Timestamp();
-            if (Installer(http, identity, options, input.ClusterId) != principal || GetTarget(registry, target) != selected)
+            if (Installer(http, identity, options, input.ClusterId) != principal || GetTarget(registry, target) != selected ||
+                recovery.Find(input.ClusterId) != pending)
                 return Problem(403, "agent_install_denied");
-            var applyUntil = Math.Min(before.MaintenanceTo!.Value, now + 300);
+            var applyUntil = before.RestartRequired ? Math.Min(before.MaintenanceTo!.Value, now + 300) : now + 300;
             var ready = health.Healthy && (!before.RestartRequired || before.MaintenanceFrom <= now && applyUntil - now >= 15);
             var plan = new BrokerAgentPlan(principal, input.ClusterId, target, package, binding, connection,
                 command with { Instance = before.Instance, LaunchMode = before.LaunchMode, CurrentDigest = before.CurrentDigest,
-                    ApplyUntil = applyUntil }, now);
+                    ApplyUntil = applyUntil, ExpectRestart = before.RestartRequired }, now);
             return Results.Ok(new
             {
                 plan = ready ? Protect(http, plan) : null,
@@ -75,7 +92,8 @@ internal static class BrokerAgentEndpoints
             MonitoringStore metrics, ISecurityAuditSink audit, bool apply, CancellationToken cancellation)
         {
             var plan = ReadPlan(http, input.Plan);
-            if (plan is null) return Problem(400, "agent_preview_invalid");
+            if (plan is null || plan.Command.ExpectRestart is not { } expectRestart || plan.Command.ApplyUntil is not { } deadline)
+                return Problem(400, "agent_preview_invalid");
             bool Authorized() => Installer(http, identity, options, plan.ClusterId) == plan.Principal &&
                 options.AgentTargets.Contains(plan.Target) && options.AgentPackages.Contains(plan.Package) &&
                 GetTarget(registry, plan.Target) == (plan.Binding, plan.Connection);
@@ -87,10 +105,12 @@ internal static class BrokerAgentEndpoints
                 CheckStatus(status);
                 if (apply && status.Stage is ("unknown" or "publishing"))
                 {
-                    if (Timestamp() >= plan.Command.ApplyUntil!.Value) return Problem(409, "agent_preview_expired");
-                    var observed = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, true, cancellation);
+                    if (Timestamp() >= deadline) return Problem(409, "agent_preview_expired");
+                    if (status.Stage == "publishing" && !expectRestart) return Problem(409, "agent_preview_stale");
+                    var observed = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, expectRestart, cancellation);
                     if (!observed.Healthy) return Results.Conflict(new { stage = "blocked", code = "agent_restart_not_safe", health = observed });
                     if (!Authorized()) return Problem(403, "agent_install_denied");
+                    if (Timestamp() >= deadline) return Problem(409, "agent_preview_expired");
                     recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan));
                     await Audit(audit, plan, SecurityAuditOutcome.Succeeded, "agent_dispatch_authorized", cancellation);
                     try { status = await host.CallAsync(plan.Connection, plan.Command with { Action = "apply" }, cancellation); }
@@ -102,14 +122,19 @@ internal static class BrokerAgentEndpoints
                     CheckStatus(status);
                 }
                 if (!Authorized()) return Problem(403, "agent_install_denied");
-                if (status.Stage == "unknown" && Timestamp() >= plan.Command.ApplyUntil!.Value)
+                if (status.Stage == "unknown" && Timestamp() >= deadline)
                 {
                     recovery.Finish(plan.ClusterId, plan.Command.OperationId);
                     return Results.Ok(new { stage = "expired", operationId = plan.Command.OperationId });
                 }
-                if (status.Stage == "alreadyInstalled") recovery.Finish(plan.ClusterId, plan.Command.OperationId);
+                if (status.Stage == "alreadyInstalled")
+                {
+                    if (expectRestart) return Problem(409, "agent_restart_evidence_invalid");
+                    recovery.Finish(plan.ClusterId, plan.Command.OperationId);
+                }
                 if (status.Stage is not ("restartObserved" or "complete"))
-                    return Results.Ok(new { status.Stage, operationId = plan.Command.OperationId, status.DispatchedAt });
+                    return Results.Ok(new { status.Stage, operationId = plan.Command.OperationId, status.DispatchedAt, status.Version,
+                        requiresRenewal = status.Stage == "publishing" && Timestamp() >= deadline });
                 if (status.ProcessStartedAt is not { } started || status.DispatchedAt is not { } dispatched ||
                     started < dispatched - 2 || started > Timestamp() + 2 || status.Digest != plan.Package.Digest ||
                     status.Version != plan.Package.Version)

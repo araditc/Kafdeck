@@ -5293,8 +5293,15 @@
             ]
           },
           "version": {
-            "type": "string",
-            "maxLength": 72
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 72
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "digest": {
             "type": "string",
@@ -5328,6 +5335,9 @@
           },
           "health": {
             "$ref": "#/components/schemas/BrokerAgentHealth"
+          },
+          "requiresRenewal": {
+            "type": "boolean"
           }
         },
         "additionalProperties": true

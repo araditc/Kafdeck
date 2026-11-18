@@ -1805,5 +1805,6 @@
   "Preview another package": "Preview another package",
   "Checking agent operation…": "Checking agent operation…",
   "Fresh metric at {0}": "Fresh metric at {0}",
-  "The plan expired before dispatch. Preview again.": "The plan expired before dispatch. Preview again."
+  "The plan expired before dispatch. Preview again.": "The plan expired before dispatch. Preview again.",
+  "Preview pending change in the current maintenance window": "Preview pending change in the current maintenance window"
 }

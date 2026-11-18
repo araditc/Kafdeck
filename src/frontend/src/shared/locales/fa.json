@@ -1805,5 +1805,6 @@
   "Preview another package": "پیش‌نمایش بستهٔ دیگر",
   "Checking agent operation…": "در حال بررسی عملیات عامل…",
   "Fresh metric at {0}": "متریک تازه در {0}",
-  "The plan expired before dispatch. Preview again.": "طرح پیش از ارسال فرمان منقضی شد. دوباره پیش‌نمایش بگیرید."
+  "The plan expired before dispatch. Preview again.": "طرح پیش از ارسال فرمان منقضی شد. دوباره پیش‌نمایش بگیرید.",
+  "Preview pending change in the current maintenance window": "پیش‌نمایش تغییر نیمه‌تمام در بازهٔ نگهداری فعلی"
 }

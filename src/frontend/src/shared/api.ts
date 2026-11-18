@@ -26,7 +26,8 @@ export interface BrokerAgentPreview {
 export interface BrokerAgentProgress {
   operationId: string; stage: 'unknown' | 'publishing' | 'awaitingRestart' | 'awaitingMetrics' |
     'awaitingHealth' | 'reconcile' | 'complete' | 'alreadyInstalled' | 'expired';
-  version?: string; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
+  version?: string | null; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
+  requiresRenewal?: boolean;
   processStartedAt?: number; monitoringInstance?: string; health?: BrokerAgentHealth;
 }
 

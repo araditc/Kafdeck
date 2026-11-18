@@ -29,6 +29,7 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
   const [target, setTarget] = useState<{brokerId:number|null;packages:BrokerAgentPackage[]} | null>(null);
   const [version, setVersion] = useState('');
   const [preview, setPreview] = useState<BrokerAgentPreview | null>(null);
+  const [renewing, setRenewing] = useState(false);
   const [progress, setProgress] = useState<BrokerAgentProgress | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,24 +61,33 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
   }
 
   const observe = (plan: string, apply: boolean) => run(async signal => {
-    if (apply) setSaved(plan);
+    if (apply) {
+      setSaved(plan);
+      setRenewing(false);
+    }
     const result = await kafdeckApi.brokerAgentProgress(plan, apply, signal);
     if (!signal.aborted) setProgress(result);
   });
   const brokerId = target?.brokerId;
   if (brokerId === undefined || brokerId === null || !target?.packages.length) return null;
   const finished = progress?.stage === 'complete' || progress?.stage === 'alreadyInstalled' || progress?.stage === 'expired';
+  const needsRenewal = progress?.stage === 'publishing' && progress.requiresRenewal;
+  const canConfirm = !saved || renewing;
+  function inspectVersion(version: string, renew: boolean) {
+    setConfirm(false);
+    setPreview(null);
+    setRenewing(renew);
+    void run(async signal => {
+      const result = await kafdeckApi.previewBrokerAgent(clusterId, brokerId!, version, signal);
+      if (!signal.aborted) setPreview(result);
+    });
+  }
   return <section className="card kafdeck-card p-3" aria-labelledby="broker-agent-heading">
     <h2 id="broker-agent-heading" className="card-title">{t("Offline broker agent")}</h2>
     <p>{t("Broker")} <bdi>{brokerId}</bdi></p>
     {!saved && <form className="d-flex flex-wrap align-items-end gap-2" onSubmit={event => {
       event.preventDefault();
-      setConfirm(false);
-      setPreview(null);
-      void run(async signal => {
-        const result = await kafdeckApi.previewBrokerAgent(clusterId, brokerId, version, signal);
-        if (!signal.aborted) setPreview(result);
-      });
+      inspectVersion(version, false);
     }}>
       <div><label className="form-label" htmlFor="broker-agent-package">{t("Offline package version")}</label>
         <select className="form-select" id="broker-agent-package" value={version} disabled={busy}
@@ -102,7 +112,7 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
       <p>{t("Existing JVM options and broker credentials stay in place.")}</p>
       <Health value={preview.health} />
       {preview.requiresWindow && <p role="status">{t("A restart requires the approved maintenance window.")}</p>}
-      {!saved && preview.plan && <div className="d-flex flex-wrap align-items-center gap-2">
+      {canConfirm && preview.plan && <div className="d-flex flex-wrap align-items-center gap-2">
         {preview.restartRequired && <label className="form-check mb-0">
           <input type="checkbox" className="form-check-input" checked={confirm} onChange={event => setConfirm(event.currentTarget.checked)} />
           {t("Confirm restart of this broker in the maintenance window")}
@@ -114,8 +124,10 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
     {saved && <div className="mt-3 d-flex flex-wrap gap-2">
       <button className="btn btn-outline-primary" type="button" disabled={busy}
         onClick={() => void observe(saved, false)}>{t("Check agent operation")}</button>
-      {!finished && <button className="btn btn-outline-secondary" type="button" disabled={busy}
+      {!finished && !needsRenewal && <button className="btn btn-outline-secondary" type="button" disabled={busy}
         onClick={() => void observe(saved, true)}>{t("Retry the same agent request")}</button>}
+      {needsRenewal && progress.version && <button className="btn btn-outline-secondary" type="button" disabled={busy}
+        onClick={() => inspectVersion(progress.version!, true)}>{t("Preview pending change in the current maintenance window")}</button>}
       {finished && <button className="btn btn-outline-secondary" type="button" disabled={busy}
        onClick={() => { setSaved(null); setPreview(null); setProgress(null); }}>{t("Preview another package")}</button>}
     </div>}

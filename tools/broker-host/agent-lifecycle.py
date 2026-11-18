@@ -166,6 +166,11 @@ def state_write(directory, plan, phase, dispatched=None):
     return record
 
 
+def journal_plan(request):
+    return {key: request[key] for key in ('operationId','targetId','brokerId','kafkaClusterId','instance',
+                                           'currentDigest','version','digest','launchMode')}
+
+
 def status(directory, runtime, service, request, probe, state):
     if state is None or state['plan']['operationId'] != request.get('operationId'):
         return {'stage': 'unknown'}
@@ -215,22 +220,28 @@ def handle(catalog, request, probe):
         observed, pid, restart = process(service, request, probe)
         require_runtime_mount(observed, runtime, probe)
         digest, mode, args, argument = installed_files(directory, runtime, pid)
+        publishing = state is not None and state['phase'] == 'publishing'
+        if publishing:
+            plan = journal_plan(request)
+            require(request.get('expectRestart') is True and state['plan'] == plan and
+                    plan['instance'] == observed['instance'] and plan['launchMode'] == mode and
+                    digest in (plan['currentDigest'], plan['digest']), 'agent_preview_stale')
+        restart_required = publishing or digest != request['digest'] or args == ''
         if action == 'preview':
-            current = next((name for name, value in catalog['packages'].items() if value == digest), None)
-            return {'stage': 'preview', 'adapter': observed['adapter'], 'currentDigest': digest, 'currentVersion': current,
-                    'instance': observed['instance'], 'launchMode': mode, 'restartRequired': digest != request['digest'] or args == '',
+            current_digest = plan['currentDigest'] if publishing else digest
+            current = next((name for name, value in catalog['packages'].items() if value == current_digest), None)
+            return {'stage': 'preview', 'adapter': observed['adapter'], 'currentDigest': current_digest, 'currentVersion': current,
+                    'instance': observed['instance'], 'launchMode': mode, 'restartRequired': restart_required,
                     'maintenanceFrom': settings['maintenanceFrom'], 'maintenanceTo': settings['maintenanceTo']}
-        plan = {key: request[key] for key in ('operationId','targetId','brokerId','kafkaClusterId','instance','currentDigest','version','digest','launchMode')}
+        plan = journal_plan(request)
+        require(request.get('expectRestart') is restart_required and plan['instance'] == observed['instance'] and
+                plan['launchMode'] == mode and (publishing or digest == plan['currentDigest']), 'agent_preview_stale')
+        if not restart_required:
+            return {'stage': 'alreadyInstalled', 'version': plan['version'], 'digest': plan['digest']}
         now = int(time.time())
         require(settings['maintenanceFrom'] <= now < settings['maintenanceTo'] and type(request['applyUntil']) is int
                 and now < request['applyUntil'] <= settings['maintenanceTo'], 'agent_outside_maintenance')
-        require(plan['instance'] == observed['instance'] and plan['launchMode'] == mode, 'agent_preview_stale')
-        if state and state['phase'] == 'publishing':
-            require(state['plan'] == plan and digest in (plan['currentDigest'], plan['digest']), 'agent_preview_stale')
-        else:
-            require(digest == plan['currentDigest'], 'agent_preview_stale')
-            if digest == plan['digest'] and args != '':
-                return {'stage': 'alreadyInstalled', 'version': plan['version'], 'digest': plan['digest']}
+        if not publishing:
             state_write(directory, plan, 'publishing')
         if digest != plan['digest']:
             atomic(directory / JAR, package, 0o644)
