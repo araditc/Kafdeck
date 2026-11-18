@@ -30,6 +30,7 @@ import { RecordExplorer } from '../features/records/RecordExplorer.js';
 import { TopicRecordPublisher } from '../features/records/TopicRecordPublisher.js';
 import { ReadViewsExplorer } from '../features/readviews/ReadViewsExplorer.js';
 import { MonitoringPage } from '../features/monitoring/MonitoringPage.js';
+import { BrokerLogs } from '../features/monitoring/BrokerLogs.js';
 import { RegisteredConnectView } from '../features/readviews/RegisteredConnectView.js';
 import { RegisteredKsqlView } from '../features/readviews/RegisteredKsqlView.js';
 import { NotificationObservationPanel } from '../features/notifications/NotificationObservationPanel.js';
@@ -814,7 +815,7 @@ export function AppShell() {
           </section>}</>}
           {selectedDirectoryEntry && <>
             {activePage === 'monitoring' && <MonitoringPage key={JSON.stringify([operatorScope, selectedClusterId])}
-              clusterId={selectedClusterId} refresh={consumerRefresh} manage={operator?.canManageUsers===true} />}
+              clusterId={selectedClusterId} refresh={consumerRefresh} manage={operator?.canManageUsers===true} logLinks={!!operator} />}
             {wantsClusterObservation && clusterObservationError && <div className="alert alert-danger kafdeck-status" role="alert">{problemPresentation(clusterObservationError)}</div>}
             {wantsClusterObservation && !selected && !clusterObservationError && <div className="alert alert-info kafdeck-status" role="status">{t("Loading cluster observations…")}</div>}
             {activePage === 'overview' && selected && <section className="card kafdeck-card" id="overview" aria-labelledby="overview-title">
@@ -829,6 +830,7 @@ export function AppShell() {
               {brokerError && <div className="alert alert-danger" role="alert">{problemPresentation(brokerError)}</div>}
               {brokerConfiguration && <article aria-labelledby="broker-config-title"><h3 id="broker-config-title" className="h3">{t("Broker")}{' '}<bdi dir="ltr" lang="en">{brokerConfiguration.brokerId}</bdi> {' '}{t("configuration")}</h3><ConfigurationView entries={brokerConfiguration.entries} /></article>}
             </section>}
+            {activePage === 'brokers' && operator && <BrokerLogs key={JSON.stringify([operatorScope, selectedClusterId])} clusterId={selectedClusterId} />}
             {activePage === 'topics' && <section className="card kafdeck-card" id="topics" aria-labelledby="topics-title">
               <h2 id="topics-title" className="card-title">{t("Topics")}</h2>
               {!activeTopic && <>

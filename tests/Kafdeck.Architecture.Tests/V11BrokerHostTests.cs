@@ -148,7 +148,8 @@ public sealed class V11BrokerHostTests
         internal WebApplication App = null!;
         internal HttpClient Client = null!;
         internal ClaimsPrincipal Actor = null!;
-        internal static async Task<HostFixture> Start(BrokerHostOptions? options = null, IBrokerHostProbe? probe = null, IKafkaAdministrationPort? port = null)
+        internal static async Task<HostFixture> Start(BrokerHostOptions? options = null, IBrokerHostProbe? probe = null,
+            IKafkaAdministrationPort? port = null, IBrokerLogReader? logReader = null, long? alertTime = null)
         {
             var f = new HostFixture();
             var builder = WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -164,7 +165,23 @@ public sealed class V11BrokerHostTests
                 f.App.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(directory) });
             }
             f.App.MapGet("/api/v1/clusters/test-cluster", async (ClusterExplorerService clusters) => new { data = await clusters.GetClusterAsync("test-cluster") });
-            f.App.MapBrokerHosts(f.Identity.Store, options ?? Options(), f.Store, probe ?? f.Probe);
+            var configured = options ?? Options();
+            f.App.MapBrokerHosts(f.Identity.Store, configured, f.Store, probe ?? f.Probe);
+            if (logReader is not null)
+            {
+                var logOptions = new BrokerHostOptions { Enabled = configured.Enabled, AllowedNetworks = configured.AllowedNetworks,
+                    Credentials = configured.Credentials, LogReaderUserIds = [f.Identity.OwnerId],
+                    LogSources = [new("test-cluster", 1, "fixture-broker-1")] };
+                f.App.MapBrokerLogs(f.Identity.Store, logOptions, f.Store, logReader);
+                if (alertTime is { } time)
+                    f.App.MapGet("/api/v1/clusters/test-cluster/monitoring/alerts", () => new
+                    {
+                        state = "available", observedAt = time, truncated = false, warning = false,
+                        rows = new[] { new { name = "TestBrokerDiagnostic", state = "firing", severity = "warning",
+                            instance = "fixture-broker-1", metric = "fixture-diagnostic", labels = new { },
+                            time, since = time, value = 1, threshold = 0 } },
+                    });
+            }
             await f.App.StartAsync();
             f.Client = new(new SocketsHttpHandler { UseProxy = false }) { BaseAddress = new(Assert.Single(f.App.Urls)) };
             using var csrf = await f.Client.GetFromJsonAsync<JsonDocument>("/api/v1/auth/csrf");

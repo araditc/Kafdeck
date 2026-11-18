@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kafdeck experimental managed-browser API",
-    "version": "1.0.0-experimental.3",
+    "version": "1.0.0-experimental.4",
     "description": "Managed-browser contract revision including v1.1 host registration, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
   },
   "servers": [
@@ -3090,6 +3090,188 @@
         },
         "x-runtime-request-schema": "BrokerHostBind"
       }
+    },
+    "/api/v1/fleet/hosts/log-targets": {
+      "get": {
+        "operationId": "managed-broker-log-targets",
+        "summary": "List bound log targets for the signed-in account",
+        "description": "An account without the dedicated grant receives allowed=false and no binding information. Explicit monitoring instance mappings support alert navigation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "explicit managed user log-read grant and current cluster scope",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped broker log result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerLogTargets"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fleet/hosts/logs": {
+      "post": {
+        "operationId": "managed-broker-logs-read",
+        "summary": "Read a bounded time window from a bound broker service",
+        "description": "A registered host helper checks the service identity before and after reading one approved systemd unit or Compose container. Sensitive entries are redacted before the no-store browser response. Requests look back up to 48 hours with a one-hour maximum window.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "explicit managed user log-read grant and current cluster scope",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "x-declared-body-limit-bytes": 2048,
+        "x-runtime-request-schema": "BrokerLogRead",
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerLogRead"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scoped broker log result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerLogPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was denied or the service log could not be read safely.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4237,6 +4419,142 @@
           "revision",
           "binding"
         ],
+        "additionalProperties": true
+      },
+      "BrokerLogTargets": {
+        "type": "object",
+        "required": [
+          "allowed",
+          "targets"
+        ],
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerLogTarget"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerLogTarget": {
+        "type": "object",
+        "required": [
+          "brokerId",
+          "monitoringInstance"
+        ],
+        "properties": {
+          "brokerId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "monitoringInstance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 160
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerLogRead": {
+        "type": "object",
+        "required": [
+          "clusterId",
+          "brokerId",
+          "from",
+          "to"
+        ],
+        "properties": {
+          "clusterId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "brokerId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "from": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "UTC Unix seconds, inclusive."
+          },
+          "to": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "UTC Unix seconds, exclusive."
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerLogPage": {
+        "type": "object",
+        "required": [
+          "brokerId",
+          "from",
+          "to",
+          "adapter",
+          "lines",
+          "truncated"
+        ],
+        "properties": {
+          "brokerId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "from": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "to": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "systemd",
+              "compose"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerLogLine"
+            },
+            "maxItems": 200
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "BrokerLogLine": {
+        "type": "object",
+        "required": [
+          "timeMs",
+          "text"
+        ],
+        "properties": {
+          "timeMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
         "additionalProperties": true
       }
     }

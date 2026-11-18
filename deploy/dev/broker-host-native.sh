@@ -38,9 +38,44 @@ group.initial.rebalance.delay.ms=0
 EOF
 cluster_id=$("$kafka/bin/kafka-storage.sh" random-uuid)
 "$kafka/bin/kafka-storage.sh" format --cluster-id "$cluster_id" --config "$lab/server.properties"
-sudo systemd-run --unit=kafdeck-v11-kafka --property="User=$(id -un)" --property="WorkingDirectory=$lab" \
-  --setenv="JAVA_HOME=$JAVA_HOME" --setenv="KAFKA_HEAP_OPTS=$KAFKA_HEAP_OPTS" \
-  "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
+launch() {
+  unit=$1
+  shift
+  sudo systemd-run --unit="$unit" --property="User=$(id -un)" --property="WorkingDirectory=$lab" \
+    --setenv="JAVA_HOME=$JAVA_HOME" --setenv="KAFKA_HEAP_OPTS=$KAFKA_HEAP_OPTS" "$@"
+}
+if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then
+  sed -e 's/process.roles=broker,controller/process.roles=broker/' -e 's/node.id=1/node.id=2/' \
+    -e 's/:19092/:19094/g' -e 's/,CONTROLLER:\/\/127.0.0.1:19093//' -e 's|/data$|/data-sibling|' \
+    "$lab/server.properties" > "$lab/sibling.properties"
+  "$kafka/bin/kafka-storage.sh" format --cluster-id "$cluster_id" --config "$lab/sibling.properties"
+  cat > "$lab/launch-logged" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+marker=$1
+timefile=$2
+trigger=$3
+shift 3
+(
+  # Stay in the broker unit so journald attaches its trusted unit field.
+  deadline=$((SECONDS + 1200))
+  until test -e "$trigger"; do
+    test "$SECONDS" -lt "$deadline"
+    sleep 1
+  done
+  at=$(date +%s)
+  printf 'INFO Kafdeck diagnostics: %s\n' "$marker"
+  printf 'INFO Kafdeck diagnostics: password=v11-example-value\n'
+  printf '%s\n' "$at" > "$timefile"
+) &
+exec "$@"
+EOF
+  chmod 0755 "$lab/launch-logged"
+  launch kafdeck-v11-kafka "$lab/launch-logged" native-486-primary "$lab/time-1" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
+  launch kafdeck-v11-kafka-sibling "$lab/launch-logged" native-486-sibling "$lab/time-2" "$lab/emit-logs" "$kafka/bin/kafka-server-start.sh" "$lab/sibling.properties"
+else
+  launch kafdeck-v11-kafka "$kafka/bin/kafka-server-start.sh" "$lab/server.properties"
+fi
 ready=0
 for attempt in $(seq 1 60); do
   if timeout 3 bash -c 'echo >/dev/tcp/127.0.0.1/19092' 2>/dev/null; then ready=1; break; fi
@@ -49,6 +84,21 @@ done
 test "$ready" = 1
 ssh-keygen -q -t ed25519 -N '' -f "$lab/probe-key"
 printf '%s\n' '{"version":1,"targets":[{"id":"native-broker-1","adapter":"systemd","unit":"kafdeck-v11-kafka.service"}]}' > "$lab/targets.json"
+if [[ "${KAFDECK_NATIVE_LOG_FIXTURE:-}" == 1 ]]; then
+  deadline=$((SECONDS + 90))
+  until timeout 3 bash -c 'echo >/dev/tcp/127.0.0.1/19094' 2>/dev/null; do
+    test "$SECONDS" -lt "$deadline"
+    sleep 1
+  done
+  printf '%s\n' '{"version":1,"targets":[{"id":"native-broker-1","adapter":"systemd","unit":"kafdeck-v11-kafka.service","logs":true},{"id":"native-broker-2","adapter":"systemd","unit":"kafdeck-v11-kafka-sibling.service","logs":true}]}' > "$lab/targets.json"
+  {
+    echo KAFDECK_RUN_BROKER_LOG_LIVE=1
+    echo "KAFDECK_HOST_LOG_CLUSTER_ID=$cluster_id"
+    echo KAFDECK_HOST_LOG_TARGET_PREFIX=native-broker
+    echo KAFDECK_HOST_LOG_MARKER=native-486-primary
+    echo KAFDECK_HOST_LOG_SIBLING=native-486-sibling
+  } >> "$GITHUB_ENV"
+fi
 sudo sh tools/broker-host/install.sh "$lab/targets.json" "$lab/probe-key.pub"
 pin=$(sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | awk '{print $2}')
 {

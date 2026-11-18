@@ -1,6 +1,7 @@
 {
   "mappingMethods": [
     "MapBrokerHosts",
+    "MapBrokerLogs",
     "MapGovernanceOpenApi",
     "MapKafdeckAntiforgeryEndpoint",
     "MapKafdeckAttribution",
@@ -2073,6 +2074,28 @@
       "managed": "managed-hosts-bind"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/fleet/hosts/log-targets",
+      "name": "managed-broker-log-targets",
+      "request": null,
+      "governance": null,
+      "declarative": null,
+      "antiforgery": false,
+      "managed": "managed-broker-log-targets"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fleet/hosts/logs",
+      "name": "managed-broker-logs-read",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerLogRead"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-broker-logs-read"
+    },
+    {
       "method": "POST",
       "path": "/api/v1/fleet/hosts/{hostId}/probe",
       "name": "managed-hosts-probe",
@@ -3487,6 +3510,30 @@
         "brokerId",
         "hostId",
         "targetId"
+      ]
+    },
+    "FamilyBrokerLogRead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clusterId": {
+          "type": "string"
+        },
+        "brokerId": {
+          "type": "integer"
+        },
+        "from": {
+          "type": "integer"
+        },
+        "to": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clusterId",
+        "brokerId",
+        "from",
+        "to"
       ]
     },
     "FamilyAttributionPageOfMeasurementWindow": {
@@ -9774,6 +9821,8 @@
       "GET /api/v1/fleet/hosts",
       "POST /api/v1/fleet/hosts",
       "POST /api/v1/fleet/hosts/bindings",
+      "GET /api/v1/fleet/hosts/log-targets",
+      "POST /api/v1/fleet/hosts/logs",
       "POST /api/v1/fleet/hosts/{hostId}/probe",
       "GET /api/v1/identity/users",
       "POST /api/v1/identity/users",
@@ -9825,9 +9874,10 @@
     "src/backend/Kafdeck.Api/BearerRuntimeAuthorization.cs": "3d3a3d7ee9c47f8ab0b86b1a7fbade9ff08e343c44fc876ecbccca99d876a4ec",
     "src/backend/Kafdeck.Api/BearerTopicMutationScope.cs": "9c9d423836d01f7c79a650dabf3d87b3be5fb96196703de631f289ae42cc9c45",
     "src/backend/Kafdeck.Api/BrokerHostEndpoints.cs": "0a4493f65c4545cf85ae88b6ecaf811052e752fbfe7614274eabbe46955e470c",
-    "src/backend/Kafdeck.Api/BrokerHostModels.cs": "ab9f886c2e1477db71b3e6c0c10092e55245a96ce58c552f2bd905c4098fede9",
-    "src/backend/Kafdeck.Api/BrokerHostSsh.cs": "7a33eb1764ee31894f63b3b5f16dbaf947737c910379f2ef96fc646a8c03b71a",
+    "src/backend/Kafdeck.Api/BrokerHostModels.cs": "5e5e7684416444b43df2b04c5278c1c82a71e315f3ec1c6ba45e4fc2ba5f1b0e",
+    "src/backend/Kafdeck.Api/BrokerHostSsh.cs": "f1b5ec00942f76565f7a25b74213ad83e57c175ad0cd8d1d5ad5df247c578603",
     "src/backend/Kafdeck.Api/BrokerHostStore.cs": "01b71b92c0676aac333a1f57cd17d05b71e46aadbf4c779394f2ce3659bc73e2",
+    "src/backend/Kafdeck.Api/BrokerLogEndpoints.cs": "c2aeb0fa008a61eac02128151121d7faadea9229a275a45ba4d81145d61fa184",
     "src/backend/Kafdeck.Api/BrowserNavigationEndpoints.cs": "e4577241a77f51096090bfbd9f0896d89fd4c5fb3693dffbaff9d3d771950c65",
     "src/backend/Kafdeck.Api/CatalogHosting.cs": "07153b126ce282c39ae06d17e5c426776fabba57ebf8eec858aa1fcee2bdee88",
     "src/backend/Kafdeck.Api/CatalogMutation.cs": "14ec0e81e2e1677426db8a9732c275d432443e7bf85bcfde2a292eb420a07fad",
@@ -9926,7 +9976,7 @@
     "src/backend/Kafdeck.Api/OperationalAnalyticsRuntimeService.cs": "1ec5bedacc264e80a292b04575d4c4daba5f11cfe682a619bc6ce54b19b88e23",
     "src/backend/Kafdeck.Api/OperationalTelemetryProviderDecorators.cs": "a7b6ddd558024bfffd1158792c4de5fe95388a356e8e58f3ba84d9b83a637359",
     "src/backend/Kafdeck.Api/OperatorSessionUiScope.cs": "797c89a4469577d242d165debeb48d575be544fcb2f846592a0bbd2fdff0940d",
-    "src/backend/Kafdeck.Api/Program.cs": "cc005c619acf623c36c24c2afac6453828ae0af171b1fdba6f3ab4f2757a1010",
+    "src/backend/Kafdeck.Api/Program.cs": "5b52a0af5e79ae6b314543ba0068f5960e3e5a943268aca86b452c0b634df30a",
     "src/backend/Kafdeck.Api/Properties/AssemblyInfo.cs": "b9c93f92157f9dfb4beae4203e5d6269aeac684818affb4def98a2667b703494",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceEndpoints.cs": "31accbee49239759fdb252a285c0b6c60a4038190f353c7ac72a0db96fcdc734",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",

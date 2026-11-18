@@ -3,4 +3,11 @@ import { createRoot } from 'react-dom/client';
 import '@tabler/core/dist/css/tabler.min.css';
 import '../../src/app/kafdeck-theme.css';
 import { BrokerHostsPanel } from '../../src/app/BrokerHostsPanel';
-createRoot(document.getElementById('root')!).render(<BrokerHostsPanel clusterId="test-cluster" />);
+import { BrokerLogs } from '../../src/features/monitoring/BrokerLogs';
+import { BrokerMetrics } from '../../src/features/monitoring/BrokerMetrics';
+
+const clusterId = 'test-cluster';
+const page = location.hash === '#brokers' ? <BrokerLogs clusterId={clusterId} /> :
+  location.hash === '#monitoring' ? <BrokerMetrics clusterId={clusterId} refresh={0} manage={false} seconds={30}
+    view="alerts" onInspect={() => {}} inspection={null} logLinks /> : <BrokerHostsPanel clusterId={clusterId} />;
+createRoot(document.getElementById('root')!).render(page);

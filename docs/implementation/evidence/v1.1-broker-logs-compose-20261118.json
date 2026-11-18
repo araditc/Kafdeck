@@ -1,0 +1,23 @@
+{
+  "issue": 486,
+  "environment": "Arad Office",
+  "adapter": "docker-compose",
+  "broker": 1,
+  "service": "kafka-1",
+  "siblingBroker": 2,
+  "siblingService": "kafka-2",
+  "eventTimeUtc": "2026-11-18T07:16:29.0000000Z",
+  "observed": [
+    "real pinned SSH and Kafka identity",
+    "broker window contained controlled diagnostic",
+    "sibling marker present in its own stream and absent from selected browser view",
+    "test credential value redacted",
+    "alert link opened the same broker and time window"
+  ],
+  "brokerRestart": false,
+  "browser": "Chrome, production Brokers and Alerts components, isolated managed session and controlled alert fixture",
+  "privateEvidenceSha256": {
+    "compose-broker-logs.json": "163453d1cc7c7421f60418d230b5a20746a31707a78ca8a4de3f5180c7b0c466",
+    "compose-broker-logs.trx": "9b499f4d22088a723d274f17de8a4d6c054237fa2d1b82d67ca1bc66ee81b418"
+  }
+}

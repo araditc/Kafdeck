@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiProblem, kafdeckApi, type BrokerHostDraft, type BrokerHostRegistry, type BrokerServiceTarget } from '../shared/api.js';
 import { t } from '../shared/i18n.js';
+import { brokerLogsHref, useBrokerLogTargets } from '../features/monitoring/BrokerLogs.js';
 
 const empty: BrokerHostDraft = { name: '', address: '', port: 22, user: 'kafdeck-probe', fingerprint: '', credentialId: '' };
 
 export function BrokerHostsPanel({ clusterId }: { clusterId: string }) {
+  const logAccess = useBrokerLogTargets(clusterId)?.result;
   const [registry, setRegistry] = useState<BrokerHostRegistry | null>(null);
   const [draft, setDraft] = useState(empty);
   const [hostId, setHostId] = useState('');
@@ -83,6 +85,10 @@ export function BrokerHostsPanel({ clusterId }: { clusterId: string }) {
         <div><button type="submit" className="btn btn-primary" disabled={busy || !targetId || broker === ''}>{busy ? t('Verifying…') : t('Verify and bind broker')}</button></div>
       </form>}
       <h3 className="h4">{t('Verified broker bindings')}</h3>
+      {logAccess?.allowed ? <ul className="d-flex flex-wrap gap-2 list-unstyled">
+        {registry.bindings.filter(binding => binding.clusterId === clusterId).map(target => <li key={target.brokerId}><a className="btn btn-sm btn-outline-primary"
+          href={brokerLogsHref(clusterId, target.brokerId)}>{t('Open logs for broker {0}', [target.brokerId])}</a></li>)}
+      </ul> : null}
       <p className="text-secondary">{t('Verification is a dated observation. Reverify the binding after service, host key or cluster changes.')}</p>
       <div className="table-responsive" tabIndex={0} role="region" aria-label={t('Verified broker bindings')}><table className="table table-vcenter"><thead><tr><th>{t('Broker')}</th><th>{t('Host name')}</th><th>{t('Approved service')}</th><th>{t('Last verified')}</th></tr></thead><tbody>{registry.bindings.filter(item => item.clusterId === clusterId).map(item => <tr key={item.brokerId}><th scope="row">{item.brokerId}</th><td><bdi>{registry.hosts.find(host => host.id === item.hostId)?.connection.name}</bdi></td><td><bdi>{item.targetId}</bdi></td><td><time dateTime={item.verifiedAtUtc}>{new Date(item.verifiedAtUtc).toLocaleString()}</time></td></tr>)}</tbody></table></div>
       {!registry.bindings.some(item => item.clusterId === clusterId) && <p>{t('No verified host bindings for this cluster.')}</p>}

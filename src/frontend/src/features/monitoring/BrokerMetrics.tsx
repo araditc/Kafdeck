@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { kafdeckApi, type BrokerMetricAlert } from '../../shared/api.js';
+import { kafdeckApi, type BrokerLogTargets, type BrokerMetricAlert } from '../../shared/api.js';
 import { t } from '../../shared/i18n.js';
 import { readViewProblemText } from '../readviews/readViewProblem.js';
 import { useObservation } from './useObservation.js';
 import { TimeChart } from './Chart.js';
 import { AlertRules } from './AlertRules.js';
 import { MetricSelect } from './CatalogSelect.js';
+import { alertLogsHref, useBrokerLogTargets } from './BrokerLogs.js';
 
 const investigations: Record<string, string> = {
   KafkaMetadataOfflinePartitions: 'Inspect partition leaders and controller events for unavailable replicas.',
@@ -59,9 +60,9 @@ export function SeriesView({clusterId, metric, minutes, instance, filters, refre
   </>;
 }
 
-export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspect,inspection}: {
+export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspect,inspection,logLinks=false}: {
   clusterId:string;refresh:number;manage:boolean;seconds:number;view:'alerts'|'explorer';
-  onInspect:(a:BrokerMetricAlert)=>void;inspection:BrokerMetricAlert|null
+  onInspect:(a:BrokerMetricAlert)=>void;inspection:BrokerMetricAlert|null;logLinks?:boolean
 }) {
   const [metric, setMetric] = useState(''), [minutes, setMinutes] = useState(60);
   const [draftInstance, setDraftInstance] = useState(''), [instance, setInstance] = useState('');
@@ -73,6 +74,7 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspec
   const delivered = useRef(new Set<string>());
   const alertsRead = useCallback(async(s: AbortSignal) => view==='alerts' ? kafdeckApi.monitoringAlerts(clusterId, s) : null, [clusterId,view]);
   const alerts = useObservation(alertsRead, refresh, view==='alerts'?Math.min(15,seconds)*1000:0, notify);
+  const logTargets = useBrokerLogTargets(clusterId, logLinks && view === 'alerts')?.result ?? null;
   useEffect(()=>{
     if(!inspection || view!=='explorer') return;
     setMetric(inspection.metric);setFilters(JSON.stringify(inspection.labels));setRawFilters(JSON.stringify(inspection.labels));
@@ -107,14 +109,17 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspec
       {alerts.value.rows.length === 0 && <p>{t("No active alerts returned by the configured rules.")}</p>}
       {alertRows.slice(firstAlert,firstAlert+4).map((alert, i) => {
         const next = advice(alert);
+        const logLink = alertLogsHref(clusterId, logTargets, alert.instance, alert.since);
         return <div className={'alert mb-0 ' + (alert.state === 'firing' ? 'alert-danger' : 'alert-warning')} key={i}>
           <strong><bdi>{alert.name}</bdi> · {alert.state === 'firing' ? t("Firing") : t("Pending")}</strong>
           <div><bdi>{alert.severity} · {alert.instance} · {alert.metric} · {JSON.stringify(alert.labels)}</bdi></div>
           <p>{t("Measured {0}, threshold {1}. First detected {2}.", [alert.value, alert.threshold, new Date(alert.since*1000).toISOString()])}</p>
           {next && <p>{t(next)}</p>}
-          <button type="button" className="btn btn-sm btn-outline-primary"
+          <div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-sm btn-outline-primary"
             onClick={() => onInspect(alert)}>
             {t("Inspect measurement")}</button>
+            {logLink && <a className="btn btn-sm btn-outline-primary" href={logLink}>{t("Open broker logs")}</a>}
+          </div>
         </div>;
       })}
       <PageButtons page={page} total={alerts.value.rows.length} size={4} onChange={setPage}/>
@@ -125,7 +130,7 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspec
     </>}
     {alerts.value?.state === 'available' && <details onToggle={e=>setShowHistory(e.currentTarget.open)}>
       <summary>{t("Alert history (24 hours)")}</summary>
-      {showHistory && <IncidentHistory clusterId={clusterId} refresh={refresh} />}
+      {showHistory && <IncidentHistory clusterId={clusterId} refresh={refresh} logTargets={logTargets} />}
     </details>}
     {manage && available && <AlertRules clusterId={clusterId} metric={metric} />}
     </>}
@@ -169,7 +174,7 @@ export function BrokerMetrics({clusterId, refresh, manage, seconds,view,onInspec
   </section>;
 }
 
-function IncidentHistory({clusterId,refresh}: {clusterId:string;refresh:number}) {
+function IncidentHistory({clusterId,refresh,logTargets}: {clusterId:string;refresh:number;logTargets:BrokerLogTargets|null}) {
   const [page,setPage]=useState(0);
   const read=useCallback((s: AbortSignal)=>kafdeckApi.monitoringIncidents(clusterId,s),[clusterId]);
   const result=useObservation(read,refresh,30_000);
@@ -178,11 +183,14 @@ function IncidentHistory({clusterId,refresh}: {clusterId:string;refresh:number})
   if(!result.value.rows.length) return <p>{t("No alerts in this interval.")}</p>;
   const first=Math.min(page,Math.max(0,Math.ceil(result.value.rows.length/6)-1))*6;
   return <>{result.value.truncated && <p>{t("Most recent 50 alerts")}</p>}
-    <ul>{result.value.rows.slice(first,first+6).map((r,i)=><li key={i}>
+    <ul>{result.value.rows.slice(first,first+6).map((r,i)=>{
+      const logLink = alertLogsHref(clusterId, logTargets, r.instance, r.fired);
+      return <li key={i}>
       <bdi>{r.name} · {r.instance} · {r.metric} · {JSON.stringify(r.labels)}</bdi>
       <div>{t("Fired at {0} with value {1} (threshold {2}).",[new Date(r.fired*1000).toISOString(),r.value,r.threshold])}
         {' · '}{!r.ended ? t("Firing") : <>{r.reason==='recovered' ? t("Recovered") : r.reason==='ruleChanged' ? t("Rule changed") : r.reason==='noTraffic' ? t("No new request activity") : t("No recent data")} · <bdi>{new Date(r.ended*1000).toISOString()}</bdi></>}</div>
-    </li>)}</ul><PageButtons page={page} total={result.value.rows.length} size={6} onChange={setPage}/></>;
+      {logLink && <a href={logLink}>{t("Open broker logs")}</a>}
+    </li>;})}</ul><PageButtons page={page} total={result.value.rows.length} size={6} onChange={setPage}/></>;
 }
 
 function PageButtons({page,total,size,onChange}:{page:number;total:number;size:number;onChange:(n:number)=>void}) {
