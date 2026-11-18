@@ -17,6 +17,7 @@ public enum SecurityAuditEventType
     KsqlStreamCreation = 13,
     KsqlTableCreation = 14,
     KafkaTargetRegistration = 15,
+    BrokerHostManagement = 16,
 }
 
 public enum SecurityAuditOutcome

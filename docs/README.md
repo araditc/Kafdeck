@@ -24,6 +24,7 @@ The [final publication record](releases/v1.0.md) and [completed checklist](relea
 | v1.0 stabilization | [Bounded checklist](releases/v1.0-readiness-checklist.md), [code-gap audit](implementation/v1.0-code-gap-audit.md), [accepted compatibility/support policy](operator/v1.0-compatibility-support.md), [contract inventory](implementation/v1.0-contract-inventory.md), [RC installation/upgrade admission](releases/v1.0-rc-admission.md) |
 | Current capability availability | [Released v1.0 matrix](product/current-capabilities.md) |
 | Architecture and project direction | [Architecture](architecture/), [ADRs](adr/), [RFCs](rfcs/), [Roadmap](../ROADMAP.md) |
+| v1.1 development: SSH hosts and verified broker/service mappings | [Broker host registration](operator/v1.1-broker-host-registration.md) — not in the v1.0.0 release packages |
 
 Development scaffolds/laboratories under `deploy/dev` are isolated fixtures. They are not turnkey production deployments, and historical candidate reports are not replacements for the final v1.0 release evidence.
 

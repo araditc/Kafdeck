@@ -1,0 +1,64 @@
+{
+  "issue": 485,
+  "implementationCommit": "e8a0f5b0ee3f92832844b0c9f8cff8e958c66238",
+  "nativeRun": "https://github.com/araditc/Kafdeck/actions/runs/44237819458",
+  "nativeEnvironment": {
+    "pid1": "systemd",
+    "dockerExecutablePresent": false,
+    "unit": "active"
+  },
+  "compose": {
+    "hostCount": 1,
+    "brokerIds": [
+      1,
+      2,
+      3
+    ],
+    "project": "kafka-kraft",
+    "services": [
+      "kafka-1",
+      "kafka-2",
+      "kafka-3"
+    ],
+    "apiAcceptance": true,
+    "renderedProductionComponentAcceptance": true,
+    "arbitrarySshCommandExitCode": 126,
+    "brokerRestart": false
+  },
+  "securityCases": [
+    "changed SSH pin rejected before registration",
+    "wrong broker refused without registry revision change",
+    "unregistered cluster refused without registry revision change",
+    "revoked owner refused after SSH observation",
+    "CSRF required",
+    "credential reference/value excluded from response and registry",
+    "durable audit recovered after sink failure",
+    "process replacement and metadata mismatch rejected",
+    "namespace symlink and FIFO rejected",
+    "bounded command output"
+  ],
+  "compatibility": {
+    "stableSelectionUnchanged": true,
+    "existingRoutesAndSchemasUnchanged": true,
+    "staticAndGeneratedOpenApiIdentitiesUnchanged": true,
+    "newExperimentalRoutes": [
+      "GET /api/v1/fleet/hosts",
+      "POST /api/v1/fleet/hosts",
+      "POST /api/v1/fleet/hosts/bindings",
+      "POST /api/v1/fleet/hosts/{hostId}/probe"
+    ],
+    "newOptionalSection": "Kafdeck:BrokerHosts"
+  },
+  "evidenceSha256": {
+    "compose.json": "8cdb2f5461400e5a670947495aff24ec068ff03ace33b22cd9692c055f30d5ef",
+    "compose-browser.json": "30670ea32382f9a65577c4faa7bd2bfa57a30dea8d37799591536ff2c0d94fc8",
+    "compose-fleet.png": "141c59d704f35ca58735b6fc7cc3f23640ba77bbe747c52773f6f107a3bf4fff",
+    "compose-fleet-mobile.png": "aeb865e260599385581214eef21c6434ce1f844c5f6960dfccd332ce5a337576",
+    "office-final-observation.json": "1352005fd32db39ca3374010ecddd414ece3bf8820dc7e268814b51a9448a914",
+    "native/systemd.json": "1a0ad966f425353815098a0f2f3b4e7e90443d4cac596ca76d8498ac8728a588",
+    "native/systemd-browser.json": "eec96eb329596ced674bcc5e51463bbaf8b070bbf3ad482aab2dc272e60a406a",
+    "native/native-environment.json": "039b0306debaea0943d0a378b30ddb647dd6f3bf9ffe8912b3c46341ec8f75bd",
+    "native/host-acceptance.trx": "405a06d411017224ee901a6ec7a36a354fa6171e160bf15401a22972e972de23"
+  },
+  "testScope": "Compose tests used the working tree feature sources committed in e8a0f5b. The hardened final helper was separately re-observed on all three brokers with seven Linux helper tests. Browser fixtures use a normalized owner session and production handlers, not a new Keycloak login campaign. Native acceptance ran the exact implementation commit."
+}

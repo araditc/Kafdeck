@@ -849,7 +849,23 @@ function recordParams(query: RecordQuery): URLSearchParams {
   return params;
 }
 
+export interface BrokerHostDraft { name: string; address: string; port: number; user: string; fingerprint: string; credentialId: string }
+export interface BrokerHost { id: string; connection: BrokerHostDraft; verifiedAtUtc: string }
+export interface BrokerServiceTarget { id: string; adapter: 'systemd' | 'compose'; unit: string | null; project: string | null; service: string | null; brokerId: number | null; kafkaClusterId: string | null; status: string }
+export interface BrokerHostBinding { clusterId: string; brokerId: number; hostId: string; targetId: string; verifiedAtUtc: string }
+export interface BrokerHostRegistry { revision: number; hosts: BrokerHost[]; bindings: BrokerHostBinding[]; credentials: { id: string; authentication: string }[] }
+
 export const kafdeckApi = {
+  brokerHosts(signal?: AbortSignal) { return readJson<BrokerHostRegistry>('/api/v1/fleet/hosts', signal); },
+  registerBrokerHost(expectedRevision: number, host: BrokerHostDraft, signal?: AbortSignal) {
+    return postJson<{ revision: number; host: BrokerHost; targets: BrokerServiceTarget[] }>('/api/v1/fleet/hosts', { expectedRevision, host }, signal);
+  },
+  probeBrokerHost(id: string, signal?: AbortSignal) {
+    return postJson<{ targets: BrokerServiceTarget[] }>(`/api/v1/fleet/hosts/${encodeURIComponent(id)}/probe`, {}, signal);
+  },
+  bindBrokerHost(expectedRevision: number, clusterId: string, brokerId: number, hostId: string, targetId: string, signal?: AbortSignal) {
+    return postJson<unknown>('/api/v1/fleet/hosts/bindings', { expectedRevision, clusterId, brokerId, hostId, targetId }, signal);
+  },
   monitoringSampling(clusterId:string,signal:AbortSignal) {
     return readJson<{seconds:number}>(clusterPath(clusterId)+'/monitoring/sampling',signal);
   },

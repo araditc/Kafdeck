@@ -5,6 +5,7 @@ import { LanguageSelector } from './LanguageSelector.js';
 import { SignInPage } from './SignInPage.js';
 import { KafkaConnectionPage } from './KafkaConnectionPage.js';
 import { ManagedUsersPage } from './ManagedUsersPage.js';
+import { BrokerHostsPanel } from './BrokerHostsPanel.js';
 import { clearDeploymentAccessToken, deploymentAccessToken, setDeploymentAccessToken } from '../shared/deploymentAccess.js';
 import { rememberSignIn } from '../shared/recentSignIns.js';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -790,6 +791,7 @@ export function AppShell() {
           {activePage === 'governance-attribution' && governanceAvailable(activePage) && <AttributionPanel key={`attribution:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {error && <div className="alert alert-danger kafdeck-status" role="alert">{problemPresentation(error)}</div>}
           {!loading && !error && clusters.length === 0 && <div className="alert alert-warning kafdeck-status" role="status">{t("No authorized clusters are available.")}</div>}
+          {activePage === 'fleet' && operator?.canManageUsers && selectedClusterId && <BrokerHostsPanel key={`hosts:${operatorScope}:${selectedClusterId}`} clusterId={selectedClusterId} />}
           {activePage === 'fleet' && <section className="card kafdeck-card" id="fleet" aria-labelledby="fleet-title">
             <h2 id="fleet-title" className="card-title">{t("Fleet Operations")}</h2>
             <p className="text-secondary">{t("Capability-driven status from the active Kafdeck runtime. Unsupported or blocked operations remain fail-closed rather than being simulated through alternate provider paths.")}</p>

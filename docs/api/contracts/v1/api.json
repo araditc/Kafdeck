@@ -1,5 +1,6 @@
 {
   "mappingMethods": [
+    "MapBrokerHosts",
     "MapGovernanceOpenApi",
     "MapKafdeckAntiforgeryEndpoint",
     "MapKafdeckAttribution",
@@ -2039,6 +2040,50 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/fleet/hosts",
+      "name": "managed-hosts-list",
+      "request": null,
+      "governance": null,
+      "declarative": null,
+      "antiforgery": false,
+      "managed": "managed-hosts-list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fleet/hosts",
+      "name": "managed-hosts-register",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerHostWrite"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-hosts-register"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fleet/hosts/bindings",
+      "name": "managed-hosts-bind",
+      "request": {
+        "$ref": "#/components/schemas/FamilyBrokerHostBind"
+      },
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-hosts-bind"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fleet/hosts/{hostId}/probe",
+      "name": "managed-hosts-probe",
+      "request": null,
+      "governance": null,
+      "declarative": null,
+      "antiforgery": true,
+      "managed": "managed-hosts-probe"
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/governance/attribution",
       "name": "v09-attribution",
       "request": null,
@@ -3367,6 +3412,83 @@
     }
   ],
   "schemas": {
+    "FamilyBrokerHostWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "type": "integer"
+        },
+        "host": {
+          "$ref": "#/components/schemas/FamilyBrokerHostDraft"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "host"
+      ]
+    },
+    "FamilyBrokerHostDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "user": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "credentialId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "address",
+        "port",
+        "user",
+        "fingerprint",
+        "credentialId"
+      ]
+    },
+    "FamilyBrokerHostBind": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "type": "integer"
+        },
+        "clusterId": {
+          "type": "string"
+        },
+        "brokerId": {
+          "type": "integer"
+        },
+        "hostId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "targetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "clusterId",
+        "brokerId",
+        "hostId",
+        "targetId"
+      ]
+    },
     "FamilyAttributionPageOfMeasurementWindow": {
       "type": "object",
       "additionalProperties": false,
@@ -9649,6 +9771,10 @@
       "POST /api/v1/connections/{clusterId}/schema-registry/test",
       "POST /api/v1/data-jobs/generator/{operationId}/reconcile/preview",
       "POST /api/v1/data-jobs/{operationId}/reconcile/preview",
+      "GET /api/v1/fleet/hosts",
+      "POST /api/v1/fleet/hosts",
+      "POST /api/v1/fleet/hosts/bindings",
+      "POST /api/v1/fleet/hosts/{hostId}/probe",
       "GET /api/v1/identity/users",
       "POST /api/v1/identity/users",
       "POST /api/v1/identity/users/provisioning/{operationId}/recover",
@@ -9698,6 +9824,10 @@
     "src/backend/Kafdeck.Api/BearerReadOpenApi.cs": "460300e18740a9a1334611467115e400bc02e4925e14373acf8b483fe9acb6b0",
     "src/backend/Kafdeck.Api/BearerRuntimeAuthorization.cs": "3d3a3d7ee9c47f8ab0b86b1a7fbade9ff08e343c44fc876ecbccca99d876a4ec",
     "src/backend/Kafdeck.Api/BearerTopicMutationScope.cs": "9c9d423836d01f7c79a650dabf3d87b3be5fb96196703de631f289ae42cc9c45",
+    "src/backend/Kafdeck.Api/BrokerHostEndpoints.cs": "0a4493f65c4545cf85ae88b6ecaf811052e752fbfe7614274eabbe46955e470c",
+    "src/backend/Kafdeck.Api/BrokerHostModels.cs": "ab9f886c2e1477db71b3e6c0c10092e55245a96ce58c552f2bd905c4098fede9",
+    "src/backend/Kafdeck.Api/BrokerHostSsh.cs": "7a33eb1764ee31894f63b3b5f16dbaf947737c910379f2ef96fc646a8c03b71a",
+    "src/backend/Kafdeck.Api/BrokerHostStore.cs": "01b71b92c0676aac333a1f57cd17d05b71e46aadbf4c779394f2ce3659bc73e2",
     "src/backend/Kafdeck.Api/BrowserNavigationEndpoints.cs": "e4577241a77f51096090bfbd9f0896d89fd4c5fb3693dffbaff9d3d771950c65",
     "src/backend/Kafdeck.Api/CatalogHosting.cs": "07153b126ce282c39ae06d17e5c426776fabba57ebf8eec858aa1fcee2bdee88",
     "src/backend/Kafdeck.Api/CatalogMutation.cs": "14ec0e81e2e1677426db8a9732c275d432443e7bf85bcfde2a292eb420a07fad",
@@ -9796,7 +9926,7 @@
     "src/backend/Kafdeck.Api/OperationalAnalyticsRuntimeService.cs": "1ec5bedacc264e80a292b04575d4c4daba5f11cfe682a619bc6ce54b19b88e23",
     "src/backend/Kafdeck.Api/OperationalTelemetryProviderDecorators.cs": "a7b6ddd558024bfffd1158792c4de5fe95388a356e8e58f3ba84d9b83a637359",
     "src/backend/Kafdeck.Api/OperatorSessionUiScope.cs": "797c89a4469577d242d165debeb48d575be544fcb2f846592a0bbd2fdff0940d",
-    "src/backend/Kafdeck.Api/Program.cs": "33a062d96c442a1ec0b3d92dfec120c06ae07e65caf3dcac4e1e0e98b3523671",
+    "src/backend/Kafdeck.Api/Program.cs": "cc005c619acf623c36c24c2afac6453828ae0af171b1fdba6f3ab4f2757a1010",
     "src/backend/Kafdeck.Api/Properties/AssemblyInfo.cs": "b9c93f92157f9dfb4beae4203e5d6269aeac684818affb4def98a2667b703494",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceEndpoints.cs": "31accbee49239759fdb252a285c0b6c60a4038190f353c7ac72a0db96fcdc734",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",
