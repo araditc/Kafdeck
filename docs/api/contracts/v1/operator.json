@@ -5,6 +5,7 @@
     "Kafdeck:Authorization",
     "Kafdeck:Authorization:GroupBindings",
     "Kafdeck:Authorization:SubjectBindings",
+    "Kafdeck:BrokerHosts",
     "Kafdeck:Catalog",
     "Kafdeck:Clusters",
     "Kafdeck:ConnectionWorkspace:Enabled",
@@ -1066,6 +1067,10 @@
         },
         {
           "receiver": "Configuration",
+          "key": "Kafdeck:BrokerHosts"
+        },
+        {
+          "receiver": "Configuration",
           "key": "Kafdeck:Declarative"
         },
         {
@@ -2031,7 +2036,7 @@
     "src/backend/Kafdeck.Api/NonBrowserReadAuthentication.cs": "d5c843d96e3dc641d0b006a7b88361de39a1807fcf306b7a6b89c1e002bf7963",
     "src/backend/Kafdeck.Api/NotificationProductEventHosting.cs": "706317233b7aa68c7a55e19379bd14c0aea8f46b4453ea38af33f770388c611a",
     "src/backend/Kafdeck.Api/OidcSessionAuthentication.cs": "15f1d50ce6e3c0124dd862571ddecfca1db3e56a735ac3f0364eda664efaef7a",
-    "src/backend/Kafdeck.Api/Program.cs": "33a062d96c442a1ec0b3d92dfec120c06ae07e65caf3dcac4e1e0e98b3523671",
+    "src/backend/Kafdeck.Api/Program.cs": "cc005c619acf623c36c24c2afac6453828ae0af171b1fdba6f3ab4f2757a1010",
     "src/backend/Kafdeck.Api/RegisteredHttpServiceRuntime.cs": "742b5f9a0bf69cc3c55db5f835e5da9712d24327e7da440565ba70b174e51e06",
     "src/backend/Kafdeck.Api/RegisteredKafkaRuntime.cs": "c967f96b4b397409bc01e29cdd9211397c51a39e25a89c99eefb2436c5c296d8",
     "deploy/helm/kafdeck/Chart.yaml": "0cbc12061ff2792cd6bcea719510d5d0e96dba8f6aa19c7361ea5eeaa2ea4420",
