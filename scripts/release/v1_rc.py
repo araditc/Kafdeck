@@ -29,11 +29,18 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
-def selection(root=ROOT, *, stable=False):
-    filename = "v1.0.json" if stable else "v1.0-rc.json"
+def selection_filename(version):
+    if version == "1.0.0":
+        return "v1.0.json"
+    require(re.fullmatch(r"1\.[01]\.0-rc\.[1-9][0-9]*", version), "Unexpected build version")
+    return f"v{version[:3]}-rc.json"
+
+
+def selection(root=ROOT, *, stable=False, version=None):
+    version = version or ("1.0.0" if stable else "1.0.0-rc.1")
+    filename = selection_filename(version)
     value = json.loads((root / ".github/release" / filename).read_text(encoding="utf-8-sig"))
-    expected = r"1\.0\.0" if stable else r"1\.0\.0-rc\.[1-9][0-9]*"
-    require(value["schemaVersion"] == 1 and re.fullmatch(expected, value["version"]), "Unexpected build version")
+    require(value["schemaVersion"] == 1 and value["version"] == version, "Unexpected build version")
     require(value["candidate"] == "v" + value["version"] and value["signed"] is False and value["releaseReady"] is False
             and value["publicationAuthorized"] is False, "RC preparation cannot authorize signing/publication")
     require(value["nativeProducer"] == ".github/workflows/v1-rc-native.yml", "Unexpected native producer")
@@ -41,17 +48,19 @@ def selection(root=ROOT, *, stable=False):
     return value
 
 
-def inputs(root=ROOT, revision="HEAD", *, stable=False):
+def inputs(root=ROOT, revision="HEAD", *, stable=False, version=None):
     """Source projection includes runtime embedded documents and exact build/tool producers.
 
     Tests, evidence and ordinary documentation do not become runtime build inputs.
     Exact producer source SHA is still retained; matching this projection never silently
     transfers an authenticated producer run or a signature to another commit.
     """
-    selector = ".github/release/v1.0.json" if stable else ".github/release/v1.0-rc.json"
+    version = version or ("1.0.0" if stable else "1.0.0-rc.1")
+    selector = ".github/release/" + selection_filename(version)
     files = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", revision, "--", "src", "build", "docs/api", "Directory.Build.props", "Directory.Build.targets",
                                      "Directory.Packages.props", "Kafdeck.slnx", "global.json", selector,
                                      ".github/workflows/v1-rc-native.yml", "scripts/release/test-v1-rc-native.ps1", "scripts/release/v1_rc.py"], cwd=root, text=True).splitlines()
+    require(selector in files, "Build selector is absent from the selected source")
     selected = []
     for name in sorted(files):
         if name.startswith("docs/api/") and not re.fullmatch(r"docs/api/openapi-[^/]+\.json", name):
@@ -147,7 +156,7 @@ def verify(directory, expected_source, expected_input_sha, expected_manifest_sha
     value = json.loads(manifest.read_text(encoding="utf-8-sig"))
     require(value["sourceSha"] == expected_source and value["inputSha256"] == expected_input_sha, "RC source/input identity mismatch")
     require(hashlib.sha256(canonical(value["inputs"])).hexdigest() == expected_input_sha, "RC input list is inconsistent")
-    chosen = selection(stable=value["version"] == "1.0.0")
+    chosen = selection(version=value["version"])
     rebuilt = packet(directory, value["rid"], expected_source, value["inputs"], chosen)
     require(rebuilt == value, "RC manifest/media/native proof mismatch")
     return value
@@ -183,7 +192,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     prepare = sub.add_parser("prepare-native")
-    prepare.add_argument("--stable", action="store_true")
+    version = prepare.add_mutually_exclusive_group()
+    version.add_argument("--stable", action="store_true")
+    version.add_argument("--version")
     prepare.add_argument("--directory", required=True, type=pathlib.Path)
     prepare.add_argument("--rid", required=True)
     for command in ("verify-native", "install-api"):
@@ -198,7 +209,8 @@ def main():
     if args.command == "prepare-native":
         require(not subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=all"], cwd=ROOT, text=True).strip(), "RC producer requires clean tracked and untracked source")
         source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-        value = packet(args.directory, args.rid, source, inputs(stable=args.stable), selection(stable=args.stable))
+        chosen = selection(stable=args.stable, version=args.version)
+        value = packet(args.directory, args.rid, source, inputs(version=chosen["version"]), chosen)
         output = args.directory / "rc-manifest.json"
         output.write_bytes((json.dumps(value, indent=2) + "\n").encode())
         print(json.dumps({"source": source, "rid": args.rid, "manifestSha256": sha(output), "inputSha256": value["inputSha256"], "releaseReady": False}))

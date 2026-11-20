@@ -12,6 +12,10 @@ on:
         description: 'Stable build run IDs, in native,distribution,integrations order. Leave empty for the historical RC.'
         type: string
         required: false
+      candidate_runs:
+        description: 'Unsigned 1.1 RC build run IDs in native,distribution,integrations order'
+        type: string
+        required: false
       manifest_sha256:
         description: 'Owner-reviewed manifest SHA256 (leave empty for preparation)'
         type: string
@@ -42,7 +46,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STABLE_RUNS: ${{ inputs.stable_runs }}
-        run: python3 scripts/release/v1_media.py prepare staging --stable-runs "$STABLE_RUNS"
+          CANDIDATE_RUNS: ${{ inputs.candidate_runs }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$CANDIDATE_RUNS" ]]; then
+            [[ -z "$STABLE_RUNS" ]]
+            python3 scripts/release/v1_media.py prepare staging --candidate-runs "$CANDIDATE_RUNS"
+          else
+            python3 scripts/release/v1_media.py prepare staging --stable-runs "$STABLE_RUNS"
+          fi
       - name: Record review digest
         id: identity
         run: |
@@ -64,7 +76,7 @@ jobs:
 
   sign:
     needs: prepare
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.owner_decision != ''
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.candidate_runs == '' && inputs.owner_decision != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -11,6 +11,21 @@ import v1_rc as rc
 SOURCE = "a" * 40
 
 
+class CandidateSelectionTests(unittest.TestCase):
+    def test_native_selection_distinguishes_the_current_candidate_and_historical_builds(self):
+        for version, assembly in (("1.1.0-rc.1", "1.1.0.0"), ("1.0.0-rc.1", "1.0.0.0"), ("1.0.0", "1.0.0.0")):
+            with self.subTest(version=version):
+                selected = rc.selection(version=version)
+                self.assertEqual(version, selected["version"])
+                self.assertEqual(assembly, selected["assemblyVersion"])
+                self.assertFalse(selected["signed"] or selected["releaseReady"] or selected["publicationAuthorized"])
+
+    def test_selector_requires_the_exact_configured_version(self):
+        for version in ("1.1.0", "1.1.0-rc.2", "1.1.0-rc.1/../../release"):
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "Unexpected build version"):
+                rc.selection(version=version)
+
+
 class CandidatePacketTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
