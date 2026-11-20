@@ -128,6 +128,33 @@ class PublicationGuards(unittest.TestCase):
         with self.assertRaises(ValueError):
             driver.verify_existing(plan, tag, {**release, "prerelease": False}, {}, "body")
 
+    def test_stable_11_approval_selects_the_exact_signed_stable_release(self):
+        plan = driver.STABLE_11
+        self.assertIs(driver.approved_publication(plan.approval), plan)
+        self.assertFalse(plan.prerelease)
+        self.assertEqual(plan.tag, "v1.1.0")
+        other_manifest = plan.approval.replace(plan.manifest, driver.RC.manifest)
+        with self.assertRaises(ValueError):
+            driver.approved_publication(other_manifest)
+
+    def test_owner_staged_draft_requires_the_exact_empty_draft_and_author(self):
+        plan = driver.STABLE_11
+        body = driver.release_body(plan)
+        release = {"draft": True, "assets": [], "author": {"login": "ammarheidari"}, "body": body}
+        self.assertTrue(driver.owner_staged_draft(plan, release, "ammarheidari"))
+        for changed in ({"draft": False}, {"assets": [{"name": "foreign"}]},
+                        {"author": {"login": "other"}}, {"body": "different"}):
+            with self.subTest(changed=changed):
+                self.assertFalse(driver.owner_staged_draft(plan, {**release, **changed}, "ammarheidari"))
+
+    def test_final_notes_add_verified_oci_digest_to_owner_staged_body(self):
+        plan = driver.STABLE_11
+        digest = "sha256:" + "a" * 64
+        body = driver.release_body(plan, digest)
+        summary = f"\nOCI multi-architecture image {chr(96)}{driver.IMAGE}@{digest}{chr(96)}.\n"
+        self.assertIn(summary, body)
+        self.assertEqual(body.replace(summary, ""), driver.release_body(plan))
+
 
 if __name__ == "__main__":
     unittest.main()
