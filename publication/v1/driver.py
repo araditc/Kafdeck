@@ -79,8 +79,23 @@ RC = Publication(
 )
 
 
+STABLE_11 = Publication(
+    version="1.1.0",
+    source="13e297d2e98e414b6e3e8c7ef520f611bf992ad4",
+    signing_commit="13e297d2e98e414b6e3e8c7ef520f611bf992ad4",
+    manifest="fbde2e6f65e7e4559fbe59a6d1f228abbc2355c1d6435140153326cfd37a85e5",
+    bundle="8c8da5acb40d9df2621c232497057bc2f0b34b6552c96411e5b7bb78f05ad88d",
+    signing_run=44796139117,
+    signature_artifact=14658478200,
+    signature_zip="e08df94b4cf7b585973e2fe84d6d2dce3665319c6cc5f12725c8f473d012e62c",
+    media_artifact=14658458052,
+    media_zip="25b45f186932652527cef613b40c422513c01040c9453199401473d848c3e154",
+    notes=Path("publication/v1/release-notes-1.1.0.md"),
+)
+
+
 def approved_publication(approval):
-    options = {plan.approval: plan for plan in (STABLE, RC)}
+    options = {plan.approval: plan for plan in (STABLE, RC, STABLE_11)}
     require(approval in options, "Exact publication approval must select a signed manifest")
     return options[approval]
 
@@ -224,16 +239,29 @@ def existing_release(plan):
     return matches[0] if matches else None
 
 
+def release_body(plan, index_digest=None):
+    body = plan.notes.read_text(encoding="utf-8")
+    body += f"\n\nSigned manifest SHA256 `{plan.manifest}`.\n"
+    if index_digest is not None:
+        body += f"\nOCI multi-architecture image `{IMAGE}@{index_digest}`.\n"
+    return body + f"\n[Publication inventory](https://github.com/{REPOSITORY}/releases/download/{plan.tag}/publication-selection.json).\n"
+
+
+def owner_staged_draft(plan, release, actor):
+    return bool(release and release["draft"] and not release["assets"]
+                and release["author"]["login"].lower() == actor.lower()
+                and release["body"] == release_body(plan))
+
+
 def publish(plan, selection):
     publisher = authority(plan)
     assets = OUT / "assets"
     expected = {p.name: digest(p) for p in assets.iterdir()}
-    body = plan.notes.read_text(encoding="utf-8")
-    body += f"\n\nSigned manifest SHA256 `{plan.manifest}`.\n\nOCI multi-architecture image `{IMAGE}@{selection['indexDigest']}`.\n"
-    body += f"\n[Publication inventory](https://github.com/{REPOSITORY}/releases/download/{plan.tag}/publication-selection.json).\n"
+    body = release_body(plan, selection["indexDigest"])
     tag = transport.repo_api("git/ref/tags/" + plan.tag, optional=True)
     release = existing_release(plan)
-    verify_existing(plan, tag, release, expected, body)
+    staged = owner_staged_draft(plan, release, os.environ["GITHUB_ACTOR"])
+    verify_existing(plan, tag, release, expected, release_body(plan) if staged else body)
     privacy = transport.privacy()
     previous_latest = transport.repo_api("releases/latest")["tag_name"] if plan.prerelease else None
     subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"], "--password-stdin"],
@@ -252,6 +280,16 @@ def publish(plan, selection):
         release = transport.repo_api("releases", data={"tag_name": plan.tag, "target_commitish": plan.source, "name": f"Kafdeck {plan.version}",
                                                       "body": body, "draft": True, "prerelease": plan.prerelease,
                                                       "make_latest": "false"})
+    if staged:
+        # The owner can reserve an empty draft before the workflow computes the OCI index.
+        endpoint = "releases/" + str(release["id"])
+        release = transport.repo_api(endpoint)
+        require(owner_staged_draft(plan, release, os.environ["GITHUB_ACTOR"]), "Owner-staged draft changed before upload")
+        verify_existing(plan, tag, release, expected, release_body(plan))
+        release = json.loads(transport.run("gh", "api", f"repos/{REPOSITORY}/{endpoint}", "--method", "PATCH",
+                                            "--input", "-", input=json.dumps({"body": body})))
+        require(release["draft"] and not release["assets"], "Owner-staged draft changed during finalization")
+        verify_existing(plan, tag, release, expected, body)
     existing = {a["name"] for a in release["assets"]}
     for name in sorted(expected):
         if name not in existing:

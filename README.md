@@ -30,7 +30,7 @@ Kafdeck is a self-hosted control plane for Apache Kafka designed for operators w
 It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
 
 > [!IMPORTANT]
-> **Stable v1.0.0 is released.** See the [official release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0), [installation guide](docs/operator/v1.0-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [Exact release evidence](docs/implementation/evidence/v1.0-release-published-20261117.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
+> **Download Kafdeck.** See the [latest stable release](https://github.com/araditc/Kafdeck/releases/latest), [installation guide](docs/operator/v1.0-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [v1.0.0 release evidence](docs/implementation/evidence/v1.0-release-published-20261117.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
 
 For **offline Windows Server installation and upgrades**, download the [offline Windows Server bundle and Java agent](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). The [English offline guide](docs/operator/windows-offline-install.md) covers bundled Java/PostgreSQL/Keycloak, automatic Windows Services and first-admin setup. The [Java agent guide](docs/operator/kafka-agent.md) includes installation, Docker/Windows configuration and [source code](tools/kafka-agent/). Upgrade an existing installation with [one PowerShell script](docs/operator/windows-offline-upgrade.md).
 
@@ -226,7 +226,7 @@ A typical request flows like this:
 
 ## Getting started
 
-1. [Install v1.0.0](docs/operator/v1.0-installation-guide.md) using Docker/Podman, a native archive or Helm. Verify signed media, configure HTTPS and persistent state, and prepare a dedicated Keycloak realm.
+1. [Install Kafdeck](docs/operator/v1.0-installation-guide.md) using Docker/Podman, a native archive or Helm. Verify signed media, configure HTTPS and persistent state, and prepare a dedicated Keycloak realm.
 2. [Issue the one-time setup code and create the first administrator](docs/operator/managed-identity-setup.md). The code expires after 15 minutes; initial setup does not require email verification.
 3. Sign in through Keycloak. Open **Kafka connections**, enter the brokers and Kafka authentication, **Test connection**, then save/open the successful target.
 4. The target appears in the cluster selector and opens **Topics**. Follow the [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md) for topics/messages, consumers/offsets, Schemas, Kafka Connect and ksqlDB.
