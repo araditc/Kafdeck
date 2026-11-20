@@ -13,7 +13,7 @@ on:
         type: string
         required: false
       candidate_runs:
-        description: 'Unsigned 1.1 RC build run IDs in native,distribution,integrations order'
+        description: '1.1 RC build run IDs in native,distribution,integrations order'
         type: string
         required: false
       manifest_sha256:
@@ -76,7 +76,7 @@ jobs:
 
   sign:
     needs: prepare
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.candidate_runs == '' && inputs.owner_decision != ''
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.owner_decision != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
