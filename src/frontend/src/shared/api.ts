@@ -29,6 +29,7 @@ export interface BrokerAgentProgress {
   version?: string | null; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
   requiresRenewal?: boolean;
   processStartedAt?: number; monitoringInstance?: string; health?: BrokerAgentHealth;
+  lastConfirmed?: 'DispatchAuthorized' | 'PackagePublishing' | 'RestartIntent' | 'RestartObserved' | 'KafkaHealthy' | null;
 }
 
 export interface ApiObservation { observedAt: string; freshness: Freshness; cacheAgeMs: number; partial: boolean; }

@@ -1822,5 +1822,13 @@
   "Confirm configuration preview": "Confirm configuration preview",
   "Apply configuration change": "Apply configuration change",
   "Preview restore": "Preview restore",
-  "Target": "Target"
+  "Target": "Target",
+  "Dispatch authorized": "Dispatch authorized",
+  "Package publication recorded": "Package publication recorded",
+  "Restart intent recorded": "Restart intent recorded",
+  "New broker process observed": "New broker process observed",
+  "Kafka health and replicas verified": "Kafka health and replicas verified",
+  "Last confirmed: {0}": "Last confirmed: {0}",
+  "Inspect the selected broker's service logs, restore Kafka and replica health, then check this operation again.": "Inspect the selected broker's service logs, restore Kafka and replica health, then check this operation again.",
+  "Check the selected broker's monitoring source and ingestion, then check this operation again.": "Check the selected broker's monitoring source and ingestion, then check this operation again."
 }

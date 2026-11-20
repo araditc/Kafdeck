@@ -15,6 +15,14 @@ const stageLabel = {
   expired: 'The plan expired before dispatch. Preview again.',
 } satisfies Record<BrokerAgentProgress['stage'], string>;
 
+const checkpointLabel = {
+  DispatchAuthorized: 'Dispatch authorized',
+  PackagePublishing: 'Package publication recorded',
+  RestartIntent: 'Restart intent recorded',
+  RestartObserved: 'New broker process observed',
+  KafkaHealthy: 'Kafka health and replicas verified',
+} satisfies Record<NonNullable<BrokerAgentProgress['lastConfirmed']>, string>;
+
 function Health({value}: {value: BrokerAgentHealth}) {
   return <div>
     <p>{t("Brokers: {0} · Topics: {1} · Affected partitions: {2}", [value.brokerCount,value.topics,value.affectedPartitions])}</p>
@@ -124,7 +132,10 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
     {saved && <div className="mt-3 d-flex flex-wrap gap-2">
       <button className="btn btn-outline-primary" type="button" disabled={busy}
         onClick={() => void observe(saved, false)}>{t("Check agent operation")}</button>
-      {!finished && !needsRenewal && <button className="btn btn-outline-secondary" type="button" disabled={busy}
+      {!finished && !needsRenewal && progress?.stage !== 'awaitingRestart' &&
+        progress?.stage !== 'awaitingHealth' && progress?.stage !== 'awaitingMetrics' &&
+        !(progress?.stage === 'reconcile' && progress.lastConfirmed && progress.lastConfirmed !== 'DispatchAuthorized' &&
+          progress.lastConfirmed !== 'PackagePublishing') && <button className="btn btn-outline-secondary" type="button" disabled={busy}
         onClick={() => void observe(saved, true)}>{t("Retry the same agent request")}</button>}
       {needsRenewal && progress.version && <button className="btn btn-outline-secondary" type="button" disabled={busy}
         onClick={() => inspectVersion(progress.version!, true)}>{t("Preview pending change in the current maintenance window")}</button>}
@@ -135,6 +146,9 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
     {!!error && <p role="alert">{readViewProblemText(readViewError(error))}</p>}
     {progress && <div aria-live="polite">
       <p>{t(stageLabel[progress.stage])} <bdi>{progress.operationId}</bdi></p>
+      {progress.lastConfirmed && <p>{t("Last confirmed: {0}", [t(checkpointLabel[progress.lastConfirmed])])}</p>}
+      {progress.stage === 'awaitingHealth' && <p>{t("Inspect the selected broker's service logs, restore Kafka and replica health, then check this operation again.")}</p>}
+      {progress.stage === 'awaitingMetrics' && <p>{t("Check the selected broker's monitoring source and ingestion, then check this operation again.")}</p>}
       {progress.health && <Health value={progress.health} />}
       {progress.metricSeenAt && <p>{t("Fresh metric at {0}", [new Date(progress.metricSeenAt*1000).toISOString()])}
         {' '}<bdi>{progress.monitoringInstance}</bdi></p>}

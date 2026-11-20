@@ -1,0 +1,71 @@
+name: v11-operational-acceptance
+on:
+  pull_request:
+    paths:
+      - 'src/backend/Kafdeck.Api/BrokerAgent*.cs'
+      - 'src/frontend/src/app/BrokerAgentPanel.tsx'
+      - 'src/frontend/src/shared/api.ts'
+      - 'tools/broker-host/**'
+      - 'tests/Kafdeck.Architecture.Tests/V11BrokerAgentTests.cs'
+      - 'deploy/dev/broker-agent-fault-browser.cjs'
+      - '.github/workflows/v11-operational-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v11-operational-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  systemd-fault-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Create a disposable two-broker native Kafka fixture
+        env:
+          KAFDECK_NATIVE_AGENT_FIXTURE: '1'
+        run: bash deploy/dev/broker-host-native.sh
+      - name: Build the Fleet browser harness
+        run: |
+          npm ci --prefix src/frontend --ignore-scripts --no-audit --no-fund
+          node src/frontend/tests/host-harness/build.mjs
+          npm ci --prefix deploy/dev/browser-g2 --ignore-scripts --no-audit --no-fund
+          deploy/dev/browser-g2/node_modules/.bin/playwright install --with-deps chromium
+          echo "KAFDECK_HOST_UI_DIST=$GITHUB_WORKSPACE/src/frontend/dist/host-harness" >> "$GITHUB_ENV"
+          echo "KAFDECK_AGENT_FAULT_BROWSER_SCRIPT=$GITHUB_WORKSPACE/deploy/dev/broker-agent-fault-browser.cjs" >> "$GITHUB_ENV"
+      - name: Check lost SSH reply, broker recovery and delayed metrics
+        env:
+          KAFDECK_RUN_V11_AGENT_FAULTS: '1'
+        run: |
+          set -euo pipefail
+          primary=kafdeck-v11-kafka.service
+          target=kafdeck-v11-kafka-sibling.service
+          primary_before=$(systemctl show -p MainPID --value "$primary")
+          target_before=$(systemctl show -p MainPID --value "$target")
+          test "$primary_before" -gt 0
+          test "$target_before" -gt 0
+          dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --no-restore --filter 'FullyQualifiedName~Fleet_recovers_an_interrupted_apply' --logger 'trx;LogFileName=agent-faults.trx' --results-directory artifacts/host-acceptance
+          python3 scripts/ci/require-complete-trx.py artifacts/host-acceptance/agent-faults.trx V11BrokerAgentLiveTests:1
+          test "$primary_before" = "$(systemctl show -p MainPID --value "$primary")"
+          test "$target_before" != "$(systemctl show -p MainPID --value "$target")"
+          systemctl is-active --quiet "$target"
+          printf '%s\n' '{"siblingProcessUnchanged":true,"targetRestartObserved":true,"targetActive":true}' > artifacts/host-acceptance/agent-fault-preservation.json
+      - name: Stop the owned native units
+        if: always()
+        run: sudo systemctl stop kafdeck-v11-kafka.service kafdeck-v11-kafka-sibling.service || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: v11-native-fault-recovery
+          path: artifacts/host-acceptance/
+          retention-days: 30
