@@ -48,7 +48,7 @@ def check_image(folder, arch, source, version):
             and all(report[p][k] is True for p in ("startup", "restart")
                     for k in ("networkNone", "health", "staticFrontend")), "Missing isolated startup evidence")
     sbom, sarif = folder / "sbom.spdx.json", folder / "trivy-results.sarif"
-    if version == "1.0.0":
+    if version != "1.0.0-rc.1":
         require(all(report[phase].get("packageVersion") == version for phase in ("startup", "restart")),
                 "Installed OCI application version mismatch")
     require(digest(sbom) == report["sbomSha256"] and read(sbom)["spdxVersion"].startswith("SPDX-"), "Invalid SBOM")
@@ -60,7 +60,7 @@ def check_image(folder, arch, source, version):
 
 def check_media(media, policy, version):
     source = policy["source"]
-    chosen = v1_rc.selection(stable=version == "1.0.0")
+    chosen = v1_rc.selection(version=version)
     expected = set()
 
     def include(folder, names):
@@ -123,7 +123,7 @@ def prepare(output, policy):
     require(not output.exists(), "Use a fresh output directory")
     source = policy["source"]
     subprocess.run(["git", "merge-base", "--is-ancestor", source, "HEAD"], check=True)
-    chosen = v1_rc.selection(stable=policy.get("version") == "1.0.0")
+    chosen = v1_rc.selection(version=policy.get("version"))
     version = chosen["version"]
     expected = targets(source, chosen["nativeRids"])
     receipts = []
@@ -148,20 +148,20 @@ def prepare(output, policy):
     manifest = {"schemaVersion": 1, "repository": REPOSITORY, "version": version,
           "source": source, "scope": "full-distribution", "producers": sorted(receipts, key=lambda x: x["artifact"]),
           "files": check_media(output / "media", policy, version)}
-    if version == "1.0.0":
+    if version != "1.0.0-rc.1":
         manifest["nativeInputSha256"] = policy["nativeInputSha256"]
         manifest["imageConfigDigests"] = image_config_digests(output / "media")
     write(output / "manifest.json", manifest)
 
 
-def stable_policy(run_ids):
+def protected_main_policy(run_ids, version):
     require(re.fullmatch(r"[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*", run_ids), "Expected native,distribution,integrations run IDs")
     runs = dict(zip(("native", "distribution", "integrations"), map(int, run_ids.split(",")), strict=True))
     run = api(f"actions/runs/{runs['native']}")
     source = run["head_sha"]
     require(re.fullmatch(r"[0-9a-f]{40}", source) and validate_run(run, source, RUNS) == "native", "Invalid native source")
-    projection = v1_rc.inputs(revision=source, stable=True)
-    return {"source": source, "version": "1.0.0", "runs": runs,
+    projection = v1_rc.inputs(revision=source, version=version)
+    return {"source": source, "version": version, "runs": runs,
             "nativeInputSha256": hashlib.sha256(v1_rc.canonical(projection)).hexdigest()}
 
 
@@ -170,19 +170,26 @@ def main():
     parser.add_argument("operation", choices=["prepare", "verify"])
     parser.add_argument("directory", type=Path)
     parser.add_argument("--manifest-sha256")
-    parser.add_argument("--stable-runs", help="Prepare stable media from three successful protected-main producers")
+    runs = parser.add_mutually_exclusive_group()
+    runs.add_argument("--stable-runs", help="Prepare 1.0.0 media from three successful protected-main producers")
+    runs.add_argument("--candidate-runs", help="Prepare 1.1 RC media from three successful protected-main producers")
     args = parser.parse_args()
     policy = read(SELECTION)
     manifest = args.directory / "manifest.json"
     if args.operation == "prepare":
         if args.stable_runs:
-            policy = stable_policy(args.stable_runs)
+            policy = protected_main_policy(args.stable_runs, "1.0.0")
+        if args.candidate_runs:
+            version = ElementTree.parse(v1_rc.ROOT / "Directory.Build.props").findtext(".//Version")
+            require(version is not None and v1_rc.selection_filename(version) == "v1.1-rc.json",
+                    "The checkout must select a 1.1 RC")
+            policy = protected_main_policy(args.candidate_runs, version)
         prepare(args.directory, policy)
     else:
         require(digest(manifest) == args.manifest_sha256, "Manifest differs from independently pinned SHA256")
         value = read(manifest)
-        version = v1_rc.selection(stable=value["version"] == "1.0.0")["version"]
-        if version == "1.0.0":
+        version = v1_rc.selection(version=value["version"])["version"]
+        if version != "1.0.0-rc.1":
             policy = {"source": value["source"], "nativeInputSha256": value["nativeInputSha256"]}
             require(value["imageConfigDigests"] == image_config_digests(args.directory / "media"), "Image digest inventory mismatch")
         require(value["source"] == policy["source"] and value["version"] == version and value["repository"] == REPOSITORY

@@ -6,8 +6,19 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path "$PSScriptRoot/../..").Path
 $source = (& git -C $root rev-parse HEAD).Trim()
-$selection = Get-Content (Join-Path $root ".github/release/v1.0.json") -Raw | ConvertFrom-Json
-if ($selection.version -ne "1.0.0" -or $selection.signed -or $selection.publicationAuthorized) { throw "Unexpected RC selection." }
+$build = [xml](Get-Content (Join-Path $root 'Directory.Build.props') -Raw)
+$version = $build.Project.PropertyGroup.Version
+$selector = switch -Regex ($version) {
+    '^1\.0\.0$' { 'v1.0.json' }
+    '^1\.([01])\.0-rc\.[1-9][0-9]*$' { "v1.$($Matches[1])-rc.json" }
+    default { throw 'Unexpected native build version.' }
+}
+$selection = Get-Content (Join-Path $root ".github/release/$selector") -Raw | ConvertFrom-Json
+if ($selection.schemaVersion -ne 1 -or $selection.version -ne $version -or $selection.candidate -ne "v$version" -or
+    $selection.assemblyVersion -ne $build.Project.PropertyGroup.AssemblyVersion -or
+    $selection.signed -cne $false -or $selection.releaseReady -cne $false -or $selection.publicationAuthorized -cne $false) {
+    throw 'Unexpected native build selection.'
+}
 $platform = if ($IsWindows) { 'win' } elseif ($IsMacOS) { 'osx' } else { 'linux' }
 $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
 if ($Rid -ne "$platform-$architecture") { throw 'Runner does not match the native package RID.' }
@@ -185,7 +196,7 @@ try {
         identity='Keycloak 26.8.1 HTTPS private_key_jwt';runtime=[Runtime.InteropServices.RuntimeInformation]::OSDescription;
         scope='native archive install, API/frontend startup and service-authenticated reads; effect and restore acceptance is separate'} |
         ConvertTo-Json -Depth 10 | Set-Content (Join-Path $evidence 'native-evidence.json') -Encoding utf8
-    & $python (Join-Path $root "scripts/release/v1_rc.py") prepare-native --stable --directory $evidence --rid $Rid
+    & $python (Join-Path $root "scripts/release/v1_rc.py") prepare-native --version $version --directory $evidence --rid $Rid
     Native-Ok "source-bound-rc-manifest"
 } finally {
     foreach ($process in $owned) {
