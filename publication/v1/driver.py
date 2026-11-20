@@ -286,8 +286,10 @@ def publish(plan, selection):
         release = transport.repo_api(endpoint)
         require(owner_staged_draft(plan, release, os.environ["GITHUB_ACTOR"]), "Owner-staged draft changed before upload")
         verify_existing(plan, tag, release, expected, release_body(plan))
+        # GitHub can detach a draft when a PATCH omits its tag name.
+        update = {"tag_name": plan.tag, "target_commitish": plan.source, "body": body}
         release = json.loads(transport.run("gh", "api", f"repos/{REPOSITORY}/{endpoint}", "--method", "PATCH",
-                                            "--input", "-", input=json.dumps({"body": body})))
+                                            "--input", "-", input=json.dumps(update)))
         require(release["draft"] and not release["assets"], "Owner-staged draft changed during finalization")
         verify_existing(plan, tag, release, expected, body)
     existing = {a["name"] for a in release["assets"]}
