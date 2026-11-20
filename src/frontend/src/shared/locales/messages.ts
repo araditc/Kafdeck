@@ -1823,5 +1823,13 @@ export const messages: Readonly<Record<string, string>> = {
   "Confirm configuration preview": "تأیید پیش‌نمایش تنظیمات",
   "Apply configuration change": "اعمال تغییر تنظیمات",
   "Preview restore": "پیش‌نمایش بازیابی",
-  "Target": "هدف"
+  "Target": "هدف",
+  "Dispatch authorized": "ارسال عملیات مجاز شد",
+  "Package publication recorded": "ثبت بسته تأیید شد",
+  "Restart intent recorded": "درخواست راه‌اندازی مجدد ثبت شد",
+  "New broker process observed": "فرایند جدید بروکر مشاهده شد",
+  "Kafka health and replicas verified": "سلامت Kafka و replicaها تأیید شد",
+  "Last confirmed: {0}": "آخرین وضعیت تأییدشده: {0}",
+  "Inspect the selected broker's service logs, restore Kafka and replica health, then check this operation again.": "لاگ سرویس بروکر انتخاب‌شده را بررسی کنید، سلامت Kafka و replicaها را برگردانید و دوباره وضعیت عملیات را ببینید.",
+  "Check the selected broker's monitoring source and ingestion, then check this operation again.": "منبع مانیتورینگ و دریافت متریک بروکر انتخاب‌شده را بررسی کنید و دوباره وضعیت عملیات را ببینید."
 };

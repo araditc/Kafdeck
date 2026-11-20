@@ -5,7 +5,10 @@ namespace Kafdeck.Api;
 
 // Only protected plan tokens and scoped operation IDs are persisted. The
 // host journal remains authoritative for dispatch and reconciliation.
-internal sealed record BrokerAgentRecovery(string ClusterId, string OperationId, string Principal, string Token);
+internal enum BrokerAgentCheckpoint { DispatchAuthorized, PackagePublishing, RestartIntent, RestartObserved, KafkaHealthy }
+
+internal sealed record BrokerAgentRecovery(string ClusterId, string OperationId, string Principal, string Token,
+    BrokerAgentCheckpoint Checkpoint = BrokerAgentCheckpoint.DispatchAuthorized);
 
 internal sealed class BrokerAgentRecoveryStore(string path)
 {
@@ -23,11 +26,20 @@ internal sealed class BrokerAgentRecoveryStore(string path)
             if (previous.OperationId != entry.OperationId || previous.Principal != entry.Principal)
                 throw new BrokerHostFailure("agent_previous_operation_pending");
             if (previous.Token != entry.Token)
-                Write(rows.Select(row => row == previous ? entry : row).ToArray());
+                Write(rows.Select(row => row == previous ? previous with { Token = entry.Token } : row).ToArray());
             return;
         }
         if (rows.Length >= 32) throw new BrokerHostFailure("agent_recovery_limit");
         Write([.. rows, entry]);
+    }
+
+    internal void Advance(string clusterId, string operationId, BrokerAgentCheckpoint checkpoint)
+    {
+        using var lease = Lock();
+        var rows = Read();
+        var current = rows.SingleOrDefault(row => row.ClusterId == clusterId && row.OperationId == operationId);
+        if (current is not null && current.Checkpoint < checkpoint)
+            Write(rows.Select(row => row == current ? current with { Checkpoint = checkpoint } : row).ToArray());
     }
 
     internal void Finish(string clusterId, string operationId)
@@ -45,7 +57,8 @@ internal sealed class BrokerAgentRecoveryStore(string path)
             using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             if (input.Length > 256 * 1024) throw new BrokerHostFailure("agent_recovery_invalid");
             var rows = JsonSerializer.Deserialize<BrokerAgentRecovery[]>(input, Format);
-            if (rows is null || rows.Length > 32 || rows.Select(row => row.ClusterId).Distinct().Count() != rows.Length)
+            if (rows is null || rows.Length > 32 || rows.Any(row => !Enum.IsDefined(row.Checkpoint)) ||
+                rows.Select(row => row.ClusterId).Distinct().Count() != rows.Length)
                 throw new BrokerHostFailure("agent_recovery_invalid");
             return rows;
         }

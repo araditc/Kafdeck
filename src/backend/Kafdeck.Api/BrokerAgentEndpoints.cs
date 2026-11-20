@@ -101,8 +101,27 @@ internal static class BrokerAgentEndpoints
             if (!await dispatch.WaitAsync(0, cancellation)) return Problem(429, "agent_lifecycle_busy");
             try
             {
-                var status = await host.CallAsync(plan.Connection, plan.Command with { Action = "status" }, cancellation);
+                var operationId = plan.Command.OperationId;
+                BrokerAgentRecovery? Pending()
+                {
+                    var row = recovery.Find(plan.ClusterId);
+                    return row?.OperationId == operationId && row.Principal == plan.Principal ? row : null;
+                }
+                string? Checkpoint() => Pending()?.Checkpoint.ToString();
+                IResult Reconcile() => Results.Ok(new { stage = "reconcile", operationId, lastConfirmed = Checkpoint() });
+                void Advance(BrokerAgentCheckpoint checkpoint) => recovery.Advance(plan.ClusterId, operationId, checkpoint);
+
+                BrokerAgentHostResult status;
+                try { status = await host.CallAsync(plan.Connection, plan.Command with { Action = "status" }, cancellation); }
+                catch (BrokerHostFailure e) when (UncertainResponse(e) && Pending() is not null)
+                { return Authorized() ? Reconcile() : Problem(403, "agent_install_denied"); }
                 CheckStatus(status);
+                if (!Authorized()) return Problem(403, "agent_install_denied");
+                // A lost host journal cannot reset an observed restart or release the cluster's pending operation.
+                var checkpoint = Pending()?.Checkpoint;
+                if ((checkpoint > BrokerAgentCheckpoint.DispatchAuthorized && status.Stage == "unknown") ||
+                    (checkpoint >= BrokerAgentCheckpoint.RestartIntent && status.Stage == "publishing"))
+                    return Reconcile();
                 if (apply && status.Stage is ("unknown" or "publishing"))
                 {
                     if (Timestamp() >= deadline) return Problem(409, "agent_preview_expired");
@@ -114,10 +133,10 @@ internal static class BrokerAgentEndpoints
                     recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan));
                     await Audit(audit, plan, SecurityAuditOutcome.Succeeded, "agent_dispatch_authorized", cancellation);
                     try { status = await host.CallAsync(plan.Connection, plan.Command with { Action = "apply" }, cancellation); }
-                    catch (BrokerHostFailure e) when (e.Code is "host_probe_unavailable" or "host_helper_unavailable" or "agent_response_invalid")
+                    catch (BrokerHostFailure e) when (UncertainResponse(e))
                     {
                         await Audit(audit, plan, SecurityAuditOutcome.Failed, "agent_dispatch_response_uncertain", cancellation);
-                        return Results.Ok(new { stage = "reconcile", operationId = plan.Command.OperationId });
+                        return Authorized() ? Reconcile() : Problem(403, "agent_install_denied");
                     }
                     CheckStatus(status);
                 }
@@ -132,21 +151,35 @@ internal static class BrokerAgentEndpoints
                     if (expectRestart) return Problem(409, "agent_restart_evidence_invalid");
                     recovery.Finish(plan.ClusterId, plan.Command.OperationId);
                 }
+                if (status.Stage == "publishing")
+                    Advance(BrokerAgentCheckpoint.PackagePublishing);
+                if (status.Stage == "awaitingRestart" && status.DispatchedAt is > 0)
+                {
+                    Advance(BrokerAgentCheckpoint.RestartIntent);
+                    var health = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, false, cancellation);
+                    if (!Authorized()) return Problem(403, "agent_install_denied");
+                    return Results.Ok(new { stage = health.Healthy ? "awaitingRestart" : "awaitingHealth", operationId,
+                        status.DispatchedAt, status.Version, lastConfirmed = Checkpoint(), health });
+                }
                 if (status.Stage is not ("restartObserved" or "complete"))
-                    return Results.Ok(new { status.Stage, operationId = plan.Command.OperationId, status.DispatchedAt, status.Version,
-                        requiresRenewal = status.Stage == "publishing" && Timestamp() >= deadline });
+                    return Results.Ok(new { status.Stage, operationId, status.DispatchedAt, status.Version,
+                        lastConfirmed = Checkpoint(), requiresRenewal = status.Stage == "publishing" && Timestamp() >= deadline });
                 if (status.ProcessStartedAt is not { } started || status.DispatchedAt is not { } dispatched ||
                     started < dispatched - 2 || started > Timestamp() + 2 || status.Digest != plan.Package.Digest ||
                     status.Version != plan.Package.Version)
                     return Problem(409, "agent_restart_evidence_invalid");
+                Advance(BrokerAgentCheckpoint.RestartObserved);
+                var recovered = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, false, cancellation);
+                if (!Authorized()) return Problem(403, "agent_install_denied");
+                if (!recovered.Healthy)
+                    return Results.Ok(new { stage = "awaitingHealth", operationId, processStartedAt = started,
+                        dispatchedAt = dispatched, lastConfirmed = Checkpoint(), health = recovered });
+                Advance(BrokerAgentCheckpoint.KafkaHealthy);
                 var seen = metrics.AgentMetricAfter(plan.ClusterId, plan.Target.MonitoringInstance, started, plan.CreatedAt);
                 if (seen is null)
-                    return Results.Ok(new { stage = "awaitingMetrics", operationId = plan.Command.OperationId, dispatchedAt = dispatched,
-                        monitoringInstance = plan.Target.MonitoringInstance });
-                var recovered = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, false, cancellation);
-                if (!recovered.Healthy)
-                    return Results.Ok(new { stage = "awaitingHealth", operationId = plan.Command.OperationId, health = recovered });
-                if (!Authorized()) return Problem(403, "agent_install_denied");
+                    return Results.Ok(new { stage = "awaitingMetrics", operationId, processStartedAt = started,
+                        dispatchedAt = dispatched, lastConfirmed = Checkpoint(),
+                        monitoringInstance = plan.Target.MonitoringInstance, health = recovered });
                 if (status.Stage == "restartObserved")
                 {
                     await Audit(audit, plan, SecurityAuditOutcome.Succeeded, "agent_recovery_observed", cancellation);
@@ -171,6 +204,9 @@ internal static class BrokerAgentEndpoints
             .WithManagedBrowserContract("managed-broker-agent-status", typeof(BrokerAgentPlanInput))
             .WithMetadata(new RequestSizeLimitAttribute(8192)).RequireKafdeckAntiforgery();
     }
+
+    private static bool UncertainResponse(BrokerHostFailure failure) => failure.Code is
+        "host_probe_unavailable" or "host_helper_unavailable" or "agent_response_invalid";
 
     private static long Timestamp() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
