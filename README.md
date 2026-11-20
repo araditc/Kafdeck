@@ -868,7 +868,7 @@ The roadmap is public and capability-driven:
 
 [**View the Kafdeck Roadmap →**](ROADMAP.md)
 
-v0.9 is [released](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0) with governance, managed onboarding, dashboard workflows, hardening and verified distribution/recovery. Future scope remains owner-governed; v1.0 stability is a roadmap theme, not an automatically authorized implementation plan.
+[Stable v1.0.0](docs/releases/v1.0.md) includes governed operations, managed onboarding and verified distribution. The [v1.1.0-rc.1 pre-release](docs/releases/v1.1-rc.1.md) introduces broker host management in Fleet.
 
 Nothing in the roadmap should be interpreted as currently available until it is implemented, validated, and released.
 

@@ -154,12 +154,17 @@ def prepare(output, policy):
     write(output / "manifest.json", manifest)
 
 
-def protected_main_policy(run_ids, version):
+def protected_main_policy(run_ids, version=None):
     require(re.fullmatch(r"[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*", run_ids), "Expected native,distribution,integrations run IDs")
     runs = dict(zip(("native", "distribution", "integrations"), map(int, run_ids.split(",")), strict=True))
     run = api(f"actions/runs/{runs['native']}")
     source = run["head_sha"]
     require(re.fullmatch(r"[0-9a-f]{40}", source) and validate_run(run, source, RUNS) == "native", "Invalid native source")
+    if version is None:
+        props = subprocess.check_output(["git", "show", f"{source}:Directory.Build.props"], cwd=v1_rc.ROOT)
+        version = ElementTree.fromstring(props).findtext(".//Version")
+        require(version is not None and v1_rc.selection_filename(version) in {"v1.1-rc.json", "v1.1.json"},
+                "The selected producer must build a 1.1 release")
     projection = v1_rc.inputs(revision=source, version=version)
     return {"source": source, "version": version, "runs": runs,
             "nativeInputSha256": hashlib.sha256(v1_rc.canonical(projection)).hexdigest()}
@@ -172,7 +177,7 @@ def main():
     parser.add_argument("--manifest-sha256")
     runs = parser.add_mutually_exclusive_group()
     runs.add_argument("--stable-runs", help="Prepare 1.0.0 media from three successful protected-main producers")
-    runs.add_argument("--candidate-runs", help="Prepare 1.1 RC media from three successful protected-main producers")
+    runs.add_argument("--candidate-runs", help="Prepare 1.1 release candidate media from three successful protected-main producers")
     args = parser.parse_args()
     policy = read(SELECTION)
     manifest = args.directory / "manifest.json"
@@ -180,10 +185,7 @@ def main():
         if args.stable_runs:
             policy = protected_main_policy(args.stable_runs, "1.0.0")
         if args.candidate_runs:
-            version = ElementTree.parse(v1_rc.ROOT / "Directory.Build.props").findtext(".//Version")
-            require(version is not None and v1_rc.selection_filename(version) == "v1.1-rc.json",
-                    "The checkout must select a 1.1 RC")
-            policy = protected_main_policy(args.candidate_runs, version)
+            policy = protected_main_policy(args.candidate_runs)
         prepare(args.directory, policy)
     else:
         require(digest(manifest) == args.manifest_sha256, "Manifest differs from independently pinned SHA256")
