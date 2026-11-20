@@ -1,6 +1,6 @@
 # Support
 
-Kafdeck community support is available through the [GitHub repository](https://github.com/araditc/Kafdeck). Start with the [documentation index](docs/README.md), [installation](docs/operator/v0.9-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard guide](docs/operator/v0.9-dashboard-guide.md).
+Kafdeck community support is available through the [GitHub repository](https://github.com/araditc/Kafdeck). Start with the [documentation index](docs/README.md), [installation](docs/operator/v1.1-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard guide](docs/operator/v0.9-dashboard-guide.md).
 
 ## Bugs and feature requests
 

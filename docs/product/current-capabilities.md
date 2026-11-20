@@ -1,6 +1,6 @@
-# Released v1.0 capability availability
+# Released v1.1 capability availability
 
-This is the current availability guide. [ROADMAP.md](../../ROADMAP.md) records chronology/future direction; the [Gate 2 capability map](capability-map.md) preserves the original target inventory. A historical TARGET/DEFER label is not current support. Availability is bounded by actual configuration, provider capabilities, authorization and the [released evidence](../implementation/evidence/v1.0-release-published-20261117.json).
+This is the current availability guide. [ROADMAP.md](../../ROADMAP.md) records chronology/future direction; the [Gate 2 capability map](capability-map.md) preserves the original target inventory. A historical TARGET/DEFER label is not current support. Availability is bounded by actual configuration, provider capabilities, authorization and the [released evidence](../releases/v1.1.md).
 
 | Capability | Current posture and boundary |
 | --- | --- |
@@ -14,12 +14,13 @@ This is the current availability guide. [ROADMAP.md](../../ROADMAP.md) records c
 | ksqlDB | Implemented: catalog, bounded SELECT with earliest/new-message selection. Separate registered-target Stream/Table forms require owner and matching cluster identity, and are blocked by active governance/policy; arbitrary SQL/DML remains blocked |
 | Streams and lineage | Partial/provider-dependent: registered application/topology/metric evidence; inferred lineage grants no rights and missing telemetry is not fabricated |
 | Fleet/security/provider operations | Partial/capability-driven: supported typed primitives only. No generic broker maintenance operation is invented to hide an unsupported provider capability |
+| Fleet broker host management | Pinned SSH registration and verified broker mapping on Linux/systemd and Docker Compose, bounded service logs, staged offline agent rollout, governed dynamic broker settings and recovery |
 | Telemetry, history, SLO, data quality and notifiers | Implemented within admitted metric/record/transport contracts. Missing/stale measurements remain explicit; no universal throughput or cost promise |
 | Integrated monitoring | Broker CPU/GC/request queues, topic/partition measurements, consumer activity, selectable metrics, configurable sampling, prepared charts and alerts. The Java 21-compatible agent collects available local JMX measurements |
 | Catalog, requests, policy and attribution | Implemented: scoped catalog/history, immutable request decisions, effect-time policy and measured attribution/rates. Catalog/approval does not grant execution rights; attribution is not billing/payment |
-| CLI, Terraform, MCP and GitOps | Implemented admitted finite families and shared backend governance. Terraform 0.8.0 and MCP 1.0.0 ship in v1.0 media. No blanket API-family parity, Terraform destroy or public package-feed claim |
+| CLI, Terraform, MCP and GitOps | Implemented admitted finite families and shared backend governance. Terraform 0.8.0 and MCP 1.1.0 ship in v1.1 media. No blanket API-family parity, Terraform destroy or public package-feed claim |
 | Deployment and recovery | Implemented signed offline/native/OCI/Helm media, tested upgrades/restores and generation fencing. Helm has one application replica; external database HA is separate |
 | Accessibility and locales | English/Persian RTL, keyboard/focus and accepted accessibility observations; original automated/manual evidence remains distinct |
 | Public runtime plugins, embedded shell, gateway | Public dynamic plugin SDK remains deferred; unrestricted shell/provider proxy and a data-plane gateway are not core capabilities |
 
-Use the [installation guide](../operator/v1.0-installation-guide.md), [first owner guide](../operator/managed-identity-setup.md) and [dashboard walkthrough](../operator/v0.9-dashboard-guide.md) for actual use. Per-release tests do not grant blanket provider/CNI support; KAF-02 requires tested deployment egress.
+Use the [installation guide](../operator/v1.1-installation-guide.md), [first owner guide](../operator/managed-identity-setup.md) and [dashboard walkthrough](../operator/v0.9-dashboard-guide.md) for actual use. Per-release tests do not grant blanket provider/CNI support; KAF-02 requires tested deployment egress.

@@ -6,7 +6,7 @@
 
 **The Open Source Kafka Control Plane**
 
-Secure, vendor-neutral, operations-first visibility for Apache Kafka.
+Inspect, monitor and manage Apache Kafka from one self-hosted control plane.
 
 [![Latest Release](https://img.shields.io/github/v/release/araditc/Kafdeck)](https://github.com/araditc/Kafdeck/releases/latest)
 [![Quality Gate](https://github.com/araditc/Kafdeck/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/araditc/Kafdeck/actions/workflows/quality-gate.yml)
@@ -16,6 +16,7 @@ Secure, vendor-neutral, operations-first visibility for Apache Kafka.
 
 [Getting Started](#getting-started) ·
 [Features](#feature-matrix) ·
+[Fleet](#fleet-broker-host-management) ·
 [Configuration](#configuration) ·
 [Security](#security-model) ·
 [Contributing](#contributing) ·
@@ -25,14 +26,12 @@ Secure, vendor-neutral, operations-first visibility for Apache Kafka.
 
 ---
 
-Kafdeck is a self-hosted control plane for Apache Kafka designed for operators who need useful Kafka visibility **without turning the management UI into another reliability or security risk**.
-
-It runs outside the Kafka data path, supports local/on-premise and air-gapped deployments, uses bounded read operations, and keeps metadata access, record access, export, identity, and masking as separate security concerns.
+Kafdeck is a self-hosted, vendor-neutral control plane for Apache Kafka. Use the dashboard to inspect clusters, browse records with server-side masking, diagnose consumer lag, monitor broker health and manage authorized changes. Kafdeck runs outside the Kafka message path. Read-only operation is the default, and governed changes are opt-in.
 
 > [!IMPORTANT]
-> **Download Kafdeck.** See the [latest stable release](https://github.com/araditc/Kafdeck/releases/latest), [installation guide](docs/operator/v1.0-installation-guide.md), [first administrator setup](docs/operator/managed-identity-setup.md) and [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md). [v1.0.0 release evidence](docs/implementation/evidence/v1.0-release-published-20261117.json) records source, images, signatures and tested limits. Read-only remains the default; governed mutations remain opt-in.
+> **Latest stable release: [Kafdeck v1.1.0](https://github.com/araditc/Kafdeck/releases/tag/v1.1.0).** [Install or upgrade](docs/operator/v1.1-installation-guide.md) · [Create the first administrator](docs/operator/managed-identity-setup.md) · [Fleet quickstart](docs/operator/v1.1-fleet-quickstart.md) · [Release evidence](docs/releases/v1.1.md).
 
-For **offline Windows Server installation and upgrades**, download the [offline Windows Server bundle and Java agent](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). The [English offline guide](docs/operator/windows-offline-install.md) covers bundled Java/PostgreSQL/Keycloak, automatic Windows Services and first-admin setup. The [Java agent guide](docs/operator/kafka-agent.md) includes installation, Docker/Windows configuration and [source code](tools/kafka-agent/). Upgrade an existing installation with [one PowerShell script](docs/operator/windows-offline-upgrade.md).
+For a fresh Windows Server or an existing Windows Services installation, use the supplementary 1.1.0 offline bundle and its checksum. The bundled native application comes from the signed stable release. [Windows offline installation](docs/operator/windows-offline-install.md) · [Windows offline upgrade](docs/operator/windows-offline-upgrade.md) · [Kafka agent guide](docs/operator/kafka-agent.md). The original Windows supplement and standalone agent ZIP are available from the [v1.0.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0).
 
 ![Kafdeck monitoring dashboard with CPU, GC, request queue latency, metadata response time and partition health charts](docs/images/monitoring-overview.png)
 
@@ -49,11 +48,11 @@ For **offline Windows Server installation and upgrades**, download the [offline 
 - **On-premise and air-gapped friendly** — core runtime functionality has no required SaaS dependency.
 - **Governed OSS engineering** — architecture, security, compatibility, release evidence, and project decisions are versioned in the repository.
 
-For the capability roadmap and release history, see [ROADMAP.md](ROADMAP.md) and the [release notes](docs/releases/). Start with the [documentation index](docs/README.md) for operator and contributor guides.
+Use the [documentation index](docs/README.md) for operator and contributor guides, the [roadmap](ROADMAP.md) for planned work, and the [v1.1.0 release notes](publication/v1/release-notes-1.1.0.md) for this release.
 
 ## Feature matrix
 
-The sections below describe **v1.0 capabilities**, retaining explicit provider and authorization boundaries. The [Roadmap](ROADMAP.md) records capability history and future direction.
+The sections below describe the capabilities shipped in **v1.1.0**. Availability depends on configuration, provider support and the operator's permissions.
 
 ### Cluster and broker operations
 
@@ -68,6 +67,7 @@ The sections below describe **v1.0 capabilities**, retaining explicit provider a
 
 - Local, deployment-token and OIDC access modes,
 - Keycloak first-owner setup with a local one-time code, managed users and cluster assignments,
+- safe recovery of interrupted managed-user creation and audit of Kafka connection registration,
 - OIDC Authorization Code + PKCE with server-side sessions,
 - immutable default-deny RBAC in OIDC mode,
 - subject/group bindings,
@@ -98,7 +98,8 @@ The sections below describe **v1.0 capabilities**, retaining explicit provider a
 - committed/end offsets and per-partition/aggregate lag,
 - explicit missing / unauthorized / out-of-range states,
 - evidence-based inactive/stalled diagnostics,
-- metrics/history only when a trustworthy provider exists — unknown data is never fabricated as zero.
+- live offset and lag observations with explicit reasons for incomplete data,
+- governed offset reset and group deletion where the configured permissions and broker support permit them.
 
 ### Schema Registry lifecycle and developer tooling
 
@@ -136,6 +137,7 @@ Current governed families include:
 - consumer offset/group administration,
 - Schema Registry lifecycle mutations,
 - Kafka Connect lifecycle mutations,
+- supported dynamic broker overrides with preview, readback and restore,
 - controlled DeleteRecords purge,
 - finite replay/reprocess/DLQ/forwarding jobs,
 - bounded Data Generator execution.
@@ -166,9 +168,34 @@ Safety properties include server-owned LOW / MODERATE / HIGH / CRITICAL risk flo
 - lineage edges carry provenance, confidence, observed time and `Observed` / `Inferred` evidence kind,
 - inferred lineage never satisfies authorization.
 
-### Fleet capability truth
+### Monitoring and alerts
 
-Kafdeck exposes fleet capability state explicitly instead of simulating missing provider primitives. A capability may be `Supported`, `Blocked`, `Unsupported`, `Unconfigured`, `Unavailable` or `Unknown`. Kafdeck does not substitute CLI, reflection, raw protocol, sidecars or arbitrary provider HTTP calls to hide a capability gap.
+- Broker and controller metrics from the Kafdeck Java agent, including process CPU, GC, request queue latency, replication and disk usage where observed.
+- Prepared charts for brokers, topics and partitions, plus consumer lag and committed/end-offset growth.
+- Configurable sampling intervals and chart windows. Search available metrics and labels in the metric explorer.
+- Server-side threshold rules and alert history. Optional browser notifications require permission. Missing samples appear as gaps, and stale evidence has its own status.
+
+For source enrollment, storage limits and diagnostics, see the [monitoring guide](docs/operator/kafka-monitoring.md). Agents collect numeric JVM and Kafka metrics exposed by their process. The source and build tools are in [tools/kafka-agent](tools/kafka-agent/).
+
+### Fleet broker host management
+
+| Workflow | Scope and requirements |
+| --- | --- |
+| Register an SSH host | Pin the host key, restrict approved destinations and map each broker to a verified service or container. [Host registration](docs/operator/v1.1-broker-host-registration.md) |
+| Read service logs | Use explicitly granted log-reader access for the selected broker and correlate bounded logs with monitoring. [Broker logs](docs/operator/v1.1-broker-service-logs.md) |
+| Install or upgrade the monitoring agent | Stage an approved offline package, use dedicated installer access and select a broker in a maintenance window. [Offline agent rollout](docs/operator/v1.1-offline-broker-agent.md) |
+| Change a dynamic broker setting | Use the governed Kafka Admin API for the supported `log.cleaner.backoff.ms` broker override. Fleet previews the effective value and source, verifies readback and supports restoring inheritance. [Dynamic settings](docs/operator/v1.1-dynamic-broker-settings.md) |
+| Resume an interrupted rollout | Inspect the saved stage, verify broker and replica health, then wait for a fresh metric from the verified JVM before moving to the next broker. [Recovery guide](docs/operator/v1.1-fleet-operational-recovery.md) |
+
+Acceptance covered Linux with systemd and Docker absent, and an isolated Docker Compose pilot. The [Fleet RFC](docs/rfcs/0011-v1.1-broker-host-management.md) defines the supported host adapters and operations. Fleet displays explicit provider, configuration and authorization states for each capability.
+
+### Governance and automation
+
+- Scoped ownership catalog, service requests and approval history, policy checks at execution time, and measured attribution.
+- Finite operation families through the CLI, MCP and Terraform using backend authorization, risk, approval and verification controls.
+- Durable reconciliation and restore workflows for governed operations and supported databases.
+
+[Declarative automation](docs/operator/v0.8-automation-workflow.md) · [MCP operator guide](docs/operator/v0.8-mcp.md) · [Terraform provider source](providers/terraform/).
 
 ### Topic catalog and operator UX
 
@@ -177,7 +204,8 @@ Kafdeck exposes fleet capability state explicitly instead of simulating missing 
 - keyboard-first Command Palette with Ctrl/Cmd+K,
 - unified explicit status semantics for denied/unsupported/blocked/partial/stale/unavailable/unknown/approval states,
 - locally bundled Tabler/frontend assets with no runtime CDN dependency,
-- reduced-motion and keyboard/focus-management support.
+- reduced motion, keyboard navigation and focus management,
+- English and Persian dashboard locales with RTL layout support.
 
 ## How Kafdeck works
 
@@ -194,12 +222,17 @@ flowchart LR
     S --> Q[Bounded ksqlDB adapter]
     S --> T[Registered Streams telemetry]
     S --> J[Durable mutation / job coordinator]
+    S --> F[Fleet broker operations]
+    S --> N[Monitoring and alerts]
 
     K --> KF[(Apache Kafka)]
     SR --> REG[(Schema Registry)]
     C --> CON[(Kafka Connect)]
     Q --> KSQL[(ksqlDB)]
     T --> APP[(Registered app telemetry)]
+    F --> H[Verified systemd / Compose hosts]
+    F --> K
+    AG[Kafka JVM agent] --> N
 
     J --> K
     J --> SR
@@ -209,9 +242,9 @@ flowchart LR
     M --> A
 ~~~
 
-The important part is what is **not** in this diagram: Kafdeck is not a generic Kafka producer proxy, broker plugin, arbitrary provider HTTP/SQL console, consumer-group member for normal browsing, or mandatory data-plane gateway.
+The API and operator dashboard use typed adapters over existing Kafka and ecosystem connections. Fleet uses restricted host helpers on verified targets. Monitoring combines Kafka metadata with reports from enrolled agents.
 
-When administration is disabled, state-changing routes fail closed and Kafdeck remains observational. When administration is enabled, every admitted effect still passes through typed authorization, server-owned risk classification, preview/confirmation/approval, durable idempotency/fencing, verification and audit. Long-running data jobs and generator work remain finite and budgeted; ambiguous provider effects are not blindly retried.
+Kafka administration is opt-in. Governed mutations apply authorization, server-owned risk classification, preview, confirmation or approval, durable execution state, verification and audit. Data jobs and generation run with finite budgets. An ambiguous provider response requires reconciliation before another dispatch.
 
 A typical request flows like this:
 
@@ -226,24 +259,30 @@ A typical request flows like this:
 
 ## Getting started
 
-1. [Install Kafdeck](docs/operator/v1.0-installation-guide.md) using Docker/Podman, a native archive or Helm. Verify signed media, configure HTTPS and persistent state, and prepare a dedicated Keycloak realm.
-2. [Issue the one-time setup code and create the first administrator](docs/operator/managed-identity-setup.md). The code expires after 15 minutes; initial setup does not require email verification.
-3. Sign in through Keycloak. Open **Kafka connections**, enter the brokers and Kafka authentication, **Test connection**, then save/open the successful target.
-4. The target appears in the cluster selector and opens **Topics**. Follow the [dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md) for topics/messages, consumers/offsets, Schemas, Kafka Connect and ksqlDB.
-5. Use **Manage users** to create users and assign roles/clusters. Kafka ACLs and governed mutation controls remain separate from sign-in.
+1. Download the verified [v1.1.0 distribution](https://github.com/araditc/Kafdeck/releases/tag/v1.1.0) and follow [offline verification](#releases-and-supply-chain). Choose a deployment from the table below.
+2. Configure HTTPS, persistent state and a dedicated Keycloak realm for a managed deployment. [Configuration example](docs/operator/examples/v0.9-managed-appsettings.json) · [Keycloak and managed identity](docs/operator/managed-identity-setup.md).
+3. With the same configuration root and service identity, run the application with `--issue-setup-code`. Use the 15-minute code to create the first administrator. Initial setup works without email verification. Sign in through Keycloak.
+4. Open **Kafka connections**, enter the bootstrap servers and Kafka authentication, then **Test connection** and save. Select the saved cluster to open **Topics**. [Dashboard walkthrough](docs/operator/v0.9-dashboard-guide.md).
+5. Use **Manage users** for roles and cluster assignments, **Monitoring** to enroll sources, and **Fleet** to register broker hosts. [Monitoring](docs/operator/kafka-monitoring.md) · [Fleet quickstart](docs/operator/v1.1-fleet-quickstart.md).
 
-The [installation guide](docs/operator/v1.0-installation-guide.md) includes image access, native content/web roots, persistent storage, signed/offline verification and deployment-tested egress requirements. An [optional static-cluster Token-mode evaluation](docs/operator/static-token-evaluation.md) is available for isolated laboratories.
+| Deployment | v1.1.0 media |
+| --- | --- |
+| Windows Server Services | Use `kafdeck-offline-1.1.0-win-x64.zip` with its matching checksum for an offline installation or upgrade. |
+| Native application | Extract `media/native/<rid>/kafdeck-api-ui-1.1.0-<rid>.tar.gz`. Supported package targets are `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`. Use `Kafdeck.Api` or `Kafdeck.Api.exe` with a separate `--contentRoot` for configuration and `--webroot` pointing to the extracted `wwwroot`. |
+| Docker or Podman | Use the released [GHCR digest](#releases-and-supply-chain) with an authorized account, or use the signed amd64 or arm64 image archive from `media/oci/`. |
+| Kubernetes | Use `media/helm/kafdeck-1.1.0.tgz` with the released image digest, external identity, TLS, persistent storage and tested egress. The admitted chart profile uses one application replica. [Helm guide](deploy/helm/kafdeck/README.md). |
+| CLI, MCP and Terraform | Extract the CLI or MCP archive for your platform. The distribution also contains `Kafdeck.Mcp.1.1.0.nupkg` and the independently versioned Terraform provider `0.8.0`. [CLI identity](docs/operator/v0.8-cli-human-oidc-runbook.md) · [MCP](docs/operator/v0.8-mcp.md). |
+
+Follow the [1.1.0 installation and upgrade guide](docs/operator/v1.1-installation-guide.md) for Windows Server, Linux with systemd, Docker Compose and Helm. Preserve configuration, state, data-protection keys and recoverable backups before upgrading manually managed deployments. [Distribution recovery runbook](docs/operations/v0.9-distribution-recovery.md) · [Historical v1.0 installation guide](docs/operator/v1.0-installation-guide.md).
 
 ## Building from source
 
-Building from source is the best path for contributors and for testing unreleased main capabilities.
-
 ### Prerequisites
 
-- Git,
-- .NET SDK 10,
-- Node.js 24+ and npm,
-- Docker + Compose for the integration Kafka environment.
+- Git, the .NET 10 SDK selected by [global.json](global.json), and Node.js 24+ with npm.
+- Docker with Compose for the optional local Kafka smoke environment.
+
+Run the following from the repository root. With the built assets copied into the web root, a default run serves the API and UI at `http://127.0.0.1:8080` with an empty cluster list.
 
 ### Linux / macOS
 
@@ -253,28 +292,12 @@ cd Kafdeck
 
 dotnet restore Kafdeck.slnx --locked-mode
 dotnet build Kafdeck.slnx -c Release --no-restore
-
 npm --prefix src/frontend ci
 npm --prefix src/frontend run build
 
-rm -rf src/backend/Kafdeck.Api/wwwroot
 mkdir -p src/backend/Kafdeck.Api/wwwroot
 cp -R src/frontend/dist/. src/backend/Kafdeck.Api/wwwroot/
-
-dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
-~~~
-
-The default application configuration remains intentionally loopback-only at <code>http://127.0.0.1:8080</code> and contains no cluster profiles. To expose a source run to another machine, explicitly select Token or OIDC mode and configure one or more <code>ListenUrls</code>. For a useful source run, either add <code>src/backend/Kafdeck.Api/appsettings.Development.json</code> or set environment variables before starting the API:
-
-~~~bash
-export Kafdeck__Deployment__ListenUrls__0=http://0.0.0.0:8080
-export Kafdeck__Deployment__AccessMode=Token
-export Kafdeck__Deployment__AccessToken=env:KAFDECK_DEPLOYMENT_TOKEN
-export KAFDECK_DEPLOYMENT_TOKEN='change-this-local-token'
-export Kafdeck__Clusters__0__Id=local
-export Kafdeck__Clusters__0__BootstrapServers__0=localhost:9092
-export Kafdeck__Clusters__0__SecurityProtocol=Plaintext
-dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
+dotnet run -c Release --no-build --no-launch-profile --project src/backend/Kafdeck.Api
 ~~~
 
 ### Windows / PowerShell
@@ -285,35 +308,15 @@ Set-Location Kafdeck
 
 dotnet restore Kafdeck.slnx --locked-mode
 dotnet build Kafdeck.slnx -c Release --no-restore
-
 npm --prefix src/frontend ci
 npm --prefix src/frontend run build
 
-Remove-Item -Recurse -Force src/backend/Kafdeck.Api/wwwroot -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force src/backend/Kafdeck.Api/wwwroot | Out-Null
-Copy-Item -Recurse src/frontend/dist/* src/backend/Kafdeck.Api/wwwroot/
-
-dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
+Copy-Item -Recurse -Force src/frontend/dist/* src/backend/Kafdeck.Api/wwwroot/
+dotnet run -c Release --no-build --no-launch-profile --project src/backend/Kafdeck.Api
 ~~~
 
-For a local Kafka:
-
-~~~powershell
-docker compose -f deploy/dev/docker-compose.kafka.yml up -d
-~~~
-
-To point a native Windows source run at that broker:
-
-~~~powershell
-$env:Kafdeck__Deployment__ListenUrls__0 = "http://0.0.0.0:8080"
-$env:Kafdeck__Deployment__AccessMode = "Token"
-$env:Kafdeck__Deployment__AccessToken = "env:KAFDECK_DEPLOYMENT_TOKEN"
-$env:KAFDECK_DEPLOYMENT_TOKEN = "change-this-local-token"
-$env:Kafdeck__Clusters__0__Id = "local"
-$env:Kafdeck__Clusters__0__BootstrapServers__0 = "localhost:9092"
-$env:Kafdeck__Clusters__0__SecurityProtocol = "Plaintext"
-dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
-~~~
+To populate a local run, start the [Kafka smoke environment](#local-kafka-smoke-environment) and add a loopback Kafka profile under [Configuration](#configuration). See the [static Token-mode evaluation guide](docs/operator/static-token-evaluation.md) for controlled evaluation from another machine.
 
 ### Build the OCI image locally
 
@@ -321,16 +324,26 @@ dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj
 docker build -t kafdeck:dev .
 ~~~
 
-The runtime image serves both API and UI, runs as the image-defined non-root user, exposes port 8080, and uses ASP.NET Core 10.
+The ASP.NET Core 10 image serves both API and UI, runs as a non-root user and exposes port 8080.
 
 ## Configuration
 
 Kafdeck uses the standard ASP.NET Core configuration model. JSON configuration and environment variables can be combined. Nested environment keys use double underscores.
 
-~~~bash
-Kafdeck__Clusters__0__Id=prod
-Kafdeck__Clusters__0__BootstrapServers__0=kafka-1.example:9093
-Kafdeck__Clusters__0__SecurityProtocol=SaslSsl
+For a loopback source run against the local Kafka smoke broker, add this section in the application's `appsettings.Development.json` and set `ASPNETCORE_ENVIRONMENT=Development` before starting the API. Environment-variable equivalents include `Kafdeck__Clusters__0__Id` and `Kafdeck__Clusters__0__BootstrapServers__0`.
+
+~~~json
+{
+  "Kafdeck": {
+    "Clusters": [
+      {
+        "Id": "local",
+        "BootstrapServers": ["127.0.0.1:9092"],
+        "SecurityProtocol": "Plaintext"
+      }
+    ]
+  }
+}
 ~~~
 
 ### Access modes
@@ -405,13 +418,10 @@ TLS server-certificate verification cannot be silently disabled.
 
 ### Optional Schema Registry
 
-<code>SchemaRegistry</code> is a property of an individual object inside <code>Kafdeck:Clusters[]</code>. Example cluster object:
+<code>SchemaRegistry</code> is a property of an individual object inside <code>Kafdeck:Clusters[]</code>. Merge this fragment into the Kafka cluster profile.
 
 ~~~json
 {
-  "Id": "prod",
-  "BootstrapServers": [ "kafka-1.example:9093" ],
-  "SecurityProtocol": "SaslSsl",
   "SchemaRegistry": {
     "Url": "https://schema-registry.example",
     "ProviderProfile": "ConfluentCompatibleV1",
@@ -423,19 +433,16 @@ TLS server-certificate verification cannot be silently disabled.
 
 Remote basic authentication requires HTTPS.
 
-`ProviderProfile` defaults to `ConfluentCompatibleV1` for backward compatibility. v0.7 also admits `KarapaceCompatibleV1` through the tested Confluent-compatible lifecycle contract. `ApicurioV3` is a distinct capability profile and is currently reported as unsupported for lifecycle/read operations until a typed Apicurio adapter has its own compatibility evidence; Kafdeck does not send Confluent-compatible paths to that profile.
+`ProviderProfile` defaults to `ConfluentCompatibleV1` for backward compatibility. Kafdeck also supports `KarapaceCompatibleV1` through the tested Confluent-compatible lifecycle contract. `ApicurioV3` is a distinct capability profile and is currently reported as unsupported for lifecycle/read operations until a typed Apicurio adapter has its own compatibility evidence; Kafdeck does not send Confluent-compatible paths to that profile.
 
 The capability endpoint `GET /api/v1/clusters/{clusterId}/schemas/capabilities` reports provider support separately from mutation-mode activation. Subject/version/reference reads and developer tooling remain available when authorized; governed registration, compatibility changes and delete lifecycle require mutation mode plus the exact server-derived authorization/risk/approval path.
 
 ### Optional Kafka Connect
 
-v0.7 supports multiple stable Connect profiles per Kafka cluster. New deployments should use <code>ConnectProfiles[]</code>:
+Configure one or more named Connect profiles per Kafka cluster in `ConnectProfiles[]`. Merge this fragment into the Kafka cluster profile.
 
 ~~~json
 {
-  "Id": "prod",
-  "BootstrapServers": [ "kafka-1.example:9093" ],
-  "SecurityProtocol": "SaslSsl",
   "ConnectProfiles": [
     {
       "Id": "default",
@@ -461,13 +468,10 @@ Optional Connect auto-restart is **disabled by default**. If enabled under <code
 
 ### Optional ksqlDB
 
-<code>KsqlDb</code> is configured inside the relevant <code>Kafdeck:Clusters[]</code> object:
+<code>KsqlDb</code> is configured inside the relevant <code>Kafdeck:Clusters[]</code> object. Merge this fragment into that profile.
 
 ~~~json
 {
-  "Id": "prod",
-  "BootstrapServers": [ "kafka-1.example:9093" ],
-  "SecurityProtocol": "SaslSsl",
   "KsqlDb": {
     "Url": "https://ksql.example",
     "Username": "env:KAFDECK_KSQL_USER",
@@ -476,17 +480,14 @@ Optional Connect auto-restart is **disabled by default**. If enabled under <code
 }
 ~~~
 
-v0.7 admits bounded **single-statement read-only `SELECT`** execution through the typed ksqlDB adapter. Row, byte, duration and concurrency ceilings are server-owned. DDL/DML, persistent-query creation, multi-statement/ambiguous input and generic SQL/HTTP forwarding fail closed before provider I/O.
+The ksqlDB query editor accepts a bounded **single-statement read-only `SELECT`** through the typed adapter. Row, byte, duration and concurrency ceilings are server-owned. DDL/DML, persistent-query creation, multi-statement/ambiguous input and generic SQL/HTTP forwarding fail closed before provider I/O.
 
 ### Optional Kafka Streams telemetry and lineage
 
-Kafdeck never probes arbitrary application URLs. Streams topology/state-store evidence comes only from an explicitly registered telemetry profile:
+Kafdeck never probes arbitrary application URLs. Streams topology/state-store evidence comes only from an explicitly registered telemetry profile. Merge this fragment into the Kafka cluster profile.
 
 ~~~json
 {
-  "Id": "prod",
-  "BootstrapServers": [ "kafka-1.example:9093" ],
-  "SecurityProtocol": "SaslSsl",
   "StreamsTelemetry": {
     "Url": "https://streams-telemetry.example",
     "ProviderProfile": "KafdeckTelemetryV1",
@@ -560,12 +561,12 @@ docker run --rm \
   -e KAFDECK_OIDC_CLIENT_SECRET \
   -v "$PWD/kafdeck-https.pfx:/run/secrets/kafdeck-https.pfx:ro" \
   -v "$PWD/appsettings.Production.json:/app/appsettings.Production.json:ro" \
-  ghcr.io/araditc/kafdeck@sha256:8e84e47793f663e02226cb11ca43f60835f87663dca6f76b1075975a91f489f0
+  ghcr.io/araditc/kafdeck@sha256:478887bd2daa6ba3f3c6a76a73db8af8cf55a50d61b1be06ff4e655d28a27e65
 ~~~
 
 Inject <code>KAFDECK_HTTPS_CERT_PASSWORD</code> through your orchestrator/secret manager; it is an ASP.NET/Kestrel setting and does not use Kafdeck's <code>env:</code> secret-reference syntax. In production, use a certificate whose SAN matches the hostname operators use.
 
-The corresponding Kafdeck/OIDC configuration can then use an HTTPS listen URL:
+Use the following structure for an external OIDC setup and add the matching Kafka cluster profile. For managed Keycloak setup, use the separate browser and provisioning clients in the [managed identity guide](docs/operator/managed-identity-setup.md).
 
 ~~~json
 {
@@ -626,9 +627,10 @@ Core rules include:
 - audit output excludes record payloads, generated payloads, provider credentials and ksqlDB result rows;
 - ecosystem integrations expose typed configured origins, not a generic HTTP proxy;
 - Kafka Connect secret-like configuration is redacted fail-closed;
-- ksqlDB permits only bounded read-oriented queries; DDL/DML/persistent-query forms are blocked;
+- the ksqlDB query editor accepts bounded read-only SELECT. The separate owner-only Stream and Table forms enforce target identity and policy checks;
+- Fleet host access uses pinned SSH keys, destination allowlists and separate authority for log reads and agent installation;
 - inferred lineage is never used as authorization evidence;
-- release images are built with exact-source SBOM, High/Critical vulnerability scanning, keyless signing and immutable digest promotion.
+- OCI images ship with source-bound SBOMs and vulnerability scan results. The signed distribution manifest binds the image archives and configuration digests.
 
 Read [SECURITY.md](SECURITY.md) before production deployment.
 
@@ -648,7 +650,8 @@ Give Kafdeck only the Kafka permissions required for the capabilities you intent
 - configure an approved HTTPS boundary;
 - prefer concrete `ListenUrls` for production host filtering; wildcard binds require Token/OIDC and intentionally derive wildcard Host acceptance;
 - do not expose development PLAINTEXT listeners to untrusted networks;
-- monitor /healthz;
+- monitor `/healthz` and monitor upstream health through cluster and source observations;
+- test deployment egress against approved Kafka destinations, including broker-advertised addresses, as required by KAF-02;
 - retain release provenance/SBOM/security evidence according to your environment policy.
 
 ## Health check
@@ -658,25 +661,24 @@ GET /healthz
 ~~~
 
 ~~~bash
-curl http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1:8080/healthz
 ~~~
+
+This checks whether the Kafdeck HTTP process responds. Use cluster observations and **Monitoring → Sources** for upstream and agent status.
 
 ## API
 
-Kafdeck product capabilities are exposed through versioned HTTP routes under <code>/api/v1</code>. The UI uses the same backend-authoritative contracts rather than bypassing authorization.
+The dashboard and clients use versioned HTTP routes under `/api/v1` with backend authorization. The [Stable contract inventory](docs/api/contracts/v1/README.md) and [compatibility policy](docs/operator/v1.0-compatibility-support.md) define the supported HTTP, CLI, MCP and operator surfaces. Dashboard-specific API routes, including Fleet browser workflows, are Experimental under that policy.
 
-The governed v0.8 bearer OpenAPI document is available at `GET /api/v1/openapi/v0.8-bearer.json` with current `SystemRead` authorization; see [bearer/CLI parity](docs/api/v0.8-bearer-cli-parity.md). The retained v0.7 legacy contract remains available:
-
-- runtime: <code>GET /api/v1/openapi/v0.7.json</code>
-- checked in: [docs/api/openapi-v0.7.json](docs/api/openapi-v0.7.json)
-
-Earlier versioned API documents remain in [docs/api/](docs/api/) as historical release contracts. Treat the API contract from the published release you deploy as authoritative.
+- The governed bearer OpenAPI document is available at `GET /api/v1/openapi/v0.8-bearer.json` with `SystemRead` authorization. [Bearer and CLI parity](docs/api/v0.8-bearer-cli-parity.md).
+- The legacy contract is available at `GET /api/v1/openapi/v0.7.json` and in [the checked-in specification](docs/api/openapi-v0.7.json).
+- Use the [API directory](docs/api/) for versioned OpenAPI documents and the [MCP guide](docs/operator/v0.8-mcp.md) for its scoped tools.
 
 ## Kafka compatibility
 
 Compatibility is evidence-based rather than assumed from a Kafka-compatible endpoint.
 
-The v0.9 release retains the admitted Kafka compatibility matrix:
+The [Kafka compatibility workflow](.github/workflows/kafka-compatibility.yml) tests this matrix for the current release.
 
 | Kafka | Tier |
 | --- | --- |
@@ -685,20 +687,16 @@ The v0.9 release retains the admitted Kafka compatibility matrix:
 | 4.1.2 | Tier 1 |
 | 3.9.2 | Tier 2 |
 
-Provider-specific services can expose different administrative capabilities. Kafdeck records those as capability profiles instead of claiming blanket equivalence.
+Schema Registry, Connect, ksqlDB and Fleet capabilities have their own provider and deployment evidence. Check the capability state for your target before enabling operations.
 
 ## Air-gapped deployment
 
-Kafdeck has no mandatory public SaaS dependency at runtime.
+1. On a preparation host, download the [v1.1.0 full distribution](https://github.com/araditc/Kafdeck/releases/tag/v1.1.0), signature, trust root and checksums. Follow [release verification](#releases-and-supply-chain).
+2. Move the verified native, OCI or Helm media into the isolated environment. Mirror the exact image digest or import the signed architecture archive. Stage any required broker agent package separately.
+3. Provision local identity, database and upstream endpoints as needed. The supplementary Windows Server package bundles Java, PostgreSQL and Keycloak. Transfer CA material, configuration and secrets through their respective controlled paths. [Platform installation and upgrade guide](docs/operator/v1.1-installation-guide.md).
+4. For source builds in the air gap, mirror .NET, npm and base-image dependencies and use the committed lockfiles.
 
-For an air-gapped environment:
-
-1. mirror the exact released OCI digest into the controlled registry;
-2. mirror Kafka CA/client certificate material and external ecosystem credentials separately;
-3. transfer configuration independently from secrets;
-4. verify image digest before import/run;
-5. keep secret material outside the image;
-6. if rebuilding inside the air gap, mirror .NET/npm/base-image dependencies and preserve lockfiles/provenance.
+See the [Fleet offline agent guide](docs/operator/v1.1-offline-broker-agent.md) for broker package installation and upgrade.
 
 ## Troubleshooting
 
@@ -713,7 +711,10 @@ For an air-gapped environment:
 | Configuration read returns authorization errors | Kafka principal may lack read/describe permission; do not solve this by granting mutation rights |
 | Record decode unavailable | Schema Registry profile, network/TLS/auth, schema references |
 | Connect data unavailable | Connect profile, endpoint reachability, TLS/basic-auth configuration |
-| ksql metadata says unsupported | Provider requires statement execution; this is intentionally unsupported |
+| ksqlDB catalog or query is unavailable | Check the configured endpoint, matching Kafka cluster identity, provider permissions and the read-only query bounds. |
+| First-owner setup fails | Check code expiry, the dedicated Keycloak realm, HTTPS trust, service client access and persistent state. |
+| Monitoring chart has gaps | Check source freshness, collection status, configured metric labels and broker-to-Kafdeck TLS or reachability. |
+| Fleet reports a host-key mismatch or a pending rollout | Verify the host key through a trusted channel. For a pending rollout, inspect broker health and the last confirmed stage. [Recovery guide](docs/operator/v1.1-fleet-operational-recovery.md). |
 | Data appears partial | Check Kafdeck RBAC, Kafka ACLs, upstream capability/timeout limitations |
 | Response is marked stale | A bounded cached observation is being served after a retryable upstream failure |
 
@@ -724,7 +725,12 @@ src/backend/                 .NET application, modules, infrastructure adapters
 src/frontend/                React operator UI
 tests/Kafdeck.Architecture.Tests/
                              architecture/security/behavior tests
-tests/integration/           containerized integration harnesses
+src/cli/                     operator CLI
+src/mcp/                     MCP server
+providers/terraform/         Terraform provider
+tools/kafka-agent/           JVM collection agent
+tools/broker-host/            Fleet host helpers
+deploy/helm/                 Kubernetes chart
 deploy/dev/                  local Kafka development infrastructure
 docs/architecture/           architecture documentation
 docs/security/               security boundaries and threat models
@@ -799,7 +805,7 @@ The repository's official engineering/documentation language is English.
 
 Useful contribution areas include:
 
-- documentation and examples,
+- Fleet operator documentation and supported systemd and Compose examples,
 - accessibility improvements,
 - test coverage,
 - safe provider compatibility fixtures,
@@ -846,31 +852,28 @@ See:
 
 ## Releases and supply chain
 
-Kafdeck's release pipeline is designed around exact-source evidence:
+**[v1.1.0](https://github.com/araditc/Kafdeck/releases/tag/v1.1.0)** was built from `13e297d2e98e414b6e3e8c7ef520f611bf992ad4`. The publisher downloaded and verified all 50 Release assets and checked the registry manifests, configurations and layers for both architectures. [Publication run](https://github.com/araditc/Kafdeck/actions/runs/44799434364).
 
-- locked dependency restore,
-- quality gates,
-- CodeQL,
-- dependency review,
-- Kafka compatibility tests,
-- OCI build,
-- SPDX SBOM generation,
-- High/Critical vulnerability scanning,
-- keyless signing for approved published candidates,
-- immutable image digest promotion,
-- GitHub Release bound to the approved source revision.
+~~~text
+ghcr.io/araditc/kafdeck@sha256:478887bd2daa6ba3f3c6a76a73db8af8cf55a50d61b1be06ff4e655d28a27e65
+~~~
 
-Release notes and evidence live in [docs/releases/](docs/releases/).
+Download `kafdeck-1.1.0-full-distribution.zip`, `manifest.json`, `manifest.sigstore.json`, `trusted-root.json` and `SHA256SUMS`. The signed manifest covers 43 media and evidence files. The Release also exposes individual media assets with a `media__` prefix.
+
+1. Check asset hashes using `SHA256SUMS` from the release.
+2. Follow the [release notes](publication/v1/release-notes-1.1.0.md#download-and-verify) to verify the manifest offline with Cosign, the pinned trust root and the exact signing identity.
+3. Extract the distribution to `v11-media`. Use a checkout of the `v1.1.0` tag to verify every file in the signed inventory.
+
+~~~bash
+python scripts/release/v1_media.py verify ./v11-media \
+  --manifest-sha256 fbde2e6f65e7e4559fbe59a6d1f228abbc2355c1d6435140153326cfd37a85e5
+~~~
+
+The release CI records native installation on five platforms, two OCI architecture checks, Helm lifecycle, SBOMs and vulnerability scan results. [Native installation](https://github.com/araditc/Kafdeck/actions/runs/44778111923) · [OCI and Helm](https://github.com/araditc/Kafdeck/actions/runs/44778111456) · [Signature and offline verification](https://github.com/araditc/Kafdeck/actions/runs/44796139117). Historical records are in [docs/releases](docs/releases/).
 
 ## Roadmap
 
-The roadmap is public and capability-driven:
-
-[**View the Kafdeck Roadmap →**](ROADMAP.md)
-
-[Stable v1.0.0](docs/releases/v1.0.md) includes governed operations, managed onboarding and verified distribution. The [v1.1.0-rc.1 pre-release](docs/releases/v1.1-rc.1.md) introduces broker host management in Fleet.
-
-Nothing in the roadmap should be interpreted as currently available until it is implemented, validated, and released.
+Fleet broker host management shipped in [v1.1.0](https://github.com/araditc/Kafdeck/releases/tag/v1.1.0). The [public roadmap](ROADMAP.md) tracks delivered and proposed work. Prior release records include [v1.0.0](docs/releases/v1.0.md) and the [1.1 pre-release](docs/releases/v1.1-rc.1.md).
 
 ## License
 

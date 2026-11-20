@@ -2,7 +2,7 @@
 
 ## v0.9 managed onboarding
 
-For the released packages, use [installation](../operator/v0.9-installation-guide.md). To reproduce first-owner setup from source, use the SDK/Node versions below, then the [managed configuration example](../operator/examples/v0.9-managed-appsettings.json), a dedicated HTTPS Keycloak realm and writable private identity state. Run the built API with that content root; issue `--issue-setup-code` using the same configuration, create the first owner, then sign in and [test/save a Kafka connection](../operator/v0.9-dashboard-guide.md). The code expires after 15 minutes. Source/default Local mode and the older Token-mode laboratory are separate evaluation paths; they do not enable the managed setup wizard. Never reuse production identity files or business topics for development fixtures.
+For the released packages, use [installation](../operator/v1.1-installation-guide.md). To reproduce first-owner setup from source, use the SDK/Node versions below, then the [managed configuration example](../operator/examples/v0.9-managed-appsettings.json), a dedicated HTTPS Keycloak realm and writable private identity state. Run the built API with that content root; issue `--issue-setup-code` using the same configuration, create the first owner, then sign in and [test/save a Kafka connection](../operator/v0.9-dashboard-guide.md). The code expires after 15 minutes. Source/default Local mode and the older Token-mode laboratory are separate evaluation paths; they do not enable the managed setup wizard. Never reuse production identity files or business topics for development fixtures.
 
 
 ## Prerequisites
@@ -32,7 +32,7 @@ dotnet run --project src/backend/Kafdeck.Api/Kafdeck.Api.csproj -- --Kafdeck:Dep
 
 The default `appsettings.json` has an empty cluster list and a loopback listener. Add a disposable static profile through `Kafdeck:Clusters` for Local-mode development, or use the managed setup above for registered targets. `Kafdeck:Deployment:ListenUrls` is authoritative; changing only `ASPNETCORE_URLS` does not override it. Never expose Local mode on a remote listener.
 
-For a built API/UI with a separate configuration directory, run `dotnet /absolute/path/to/Kafdeck.Api.dll --contentRoot /absolute/path/to/config --webroot /absolute/path/to/wwwroot`. The web root must contain the built frontend. Use absolute Windows paths with PowerShell. Keep setup-code issuance and normal execution on the same content root, environment and service identity. See [native installation](../operator/v0.9-installation-guide.md#native-windows-linux-and-macos).
+For a built API/UI with a separate configuration directory, run `dotnet /absolute/path/to/Kafdeck.Api.dll --contentRoot /absolute/path/to/config --webroot /absolute/path/to/wwwroot`. The web root must contain the built frontend. Use absolute Windows paths with PowerShell. Keep setup-code issuance and normal execution on the same content root, environment and service identity. See [native installation](../operator/v1.1-installation-guide.md#native-windows-linux-and-macos).
 
 ## Frontend
 

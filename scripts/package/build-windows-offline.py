@@ -10,9 +10,15 @@ import urllib.parse
 import zipfile
 
 REPO = Path(__file__).resolve().parents[2]
-SOURCE = '0617a87ddc176b8255ca1452fc53c097008d9a51'
-VERSION = '1.0.0'
-NATIVE = 'native/win-x64/kafdeck-api-ui-1.0.0-win-x64.tar.gz'
+RELEASE_SOURCES = {
+    '1.0.0': '0617a87ddc176b8255ca1452fc53c097008d9a51',
+    '1.1.0': '13e297d2e98e414b6e3e8c7ef520f611bf992ad4',
+}
+STABLE_11_SIGNATURE = {
+    'manifest.json': 'fbde2e6f65e7e4559fbe59a6d1f228abbc2355c1d6435140153326cfd37a85e5',
+    'manifest.sigstore.json': '8c8da5acb40d9df2621c232497057bc2f0b34b6552c96411e5b7bb78f05ad88d',
+    'trusted-root.json': '0ba58f6c09c271f664f0f8c1fa62e2065844ca89a0397c0178ed5188f6096724',
+}
 
 
 def sha(path):
@@ -43,15 +49,33 @@ def repack(source, destination, select=None):
 
 
 def build(args):
+    version = args.version
+    source_commit = RELEASE_SOURCES[version]
     signature = REPO / 'docs/implementation/evidence/v1.0-signature'
-    manifest = json.loads((signature / 'manifest.json').read_text())
-    native = next(row for row in manifest['files'] if row['path'] == NATIVE)
-    if sha(args.native_archive) != native['sha256']:
+    if version == '1.1.0':
+        if args.signature_dir is None:
+            raise ValueError('Supply --signature-dir with the published v1.1.0 signature files')
+        signature = args.signature_dir
+        for name, expected in STABLE_11_SIGNATURE.items():
+            if sha(signature / name) != expected:
+                raise ValueError('Published v1.1.0 signature material differs: ' + name)
+    elif args.signature_dir is not None:
+        raise ValueError('The v1.0.0 signature is read from the repository evidence')
+
+    manifest = json.loads((signature / 'manifest.json').read_text(encoding='utf-8'))
+    if manifest['source'] != source_commit or manifest['version'] != version or manifest['scope'] != 'full-distribution':
+        raise ValueError('Expected the signed full distribution for the selected release')
+    archive_name = f'kafdeck-api-ui-{version}-win-x64.tar.gz'
+    native = next(row for row in manifest['files'] if row['path'] == f'native/win-x64/{archive_name}')
+    if args.native_archive.stat().st_size != native['size'] or sha(args.native_archive) != native['sha256']:
         raise ValueError('Native archive differs from the signed stable manifest')
-    vendors = json.loads((args.vendor_dir / 'vendor-manifest.json').read_text())
+    inventory = REPO / 'publication/v1-offline/vendors.json' if version == '1.1.0' else args.vendor_dir / 'vendor-manifest.json'
+    vendors = json.loads(inventory.read_text(encoding='utf-8'))
     for row in vendors:
-        row['resolvedUrl'] = urllib.parse.urlsplit(row['resolvedUrl'])._replace(query='', fragment='').geturl()
-        if sha(args.vendor_dir / row['file']) != row['sha256']:
+        if 'resolvedUrl' in row:
+            row['resolvedUrl'] = urllib.parse.urlsplit(row['resolvedUrl'])._replace(query='', fragment='').geturl()
+        medium = args.vendor_dir / row['file']
+        if medium.stat().st_size != row['bytes'] or sha(medium) != row['sha256']:
             raise ValueError('Vendor medium changed: ' + row['file'])
     bundle = args.output / 'bundle'
     if bundle.exists():
@@ -80,8 +104,14 @@ def build(args):
     shutil.copytree(REPO / 'deploy/windows', payload / 'scripts')
     docs = payload / 'docs'
     docs.mkdir()
+    if version == '1.0.0':
+        legacy_installer = 'd335d278729a9d5ca6e64728a81de74177aa9e86'
     for name in ('windows-offline-install.md', 'windows-offline-install.fa.md', 'windows-offline-upgrade.md', 'windows-offline-upgrade.fa.md', 'kafka-agent.md', 'kafka-monitoring.md', 'kafka-agent-java21.fa.md', 'windows-server-monitoring-advanced.fa.md'):
-        shutil.copyfile(REPO / 'docs/operator' / name, docs / name)
+        if version == '1.0.0':
+            original_doc = subprocess.check_output(['git', 'show', f'{legacy_installer}:docs/operator/{name}'], cwd=REPO)
+            (docs / name).write_bytes(original_doc)
+        else:
+            shutil.copyfile(REPO / 'docs/operator' / name, docs / name)
     for source, target in (('Install-Offline.ps1', 'Install-Kafdeck.ps1'), ('Upgrade-Offline.ps1', 'Upgrade-Kafdeck.ps1')):
         shutil.copyfile(REPO / 'deploy/windows' / source, bundle / target)
     for language, name in (('', 'README.md'), ('.fa', 'README.fa.md')):
@@ -90,9 +120,15 @@ def build(args):
             text = text.replace('](' + target.name + ')', '](payload/docs/' + target.name + ')')
         (bundle / name).write_text(text, encoding='utf-8')
     shutil.copyfile(REPO / 'LICENSE', bundle / 'LICENSE')
-    shutil.copytree(signature, bundle / 'native-signature')
-    shutil.copyfile(args.native_archive, media / Path(NATIVE).name)
-    notices = '''Included components
+    if version == '1.1.0':
+        signature_output = bundle / 'native-signature'
+        signature_output.mkdir()
+        for name in STABLE_11_SIGNATURE:
+            shutil.copyfile(signature / name, signature_output / name)
+    else:
+        shutil.copytree(signature, bundle / 'native-signature')
+    shutil.copyfile(args.native_archive, media / archive_name)
+    notices = f'''Included components
 Microsoft OpenJDK 21.0.13.0.2, GPLv2 with Classpath Exception. License/legal files in media/java21.zip.
 Source https://github.com/microsoft/openjdk-jdk21u/tree/release/jdk-21.0.13.0.2_1
 PostgreSQL 17.12, license and third-party notices in media/postgresql17.zip.
@@ -103,7 +139,7 @@ WinSW 2.12.0, MIT. Included WinSW-LICENSE.txt.
 Source https://github.com/winsw/winsw/tree/v2.12.0
 Microsoft Visual C++ Redistributable, original Microsoft-signed installer.
 Terms https://visualstudio.microsoft.com/license-terms/
-Kafdeck 1.0.0, Apache-2.0, included LICENSE and agent source.
+Kafdeck {version}, Apache-2.0, included LICENSE and agent source.
 The native archive is covered by native-signature/manifest.json and its existing Sigstore bundle.
 This supplementary installer has a separate SHA256 inventory and is not covered by that native distribution signature.
 '''
@@ -112,16 +148,21 @@ This supplementary installer has a separate SHA256 inventory and is not covered 
     if any(path.suffix.lower() in ('.pfx', '.key', '.pem', '.cer', '.dpapi', '.sql', '.sqlite', '.db') for path in files):
         raise ValueError('Private deployment data in package')
     result = {
-        'format': 1, 'version': VERSION, 'upgradeLayout': 'windows-services-v1',
+        'format': 1, 'version': version, 'upgradeLayout': 'windows-services-v1',
         'installerCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
-        'nativeRuntimeCommit': SOURCE, 'nativeArchiveSha256': native['sha256'],
+        'nativeRuntimeCommit': source_commit, 'nativeArchiveSha256': native['sha256'],
         'nativeManifestSha256': sha(signature / 'manifest.json'),
         'deploymentMode': 'windows-services', 'signatureScope': 'native-distribution',
         'vendors': vendors,
         'files': [{'path': path.relative_to(bundle).as_posix(), 'bytes': path.stat().st_size, 'sha256': sha(path)} for path in files],
     }
+    if version == '1.1.0':
+        packaging_paths = ['scripts/package/build-windows-offline.py', 'deploy/windows', 'tools/kafka-agent', 'docs/operator']
+        result['installerWorkingTreeModified'] = bool(subprocess.check_output(
+            ['git', 'status', '--porcelain', '--', *packaging_paths], cwd=REPO, text=True
+        ).strip())
     (bundle / 'bundle-manifest.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
-    target = args.output / 'kafdeck-offline-1.0.0-win-x64.zip'
+    target = args.output / f'kafdeck-offline-{version}-win-x64.zip'
     with zipfile.ZipFile(target, 'w') as archive:
         for path in sorted(bundle.rglob('*')):
             if path.is_file():
@@ -136,6 +177,8 @@ This supplementary installer has a separate SHA256 inventory and is not covered 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version', choices=RELEASE_SOURCES, default='1.0.0')
+    parser.add_argument('--signature-dir', type=Path)
     parser.add_argument('--vendor-dir', type=Path, required=True)
     parser.add_argument('--native-archive', type=Path, required=True)
     parser.add_argument('--jdk', type=Path, required=True)

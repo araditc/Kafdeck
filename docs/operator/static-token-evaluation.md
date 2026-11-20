@@ -1,6 +1,6 @@
 # Optional static-cluster deployment-token evaluation
 
-This is a single-deployment laboratory alternative to the [recommended managed Keycloak setup](managed-identity-setup.md). It does not create an initial owner, managed users or registered dashboard targets. For a new multi-user installation, use the [v0.9 installation guide](v0.9-installation-guide.md) and [dashboard walkthrough](v0.9-dashboard-guide.md).
+This is a single-deployment laboratory alternative to the [recommended managed Keycloak setup](managed-identity-setup.md). It does not create an initial owner, managed users or registered dashboard targets. For a new multi-user installation, use the [current installation guide](v1.1-installation-guide.md) and [dashboard walkthrough](v0.9-dashboard-guide.md).
 
 Use disposable resources and a freshly generated deployment token. The PLAINTEXT Kafka and HTTP examples below are for an isolated evaluation network. Use trusted TLS for real deployments and do not reuse example credentials.
 

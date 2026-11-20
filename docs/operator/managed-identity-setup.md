@@ -1,6 +1,6 @@
-# First administrator, Keycloak sign-in and user management (v0.9)
+# First administrator, Keycloak sign-in and user management
 
-Start with the [released installation guide](v0.9-installation-guide.md). This flow is for one managed installation, with a dedicated Keycloak realm, persistent local identity state and HTTPS. Keycloak authenticates people; the Kafka connection form configures brokers separately. No deployment token is entered into this sign-in flow.
+Start with the [current installation guide](v1.1-installation-guide.md). This flow is for one managed installation, with a dedicated Keycloak realm, persistent local identity state and HTTPS. Keycloak authenticates people; the Kafka connection form configures brokers separately. No deployment token is entered into this sign-in flow.
 
 ## 1. Prepare Keycloak and HTTPS
 
@@ -30,7 +30,7 @@ The important settings are:
 
 Do not combine managed identity with `Authorization:SubjectBindings` or `GroupBindings`. Externally managed OIDC uses the [separate RBAC configuration](v0.2-oidc-rbac-guide.md), not this first-owner wizard.
 
-Only the runtime/installer should write the state directory. Keep its issuer unchanged across restart and back up the state with the matching Keycloak realm, application databases and ASP.NET Core Data Protection key ring. The state contains managed users, saved connection definitions and protected integration credentials. Preserve the runtime's key storage on a persistent private volume; otherwise a replacement container may be unable to decrypt saved credentials. See [Microsoft's Data Protection persistence guidance](https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/configuration/default-settings?view=aspnetcore-10.0). There is no Kafdeck-specific key-ring-path setting in this release.
+Only the runtime/installer should write the state directory. Keep its issuer unchanged across restart and back up the state with the matching Keycloak realm, application databases and ASP.NET Core Data Protection key ring. The state contains managed users, saved connection definitions and protected integration credentials. Preserve the runtime's key storage on a persistent private volume; otherwise a replacement container may be unable to decrypt saved credentials. See [Microsoft's Data Protection persistence guidance](https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/configuration/default-settings?view=aspnetcore-10.0). For a new installation set `Kafdeck:DataProtection:KeyDirectory` to an absolute directory in persistent private storage.
 
 On Windows, replace Linux absolute paths with absolute Windows paths and grant the runtime account the appropriate directory/secret ACLs. Use the same service identity, content root and environment for setup-code issuance and normal execution.
 
