@@ -30,8 +30,8 @@ def canonical(value):
 
 
 def selection_filename(version):
-    if version == "1.0.0":
-        return "v1.0.json"
+    if version in ("1.0.0", "1.1.0"):
+        return f"v{version[:3]}.json"
     require(re.fullmatch(r"1\.[01]\.0-rc\.[1-9][0-9]*", version), "Unexpected build version")
     return f"v{version[:3]}-rc.json"
 

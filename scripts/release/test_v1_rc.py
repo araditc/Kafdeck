@@ -7,21 +7,38 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import v1_rc as rc
+import v1_media
 
 SOURCE = "a" * 40
 
 
 class CandidateSelectionTests(unittest.TestCase):
     def test_native_selection_distinguishes_the_current_candidate_and_historical_builds(self):
-        for version, assembly in (("1.1.0-rc.1", "1.1.0.0"), ("1.0.0-rc.1", "1.0.0.0"), ("1.0.0", "1.0.0.0")):
+        for version, assembly in (("1.1.0", "1.1.0.0"), ("1.1.0-rc.1", "1.1.0.0"), ("1.0.0-rc.1", "1.0.0.0"), ("1.0.0", "1.0.0.0")):
             with self.subTest(version=version):
                 selected = rc.selection(version=version)
                 self.assertEqual(version, selected["version"])
                 self.assertEqual(assembly, selected["assemblyVersion"])
                 self.assertFalse(selected["signed"] or selected["releaseReady"] or selected["publicationAuthorized"])
 
+    def test_assembly_selects_version_from_the_authenticated_producer_commit(self):
+        name, path = v1_media.RUNS["native"]
+        run = {"head_sha": SOURCE, "head_branch": "main", "event": "push", "status": "completed", "conclusion": "success",
+               "name": name, "path": path, "repository": {"full_name": v1_media.REPOSITORY},
+               "head_repository": {"full_name": v1_media.REPOSITORY}}
+        for version in ("1.1.0", "1.1.0-rc.1"):
+            props = f"<Project><PropertyGroup><Version>{version}</Version></PropertyGroup></Project>".encode()
+            with self.subTest(version=version), patch.object(v1_media, "api", return_value=run), \
+                    patch.object(v1_media.subprocess, "check_output", return_value=props) as git, \
+                    patch.object(rc, "inputs", return_value={"selected": "inputs"}) as inputs:
+                policy = v1_media.protected_main_policy("1,2,3")
+                self.assertEqual(policy["version"], version)
+                self.assertEqual(policy["source"], SOURCE)
+                git.assert_called_once_with(["git", "show", f"{SOURCE}:Directory.Build.props"], cwd=rc.ROOT)
+                inputs.assert_called_once_with(revision=SOURCE, version=version)
+
     def test_selector_requires_the_exact_configured_version(self):
-        for version in ("1.1.0", "1.1.0-rc.2", "1.1.0-rc.1/../../release"):
+        for version in ("1.1.1", "1.1.0-rc.2", "1.1.0-rc.1/../../release"):
             with self.subTest(version=version), self.assertRaisesRegex(ValueError, "Unexpected build version"):
                 rc.selection(version=version)
 

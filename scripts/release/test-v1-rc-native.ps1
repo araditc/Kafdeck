@@ -9,7 +9,7 @@ $source = (& git -C $root rev-parse HEAD).Trim()
 $build = [xml](Get-Content (Join-Path $root 'Directory.Build.props') -Raw)
 $version = $build.Project.PropertyGroup.Version
 $selector = switch -Regex ($version) {
-    '^1\.0\.0$' { 'v1.0.json' }
+    '^1\.([01])\.0$' { "v1.$($Matches[1]).json" }
     '^1\.([01])\.0-rc\.[1-9][0-9]*$' { "v1.$($Matches[1])-rc.json" }
     default { throw 'Unexpected native build version.' }
 }
