@@ -1,13 +1,13 @@
 # Offline Windows upgrade
 
-Download `kafdeck-offline-1.0.0-win-x64.zip` and its matching `.zip.sha256` from the [1.0.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). This medium supports both fresh installation and an in-place application upgrade of the Windows Services installation distributed in `monitoring-preview-20261115`.
+Obtain the supplementary `kafdeck-offline-1.1.0-win-x64.zip` and its matching `.zip.sha256`. This package supports a fresh installation or an in-place application upgrade of a completed **Kafdeck 1.0.0 Windows Services** installation with the bundled vendor stack.
 
 ## Run one command
 
-Copy the files to the server, compare `Get-FileHash` with the downloaded checksum, and extract into a fresh directory such as `C:\Kafdeck-Setup-1.0.0`. Open **Windows PowerShell as administrator**, using the same Windows account used for installation, and run
+Copy the files to the server, compare `Get-FileHash` with the downloaded checksum, and extract into a fresh directory such as `C:\Kafdeck-Setup-1.1.0`. Open **Windows PowerShell as administrator**, using the same Windows account used for installation, and run
 
 ```powershell
-C:\Kafdeck-Setup-1.0.0\Upgrade-Kafdeck.ps1
+C:\Kafdeck-Setup-1.1.0\Upgrade-Kafdeck.ps1
 ```
 
 For an installation in another directory, supply `-InstallRoot D:\Kafdeck`. Use `-VerifyOnly` to check eligibility before scheduling downtime. The script uses the existing service credentials and requires no password prompt. The dashboard will be unavailable while the upgrade runs.
@@ -22,7 +22,7 @@ For an installation in another directory, supply `-InstallRoot D:\Kafdeck`. Use 
 6. Restores automatic startup, starts PostgreSQL, Keycloak and Kafdeck, then verifies HTTPS, identity discovery, the first-owner state and the installed application hashes.
 7. Records the installed package/version and prints the dashboard URL and backup directory.
 
-The currently admitted path updates Kafdeck to **1.0.0** with the existing **Java 21.0.13, PostgreSQL 17 and Keycloak 26.8.1** installation. Vendor major-version migrations need a release-specific migration implementation. The script checks eligibility before stopping services. Customized external databases or state outside the installation directory require a corresponding backup/migration implementation.
+The script updates Kafdeck to **1.1.0** with the existing **Java 21.0.13, PostgreSQL 17 and Keycloak 26.8.1** installation. Vendor major-version migrations need a release-specific migration implementation. The script checks eligibility before stopping services. Customized external databases or state outside the installation directory require a corresponding backup/migration implementation.
 
 ## Failure and power loss
 

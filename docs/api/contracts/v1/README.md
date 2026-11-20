@@ -1,6 +1,6 @@
 # Explicit v1.0 contract baseline
 
-Owner-accepted [RFC-0010](../../../rfcs/0010-v1.0-contract-stability-support.md) governs this finite selection. It is the Stable guarantee for published v1.0.0, with independently versioned components retaining their selection. See the [v1.0 release record](../../../releases/v1.0.md).
+Owner-accepted [RFC-0010](../../../rfcs/0010-v1.0-contract-stability-support.md) governs this finite selection. This inventory defines the Stable selection introduced in v1.0 and retained in v1.1, with independently versioned components retaining their selection. See the [v1.0 release record](../../../releases/v1.0.md).
 
 - [api.json](api.json): compiled maximal route identities and inferred request/typed governance response schemas; canonical OpenAPI document fingerprints and complete operation identities; explicit Stable/Experimental selection and Internal exclusions; authoritative API/shared producers.
 - [cli.json](cli.json): compiled command/flag usage, shared named reads, exit codes and command/output/error producers.

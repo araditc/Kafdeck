@@ -6,17 +6,17 @@ Before v1.0, releases may evolve rapidly but must document breaking changes. Fro
 
 ## Current distribution
 
-The [official v0.9 release](https://github.com/araditc/Kafdeck/releases/tag/v0.9) includes:
+The [official v1.1.0 release](../releases/v1.1.md) includes:
 
 - immutable source tag and release notes;
 - API/UI, CLI and MCP native archives for the five tested RIDs;
 - amd64/arm64 OCI media, a two-architecture registry index and Helm chart;
-- independently versioned Terraform 0.8.0 packages and MCP 0.9.0 package;
+- independently versioned Terraform 0.8.0 packages and MCP 1.1.0 package;
 - SBOMs, scan reports, source/platform acceptance and build provenance;
 - the signed full-distribution manifest, Sigstore bundle, trusted-root material, checksums and offline mirror;
-- accepted W80/W81 evidence and the final W82 readiness decision.
+- source-bound startup, scan, signature and offline media verification records.
 
-The [published record](../implementation/evidence/v0.9-release-published-20261112.json) binds actual release assets, source and digests. GHCR retains its private access policy. Terraform packages in GitHub Releases do not establish public Terraform Registry availability. Component versions and versioned API contracts do not automatically advance with the application version.
+The [v1.1.0 publication record](../releases/v1.1.md) binds actual release assets, source and digests. GHCR retains its private access policy. Terraform packages in GitHub Releases do not establish public Terraform Registry availability. Component versions and versioned API contracts do not automatically advance with the application version.
 
 ## Maintainer release process
 
@@ -26,7 +26,7 @@ Required failing CI, unresolved critical security findings affecting the release
 
 ## Operator verification and recovery
 
-Operators should follow [installation and signed-media verification](../operator/v0.9-installation-guide.md) and [upgrade/backup/restore](../operations/v0.9-distribution-recovery.md), not dispatch maintainer publication workflows. Verify the manifest signature, approved signer/root and all selected media hashes before installation. Scope is the tested platform/provider cell; cross-compilation does not prove runtime acceptance. Keep the actual deployment's egress test and retained KAF-02 condition.
+Operators should follow [installation and signed-media verification](../operator/v1.1-installation-guide.md) and [upgrade/backup/restore](../operations/v0.9-distribution-recovery.md), not dispatch maintainer publication workflows. Verify the manifest signature, approved signer/root and all selected media hashes before installation. Scope is the tested platform/provider cell; cross-compilation does not prove runtime acceptance. Keep the actual deployment's egress test and retained KAF-02 condition.
 
 ## Supply-chain limits
 

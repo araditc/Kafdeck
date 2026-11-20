@@ -1,8 +1,8 @@
-# Offline Windows Server installation (Kafdeck 1.0.0)
+# Offline Windows Server installation (Kafdeck 1.1.0)
 
-This package includes Kafdeck **1.0.0**, Microsoft OpenJDK **21.0.13**, PostgreSQL **17.12**, Keycloak **26.8.1**, WinSW **2.12.0**, the Microsoft Visual C++ runtime installer, and the Kafka monitoring agent. No existing identity server, Java installation, .NET installation or Internet connection is required on the target server. The API is self-contained. The original signed native archive and its signature are included. The supplementary installer has a separate SHA256 inventory covering scripts and vendor media.
+This package includes Kafdeck **1.1.0**, Microsoft OpenJDK **21.0.13**, PostgreSQL **17.12**, Keycloak **26.8.1**, WinSW **2.12.0**, the Microsoft Visual C++ runtime installer, and the Kafka monitoring agent. No existing identity server, Java installation, .NET installation or Internet connection is required on the target server. The API is self-contained. The original signed native archive and its signature are included. The supplementary installer has a separate SHA256 inventory covering scripts and vendor media.
 
-Download the ZIP and its `.sha256` file from the [1.0.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.0.0). Keep both files together. The checksum file is for verifying the outer ZIP; the installer verifies the extracted files against `bundle-manifest.json`.
+Obtain the supplementary `kafdeck-offline-1.1.0-win-x64.zip` and its matching `.zip.sha256` from your package distributor. The included native application comes from the [v1.1.0 release](https://github.com/araditc/Kafdeck/releases/tag/v1.1.0). Keep both files together. The checksum file is for verifying the outer ZIP; the installer verifies the extracted files against `bundle-manifest.json`.
 
 ## Requirements
 
@@ -17,14 +17,14 @@ Download the ZIP and its `.sha256` file from the [1.0.0 release](https://github.
 1. Copy the ZIP and checksum to the server. Verify the hash against the accompanying file:
 
    ```powershell
-   Get-FileHash C:\Downloads\kafdeck-offline-1.0.0-win-x64.zip -Algorithm SHA256
-   Get-Content C:\Downloads\kafdeck-offline-1.0.0-win-x64.zip.sha256
+   Get-FileHash C:\Downloads\kafdeck-offline-1.1.0-win-x64.zip -Algorithm SHA256
+   Get-Content C:\Downloads\kafdeck-offline-1.1.0-win-x64.zip.sha256
    ```
 
 2. After verifying the source and hash, unblock the downloaded ZIP in its Properties if Windows marked it as downloaded. Extract into a **new, empty** directory:
 
    ```powershell
-   Expand-Archive -LiteralPath C:\Downloads\kafdeck-offline-1.0.0-win-x64.zip -DestinationPath C:\Kafdeck-Setup
+   Expand-Archive -LiteralPath C:\Downloads\kafdeck-offline-1.1.0-win-x64.zip -DestinationPath C:\Kafdeck-Setup
    ```
 
 3. Open **Windows PowerShell → Run as administrator** and run:
