@@ -42,3 +42,9 @@ C:\Kafdeck\scripts\Test-InstalledServices.ps1
 Open the URL printed by the script, sign in with the existing administrator and select the existing cluster. After your next planned server reboot, run `Test-InstalledServices.ps1 -RequireReboot` to verify automatic startup. Keep the saved package, checksum and backup together with your operational records.
 
 For a fresh server use `Install-Kafdeck.ps1` and the [installation guide](windows-offline-install.md). The [Java agent guide](kafka-agent.md) covers broker JVM installation. The original signed native manifest and signature are included in `native-signature/`. The supplementary Windows installer has its own checksum inventory. Its scripts and bundled third-party runtimes are outside the native distribution's Sigstore signature scope.
+
+## A previous package reports another installation or account
+
+Windows can report a service path using different slash separators from the installer, or a local service account as `.` followed by the username. The corrected package compares equivalent paths and resolves the local account through the computer name before checking its SID.
+
+If an earlier 1.1.0 package reports `Service Kafdeck belongs to another installation/account`, obtain the corrected ZIP and matching checksum, extract into a fresh folder and run `Upgrade-Kafdeck.ps1 -VerifyOnly` as the original installation account. Then run `Upgrade-Kafdeck.ps1`. The corrected error identifies an actual path or account mismatch. Preserve the original installation and service identity when investigating a mismatch.
