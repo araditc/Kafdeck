@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 # Fixed entry point. The only request is JSON on the anonymous stdin pipe, never command-line credentials.
 $ErrorActionPreference='Stop'
@@ -19,7 +19,7 @@ try {
     . (Join-Path $media 'payload/scripts/Offline-Tools.ps1')
     $manifest=Test-OfflineMedia $media
     $root=[IO.Path]::GetFullPath([string]$request.root).TrimEnd('\')
-    if($root -match '[\s\x80-\uffff]' -or $root -eq [IO.Path]::GetPathRoot($root).TrimEnd('\') -or $root.StartsWith($env:SystemRoot,[StringComparison]::OrdinalIgnoreCase) -or $cache.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase) -or $root.StartsWith($cache+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Invalid application directory.'}
+    if(!(Test-OfflineInstallPathCharacters $root) -or $root -eq [IO.Path]::GetPathRoot($root).TrimEnd('\') -or $root.StartsWith($env:SystemRoot,[StringComparison]::OrdinalIgnoreCase) -or $cache.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase) -or $root.StartsWith($cache+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Invalid application directory.'}
     $registration='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\AradITC.Kafdeck'
     if(Test-Path -LiteralPath $registration){$existing=Get-ItemProperty -LiteralPath $registration;if($existing.InstallLocation -ne $root){throw 'Another installation is already registered.'}}
     $receiptFile=Join-Path $root 'config/offline-install.json'

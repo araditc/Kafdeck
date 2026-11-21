@@ -1,4 +1,12 @@
 # Shared by the installer and its isolated acceptance test. Windows PowerShell 5.1.
+function Test-OfflineInstallPathCharacters([string]$Value) {
+    # Case-insensitive regex ranges can fold Unicode characters onto ASCII S/K.
+    # Check code points directly so ordinary ASCII installation paths remain valid.
+    foreach($character in $Value.ToCharArray()) {
+        if([int]$character -gt 127 -or [char]::IsWhiteSpace($character)){return $false}
+    }
+    return $true
+}
 function Get-OfflineWindowsCredential([PSCredential]$Credential) {
     $current=[Security.Principal.WindowsIdentity]::GetCurrent()
     if(!$Credential){
