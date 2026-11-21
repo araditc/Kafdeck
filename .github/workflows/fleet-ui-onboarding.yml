@@ -51,7 +51,7 @@ jobs:
           primary=$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)
           dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
           dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~FleetSetupTests|FullyQualifiedName~FleetSettingsStoreTests|FullyQualifiedName~FleetSetupLiveTests' --logger 'trx;LogFileName=fleet-setup.trx' --results-directory artifacts/fleet-setup
-          python3 scripts/ci/require-complete-trx.py artifacts/fleet-setup/fleet-setup.trx FleetSetupTests:6 FleetSettingsStoreTests:4 FleetSetupLiveTests:1
+          python3 scripts/ci/require-complete-trx.py artifacts/fleet-setup/fleet-setup.trx FleetSetupTests:7 FleetSettingsStoreTests:4 FleetSetupLiveTests:1
           test "$primary" = "$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)"
           test "$(systemctl is-active kafdeck-v11-kafka-sibling.service)" = active
           printf '%s\n' '{"primaryBrokerUnchanged":true,"siblingActive":true,"dockerPresent":false}' > artifacts/fleet-setup/preservation.json

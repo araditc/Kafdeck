@@ -890,3 +890,7 @@ Copyright and contribution rights are governed by the license and the project's 
 If the project is useful to you, consider starring the repository, opening high-quality issues, testing it against real Kafka environments, and contributing evidence-backed improvements.
 
 </div>
+
+## Fleet onboarding in newer source builds
+
+See [dashboard host onboarding](docs/operator/fleet-dashboard-onboarding.md) for encrypted SSH credentials and guided Linux/systemd or Compose host preparation. This source extension is newer than the immutable 1.1.0 release.

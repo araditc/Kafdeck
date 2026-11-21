@@ -133,6 +133,25 @@ public sealed class FleetSetupTests
         foreach (var name in new[] { "secret", "passphrase", "sudoPassword" }) Assert.True(properties.GetProperty(name).GetProperty("writeOnly").GetBoolean());
     }
 
+    [Fact]
+    public async Task Pending_agent_target_cannot_be_replaced_and_dispatch_rechecks_configuration_under_the_same_lease()
+    {
+        await using var f = await V11BrokerHostTests.HostFixture.Start(fleet: true);
+        var target = new BrokerAgentTarget("test-cluster", 1, "broker-1", "lifecycle", 2);
+        f.Fleet!.Change(state => state with { Configuration = state.Configuration with { AgentTargets = [target] } });
+        var pending = new BrokerAgentRecovery("test-cluster", Guid.NewGuid().ToString("N"), "owner", "protected-plan");
+        using (f.Recovery.ConfigurationLease())
+            Assert.Equal("agent_recovery_busy", Assert.Throws<BrokerHostFailure>(() => f.Recovery.Begin(pending)).Code);
+        Assert.Equal("agent_install_denied", Assert.Throws<BrokerHostFailure>(() => f.Recovery.Begin(pending, () => false)).Code);
+        Assert.Null(f.Recovery.Find("test-cluster"));
+        f.Recovery.Begin(pending, () => true);
+        var config = f.Fleet.Read().Configuration with { AgentTargets = [target with { BrokerId = 2 }] };
+        using var rejected = await f.Client.PostAsJsonAsync("/api/v1/fleet/settings/configuration", new FleetConfigurationInput(0, config));
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        Assert.Contains("bootstrap_agent_operation_pending", await rejected.Content.ReadAsStringAsync());
+        Assert.Equal(target, Assert.Single(f.Fleet.Read().Configuration.AgentTargets));
+    }
+
     private static async Task<string> Inspect(V11BrokerHostTests.HostFixture fixture)
     {
         using var inspected = await fixture.Client.PostAsJsonAsync("/api/v1/fleet/bootstrap/inspect", new FleetBootstrapInspect("test-cluster", "Office host", Connection));

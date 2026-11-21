@@ -1898,5 +1898,6 @@
   "Monitoring source": "Monitoring source",
   "Select a monitoring source": "Select a monitoring source",
   "Expected brokers: {0}": "Expected brokers: {0}",
-  "Save agent target": "Save agent target"
+  "Save agent target": "Save agent target",
+  "Configured reference": "Configured reference"
 }

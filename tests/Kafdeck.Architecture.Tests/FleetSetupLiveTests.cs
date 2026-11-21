@@ -45,6 +45,7 @@ public sealed class FleetSetupLiveTests
             OperatingSystem.IsWindows() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls(origin);
+        builder.Configuration["AllowedHosts"] = new Uri(origin).Host;
         builder.WebHost.ConfigureKestrel(server => server.ConfigureHttpsDefaults(https => https.ServerCertificate = certificate));
         builder.Configuration["Kestrel:Certificates:Default:Path"] = pfx;
         builder.Services.AddSingleton(TimeProvider.System);

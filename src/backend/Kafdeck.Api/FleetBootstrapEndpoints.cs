@@ -69,7 +69,7 @@ internal static class FleetBootstrapEndpoints
             var preview = new FleetBootstrapPreview(principal, input.ClusterId, input.Name, input.Connection.Address,
                 input.Connection.Port, input.Connection.Fingerprint, input.Connection.User, state.SettingsRevision,
                 candidates, cluster.Brokers.Count, DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds());
-            await audit.WriteAsync(FleetSettingsEndpoints.Audit(http, identity, "fleet_host_setup_inspected"), cancellation);
+            await audit.WriteAsync(FleetSettingsEndpoints.Audit(http, identity, "fleet_host_setup_inspected", input.Connection.Address, input.ClusterId), cancellation);
             return Results.Ok(new { preview = fleet.SealPreview(preview), targets = candidates,
                 package = new { version = FleetBootstrapResources.Version, digest = Digest(FleetBootstrapResources.Agent()) },
                 changes = new[] { "restrictedSshAccounts", "fixedHostHelpers", "agentPackageAndToken", "agentLaunchPreparation" },
@@ -136,7 +136,7 @@ internal static class FleetBootstrapEndpoints
                             new(agentId, "privateKey", agentKey.Private, null, "agent", false, 1)],
                         Operations = [.. (state.Operations ?? []).Where(item => item.Stage is not ("complete" or "failed")),
                             .. (state.Operations ?? []).Where(item => item.Stage is "complete" or "failed").TakeLast(23), operation],
-                    }, FleetSettingsEndpoints.Audit(http, identity, "fleet_host_preparation_authorized"));
+                    }, FleetSettingsEndpoints.Audit(http, identity, "fleet_host_preparation_authorized", id, plan.ClusterId));
                 });
                 var sources = new Dictionary<string, FleetBootstrapSource>();
                 foreach (var target in targets)
@@ -160,7 +160,7 @@ internal static class FleetBootstrapEndpoints
                 Update(fleet, operation);
                 await fleet.DrainAuditAsync(audit, cancellation);
                 return await Continue(operation, input.Connection, http, identity, options, fleet, registry,
-                    probe, ssh, audit, cancellation);
+                    probe, ssh, recovery, audit, cancellation);
             }
             finally { Dispatch.Release(); }
         }).WithManagedBrowserContract("managed-fleet-bootstrap-prepare", typeof(FleetBootstrapPrepare))
@@ -176,20 +176,26 @@ internal static class FleetBootstrapEndpoints
                 item.Principal == Principal(http, identity));
             if (operation is null) return FleetSettingsEndpoints.Failure("bootstrap_operation_missing", 404);
             if (operation.Stage == "complete") return Results.Ok(new { operation.Id, stage = "complete" });
-            if (operation.Stage == "failed") return Results.Ok(new { operation.Id, stage = "failed" });
             if (operation.Payload.Length == 0)
             {
-                // No payload was committed, therefore no SSH mutation could have been dispatched.
+                // Claim an unused reservation before revoking enrollment, including across processes.
+                // A committed SSH payload must never be mistaken for an unused reservation.
+                if (operation.Stage != "failed")
+                    fleet.Change(state =>
+                    {
+                        if (!(state.Operations ?? []).Any(item => item.Id == operation.Id && item.Stage == "reserved" && item.Payload.Length == 0))
+                            throw new BrokerHostFailure("fleet_revision_conflict");
+                        return FleetSettingsStore.AddAudit(state with
+                        {
+                            SettingsRevision = state.SettingsRevision + 1,
+                            Credentials = state.Credentials.Select(item => item.Id == operation.ProbeCredentialId || item.Id == operation.AgentCredentialId
+                                ? item with { Revoked = true, Secret = "", Passphrase = null, Revision = item.Revision + 1 } : item).ToArray(),
+                            Operations = (state.Operations ?? []).Select(item => item.Id == operation.Id ? item with { Stage = "failed" } : item).ToArray(),
+                        }, FleetSettingsEndpoints.Audit(http, identity, "fleet_host_reservation_recovered", operation.Id, operation.ClusterId));
+                    });
                 foreach (var source in metrics.Sources().Where(item => item.ClusterId == operation.ClusterId &&
                     item.Instance.EndsWith("-" + operation.Id[..12], StringComparison.Ordinal)))
                     metrics.Enroll(source.ClusterId, source.Instance, "revoke");
-                fleet.Change(state => FleetSettingsStore.AddAudit(state with
-                {
-                    SettingsRevision = state.SettingsRevision + 1,
-                    Credentials = state.Credentials.Select(item => item.Id == operation.ProbeCredentialId || item.Id == operation.AgentCredentialId
-                        ? item with { Revoked = true, Secret = "", Passphrase = null, Revision = item.Revision + 1 } : item).ToArray(),
-                    Operations = (state.Operations ?? []).Select(item => item.Id == operation.Id ? item with { Stage = "failed" } : item).ToArray(),
-                }, FleetSettingsEndpoints.Audit(http, identity, "fleet_host_reservation_recovered")));
                 await fleet.DrainAuditAsync(audit, cancellation);
                 return Results.Ok(new { operation.Id, stage = "failed", code = "bootstrap_reservation_recovered" });
             }
@@ -197,7 +203,7 @@ internal static class FleetBootstrapEndpoints
                 input.Connection.Address != operation.Connection.Address || input.Connection.Port != operation.Connection.Port ||
                 input.Connection.Fingerprint != operation.Connection.Fingerprint))
                 return FleetSettingsEndpoints.Failure("bootstrap_preview_invalid", 400);
-            return await Continue(operation, input.Connection, http, identity, options, fleet, registry, probe, ssh, audit, cancellation);
+            return await Continue(operation, input.Connection, http, identity, options, fleet, registry, probe, ssh, recovery, audit, cancellation);
             }
             finally { Dispatch.Release(); }
         }).WithManagedBrowserContract("managed-fleet-bootstrap-resume", typeof(FleetBootstrapResume))
@@ -206,7 +212,7 @@ internal static class FleetBootstrapEndpoints
 
     private static async Task<IResult> Continue(FleetBootstrapOperation operation, FleetBootstrapConnection? temporary,
         HttpContext http, ManagedIdentityStore identity, BrokerHostOptions options, FleetSettingsStore fleet,
-        BrokerHostStore registry, IBrokerHostProbe probe, IFleetBootstrapSsh ssh, ISecurityAuditSink audit,
+        BrokerHostStore registry, IBrokerHostProbe probe, IFleetBootstrapSsh ssh, BrokerAgentRecoveryStore recovery, ISecurityAuditSink audit,
         CancellationToken cancellation)
     {
         try
@@ -214,8 +220,12 @@ internal static class FleetBootstrapEndpoints
             if (!options.Current.Enabled || !options.Allows(operation.Connection.Address) ||
                 fleet.Credential(operation.ProbeCredentialId) is null || fleet.Credential(operation.AgentCredentialId) is null)
                 throw new BrokerHostFailure("host_access_denied");
+            if (Principal(http, identity) != operation.Principal) throw new BrokerHostFailure("host_access_denied");
             if (temporary is not null)
             {
+                fleet.Change(state => FleetSettingsStore.AddAudit(state,
+                    FleetSettingsEndpoints.Audit(http, identity, "fleet_host_preparation_dispatched", operation.Id, operation.ClusterId)));
+                await fleet.DrainAuditAsync(audit, cancellation);
                 var prepared = Parse(await ssh.CallAsync(temporary, System.Text.Encoding.UTF8.GetBytes(operation.Payload), cancellation));
                 if (prepared.Stage != "prepared") throw new BrokerHostFailure("bootstrap_preparation_unverified");
             }
@@ -231,6 +241,8 @@ internal static class FleetBootstrapEndpoints
             if (Principal(http, identity) != operation.Principal) throw new BrokerHostFailure("host_access_denied");
             var owner = FleetSettingsEndpoints.Owner(http, identity)!;
             var managed = identity.Find(owner) ?? throw new BrokerHostFailure("host_access_denied");
+            using var lease = recovery.ConfigurationLease();
+            if (recovery.Find(operation.ClusterId) is not null) throw new BrokerHostFailure("bootstrap_agent_operation_pending");
             fleet.Change(state =>
             {
                 if (state.Credentials.Any(item => item.Revoked && (item.Id == operation.ProbeCredentialId || item.Id == operation.AgentCredentialId)) ||
@@ -269,7 +281,7 @@ internal static class FleetBootstrapEndpoints
                         Bindings = [.. state.Registry.Bindings.Where(item => !bindings.Any(binding => binding.ClusterId == item.ClusterId && binding.BrokerId == item.BrokerId)), .. bindings],
                     },
                     Operations = (state.Operations ?? []).Select(item => item.Id == operation.Id ? item with { Stage = "complete", Payload = "" } : item).ToArray(),
-                }, FleetSettingsEndpoints.Audit(http, identity, "fleet_host_preparation_verified"));
+                }, FleetSettingsEndpoints.Audit(http, identity, "fleet_host_preparation_verified", operation.Id, operation.ClusterId));
             });
             await fleet.DrainAuditAsync(audit, cancellation);
             return Results.Ok(new { operation.Id, stage = "complete", targets = observation.Targets,

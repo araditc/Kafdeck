@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Kafdeck.Api;
 
+internal sealed record FleetCredentialMetadata(string Id, string Authentication, string Purpose, bool Revoked, long Revision, bool Stored);
+
 internal static class FleetSettingsEndpoints
 {
     internal static void MapFleetSettings(this WebApplication app, ManagedIdentityStore identity,
@@ -42,11 +44,12 @@ internal static class FleetSettingsEndpoints
                 configuration.LogSources is null || configuration.AgentInstallerUserIds is null ||
                 configuration.AgentTargets is null || configuration.AgentPackages is null)
                 return Failure("fleet_configuration_invalid", 400);
+            using var lease = recovery?.ConfigurationLease();
             var previous = store.Read().Configuration;
             if (recovery is not null && previous.AgentTargets.Any(target => recovery.Find(target.ClusterId) is not null &&
                 (!configuration.AgentTargets.Contains(target) || !previous.AgentPackages.All(configuration.AgentPackages.Contains))))
                 return Failure("bootstrap_agent_operation_pending");
-            store.SaveConfiguration(input, Audit(http, identity, "fleet_configuration_changed"));
+            store.SaveConfiguration(input, Audit(http, identity, "fleet_configuration_changed", "fleet-settings"));
             await store.DrainAuditAsync(audit, cancellation);
             return Results.Ok(View(store));
         }).WithManagedBrowserContract("managed-fleet-settings-write", typeof(FleetConfigurationInput))
@@ -54,7 +57,7 @@ internal static class FleetSettingsEndpoints
         group.MapPost("/credentials", async (FleetCredentialInput input, HttpContext http,
             ISecurityAuditSink audit, CancellationToken cancellation) =>
         {
-            store.SaveCredential(input, Audit(http, identity, input.Revoke ? "fleet_credential_revoked" : "fleet_credential_saved"));
+            store.SaveCredential(input, Audit(http, identity, input.Revoke ? "fleet_credential_revoked" : "fleet_credential_saved", input.Id));
             await store.DrainAuditAsync(audit, cancellation);
             return Results.Ok(View(store));
         }).WithManagedBrowserContract("managed-fleet-credential-write", typeof(FleetCredentialInput))
@@ -67,8 +70,11 @@ internal static class FleetSettingsEndpoints
         return new
         {
             revision = state.SettingsRevision, configuration = state.Configuration,
-            credentials = state.Credentials.Select(item => new
-            { item.Id, item.Authentication, item.Purpose, item.Revoked, item.Revision, stored = !item.Revoked }),
+            credentials = state.Credentials.Select(item => new FleetCredentialMetadata(
+                item.Id, item.Authentication, item.Purpose, item.Revoked, item.Revision, !item.Revoked))
+                .Concat(store.LegacyCredentials.Where(item => !state.Credentials.Any(saved => saved.Id == item.Id))
+                    .Select(item => new FleetCredentialMetadata(item.Id, item.Authentication,
+                        state.Configuration.AgentTargets.Any(target => target.CredentialId == item.Id) ? "agent" : "probe", false, 0, false))),
         };
     }
 
@@ -76,11 +82,11 @@ internal static class FleetSettingsEndpoints
         http.User.Identity is not NonBrowserReadIdentity && OperatorSessionContextFactory.TryCreate(http.User, out var session) &&
         session is not null && ManagedIdentityEndpoints.IsOwner(identity, session) ? session : null;
 
-    internal static SecurityAuditEvent Audit(HttpContext http, ManagedIdentityStore identity, string code)
+    internal static SecurityAuditEvent Audit(HttpContext http, ManagedIdentityStore identity, string code, string? resource = null, string? cluster = null)
     {
         var actor = Owner(http, identity) ?? throw new BrokerHostFailure("host_access_denied");
         return new(DateTimeOffset.UtcNow, SecurityAuditEventType.BrokerHostManagement,
-            SecurityAuditPrincipal.FromOperator(actor.Identity), Guid.NewGuid().ToString("N"), null, null,
+            SecurityAuditPrincipal.FromOperator(actor.Identity), Guid.NewGuid().ToString("N"), cluster, resource,
             SecurityAuditOutcome.Succeeded, code);
     }
 

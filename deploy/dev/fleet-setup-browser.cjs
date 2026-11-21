@@ -4,9 +4,12 @@ const {join} = require('node:path');
 const {chromium} = require('./browser-g2/node_modules/playwright');
 
 async function main() {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({args: ['--no-proxy-server']});
+  let page;
+  const failedRequests = [];
   try {
-    const page = await browser.newPage({ignoreHTTPSErrors:true});
+    page = await browser.newPage({ignoreHTTPSErrors:true});
+    page.on('response', response => {if (response.status() >= 400) failedRequests.push(new URL(response.url()).pathname + ': ' + response.status());});
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const base = process.argv[2];
@@ -74,6 +77,16 @@ async function main() {
       preparation:{id:prepared.id, stage:prepared.stage, brokerRestarted:prepared.brokerRestarted},
       lifecycle:progress, browserErrors:errors, administrativeKeyCleared:true,
     },null,2));
+  } catch (error) {
+    if (page) {
+      const directory = process.env.KAFDECK_SETUP_EVIDENCE;
+      mkdirSync(directory, {recursive:true});
+      await page.screenshot({path:join(directory, 'failure.png'), fullPage:true,
+        mask:[page.locator('#setup-host-secret'), page.locator('#setup-host-passphrase'), page.locator('#setup-host-sudo')] }).catch(() => {});
+      process.stderr.write('Page alerts: ' + JSON.stringify(await page.getByRole('alert').allTextContents()) + '\n');
+      process.stderr.write('HTTP failures: ' + JSON.stringify(failedRequests) + '\n');
+    }
+    throw error;
   } finally { await browser.close(); }
 }
 main().catch(error => {process.stderr.write(String(error.message)+'\n');process.exitCode=1;});

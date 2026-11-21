@@ -10,11 +10,12 @@ const { chromium } = require(process.env.KAFDECK_HOST_PLAYWRIGHT || './browser-g
     const errors=[]; page.on('pageerror', error => errors.push(error.message));
     await page.goto(process.argv[2]);
     await page.getByText('Register SSH host', { exact: true }).click();
-    await page.getByLabel('Host name', { exact: true }).fill('Acceptance broker host');
-    await page.getByLabel('Host IP address', { exact: true }).fill(process.env.KAFDECK_HOST_ADDRESS);
-    await page.getByLabel('SSH port', { exact: true }).fill(process.env.KAFDECK_HOST_PORT);
-    await page.getByLabel('Trusted SSH fingerprint', { exact: true }).fill(process.env.KAFDECK_HOST_PIN);
-    assert.equal(await page.locator('input[type=password]').count(),0);
+    const registration = page.getByRole('form', {name:'Register SSH host',exact:true});
+    await registration.getByLabel('Host name', { exact: true }).fill('Acceptance broker host');
+    await registration.getByLabel('Host IP address', { exact: true }).fill(process.env.KAFDECK_HOST_ADDRESS);
+    await registration.getByLabel('SSH port', { exact: true }).fill(process.env.KAFDECK_HOST_PORT);
+    await registration.getByLabel('Trusted SSH fingerprint', { exact: true }).fill(process.env.KAFDECK_HOST_PIN);
+    assert.equal(await registration.locator('input[type=password]').count(),0);
     await page.getByRole('button', { name: 'Verify and register host', exact: true }).click();
     await page.getByText('SSH host verified and registered.', { exact: true }).waitFor();
     const options = await page.locator('#binding-service option').evaluateAll(nodes => nodes.filter(n=>n.value&&!n.disabled).map(n=>({ id:n.value, broker:n.textContent.match(/Broker (\d+)$/)[1] })));

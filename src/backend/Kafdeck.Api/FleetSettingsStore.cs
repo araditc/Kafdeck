@@ -30,6 +30,7 @@ internal sealed class FleetSettingsStore
     private readonly IDataProtector _protector;
     private readonly BrokerHostOptions _legacy;
     internal string DatabasePath { get; }
+    internal BrokerHostCredential[] LegacyCredentials => _legacy.Credentials;
 
     internal FleetSettingsStore(string path, IDataProtectionProvider protection, BrokerHostOptions legacy,
         BrokerHostState initialRegistry)

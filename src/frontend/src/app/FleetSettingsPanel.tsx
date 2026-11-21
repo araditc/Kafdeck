@@ -27,6 +27,17 @@ export function FleetSettingsPanel({onSaved}: {onSaved: () => Promise<void>}) {
       }).catch(failure => { if (!control.signal.aborted) setError(failure instanceof ApiProblem ? failure.message : t('Fleet settings could not be loaded.')); });
     return () => control.abort();
   }, []);
+  useEffect(() => {
+    const changed = () => {
+      const signal = lifetime.current?.signal;
+      if (!signal || signal.aborted) return;
+      void kafdeckApi.fleetSettings(signal).then(value => {
+        if (!signal.aborted) { setSettings(value); setNetworks(value.configuration.allowedNetworks.join('\n')); }
+      }).catch(failure => { if (!signal.aborted) setError(failure instanceof ApiProblem ? failure.message : t('Fleet settings could not be loaded.')); });
+    };
+    window.addEventListener('kafdeck:fleet-settings-changed', changed);
+    return () => window.removeEventListener('kafdeck:fleet-settings-changed', changed);
+  }, []);
   async function run(work: (signal: AbortSignal) => Promise<FleetSettings>) {
     const signal = lifetime.current?.signal;
     if (!signal || signal.aborted || busy) return;
@@ -102,7 +113,7 @@ export function FleetSettingsPanel({onSaved}: {onSaved: () => Promise<void>}) {
           </fieldset>
         </form>
         <ul className="list-unstyled">{settings.credentials.map(credential => <li className="d-flex flex-wrap align-items-center gap-2 mb-3" key={credential.id}>
-          <bdi>{credential.id}</bdi><span>{credential.revoked ? t('Revoked') : t('Credential stored')}</span>
+          <bdi>{credential.id}</bdi><span>{credential.revoked ? t('Revoked') : credential.stored ? t('Credential stored') : t('Configured reference')}</span>
           <button type="button" className="btn btn-sm btn-outline-primary" disabled={busy} onClick={() => selectCredential(credential)}>{t('Replace credential')}</button>
           {!credential.revoked && <button type="button" className="btn btn-sm btn-outline-danger" disabled={busy} onClick={() => setRevoke(credential.id)}>{t('Revoke credential')}</button>}
           {revoke === credential.id && <><span role="alert">{t('Revoke access for hosts using this credential?')}</span>

@@ -1899,5 +1899,6 @@ export const messages: Readonly<Record<string, string>> = {
   "Monitoring source": "منبع مانیتورینگ",
   "Select a monitoring source": "منبع مانیتورینگ را انتخاب کنید",
   "Expected brokers: {0}": "تعداد بروکرهای مورد انتظار: {0}",
-  "Save agent target": "ذخیره مقصد عامل"
+  "Save agent target": "ذخیره مقصد عامل",
+  "Configured reference": "ارجاع تنظیم‌شده در سرور"
 };

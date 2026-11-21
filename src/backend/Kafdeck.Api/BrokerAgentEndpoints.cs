@@ -130,7 +130,7 @@ internal static class BrokerAgentEndpoints
                     if (!observed.Healthy) return Results.Conflict(new { stage = "blocked", code = "agent_restart_not_safe", health = observed });
                     if (!Authorized()) return Problem(403, "agent_install_denied");
                     if (Timestamp() >= deadline) return Problem(409, "agent_preview_expired");
-                    recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan));
+                    recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan), Authorized);
                     await Audit(audit, plan, SecurityAuditOutcome.Succeeded, "agent_dispatch_authorized", cancellation);
                     try { status = await host.CallAsync(plan.Connection, plan.Command with { Action = "apply" }, cancellation); }
                     catch (BrokerHostFailure e) when (UncertainResponse(e))

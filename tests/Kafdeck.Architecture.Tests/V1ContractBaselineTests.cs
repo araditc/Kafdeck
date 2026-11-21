@@ -62,6 +62,8 @@ public sealed class V1ContractBaselineTests
             var args = method.GetParameters().Select(p => p.ParameterType.IsInstanceOfType(app) ? (object)app :
                 p.ParameterType == typeof(KafdeckOptions) ? options : p.ParameterType == typeof(ManagedIdentityStore) ? store :
                 p.ParameterType == typeof(BrokerHostOptions) ? new BrokerHostOptions() :
+                p.ParameterType == typeof(FleetSettingsStore) ? System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(FleetSettingsStore)) :
+                p.ParameterType == typeof(IFleetBootstrapSsh) ? new FleetBootstrapSsh() :
                 p.ParameterType == typeof(BrokerHostStore) ? new BrokerHostStore(Path.Combine(Path.GetTempPath(), "kafdeck-host-contract-" + Guid.NewGuid().ToString("N"))) :
                 p.ParameterType == typeof(BrokerAgentRecoveryStore) ? new BrokerAgentRecoveryStore(Path.Combine(Path.GetTempPath(), "kafdeck-agent-contract-" + Guid.NewGuid().ToString("N"))) :
                 p.ParameterType == typeof(IBrokerHostProbe) || p.ParameterType == typeof(IBrokerLogReader) ||

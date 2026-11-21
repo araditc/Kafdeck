@@ -54,16 +54,17 @@ export function BrokerHostsPanel({ clusterId }: { clusterId: string }) {
   return <section className="card kafdeck-card p-3" aria-labelledby="broker-hosts-heading">
     <h2 id="broker-hosts-heading" className="h3">{t('Broker hosts')}</h2>
     <p className="text-secondary">{t('Register a trusted SSH host, then verify which running service belongs to each broker. This step does not change or restart Kafka.')}</p>
-    <FleetSettingsPanel onSaved={reloadRegistry} />
-    <FleetBootstrapPanel clusterId={clusterId} onSaved={reloadRegistry} />
-    <FleetAgentTargetPanel clusterId={clusterId} onSaved={reloadRegistry} />
     {error && <div className="alert alert-danger" role="alert"><bdi dir="auto">{error}</bdi></div>}
     {notice && <div className="alert alert-success" role="status">{notice}</div>}
     {!registry && !error && <p role="status">{t('Loading…')}</p>}
     {registry && <>
+    <FleetSettingsPanel onSaved={reloadRegistry} />
+    <FleetBootstrapPanel clusterId={clusterId} onSaved={reloadRegistry} />
+    <FleetAgentTargetPanel clusterId={clusterId} onSaved={reloadRegistry} />
+
       <details className="mb-3">
         <summary className="mb-3">{t('Register SSH host')}</summary>
-        <form onSubmit={e => { e.preventDefault(); void action(async signal => {
+        <form aria-label={t('Register SSH host')} onSubmit={e => { e.preventDefault(); void action(async signal => {
           const result = await kafdeckApi.registerBrokerHost(registry.revision, draft, signal);
           const state = await kafdeckApi.brokerHosts(signal);
           if (signal.aborted) return;
