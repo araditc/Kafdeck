@@ -36,8 +36,8 @@ try {
     foreach($name in $names){
         $service=Get-Service -Name $name -ErrorAction SilentlyContinue
         if(!$service){continue}
-        if($service.Status -ne 'Stopped'){Stop-Service -Name $name;$service.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(120))}
-        $service.Dispose()
+        try {if($service.Status -ne 'Stopped'){$service.Stop();$service.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(120))}}
+        finally {$service.Dispose()}
         & "$env:SystemRoot/System32/sc.exe" delete $name|Out-Null
         if($LASTEXITCODE){throw 'Windows did not remove an owned service.'}
         $deadline=[DateTime]::UtcNow.AddSeconds(20)

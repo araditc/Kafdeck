@@ -29,7 +29,7 @@ $retained=Join-Path $root 'secrets/retained.txt';[IO.File]::WriteAllText($retain
 $hash=(Get-FileHash -LiteralPath $retained).Hash
 function Invoke-SystemRemoval {
     $wrapper=Join-Path $root 'Remove-Test.ps1'
-    [IO.File]::WriteAllText($wrapper,"try { & '$root\scripts\Remove-OfflineServices.ps1' -InstallRoot '$root'; exit 0 } catch { exit 1 }")
+    [IO.File]::WriteAllText($wrapper,"try { & '$root\scripts\Remove-OfflineServices.ps1' -InstallRoot '$root'; exit 0 } catch { [IO.File]::WriteAllText('$root\fixture-error.txt',`$_.Exception.Message); exit 1 }")
     $action=New-ScheduledTaskAction -Execute "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$wrapper+'"')
     $principal=New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType ServiceAccount -RunLevel Highest
     $null=Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Force
@@ -58,12 +58,13 @@ try {
     $null=Invoke-CimMethod -InputObject $pg -MethodName Change -Arguments @{StartName='LocalSystem';StartPassword=''}
     Start-Service 'Kafdeck-PostgreSQL'
     if((Invoke-SystemRemoval) -eq 0){throw 'Wrong service owner was accepted.'}
-    foreach($name in $names){if((Get-Service $name).Status -ne 'Running'){throw 'Admission failure stopped a service.'}}
+    foreach($name in $names){$controller=Get-Service $name;try {if($controller.Status -ne 'Running'){throw 'Admission failure stopped a service.'}}finally{$controller.Dispose()}}
     if((Get-Content -LiteralPath $receiptFile -Raw|ConvertFrom-Json).phase -ne 'complete'){throw 'Admission failure modified the receipt.'}
     Stop-Service 'Kafdeck-PostgreSQL'
     $null=Invoke-CimMethod -InputObject (Get-CimInstance Win32_Service -Filter "Name='Kafdeck-PostgreSQL'") -MethodName Change -Arguments @{StartName=$account;StartPassword=''}
     Start-Service 'Kafdeck-PostgreSQL'
-    if((Invoke-SystemRemoval) -ne 0){throw 'Owned service removal failed.'}
+    [GC]::Collect();[GC]::WaitForPendingFinalizers()
+    if((Invoke-SystemRemoval) -ne 0){throw ('Owned service removal failed: '+[IO.File]::ReadAllText((Join-Path $root 'fixture-error.txt')))}
     foreach($name in $names){if(Get-Service -Name $name -ErrorAction SilentlyContinue){throw 'An owned service remains.'}}
     if((Get-FileHash -LiteralPath $retained).Hash -ne $hash -or (Get-Content -LiteralPath $receiptFile -Raw|ConvertFrom-Json).phase -ne 'services-removed'){throw 'Retained data/removal journal changed unexpectedly.'}
     if((Invoke-SystemRemoval) -ne 0){throw 'Idempotent removal resume failed.'}
