@@ -110,8 +110,17 @@ public sealed class V09W73CatalogLiveTests(ITestOutputHelper output)
             await admin.DeleteTopicsAsync([topic], new DeleteTopicsOptions { RequestTimeout = TimeSpan.FromSeconds(15) });
             while (admin.GetMetadata(TimeSpan.FromSeconds(5)).Topics.Any(t => t.Topic == topic && !t.Error.IsError)) await Task.Delay(100, token);
             await admin.CreateTopicsAsync([new TopicSpecification { Name = topic, NumPartitions = 1, ReplicationFactor = 1 }], new CreateTopicsOptions { RequestTimeout = TimeSpan.FromSeconds(15) });
-            Assert.Equal(CliApplication.Success, await lab.RunAsync(token, "catalog", "get", "permitted", "topics", topicId));
-            using (var stale = JsonDocument.Parse(lab.Output)) Assert.False(stale.RootElement.GetProperty("topicIdentityCurrent").GetBoolean());
+            // Topic creation can complete before DescribeTopics exposes the new identity.
+            // Retry only an unavailable observation. A reported current identity must fail.
+            var identityKind = JsonValueKind.Null;
+            for (var attempt = 0; attempt < 10 && identityKind == JsonValueKind.Null; attempt++)
+            {
+                Assert.Equal(CliApplication.Success, await lab.RunAsync(token, "catalog", "get", "permitted", "topics", topicId));
+                using var stale = JsonDocument.Parse(lab.Output);
+                identityKind = stale.RootElement.GetProperty("topicIdentityCurrent").ValueKind;
+                if (identityKind == JsonValueKind.Null) await Task.Delay(250, token);
+            }
+            Assert.Equal(JsonValueKind.False, identityKind);
             var rebind = await PreviewAsync("topics", [new { kind = "Topic", id = topicId, expectedRevision = 2, name = "Orders recreated", topicName = topic, rebindTopicIdentity = true, classification = "restricted" }]);
             Assert.NotEqual(imported.GetProperty("changes")[0].GetProperty("topicIdentity").GetString(), rebind.GetProperty("changes")[0].GetProperty("topicIdentity").GetString());
             await ExecuteAsync(rebind);
