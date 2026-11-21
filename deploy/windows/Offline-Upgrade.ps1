@@ -1,6 +1,23 @@
 ﻿# Windows PowerShell 5.1 transaction primitives. Service adapters are supplied by Upgrade-Offline.ps1.
 $OfflineUpgradeFolders = @('app','scripts','docs','agent','config','secrets','state','runtime','services','public')
 
+function Assert-OfflineUpgradeVendorStack([string]$Root) {
+    # The pinned Microsoft JDK reports its vendor revision in JAVA_VERSION.
+    $release = Get-Content -LiteralPath (Join-Path $Root 'runtime/java/release') -Raw
+    $versions = [regex]::Matches($release, '(?m)^JAVA_VERSION="([^"\r\n]+)"\r?$')
+    if ($versions.Count -ne 1) { throw 'Cannot read the installed Java version from runtime/java/release.' }
+    $javaVersion = $versions[0].Groups[1].Value
+    if ($javaVersion -notin @('21.0.13', '21.0.13.0.2')) {
+        throw "Unsupported installed Java version '$javaVersion'. This upgrade supports Java 21.0.13 or Microsoft 21.0.13.0.2."
+    }
+    $postgresVersion = (Get-Content -LiteralPath (Join-Path $Root 'state/postgresql/PG_VERSION') -Raw).Trim()
+    if ($postgresVersion -ne '17') { throw "Unsupported installed PostgreSQL data version '$postgresVersion'. This upgrade requires PostgreSQL 17." }
+    $keycloakLibraries = Join-Path $Root 'runtime/keycloak/lib/lib/main'
+    if (!(Get-ChildItem -LiteralPath $keycloakLibraries -File -Filter '*keycloak-core-26.8.1.jar')) {
+        throw 'Installed Keycloak core 26.8.1 was not found in runtime/keycloak/lib/lib/main. This upgrade requires Keycloak 26.8.1.'
+    }
+}
+
 function Assert-UpgradeConfiguration([object]$Settings, [string]$Root) {
     foreach ($property in $Settings.PSObject.Properties) {
         if ($null -eq $property.Value) { continue }

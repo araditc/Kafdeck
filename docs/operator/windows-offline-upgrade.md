@@ -48,3 +48,7 @@ For a fresh server use `Install-Kafdeck.ps1` and the [installation guide](window
 Windows can report a service path using different slash separators from the installer, or a local service account as `.` followed by the username. The corrected package compares equivalent paths and resolves the local account through the computer name before checking its SID.
 
 If an earlier 1.1.0 package reports `Service Kafdeck belongs to another installation/account`, obtain the corrected ZIP and matching checksum, extract into a fresh folder and run `Upgrade-Kafdeck.ps1 -VerifyOnly` as the original installation account. Then run `Upgrade-Kafdeck.ps1`. The corrected error identifies an actual path or account mismatch. Preserve the original installation and service identity when investigating a mismatch.
+
+## Bundled Microsoft Java version
+
+The included Microsoft JDK reports `JAVA_VERSION="21.0.13.0.2"`. The corrected upgrade accepts this exact vendor revision as well as the previously admitted `21.0.13`. If an earlier package rejects the installed bundled stack, extract the corrected package into a fresh folder and run `Upgrade-Kafdeck.ps1 -VerifyOnly`. Other unsupported Java versions, a different PostgreSQL data major, and a missing Keycloak 26.8.1 core remain rejected with component-specific diagnostics.

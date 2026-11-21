@@ -47,10 +47,7 @@ try {
     foreach ($folder in $OfflineUpgradeFolders) {
         if (!(Test-Path -LiteralPath (Join-Path $InstallRoot $folder) -PathType Container)) { throw "Missing installation folder $folder." }
     }
-    # This release upgrades the application while retaining the admitted vendor stack.
-    if ((Get-Content -LiteralPath (Join-Path $InstallRoot 'runtime/java/release') -Raw) -notmatch 'JAVA_VERSION="21\.0\.13"' -or
-        (Get-Content -LiteralPath (Join-Path $InstallRoot 'state/postgresql/PG_VERSION') -Raw).Trim() -ne '17' -or
-        !(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'runtime/keycloak/lib/lib/main') -Filter '*keycloak-core-26.8.1.jar')) { throw 'This package requires the admitted Java 21.0.13 / PostgreSQL 17 / Keycloak 26.8.1 stack. Use a release with an explicit vendor migration for other stacks.' }
+    Assert-OfflineUpgradeVendorStack $InstallRoot
     $settings = Get-Content -LiteralPath (Join-Path $InstallRoot 'config/appsettings.Production.json') -Raw | ConvertFrom-Json
     Assert-UpgradeConfiguration $settings $InstallRoot
     # Windows Services inherit machine configuration and the installation identity.

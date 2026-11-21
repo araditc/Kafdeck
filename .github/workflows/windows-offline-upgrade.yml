@@ -18,6 +18,9 @@ jobs:
       - name: Verify local-account and service-path ownership
         shell: powershell
         run: ./scripts/package/test-windows-service-owner.ps1
+      - name: Verify bundled vendor version detection
+        shell: powershell
+        run: ./scripts/package/test-offline-vendor-stack.ps1
       - name: Exercise upgrade, rollback, interruption and ACL copies
         shell: powershell
         run: ./scripts/package/test-offline-upgrade.ps1
