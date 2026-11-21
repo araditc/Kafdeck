@@ -52,7 +52,7 @@ async function main() {
     const evidence = process.env.KAFDECK_SETUP_EVIDENCE;
     mkdirSync(evidence, {recursive:true});
     await page.screenshot({path:join(evidence, 'fleet-prepared-' + broker.adapter + '.png'), fullPage:true});
-    await page.goto(base + '/#agent');
+    await page.goto(base + '/?view=agent#agent');
     await page.getByLabel('Offline package version').selectOption(inspected.package.version);
     const plan = await observe('Preview agent change', '/agent/preview');
     assert.ok(plan.plan && plan.health.healthy && plan.restartRequired);

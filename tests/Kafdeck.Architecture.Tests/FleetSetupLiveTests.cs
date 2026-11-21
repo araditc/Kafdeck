@@ -41,7 +41,8 @@ public sealed class FleetSetupLiveTests
         using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
         var pfx = identity.StatePath + ".pfx";
         File.WriteAllBytes(pfx, generated.Export(X509ContentType.Pfx));
-        using var certificate = X509CertificateLoader.LoadPkcs12FromFile(pfx, null, X509KeyStorageFlags.EphemeralKeySet);
+        using var certificate = X509CertificateLoader.LoadPkcs12FromFile(pfx, null,
+            OperatingSystem.IsWindows() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls(origin);
         builder.WebHost.ConfigureKestrel(server => server.ConfigureHttpsDefaults(https => https.ServerCertificate = certificate));
