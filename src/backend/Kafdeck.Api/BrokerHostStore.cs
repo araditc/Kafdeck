@@ -9,13 +9,26 @@ internal sealed record BrokerHostState(int Version, long Revision, BrokerHost[] 
 
 // Separate, versioned sidecar keeps the frozen managed-identity representation
 // compatible. Its location is beside the identity state, in the same backup scope.
-internal sealed class BrokerHostStore(string path)
+internal sealed class BrokerHostStore(string path, FleetSettingsStore? fleet = null)
 {
     private static readonly JsonSerializerOptions Json = new()
     { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
+    internal object[] AgentCredentials()
+    {
+        if (fleet is null) return [];
+        var state = fleet.Read();
+        return state.Registry.Hosts.Select(host => new
+        {
+            hostId = host.Id,
+            credentialId = (state.Operations ?? []).LastOrDefault(operation => operation.Stage == "complete" &&
+                operation.ProbeCredentialId == host.Connection.CredentialId)?.AgentCredentialId,
+        }).Cast<object>().ToArray();
+    }
+
     internal BrokerHostState Read()
     {
+        if (fleet is not null) return fleet.Read().Registry;
         try
         {
             using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
@@ -35,6 +48,13 @@ internal sealed class BrokerHostStore(string path)
 
     internal BrokerHostState Commit(long revision, Func<BrokerHostState, BrokerHostState> update, SecurityAuditEvent audit)
     {
+        if (fleet is not null)
+            return fleet.Change(current =>
+            {
+                if (revision != current.Registry.Revision) throw new BrokerHostFailure("host_revision_conflict");
+                var changed = update(current.Registry) with { Revision = checked(current.Registry.Revision + 1) };
+                return FleetSettingsStore.AddAudit(current with { Registry = changed }, audit);
+            }).Registry;
         using var lease = Lock();
         var state = Read();
         if (revision != state.Revision) throw new BrokerHostFailure("host_revision_conflict");
@@ -50,6 +70,7 @@ internal sealed class BrokerHostStore(string path)
 
     internal async Task DrainAuditAsync(ISecurityAuditSink sink, CancellationToken cancellation)
     {
+        if (fleet is not null) { await fleet.DrainAuditAsync(sink, cancellation); return; }
         using var lease = Lock();
         var state = Read();
         if (state.PendingAudit.Length == 0) return;

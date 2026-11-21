@@ -144,16 +144,24 @@ public sealed class V11BrokerHostTests
     {
         internal readonly ManagedProvisioningFixture Identity = new();
         internal readonly ProbeStub Probe = new();
-        internal BrokerHostStore Store => new(Identity.StatePath + ".hosts.json");
+        internal FleetSettingsStore? Fleet;
+        internal BrokerAgentRecoveryStore Recovery => new(Identity.StatePath + ".agent-operations.json");
+        internal BrokerHostStore Store => new(Identity.StatePath + ".hosts.json", Fleet);
         internal WebApplication App = null!;
         internal HttpClient Client = null!;
         internal ClaimsPrincipal Actor = null!;
         internal static async Task<HostFixture> Start(BrokerHostOptions? options = null, IBrokerHostProbe? probe = null,
-            IKafkaAdministrationPort? port = null, IBrokerLogReader? logReader = null, long? alertTime = null)
+            IKafkaAdministrationPort? port = null, IBrokerLogReader? logReader = null, long? alertTime = null, IFleetBootstrapSsh? bootstrap = null, bool fleet = false)
         {
             var f = new HostFixture();
             var builder = WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0");
             builder.Services.AddSingleton<ISecurityAuditSink>(f.Identity.Audit);
+            if (fleet || bootstrap is not null)
+            {
+                builder.Services.AddSingleton(TimeProvider.System);
+                builder.Services.AddSingleton(new MonitoringSettings(f.Identity.StatePath + ".monitoring", []));
+                builder.Services.AddSingleton<MonitoringStore>();
+            }
             builder.Services.AddSingleton(new ClusterExplorerService(port ?? new MetadataStub(), new KafkaSnapshotCoordinator()));
             builder.Services.AddKafdeckAntiforgery("http://127.0.0.1:0");
             f.Actor = OidcIdentityNormalizer.Normalize(new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", f.Identity.OwnerId.ToString("D"))], "oidc")), ManagedProvisioningFixture.Issuer, null, DateTimeOffset.UtcNow);
@@ -166,6 +174,17 @@ public sealed class V11BrokerHostTests
             }
             f.App.MapGet("/api/v1/clusters/test-cluster", async (ClusterExplorerService clusters) => new { data = await clusters.GetClusterAsync("test-cluster") });
             var configured = options ?? Options();
+            if (fleet || bootstrap is not null)
+            {
+                f.Fleet = new FleetSettingsStore(f.Identity.StatePath + ".fleet.sqlite",
+                    new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider(), configured, f.Store.Read());
+                configured.Runtime = f.Fleet.Options;
+                f.App.MapFleetSettings(f.Identity.Store, f.Fleet, f.Recovery);
+                if (bootstrap is not null) f.App.MapFleetBootstrap(f.Identity.Store, configured, f.Fleet, f.Store,
+                    probe ?? f.Probe, bootstrap, f.Recovery);
+                f.App.MapManagedBrowserOpenApi();
+                f.App.MapGet("/api/v1/identity/users", () => new { users = f.Identity.Store.Read().Users });
+            }
             f.App.MapBrokerHosts(f.Identity.Store, configured, f.Store, probe ?? f.Probe);
             if (logReader is not null)
             {
@@ -188,7 +207,9 @@ public sealed class V11BrokerHostTests
             f.Client.DefaultRequestHeaders.Add(KafdeckAntiforgeryExtensions.HeaderName, csrf!.RootElement.GetProperty("requestToken").GetString());
             return f;
         }
-        public async ValueTask DisposeAsync() { Client.Dispose(); await App.StopAsync(); await App.DisposeAsync(); Identity.Dispose(); }
+        public async ValueTask DisposeAsync() { Client.Dispose(); await App.StopAsync(); await App.DisposeAsync();
+            if (Fleet is not null) V11BrokerAgentTests.ClearMonitoringPool(Identity.StatePath + ".monitoring");
+            Identity.Dispose(); }
     }
 
     private sealed class MetadataStub : IKafkaAdministrationPort

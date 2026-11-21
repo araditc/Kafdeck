@@ -424,3 +424,8 @@ The product owner authorized signing the reviewed `1.0.0-rc.1` manifest in the r
 The owner approved signing the stable manifest `0cefda57cdef623f96739439b426a60321727ffebff2c1e4509feccc5a3f75bc` from product source `0617a87ddc176b8255ca1452fc53c097008d9a51`. Signing and network-isolated verification succeeded in [run 44134707888](https://github.com/araditc/Kafdeck/actions/runs/44134707888).
 
 The owner subsequently authorized official publication of this exact signed 1.0.0 distribution, finalizing its publication procedure on main, checking the tag, Release assets and registry digests, synchronizing local main and closing V1-7. The [stable publication decision](../releases/v1.0-stable-publication-decision.md) records the exact input and procedure. Product acceptance evidence is reused with its recorded identities and limits.
+
+
+## Fleet dashboard onboarding design — 2026-11-21
+
+The product owner explicitly authorized the complete proposal to move host networking, permissions and SSH onboarding into Fleet, persist credentials only as encrypted database values with keys outside the database, use temporary administrative access for restricted host preparation, and retain Linux/systemd without Docker and Docker Compose support. [RFC-0012](../rfcs/0012-fleet-dashboard-onboarding.md) records the accepted boundary. Implementation, specialist review and exact-head CI admission remain required. This decision does not authorize a new signed release or alter immutable 1.1.0 evidence.

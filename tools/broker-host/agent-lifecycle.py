@@ -133,10 +133,40 @@ def require_runtime_mount(observed, runtime, probe):
             'agent_runtime_mount_not_read_only')
 
 
-def installed_files(directory, runtime, pid):
+def pending_preparation(settings, observed):
+    prepared = settings.get('bootstrap')
+    if not prepared or prepared.get('instance') != observed['instance']:
+        return None
+    configuration = protected(Path(prepared['configurationPath']))
+    require(sha(read_file(configuration, 65536)) == prepared['configurationSha256'],
+            'agent_preparation_changed')
+    if observed['adapter'] == 'systemd':
+        require(str(configuration) == '/etc/systemd/system/' + observed['unit'] + '.d/90-kafdeck-agent.conf',
+                'agent_preparation_changed')
+    else:
+        require(prepared['project'] == observed['project'] and prepared['service'] == observed['service'] and
+                NAME.fullmatch(prepared['project']) and NAME.fullmatch(prepared['service']),
+                'agent_preparation_changed')
+        for source in prepared['sourceFiles']:
+            path = Path(source['path'])
+            require(path.is_absolute() and path.resolve() == path and path.stat().st_size <= 4 * 1024 * 1024 and
+                    sha(read_file(path, 4 * 1024 * 1024)) == source['sha256'], 'agent_compose_configuration_changed')
+    return prepared
+
+
+def prepared_restart(prepared):
+    command = ['/usr/bin/docker', 'compose', '--project-name', prepared['project'],
+               '--project-directory', prepared['workingDirectory']]
+    for path in [*prepared['composeFiles'], prepared['configurationPath']]:
+        command.extend(['-f', path])
+    return [*command, 'up', '-d', '--no-deps', '--force-recreate', prepared['service']]
+
+
+def installed_files(directory, runtime, pid, prepared=False):
     in_namespace = Path('/proc') / str(pid) / 'root' / runtime.lstrip('/')
-    require(in_namespace.stat().st_ino == directory.stat().st_ino and
-            in_namespace.stat().st_dev == directory.stat().st_dev, 'agent_directory_not_mounted')
+    if not prepared:
+        require(in_namespace.stat().st_ino == directory.stat().st_ino and
+                in_namespace.stat().st_dev == directory.stat().st_dev, 'agent_directory_not_mounted')
     properties = read_file(protected(directory / PROPERTIES), 16384)
     token_lines = [line.split('=', 1)[1].strip() for line in properties.decode('utf-8').splitlines()
                    if '=' in line and line.split('=', 1)[0].strip() == 'tokenFile']
@@ -151,7 +181,7 @@ def installed_files(directory, runtime, pid):
     java_options = [line.split('=', 1)[1] for line in read_file(process / 'environ', 262144).decode('utf-8').split('\0')
                     if line.startswith('JDK_JAVA_OPTIONS=')]
     direct = [item for item in arguments if item.startswith(f'-javaagent:{runtime}/')]
-    argfile_enabled = len(java_options) == 1 and shlex.split(java_options[0]).count(f'@{runtime}/{ARGS}') == 1
+    argfile_enabled = prepared or len(java_options) == 1 and shlex.split(java_options[0]).count(f'@{runtime}/{ARGS}') == 1
     require(direct == [arg] and not argfile_enabled or not direct and argfile_enabled, 'agent_launch_integration_missing')
     saved_args = read_file(protected(directory / ARGS), 4096).decode('ascii').strip() if argfile_enabled else None
     require(saved_args in (None, '', arg), 'agent_launch_integration_changed')
@@ -218,8 +248,12 @@ def handle(catalog, request, probe):
                 'agent_previous_operation_pending')
         package = admitted_package(catalog, request['version'], request['digest'])
         observed, pid, restart = process(service, request, probe)
-        require_runtime_mount(observed, runtime, probe)
-        digest, mode, args, argument = installed_files(directory, runtime, pid)
+        preparation = pending_preparation(settings, observed)
+        if preparation and observed['adapter'] == 'compose':
+            restart = prepared_restart(preparation)
+        if not preparation:
+            require_runtime_mount(observed, runtime, probe)
+        digest, mode, args, argument = (installed_files(directory, runtime, pid, True) if preparation else installed_files(directory, runtime, pid))
         publishing = state is not None and state['phase'] == 'publishing'
         if publishing:
             plan = journal_plan(request)
@@ -248,7 +282,11 @@ def handle(catalog, request, probe):
         if args == '':
             atomic(directory / ARGS, (argument + '\n').encode('ascii'), 0o644)
         rechecked, _, restart_now = process(service, request, probe)
-        require(observed == rechecked and restart_now == restart and time.time() < request['applyUntil'], 'agent_preview_stale')
+        rechecked_preparation = pending_preparation(settings, rechecked)
+        if rechecked_preparation and rechecked['adapter'] == 'compose':
+            restart_now = prepared_restart(rechecked_preparation)
+        require(observed == rechecked and rechecked_preparation == preparation and restart_now == restart and
+                time.time() < request['applyUntil'], 'agent_preview_stale')
         # At this point a lost result cannot prove whether the service manager
         # accepted the restart. Keep the intent and never dispatch it twice.
         state_write(directory, plan, 'intent', int(time.time()))
