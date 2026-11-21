@@ -101,7 +101,8 @@ def build(args):
     subprocess.run(['python', str(REPO / 'tools/kafka-agent/build.py'), '--jdk', str(args.jdk), '--output', str(agent / 'kafdeck-kafka-agent.jar')], check=True)
     shutil.copyfile(REPO / 'tools/kafka-agent/agent.properties.example', agent / 'agent.properties.example')
     shutil.copytree(REPO / 'tools/kafka-agent', agent / 'source', ignore=shutil.ignore_patterns('__pycache__'))
-    shutil.copytree(REPO / 'deploy/windows', payload / 'scripts')
+    # The GUI is built separately and embeds this medium; never recursively package its build/cache.
+    shutil.copytree(REPO / 'deploy/windows', payload / 'scripts', ignore=shutil.ignore_patterns('gui', 'bin', 'obj'))
     docs = payload / 'docs'
     docs.mkdir()
     if version == '1.0.0':

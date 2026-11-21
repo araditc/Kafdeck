@@ -1,0 +1,42 @@
+name: windows-graphical-setup
+on:
+  pull_request:
+    paths: ['deploy/windows/**', 'tests/Kafdeck.Setup.Tests/**', 'scripts/package/*setup*', '.github/workflows/windows-graphical-setup.yml']
+  push:
+    branches: [main]
+    paths: ['deploy/windows/**', 'tests/Kafdeck.Setup.Tests/**', 'scripts/package/*setup*', '.github/workflows/windows-graphical-setup.yml']
+permissions:
+  contents: read
+jobs:
+  setup:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: csharp
+          build-mode: manual
+      - name: Test exact input inventory and unsafe paths
+        run: python -B -m unittest discover -s scripts/package -p test_windows_setup.py -v
+      - name: Build elevated wizard and test language, acceptance and extraction guards
+        run: |
+          dotnet build deploy/windows/gui/Kafdeck.Setup.csproj -c Release -p:RestoreLockedMode=true -m:1 /nr:false
+          dotnet test tests/Kafdeck.Setup.Tests/Kafdeck.Setup.Tests.csproj -c Release -p:RestoreLockedMode=true -m:1 /nr:false --logger "trx;LogFileName=setup.trx" --results-directory artifacts/setup-tests
+      - name: Exercise real owned Windows service removal and retained data
+        shell: powershell
+        run: ./scripts/package/test-setup-service-removal.ps1
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          category: /csharp-windows-setup
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: graphical-setup-tests
+          path: artifacts/setup-tests/*.trx
+          if-no-files-found: ignore
