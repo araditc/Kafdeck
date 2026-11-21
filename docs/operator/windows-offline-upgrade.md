@@ -22,7 +22,7 @@ For an installation in another directory, supply `-InstallRoot D:\Kafdeck`. Use 
 6. Restores automatic startup, starts PostgreSQL, Keycloak and Kafdeck, then verifies HTTPS, identity discovery, the first-owner state and the installed application hashes.
 7. Records the installed package/version and prints the dashboard URL and backup directory.
 
-The script updates Kafdeck to **1.1.0** with the existing **Java 21.0.13, PostgreSQL 17 and Keycloak 26.8.1** installation. Vendor major-version migrations need a release-specific migration implementation. The script checks eligibility before stopping services. Customized external databases or state outside the installation directory require a corresponding backup/migration implementation.
+The script updates Kafdeck to **1.1.0** with the existing **a Keycloak-compatible Java 17, 21 or 25, PostgreSQL 17 and Keycloak 26.8.1** installation. Vendor major-version migrations need a release-specific migration implementation. The script checks eligibility before stopping services. Customized external databases or state outside the installation directory require a corresponding backup/migration implementation.
 
 ## Failure and power loss
 
@@ -48,3 +48,7 @@ For a fresh server use `Install-Kafdeck.ps1` and the [installation guide](window
 Windows can report a service path using different slash separators from the installer, or a local service account as `.` followed by the username. The corrected package compares equivalent paths and resolves the local account through the computer name before checking its SID.
 
 If an earlier 1.1.0 package reports `Service Kafdeck belongs to another installation/account`, obtain the corrected ZIP and matching checksum, extract into a fresh folder and run `Upgrade-Kafdeck.ps1 -VerifyOnly` as the original installation account. Then run `Upgrade-Kafdeck.ps1`. The corrected error identifies an actual path or account mismatch. Preserve the original installation and service identity when investigating a mismatch.
+
+## Bundled Microsoft Java version
+
+The included Microsoft JDK reports `JAVA_VERSION="21.0.13.0.2"`. The corrected upgrade accepts stable Java 17, 21 and 25 releases, including older patch levels and vendor revisions. These are the [OpenJDK branches supported by Keycloak 26.8.1](https://github.com/keycloak/keycloak/blob/26.8.1/docs/guides/server/supported-configurations.adoc). The upgrade keeps the existing Java runtime. If an earlier package rejects the installed bundled stack, extract the corrected package into a fresh folder and run `Upgrade-Kafdeck.ps1 -VerifyOnly`. Other unsupported Java versions, a different PostgreSQL data major, and a missing Keycloak 26.8.1 core remain rejected with component-specific diagnostics.
