@@ -28,7 +28,7 @@ export interface BrokerAgentProgress {
     'awaitingHealth' | 'reconcile' | 'complete' | 'alreadyInstalled' | 'expired';
   version?: string | null; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
   requiresRenewal?: boolean;
-  processStartedAt?: number; monitoringInstance?: string; health?: BrokerAgentHealth;
+  processStartedAt?: number; javaObservedAt?: number | null; monitoringInstance?: string; health?: BrokerAgentHealth;
   lastConfirmed?: 'DispatchAuthorized' | 'PackagePublishing' | 'RestartIntent' | 'RestartObserved' | 'KafkaHealthy' | null;
 }
 

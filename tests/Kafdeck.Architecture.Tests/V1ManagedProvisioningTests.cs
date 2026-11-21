@@ -203,10 +203,21 @@ internal sealed class ManagedProvisioningFixture : IDisposable
     internal ManagedIdentityEndpoints.NewUserInput Input { get; } = new("new@example.test", "Temporary-password-123!", "viewer", [], Guid.NewGuid());
     internal ManagedUserProvisioningService Service => new(Store, Client, Audit, ["fixture"]);
     internal ManagedUserProvisioningService Restart() => new(new ManagedIdentityStore(StatePath, Issuer), Client, Audit, ["fixture"]);
-    internal ManagedProvisioningFixture()
+    internal bool RetainState;
+    internal ManagedProvisioningFixture(string? reuseDirectory = null)
     {
+        if (reuseDirectory is not null)
+        {
+            var resolved = Path.GetFullPath(reuseDirectory);
+            if (!resolved.StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFileName(resolved).StartsWith("kafdeck-g01-", StringComparison.Ordinal))
+                throw new InvalidOperationException("Unexpected reuse fixture path.");
+            DirectoryPath = resolved;
+        }
         Directory.CreateDirectory(DirectoryPath);
-        Store.Write(new(Issuer, OwnerId, false, null, default, [new(OwnerId, "owner@example.test", "owner", [], true, default)]));
+        if (reuseDirectory is null)
+            Store.Write(new(Issuer, OwnerId, false, null, default, [new(OwnerId, "owner@example.test", "owner", [], true, default)]));
+        else OwnerId = Store.Read().OwnerId ?? throw new InvalidOperationException("Reusable fixture has no owner.");
         Owner = new(new(new(Issuer, OwnerId.ToString("D"))), new SessionId(Guid.NewGuid()), DateTimeOffset.UtcNow);
         Client = new(new HttpClient(Provider), Issuer, "provisioner", "fixture-secret");
     }
@@ -224,6 +235,7 @@ internal sealed class ManagedProvisioningFixture : IDisposable
     public void Dispose()
     {
         Client.Dispose(); HealStateWrites();
+        if (RetainState) return;
         if (!Path.GetFullPath(DirectoryPath).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Unexpected fixture path.");
         Directory.Delete(DirectoryPath, recursive: true);

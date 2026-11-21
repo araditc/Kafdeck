@@ -6157,6 +6157,13 @@
             "minimum": 0,
             "format": "int64"
           },
+          "javaObservedAt": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0, "format": "int64" },
+              { "type": "null" }
+            ],
+            "description": "Trusted SSH observation of the verified Kafka JVM; bounds delayed Compose exec startup. Optional for older helpers."
+          },
           "dispatchedAt": {
             "anyOf": [
               {

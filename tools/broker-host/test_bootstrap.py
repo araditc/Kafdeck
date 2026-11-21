@@ -91,6 +91,33 @@ class BootstrapTests(unittest.TestCase):
                 with self.assertRaisesRegex(agent.Rejected, 'agent_compose_configuration_changed'):
                     agent.pending_preparation({'bootstrap': prepared}, observed)
 
+    def test_prepared_compose_restart_uses_only_the_root_snapshot_without_pull_or_build(self):
+        prepared = {'project': 'pilot', 'workingDirectory': '/srv/pilot', 'service': 'broker',
+                    'composeFiles': [], 'configurationPath': '/etc/kafdeck/prepared/pilot.json'}
+        command = agent.prepared_restart(prepared)
+        self.assertIn('--no-deps', command)
+        self.assertIn('--no-build', command)
+        self.assertEqual('never', command[command.index('--pull') + 1])
+        self.assertEqual('/etc/kafdeck/prepared/pilot.json', command[command.index('-f') + 1])
+        self.assertEqual('broker', command[-1])
+
+    def test_java_observation_is_emitted_only_after_the_verified_replacement_process(self):
+        state = {'phase': 'intent', 'dispatchedAt': 99, 'plan': {
+            'operationId': 'a'*32, 'version': '1.1.0', 'digest': 'b'*64, 'instance': 'old:10'}}
+        observed = {'instance': 'new:2000'}
+        with patch.object(agent, 'process', return_value=(observed, 2, [])), \
+             patch.object(agent, 'require_runtime_mount'), \
+             patch.object(agent, 'installed_files', return_value=('b'*64, 'argfile', 'same', 'same')), \
+             patch.object(agent.Path, 'read_text', return_value='btime 100\n'), \
+             patch.object(agent.os, 'sysconf', return_value=100), \
+             patch.object(agent.time, 'time', return_value=180):
+            result = agent.status(Path('/fixed'), '/runtime', {}, {'operationId': 'a'*32}, {}, state)
+            self.assertEqual(120, result['processStartedAt'])
+            self.assertEqual(180, result['javaObservedAt'])
+            self.assertEqual('restartObserved', result['stage'])
+            observed['instance'] = 'old:10'
+            self.assertNotIn('javaObservedAt', agent.status(Path('/fixed'), '/runtime', {}, {'operationId': 'a'*32}, {}, state))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -65,8 +65,8 @@ public sealed class FleetSetupTests
         Assert.Equal("pending", result!.RootElement.GetProperty("stage").GetString());
         Assert.Empty(f.Store.Read().Bindings);
         var operation = Assert.Single(f.Fleet!.Read().Operations!);
-        Assert.DoesNotContain(Connection.Secret, JsonSerializer.Serialize(f.Fleet.Read()));
-        Assert.DoesNotContain(Connection.SudoPassword!, JsonSerializer.Serialize(f.Fleet.Read()));
+        Assert.False(JsonSerializer.Serialize(f.Fleet.Read()).Contains(Connection.Secret, StringComparison.Ordinal));
+        Assert.False(JsonSerializer.Serialize(f.Fleet.Read()).Contains(Connection.SudoPassword!, StringComparison.Ordinal));
         Assert.DoesNotContain(Connection.Secret, Encoding.UTF8.GetString(File.ReadAllBytes(f.Fleet.DatabasePath)));
         remote.ReceiptReadable = true;
         using var resumed = await f.Client.PostAsJsonAsync("/api/v1/fleet/bootstrap/resume", new FleetBootstrapResume(operation.Id, null));

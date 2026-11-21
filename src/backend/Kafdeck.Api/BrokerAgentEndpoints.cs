@@ -166,18 +166,22 @@ internal static class BrokerAgentEndpoints
                         lastConfirmed = Checkpoint(), requiresRenewal = status.Stage == "publishing" && Timestamp() >= deadline });
                 if (status.ProcessStartedAt is not { } started || status.DispatchedAt is not { } dispatched ||
                     started < dispatched - 2 || started > Timestamp() + 2 || status.Digest != plan.Package.Digest ||
+                    status.JavaObservedAt is { } javaTime && (javaTime < started || javaTime > Timestamp() + 2) ||
                     status.Version != plan.Package.Version)
                     return Problem(409, "agent_restart_evidence_invalid");
+                // A successful fixed SSH status verifies the replacement Kafka JVM before
+                // this reply arrives. Its receipt time is a trusted upper bound for old helpers.
+                var javaObservedAt = status.JavaObservedAt ?? Timestamp();
                 Advance(BrokerAgentCheckpoint.RestartObserved);
                 var recovered = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, false, cancellation);
                 if (!Authorized()) return Problem(403, "agent_install_denied");
                 if (!recovered.Healthy)
-                    return Results.Ok(new { stage = "awaitingHealth", operationId, processStartedAt = started,
+                    return Results.Ok(new { stage = "awaitingHealth", operationId, processStartedAt = started, javaObservedAt,
                         dispatchedAt = dispatched, lastConfirmed = Checkpoint(), health = recovered });
                 Advance(BrokerAgentCheckpoint.KafkaHealthy);
-                var seen = metrics.AgentMetricAfter(plan.ClusterId, plan.Target.MonitoringInstance, started, plan.CreatedAt);
+                var seen = metrics.AgentMetricAfter(plan.ClusterId, plan.Target.MonitoringInstance, started, plan.CreatedAt, javaObservedAt);
                 if (seen is null)
-                    return Results.Ok(new { stage = "awaitingMetrics", operationId, processStartedAt = started,
+                    return Results.Ok(new { stage = "awaitingMetrics", operationId, processStartedAt = started, javaObservedAt,
                         dispatchedAt = dispatched, lastConfirmed = Checkpoint(),
                         monitoringInstance = plan.Target.MonitoringInstance, health = recovered });
                 if (status.Stage == "restartObserved")
@@ -189,7 +193,7 @@ internal static class BrokerAgentEndpoints
                 }
                 recovery.Finish(plan.ClusterId, plan.Command.OperationId);
                 return Results.Ok(new { stage = "complete", operationId = plan.Command.OperationId, status.Version,
-                    status.Digest, dispatchedAt = dispatched, processStartedAt = started, metricSeenAt = seen,
+                    status.Digest, dispatchedAt = dispatched, processStartedAt = started, javaObservedAt, metricSeenAt = seen,
                     monitoringInstance = plan.Target.MonitoringInstance, health = recovered });
             }
             finally { dispatch.Release(); }

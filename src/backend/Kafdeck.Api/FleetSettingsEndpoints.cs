@@ -96,6 +96,7 @@ internal static class FleetSettingsEndpoints
             "host_access_denied" => "Only the installation administrator can manage Fleet setup.",
             "bootstrap_sudo_password_required" => "This account requires its sudo password for the fixed setup helper.",
             "bootstrap_cluster_identity_unavailable" => "No running broker on this host could be verified against the selected Kafka cluster.",
+            "bootstrap_compose_configuration_changed" => "Compose configuration on disk differs from the running service. Reconcile the deployment before preparing the agent.",
             "bootstrap_service_changed" => "A selected service changed since inspection. Inspect the host again before preparing it.",
             "bootstrap_agent_operation_pending" => "Finish or reconcile the current agent operation before changing its target or packages.",
             "bootstrap_existing_agent_requires_adoption" => "An existing agent uses a different launch configuration. Register its existing restricted access and use the agent target selector to upgrade it safely.",

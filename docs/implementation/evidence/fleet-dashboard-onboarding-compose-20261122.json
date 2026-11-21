@@ -1,0 +1,53 @@
+{
+  "observedOnLocalDate": "2026-11-22",
+  "environment": "isolated Docker Compose pilot on Arad Office",
+  "authentication": "owner acceptance fixture; production UI components and APIs",
+  "transport": "pilot-only SSH relay, end-to-end TLS",
+  "scope": "same pending operation resumed; no additional apply or broker restart",
+  "operation": {
+    "operationId": "6ae56bc2f4de4c339716e2f243f2238b",
+    "version": "1.1.0",
+    "digest": "07e8733d4fbbbe333666179e0371a9962c0447e472e777340f960ab09e392e8c",
+    "dispatchedAt": 1795287936,
+    "processStartedAt": 1795287941,
+    "javaObservedAt": 1795295684,
+    "metricSeenAt": 1795295680,
+    "health": {
+      "healthy": true,
+      "brokerCount": 2,
+      "topics": 1,
+      "affectedPartitions": 3,
+      "blockedPartitions": []
+    }
+  },
+  "freshKafkaAndJvmMetrics": true,
+  "sharedHostHelperChanged": false,
+  "operationalBrokersChanged": false,
+  "linuxHelperTests": 8,
+  "readOnlySnapshotValidation": {
+    "actualComposeConfigMatched": true,
+    "imagePinnedToRunningId": true,
+    "pullDisabled": true,
+    "readOnlyAgentMount": true,
+    "sourceDriftRejected": true,
+    "snapshotWriteWasIntercepted": true,
+    "privilegedChanges": false,
+    "restartOrApply": false
+  },
+  "focusedDotnetTests": 14,
+  "agentApiCompatibilityTests": 5,
+  "contractBaselineTests": 2,
+  "typeScript": "passed",
+  "testedProductionFiles": {
+    "src/backend/Kafdeck.Api/BrokerAgentEndpoints.cs": "6d3057ac7aedaef03220ac0213c98f9f4d4fca18db0c19cd3d894e34238a85d3",
+    "src/backend/Kafdeck.Api/MonitoringStore.cs": "9ce62309f40359fc6c4ae2011c89482895f86f1f5978635a8a6e1eb63caeb761",
+    "src/backend/Kafdeck.Api/BrokerAgentModels.cs": "c92af3da3bd574d7944269a6a623e777b4fedd3583afd5d5b07b2eddc1dc0261",
+    "tools/broker-host/bootstrap.py": "cb30e4c1f357333c440b7e2e03364cfe76abe89322826fecea34ff1cd27f90fd",
+    "tools/broker-host/agent-lifecycle.py": "6b2c39daf65aa03ef622a6a0714454206bd92ebb2327fdf0054803fbf8c4daff"
+  },
+  "limitations": [
+    "The private fixture and raw operational snapshots are not published.",
+    "The snapshot generation check intercepted writes; no root snapshot was installed by that check.",
+    "Exact-head systemd and protected-main CI admission remains tracked by PR #514."
+  ]
+}

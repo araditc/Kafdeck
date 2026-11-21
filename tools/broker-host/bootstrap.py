@@ -127,7 +127,7 @@ def service_inventory(probe):
     return observed
 
 
-def install_account(user, home, entry, helper, public_key):
+def install_account(user, home, entry, helper, public_key, operation=None):
     require(re.fullmatch(r'ssh-rsa [A-Za-z0-9+/=]+', public_key), 'bootstrap_public_key_invalid')
     try:
         account = pwd.getpwnam(user)
@@ -142,6 +142,9 @@ def install_account(user, home, entry, helper, public_key):
     previous = authorized.read_text().splitlines() if authorized.exists() else []
     require(all(not line or line.startswith(prefix) for line in previous), 'bootstrap_account_conflict')
     line = prefix + public_key
+    if operation is not None:
+        require(re.fullmatch(r'[a-f0-9]{32}', operation), 'bootstrap_operation_invalid')
+        line += ' kafdeck-fleet-' + operation + '-' + user
     atomic(authorized, ('\n'.join(dict.fromkeys([*previous, line])) + '\n').encode())
     rule = user + ' ALL=(root) NOPASSWD: ' + helper + ' ""'
     if user == 'kafdeck-probe':
@@ -167,7 +170,10 @@ def prepare_launch(target, host_directory, runtime, probe):
             'bootstrap_existing_agent_requires_adoption')
     require('\n' not in old_options and '\r' not in old_options and len(old_options) <= 8192,
             'bootstrap_java_options_invalid')
-    new_options = shlex.join([*shlex.split(old_options), '@' + runtime + '/jvm.args'])
+    options = shlex.split(old_options)
+    hook = '@' + runtime + '/jvm.args'
+    require(options.count(hook) <= 1, 'bootstrap_java_options_invalid')
+    new_options = shlex.join(options if hook in options else [*options, hook])
     gid = next(int(line.split()[2]) for line in (Path('/proc') / str(pid) / 'status').read_text().splitlines()
                if line.startswith('Gid:'))
     prepared = {'instance': observed['instance']}
@@ -192,16 +198,39 @@ def prepare_launch(target, host_directory, runtime, probe):
         if (working / '.env').exists():
             sources.append(working / '.env')
         require(all(path.stat().st_size <= 4 * 1024 * 1024 for path in sources), 'bootstrap_compose_configuration_unavailable')
+        source_hashes = [{'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in sources]
+        base = ['/usr/bin/docker', 'compose', '--project-name', target['project'], '--project-directory', str(working)]
+        for file in files:
+            base.extend(['-f', file])
+        actual_hash = command([*base, 'config', '--hash', target['service']]).split()
+        require(len(actual_hash) == 2 and actual_hash[0] == target['service'] and
+                actual_hash[1] == labels.get('com.docker.compose.config-hash'), 'bootstrap_compose_configuration_changed')
+        resolved = json.loads(command([*base, 'config', '--format', 'json']))
+        require(all(hashlib.sha256(Path(item['path']).read_bytes()).hexdigest() == item['sha256']
+                    for item in source_hashes), 'bootstrap_compose_configuration_changed')
+        selected = resolved['services'][target['service']]
+        selected.setdefault('environment', {})['JDK_JAVA_OPTIONS'] = new_options
+        selected.setdefault('volumes', []).append({'type': 'bind', 'source': str(host_directory), 'target': runtime, 'read_only': True})
+        selected['image'] = details['Image']
+        selected['pull_policy'] = 'never'
+        # Run only an admitted, root-owned snapshot. Never reread user-writable Compose
+        # inputs during privileged recreation. Escape interpolation in resolved literals.
+        def literal(value):
+            if isinstance(value, str):
+                return value.replace('$', '$$')
+            if isinstance(value, list):
+                return [literal(item) for item in value]
+            if isinstance(value, dict):
+                return {key: literal(item) for key, item in value.items()}
+            return value
         directory(Path('/etc/kafdeck/compose'))
         path = Path('/etc/kafdeck/compose') / (target['id'] + '.json')
-        content = json.dumps({'services': {target['service']: {
-            'environment': {'JDK_JAVA_OPTIONS': new_options},
-            'volumes': [str(host_directory) + ':' + runtime + ':ro']}}}, sort_keys=True).encode()
+        content = json.dumps(literal(resolved), sort_keys=True).encode()
         if path.exists():
             require(path.read_bytes() == content, 'bootstrap_launch_configuration_conflict')
-        atomic(path, content)
-        prepared.update(composeFiles=files, workingDirectory=str(working), project=target['project'], service=target['service'],
-                        sourceFiles=[{'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in sources])
+        atomic(path, content, 0o600)
+        prepared.update(composeFiles=[], workingDirectory=str(working), project=target['project'], service=target['service'],
+                        sourceFiles=source_hashes)
     prepared.update(configurationPath=str(path), configurationSha256=hashlib.sha256(content).hexdigest())
     return prepared, gid
 
@@ -234,14 +263,14 @@ def apply(payload, probe):
                                   ('agent-lifecycle.py', 'kafdeck-agent-lifecycle'), ('agent-entry.sh', 'kafdeck-agent-entry')):
             atomic(Path('/usr/local/libexec') / installed, base64.b64decode(payload['files'][source], validate=True), 0o755)
         install_account('kafdeck-probe', Path('/var/lib/kafdeck-probe'), '/usr/local/libexec/kafdeck-host-entry',
-                        '/usr/local/libexec/kafdeck-host-probe', payload['probePublicKey'])
+                        '/usr/local/libexec/kafdeck-host-probe', payload['probePublicKey'], operation)
         install_account('kafdeck-agent', Path('/var/lib/kafdeck-agent-ssh'), '/usr/local/libexec/kafdeck-agent-entry',
-                        '/usr/local/libexec/kafdeck-agent-lifecycle', payload['agentPublicKey'])
+                        '/usr/local/libexec/kafdeck-agent-lifecycle', payload['agentPublicKey'], operation)
         host_catalog = read_catalog(Path('/etc/kafdeck/host-targets.json'), {'version': 1, 'targets': []})
         selected = {target['id'] for target in payload['targets']}
         entries = [target for target in host_catalog['targets'] if target['id'] not in selected]
         for target in payload['targets']:
-            entries.append({key: target[key] for key in ('id', 'adapter', 'unit', 'project', 'service') if target.get(key) is not None} | {'logs': True})
+            entries.append(dict({key: target[key] for key in ('id', 'adapter', 'unit', 'project', 'service') if target.get(key) is not None}, logs=True))
         require(len(entries) <= 32, 'bootstrap_service_limit')
         atomic(Path('/etc/kafdeck/host-targets.json'), json.dumps({'version': 1, 'targets': entries}).encode())
         directory(Path('/var/lib/kafdeck-agent'))

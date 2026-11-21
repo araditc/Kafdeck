@@ -159,7 +159,7 @@ def prepared_restart(prepared):
                '--project-directory', prepared['workingDirectory']]
     for path in [*prepared['composeFiles'], prepared['configurationPath']]:
         command.extend(['-f', path])
-    return [*command, 'up', '-d', '--no-deps', '--force-recreate', prepared['service']]
+    return [*command, 'up', '-d', '--no-deps', '--force-recreate', '--pull', 'never', '--no-build', prepared['service']]
 
 
 def installed_files(directory, runtime, pid, prepared=False):
@@ -219,6 +219,9 @@ def status(directory, runtime, service, request, probe, state):
                 # Linux process start in UTC, for matching JVM StartTime metrics.
                 boot = next(int(line.split()[1]) for line in Path('/proc/stat').read_text().splitlines() if line.startswith('btime '))
                 result['processStartedAt'] = boot + int(observed['instance'].split(':')[-1]) // os.sysconf('SC_CLK_TCK')
+                # Compose can execute kafka.Kafka long after its PID was born as a shell.
+                # This trusted observation bounds the JVM start without assuming a fixed startup delay.
+                result['javaObservedAt'] = int(time.time())
             else:
                 result['stage'] = 'awaitingRestart'
         except (OSError, ValueError, subprocess.SubprocessError):

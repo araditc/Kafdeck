@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
@@ -27,7 +28,14 @@ public sealed class FleetSetupLiveTests
     {
         string Env(string name) => Environment.GetEnvironmentVariable("KAFDECK_SETUP_" + name)
             ?? throw new InvalidOperationException("Missing setup fixture setting " + name);
-        using var identity = new ManagedProvisioningFixture();
+        var reuse = Environment.GetEnvironmentVariable("KAFDECK_SETUP_REUSE_DIRECTORY");
+        using var identity = new ManagedProvisioningFixture(reuse)
+        { RetainState = Environment.GetEnvironmentVariable("KAFDECK_SETUP_KEEP_STATE") == "1" };
+        if (identity.RetainState)
+        {
+            Directory.CreateDirectory(Env("EVIDENCE"));
+            File.WriteAllText(Path.Combine(Env("EVIDENCE"), "private-fixture-path.txt"), identity.DirectoryPath);
+        }
         var origin = Environment.GetEnvironmentVariable("KAFDECK_SETUP_ORIGIN") ?? "https://127.0.0.1:18090";
         var profile = new ClusterProfile("test-cluster", Env("KAFKA").Split(','), KafkaSecurityProtocol.Plaintext, null, null);
         var options = new KafdeckOptions(new DeploymentOptions(origin, null, AccessMode.Oidc, null), [profile]);
@@ -35,17 +43,19 @@ public sealed class FleetSetupLiveTests
         using var rsa = RSA.Create(3072);
         var request = new CertificateRequest("CN=Kafdeck setup acceptance", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var san = new SubjectAlternativeNameBuilder(); san.AddIpAddress(IPAddress.Parse(new Uri(origin).Host));
+        var sourceUrl = Environment.GetEnvironmentVariable("KAFDECK_SETUP_SOURCE_URL");
+        if (sourceUrl is not null) san.AddIpAddress(IPAddress.Parse(new Uri(sourceUrl).Host));
         request.CertificateExtensions.Add(san.Build());
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
         using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
         var pfx = identity.StatePath + ".pfx";
-        File.WriteAllBytes(pfx, generated.Export(X509ContentType.Pfx));
+        if (!File.Exists(pfx)) File.WriteAllBytes(pfx, generated.Export(X509ContentType.Pfx));
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(pfx, null,
             OperatingSystem.IsWindows() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls(origin);
-        builder.Configuration["AllowedHosts"] = new Uri(origin).Host;
+        builder.Configuration["AllowedHosts"] = new Uri(origin).Host + (sourceUrl is null ? "" : ";" + new Uri(sourceUrl).Host);
         builder.WebHost.ConfigureKestrel(server => server.ConfigureHttpsDefaults(https => https.ServerCertificate = certificate));
         builder.Configuration["Kestrel:Certificates:Default:Path"] = pfx;
         builder.Services.AddSingleton(TimeProvider.System);
@@ -95,13 +105,27 @@ public sealed class FleetSetupLiveTests
             Assert.Single(registry.Read().Bindings);
             Assert.Empty(Assert.Single(fleet.Read().Operations!).Payload);
             var temporarySecret = Environment.GetEnvironmentVariable("KAFDECK_SETUP_PASSWORD") ?? File.ReadAllText(Env("ADMIN_KEY"));
-            Assert.DoesNotContain(temporarySecret, JsonSerializer.Serialize(fleet.Read()));
+            Assert.False(JsonSerializer.Serialize(fleet.Read()).Contains(temporarySecret, StringComparison.Ordinal));
             Assert.Equal(2, fleet.Read().Credentials.Length);
             Assert.Null(recovery.Find("test-cluster"));
-            Assert.Contains(identity.Audit.Events, item => item.ReasonCategory == "fleet_host_preparation_verified");
+            if (reuse is null) Assert.Contains(identity.Audit.Events, item => item.ReasonCategory == "fleet_host_preparation_verified");
             Assert.Contains(identity.Audit.Events, item => item.ReasonCategory == "agent_recovery_observed");
         }
-        finally { await app.StopAsync(); V11BrokerAgentTests.ClearMonitoringPool(database); }
+        finally
+        {
+            using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = database }.ToString()))
+            {
+                db.Open();
+                using var query = db.CreateCommand();
+                query.CommandText = "SELECT s.metric,max(p.time),max(p.value) FROM monitor_series s JOIN monitor_sample p ON p.series=s.id WHERE s.metric IN ('java.lang:Runtime/StartTime','kafka.server:ReplicaManager/PartitionCount/Value') GROUP BY s.metric";
+                using var rows = query.ExecuteReader();
+                var values = new List<object>();
+                while (rows.Read()) values.Add(new { metric = rows.GetString(0), time = rows.GetInt64(1), value = rows.GetDouble(2) });
+                Directory.CreateDirectory(Env("EVIDENCE"));
+                File.WriteAllText(Path.Combine(Env("EVIDENCE"), "metric-diagnostics.json"), JsonSerializer.Serialize(values));
+            }
+            await app.StopAsync(); V11BrokerAgentTests.ClearMonitoringPool(database);
+        }
     }
 }
 

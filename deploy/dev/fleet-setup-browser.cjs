@@ -41,7 +41,7 @@ async function main() {
     assert.equal(broker.adapter, process.env.KAFDECK_SETUP_ADAPTER);
     const service = broker.adapter === 'systemd' ? broker.unit : broker.project + ' / ' + broker.service;
     await page.getByLabel(service + ' · Broker 2 · ' + broker.adapter, {exact:true}).check();
-    await page.locator('#setup-agent-endpoint').fill(base + '/monitoring/ingest');
+    await page.locator('#setup-agent-endpoint').fill(process.env.KAFDECK_SETUP_SOURCE_URL || base + '/monitoring/ingest');
     await observe('Use this Kafdeck server certificate', '/fleet/settings/public-certificate');
     assert.match(await page.locator('#setup-agent-ca').inputValue(), /BEGIN CERTIFICATE/);
     await page.locator('#setup-agent-interval').selectOption('10');
@@ -67,6 +67,7 @@ async function main() {
       await new Promise(resolve => setTimeout(resolve, 3000));
       progress = await observe('Check agent operation', '/agent/status');
     }
+    writeFileSync(join(evidence, 'lifecycle-progress.json'), JSON.stringify(progress,null,2));
     assert.equal(progress.stage, 'complete');
     assert.ok(progress.health.healthy && progress.metricSeenAt > progress.processStartedAt);
     assert.equal(progress.digest, inspected.package.digest);
