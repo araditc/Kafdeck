@@ -3,6 +3,9 @@
 # Fixed entry point. The only request is JSON on the anonymous stdin pipe, never command-line credentials.
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
+# A launch from PowerShell 7 can inherit its incompatible module directories.
+# Load only the trusted operating-system Windows PowerShell 5.1 modules.
+$env:PSModulePath=[IO.Path]::Combine($env:SystemRoot,'System32\WindowsPowerShell\v1.0\Modules')
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $request=$null
 function Send-Event($Value){[Console]::Out.WriteLine(($Value|ConvertTo-Json -Compress -Depth 5));[Console]::Out.Flush()}

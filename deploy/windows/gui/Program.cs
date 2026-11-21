@@ -219,6 +219,7 @@ internal sealed class Wizard : Form
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8, WorkingDirectory = cache };
             foreach (var arg in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(cache, "Setup-Worker.ps1") }) info.ArgumentList.Add(arg);
+            info.Environment["PSModulePath"] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\Modules");
             using var process = Process.Start(info) ?? throw new IOException("Worker did not start.");
             // Drain without retaining native/PowerShell error output. It may contain secrets.
             var errors = Task.Run(async () => { var buffer = new char[4096]; while (await process.StandardError.ReadAsync(buffer) > 0) { } });
