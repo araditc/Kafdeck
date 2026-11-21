@@ -54,9 +54,16 @@ namespace Kafdeck.Windows {
 }
 function Assert-OfflineServiceOwner([object]$Service,[string]$Executable,[string]$Sid) {
     if(!$Service){return}
-    $path=$Service.PathName.Trim().Trim('"')
-    $owner=try {([Security.Principal.NTAccount]::new($Service.StartName)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{''}
-    if($path -ne $Executable -or $owner -ne $Sid){throw "Service $($Service.Name) belongs to another installation/account. It was preserved."}
+    $path=$Service.PathName.Trim()
+    if($path.StartsWith('"') -and $path.EndsWith('"')){$path=$path.Substring(1,$path.Length-2)}
+    $path=$path.Replace('/','\')
+    $expectedPath=[IO.Path]::GetFullPath($Executable)
+    $account=$Service.StartName
+    # SCM can report local accounts as .\user. NTAccount requires the machine name.
+    if($account.StartsWith('.\')){$account=$env:COMPUTERNAME+$account.Substring(1)}
+    $owner=try {([Security.Principal.NTAccount]::new($account)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{''}
+    if($path -ne $expectedPath){throw "Service $($Service.Name) executable does not match this installation. Expected '$expectedPath', registered '$path'. It was preserved."}
+    if($owner -ne $Sid){throw "Service $($Service.Name) account '$($Service.StartName)' does not match the installation SID '$Sid'. It was preserved."}
 }
 function Set-OfflineServiceRecovery([string]$Name) {
     $sc=Join-Path $env:SystemRoot 'System32/sc.exe'
