@@ -8,6 +8,32 @@ on:
 permissions:
   contents: read
 jobs:
+  full-installer-acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare the single EXE from public, hash-pinned native/vendor inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONUTF8: '1'
+        run: |
+          python -m pip install Pillow==12.0.0
+          python -B scripts/package/stage-setup-live.py
+      - name: Exercise the real worker under a new elevated installation account
+        shell: powershell
+        run: ./scripts/package/invoke-setup-live.ps1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: full-installer-acceptance
+          path: |
+            artifacts/setup-live-evidence.json
+            artifacts/setup-live-candidate/build-evidence.json
+          if-no-files-found: ignore
+          retention-days: 7
   setup:
     runs-on: windows-latest
     timeout-minutes: 15
