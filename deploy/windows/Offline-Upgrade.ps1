@@ -2,13 +2,13 @@
 $OfflineUpgradeFolders = @('app','scripts','docs','agent','config','secrets','state','runtime','services','public')
 
 function Assert-OfflineUpgradeVendorStack([string]$Root) {
-    # The pinned Microsoft JDK reports its vendor revision in JAVA_VERSION.
+    # Keycloak 26.8.1 supports OpenJDK 17, 21 and 25, including vendor patch revisions.
     $release = Get-Content -LiteralPath (Join-Path $Root 'runtime/java/release') -Raw
     $versions = [regex]::Matches($release, '(?m)^JAVA_VERSION="([^"\r\n]+)"\r?$')
     if ($versions.Count -ne 1) { throw 'Cannot read the installed Java version from runtime/java/release.' }
     $javaVersion = $versions[0].Groups[1].Value
-    if ($javaVersion -notin @('21.0.13', '21.0.13.0.2')) {
-        throw "Unsupported installed Java version '$javaVersion'. This upgrade supports Java 21.0.13 or Microsoft 21.0.13.0.2."
+    if ($javaVersion -notmatch '^(17|21|25)(?:\.\d+)*(?:\+\d+(?:\.\d+)*)?(?:-LTS)?$') {
+        throw "Unsupported installed Java version '$javaVersion'. Keycloak 26.8.1 requires a supported Java 17, 21 or 25 release."
     }
     $postgresVersion = (Get-Content -LiteralPath (Join-Path $Root 'state/postgresql/PG_VERSION') -Raw).Trim()
     if ($postgresVersion -ne '17') { throw "Unsupported installed PostgreSQL data version '$postgresVersion'. This upgrade requires PostgreSQL 17." }

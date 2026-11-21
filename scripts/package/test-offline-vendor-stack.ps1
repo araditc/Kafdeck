@@ -13,12 +13,12 @@ $core=Join-Path $fixture 'runtime/keycloak/lib/lib/main/org.keycloak.keycloak-co
 [IO.File]::WriteAllText($postgres,"17`r`n")
 [IO.File]::WriteAllText($core,'fixture')
 $checks=0
-foreach($version in @('21.0.13','21.0.13.0.2')){
+foreach($version in @('17','17.0.1','17.0.13','21','21.0.1','21.0.12','21.0.13','21.0.13.0.2','21.0.13.0.3','21.0.14','21.0.13+8-LTS','25','25.0.1')){
     [IO.File]::WriteAllText($java,("IMPLEMENTOR=`"Microsoft`"`r`nJAVA_VERSION=`"$version`"`r`nJAVA_RUNTIME_VERSION=`"$version+1-LTS`"`r`n"))
     Assert-OfflineUpgradeVendorStack $fixture
     $checks++
 }
-foreach($version in @('17.0.13','21.0.12','21.0.130','21.0.13.0.3','25.0.1')){
+foreach($version in @('1.8.0_432','11.0.25','16.0.2','18','22.0.1','26','21oops','21.0.13-ea','21..1')){
     [IO.File]::WriteAllText($java,('JAVA_VERSION="'+$version+'"'))
     $failed=$false
     try{Assert-OfflineUpgradeVendorStack $fixture}catch{
