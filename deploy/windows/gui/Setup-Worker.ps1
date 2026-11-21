@@ -61,6 +61,6 @@ try {
 } catch {
     # Do not forward PowerShell records, native output, SQL, credentials or setup codes into GUI logs.
     if($_.Exception.Message -eq 'Restart Windows, then run this SAME installer again.') {Send-Event @{stage='reboot'};exit 3010}
-    Send-Event @{stage='failed';category=$_.Exception.GetType().Name}
+    Send-Event @{stage='failed';category=$_.Exception.GetType().Name;source=[IO.Path]::GetFileName($_.InvocationInfo.ScriptName);line=$_.InvocationInfo.ScriptLineNumber}
     exit 1
 } finally {if($request){$request.password=$null}}

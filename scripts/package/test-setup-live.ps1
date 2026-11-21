@@ -8,7 +8,7 @@ if([IO.Path]::GetFullPath($Lab) -notmatch '^[A-Z]:\\KafdeckInstallerLab-[a-f0-9]
 $stage='bootstrap'
 $proof=@{success=$false;stage=$stage;actualOsReboot=$false;nativeVersion='1.1.0';productionInstallationChanged=$false}
 $password=$null
-function Assert-True([bool]$Value,[string]$Message){if(!$Value){throw $Message}}
+function Assert-True([bool]$Value,[string]$Message){if(!$Value){$script:assertion=$Message;throw 'Acceptance assertion failed.'}}
 function Worker([object]$Request,[string]$Script=$script:worker){
     $info=[Diagnostics.ProcessStartInfo]::new((Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'))
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardInput=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
@@ -22,6 +22,7 @@ function Worker([object]$Request,[string]$Script=$script:worker){
         $text=$output.GetAwaiter().GetResult();$null=$errors.GetAwaiter().GetResult()
         Assert-True (!$text.Contains($script:password)) 'Windows password leaked into worker output.'
         $events=@($text -split '\r?\n'|Where-Object {$_ -match '^\{'}|ForEach-Object {$_|ConvertFrom-Json})
+        $script:lastWorker=@{exit=$process.ExitCode;stage=$events[-1].stage;category=$events[-1].category;source=$events[-1].source;line=$events[-1].line}
         return @{exit=$process.ExitCode;event=$events[-1]}
     } finally {$process.Dispose()}
 }
@@ -71,7 +72,7 @@ try {
     $wrapper=Join-Path $Lab 'Inject-Reboot.ps1'
     $vc=(Join-Path $cache 'media/media/vc_redist.x64.exe').Replace("'","''")
     $fixedWorker=$worker.Replace("'","''")
-    $body="function global:Start-Process { param([string]`$FilePath,[string[]]`$ArgumentList,[string]`$WindowStyle,[switch]`$Wait,[switch]`$PassThru); if(`$FilePath -ne '$vc'){throw 'Unexpected injected process.'};[pscustomobject]@{ExitCode=3010} }; & '$fixedWorker'"
+    $body="function global:Start-Process { param([string]`$FilePath,[string[]]`$ArgumentList,[string]`$WindowStyle,[switch]`$Wait,[switch]`$PassThru); if(`$FilePath -ne '$vc'){throw 'Unexpected injected process.'};[pscustomobject]@{ExitCode=3010} }; & '$fixedWorker'; exit `$LASTEXITCODE"
     [IO.File]::WriteAllText($wrapper,$body,[Text.UTF8Encoding]::new($true))
     $result=Worker $request $wrapper
     Assert-True ($result.exit -eq 3010 -and $result.event.stage -eq 'reboot') 'Prerequisite reboot was not surfaced.'
@@ -139,7 +140,7 @@ try {
     }
     $proof=@{success=$true;stage='complete';nativeVersion=$build.version;installerSource=$build.installerSource;exeSha256=$build.exeSha256;payloadSha256=$build.payload.PayloadSha256;productionModuleCache=$true;licenseRefusalNoEffects=$true;prerequisite3010Resume='injected return followed by real installation';actualOsReboot=$false;automaticServices=3;dependencyRestartHealthy=$true;firstOwnerCreatedInKeycloakPostgreSQL=$true;emailVerificationRequired=$false;upgradeBaseline='same native runtime, synthetic prior installer receipt';verifiedColdBackup=$true;serviceRemovalAndRestore=$true;ownerAndEncryptedSecretsPreserved=$true;noWindowsCredentialInFilesOrOutput=$true;languagesRecorded=@('en','fa');authenticode='not-signed';productionInstallationChanged=$false}
 } catch {
-    $proof.success=$false;$proof.stage=$stage;$proof.errorCategory=$_.Exception.GetType().Name
+    $proof.success=$false;$proof.stage=$stage;$proof.errorCategory=$_.Exception.GetType().Name;$proof.assertion=$script:assertion;$proof.lastWorker=$script:lastWorker
     if(Test-Path -LiteralPath (Join-Path $fixture.root 'config/offline-install.json')){$proof.installPhase=(Get-Content -LiteralPath (Join-Path $fixture.root 'config/offline-install.json') -Raw|ConvertFrom-Json).phase}
 } finally {
     $password=$null
