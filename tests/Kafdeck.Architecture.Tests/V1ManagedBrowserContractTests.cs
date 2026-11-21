@@ -90,7 +90,7 @@ public sealed class V1ManagedBrowserContractTests
             Assert.True(names.Add(method.Value.GetProperty("operationId").GetString()!));
             Assert.Equal("experimental", method.Value.GetProperty("x-stability").GetString());
         }
-        Assert.Equal(30, names.Count);
+        Assert.Equal(38, names.Count);
         foreach (var schema in new[] { "ManagedUser", "PendingProvisioning", "WorkspaceTarget", "PublicSettings" })
             Assert.DoesNotContain(root.GetProperty("components").GetProperty("schemas").GetProperty(schema).GetProperty("properties").EnumerateObject(),
                 p => p.Name.Contains("password", StringComparison.OrdinalIgnoreCase) || p.Name.Contains("secret", StringComparison.OrdinalIgnoreCase) || p.Name.Contains("proof", StringComparison.OrdinalIgnoreCase) || p.Name.Contains("protected", StringComparison.OrdinalIgnoreCase));

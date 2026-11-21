@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kafdeck experimental managed-browser API",
-    "version": "1.0.0-experimental.5",
+    "version": "1.1.0-experimental.6",
     "description": "Managed-browser contract revision including v1.1 host registration, not a product release. Experimental dashboard integration, browser OIDC session only; not a stable third-party/Bearer/CLI API. Runtime discovery returns only actually mapped operations. Unknown JSON properties are currently ignored; handler preconditions remain authoritative. Missing or malformed JSON, authentication boundaries and infrastructure can reject a request before the handler."
   },
   "servers": [
@@ -3754,6 +3754,846 @@
           }
         }
       }
+    },
+    "/api/v1/fleet/settings/": {
+      "get": {
+        "operationId": "managed-fleet-settings-read",
+        "summary": "fleet settings read",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSettingsView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fleet/settings/configuration": {
+      "post": {
+        "operationId": "managed-fleet-settings-write",
+        "summary": "fleet settings write",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSettingsView"
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 65536,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetConfigurationInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "FleetConfigurationInput"
+      }
+    },
+    "/api/v1/fleet/settings/credentials": {
+      "post": {
+        "operationId": "managed-fleet-credential-write",
+        "summary": "fleet credential write",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSettingsView"
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 131072,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetCredentialInput"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "FleetCredentialInput"
+      }
+    },
+    "/api/v1/fleet/bootstrap/operations": {
+      "get": {
+        "operationId": "managed-fleet-bootstrap-operations",
+        "summary": "fleet bootstrap operations",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fleet/bootstrap/inspect": {
+      "post": {
+        "operationId": "managed-fleet-bootstrap-inspect",
+        "summary": "fleet bootstrap inspect",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 131072,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetBootstrapInspect"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "FleetBootstrapInspect"
+      }
+    },
+    "/api/v1/fleet/bootstrap/prepare": {
+      "post": {
+        "operationId": "managed-fleet-bootstrap-prepare",
+        "summary": "fleet bootstrap prepare",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 262144,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetBootstrapPrepare"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "FleetBootstrapPrepare"
+      }
+    },
+    "/api/v1/fleet/bootstrap/resume": {
+      "post": {
+        "operationId": "managed-fleet-bootstrap-resume",
+        "summary": "fleet bootstrap resume",
+        "description": "Installation owner only. Secrets are write-only, encrypted at rest, and omitted from responses and audit. Administrative setup credentials are temporary and never persisted. Host preparation never restarts Kafka; lifecycle apply has separate health gates and confirmation.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": true,
+        "security": [
+          {
+            "BrowserSession": [],
+            "Antiforgery": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "x-handler-problem-codes": [
+          "identity-forbidden",
+          "identity-busy",
+          "identity-input",
+          "identity-provisioning-conflict",
+          "identity-duplicate",
+          "identity-limit",
+          "identity-provisioning-profile",
+          "identity-storage",
+          "identity-provider",
+          "identity-provisioning-pending"
+        ],
+        "x-declared-body-limit-bytes": 131072,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetBootstrapResume"
+              }
+            }
+          }
+        },
+        "x-runtime-request-schema": "FleetBootstrapResume"
+      }
+    },
+    "/api/v1/fleet/settings/public-certificate": {
+      "get": {
+        "operationId": "managed-fleet-public-certificate",
+        "summary": "Read the public Kafdeck HTTPS certificate",
+        "description": "Owner only. Exports only the public certificate, never its private key or PFX password.",
+        "x-stability": "experimental",
+        "x-availability": "ManagedIdentity.Enabled and BrokerHosts.Enabled; OIDC HTTPS",
+        "x-authority": "current installation owner",
+        "x-browser-only": true,
+        "x-csrf-required": false,
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, CSRF, binding or operation precondition failed. A pre-handler authentication response may have an empty body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unhandled infrastructure or transport rejection; do not assume the side effect is absent. HTTP 413 may be produced by hosting/proxy limits; declared endpoint metadata is not a new transport-enforcement guarantee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Current settings or bounded operation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pem": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5338,6 +6178,337 @@
           },
           "requiresRenewal": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "FleetConfiguration": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "allowedNetworks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "logReaderUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "logSources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "clusterId": {
+                  "type": "string"
+                },
+                "brokerId": {
+                  "type": "integer"
+                },
+                "monitoringInstance": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "agentInstallerUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "agentTargets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "clusterId": {
+                  "type": "string"
+                },
+                "brokerId": {
+                  "type": "integer"
+                },
+                "monitoringInstance": {
+                  "type": "string"
+                },
+                "credentialId": {
+                  "type": "string"
+                },
+                "expectedBrokers": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "agentPackages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string"
+                },
+                "digest": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "FleetConfigurationInput": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "integer"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/FleetConfiguration"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "expectedRevision",
+          "configuration"
+        ]
+      },
+      "FleetCredentialInput": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "authentication": {
+            "enum": [
+              "password",
+              "privateKey"
+            ]
+          },
+          "secret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "writeOnly": true
+          },
+          "passphrase": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "writeOnly": true
+          },
+          "purpose": {
+            "enum": [
+              "probe",
+              "agent"
+            ]
+          },
+          "revoke": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "expectedRevision",
+          "id",
+          "authentication",
+          "purpose"
+        ]
+      },
+      "FleetBootstrapConnection": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "user": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "authentication": {
+            "enum": [
+              "password",
+              "privateKey"
+            ]
+          },
+          "secret": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "passphrase": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "writeOnly": true
+          },
+          "sudoPassword": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "address",
+          "port",
+          "user",
+          "fingerprint",
+          "authentication",
+          "secret"
+        ]
+      },
+      "FleetBootstrapInspect": {
+        "type": "object",
+        "properties": {
+          "clusterId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "connection": {
+            "$ref": "#/components/schemas/FleetBootstrapConnection"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "clusterId",
+          "name",
+          "connection"
+        ]
+      },
+      "FleetBootstrapPrepare": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "targetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connection": {
+            "$ref": "#/components/schemas/FleetBootstrapConnection"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "caPem": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "intervalSeconds": {
+            "type": "integer"
+          },
+          "maintenanceFrom": {
+            "type": "integer"
+          },
+          "maintenanceTo": {
+            "type": "integer"
+          },
+          "confirmPreparation": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "preview",
+          "targetIds",
+          "connection",
+          "endpoint",
+          "intervalSeconds",
+          "maintenanceFrom",
+          "maintenanceTo",
+          "confirmPreparation"
+        ]
+      },
+      "FleetBootstrapResume": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FleetBootstrapConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmPreparation": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "operationId"
+        ]
+      },
+      "FleetSettingsView": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/FleetConfiguration"
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "authentication": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "revoked": {
+                  "type": "boolean"
+                },
+                "revision": {
+                  "type": "integer"
+                },
+                "stored": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            }
           }
         },
         "additionalProperties": true

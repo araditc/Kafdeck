@@ -136,6 +136,29 @@ elif [[ "$agent_fixture" == 1 ]]; then
   done
   printf '%s\n' '{"version":1,"targets":[{"id":"native-broker-1","adapter":"systemd","unit":"kafdeck-v11-kafka.service"},{"id":"native-broker-2","adapter":"systemd","unit":"kafdeck-v11-kafka-sibling.service"}]}' > "$lab/targets.json"
 fi
+if [[ "${KAFDECK_NATIVE_BOOTSTRAP_FIXTURE:-}" == 1 ]]; then
+  ssh-keygen -q -t ed25519 -N '' -f "$lab/admin-key"
+  mkdir -p "$HOME/.ssh"
+  chmod 0700 "$HOME/.ssh"
+  printf 'restrict %s\n' "$(cat "$lab/admin-key.pub")" >> "$HOME/.ssh/authorized_keys"
+  chmod 0600 "$HOME/.ssh/authorized_keys"
+  "$kafka/bin/kafka-topics.sh" --bootstrap-server 127.0.0.1:19092,127.0.0.1:19094 \
+    --create --topic kafdeck-bootstrap-fixture --partitions 3 --replication-factor 2 --config min.insync.replicas=1
+  {
+    echo KAFDECK_RUN_FLEET_SETUP_LIVE=1
+    echo KAFDECK_SETUP_ADDRESS=127.0.0.1
+    echo KAFDECK_SETUP_PORT=22
+    echo "KAFDECK_SETUP_ADMIN_USER=$(id -un)"
+    echo "KAFDECK_SETUP_ADMIN_KEY=$lab/admin-key"
+    echo "KAFDECK_SETUP_PIN=$(sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | awk '{print $2}')"
+    echo KAFDECK_SETUP_KAFKA=127.0.0.1:19092,127.0.0.1:19094
+    echo KAFDECK_SETUP_ADAPTER=systemd
+    echo "KAFDECK_SETUP_EVIDENCE=$GITHUB_WORKSPACE/artifacts/fleet-setup"
+    echo "KAFDECK_SETUP_BROWSER_SCRIPT=$GITHUB_WORKSPACE/deploy/dev/fleet-setup-browser.cjs"
+    echo "KAFDECK_SOURCE_SHA=$(git rev-parse HEAD)"
+  } >> "$GITHUB_ENV"
+  exit 0
+fi
 sudo sh tools/broker-host/install.sh "$lab/targets.json" "$lab/probe-key.pub"
 pin=$(sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | awk '{print $2}')
 if [[ "$agent_fixture" == 1 ]]; then

@@ -16,9 +16,10 @@ internal sealed class BrokerAgentRecoveryStore(string path)
 
     internal BrokerAgentRecovery? Find(string clusterId) => Read().SingleOrDefault(row => row.ClusterId == clusterId);
 
-    internal void Begin(BrokerAgentRecovery entry)
+    internal void Begin(BrokerAgentRecovery entry, Func<bool>? admitted = null)
     {
         using var lease = Lock();
+        if (admitted?.Invoke() == false) throw new BrokerHostFailure("agent_install_denied");
         var rows = Read();
         var previous = rows.SingleOrDefault(row => row.ClusterId == entry.ClusterId);
         if (previous is not null)
@@ -65,6 +66,8 @@ internal sealed class BrokerAgentRecoveryStore(string path)
         catch (FileNotFoundException) { return []; }
         catch (JsonException) { throw new BrokerHostFailure("agent_recovery_invalid"); }
     }
+
+    internal IDisposable ConfigurationLease() => Lock();
 
     private FileStream Lock()
     {

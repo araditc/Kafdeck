@@ -6,6 +6,8 @@ namespace Kafdeck.Api;
 
 internal sealed class BrokerHostOptions
 {
+    internal Func<BrokerHostOptions>? Runtime { get; set; }
+    internal BrokerHostOptions Current => Runtime?.Invoke() ?? this;
     public bool Enabled { get; init; }
     public string[] AllowedNetworks { get; init; } = [];
     public BrokerHostCredential[] Credentials { get; init; } = [];
@@ -51,7 +53,7 @@ internal sealed class BrokerHostOptions
     }
 
     internal bool Allows(string address) => IPAddress.TryParse(address, out var ip) &&
-        AllowedNetworks.Any(value => IPNetwork.Parse(value).Contains(ip));
+        Current.AllowedNetworks.Any(value => IPNetwork.Parse(value).Contains(ip));
 }
 
 internal sealed class BrokerHostCredential
@@ -87,7 +89,7 @@ internal static partial class BrokerHostValidation
     internal static bool Draft(BrokerHostDraft? draft, BrokerHostOptions options) => draft is not null &&
         !string.IsNullOrWhiteSpace(draft.Name) && draft.Name.Length <= 100 && !draft.Name.Any(char.IsControl) &&
         options.Allows(draft.Address) && draft.Port is >= 1 and <= 65535 && Name(draft.User) &&
-        options.Credentials.Any(value => value.Id == draft.CredentialId) && Fingerprint(draft.Fingerprint);
+        options.Current.Credentials.Any(value => value.Id == draft.CredentialId) && Fingerprint(draft.Fingerprint);
 
     internal static bool Fingerprint(string? fingerprint)
     {

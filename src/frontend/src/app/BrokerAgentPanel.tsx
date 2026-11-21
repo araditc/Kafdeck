@@ -33,6 +33,12 @@ function Health({value}: {value: BrokerAgentHealth}) {
 }
 
 export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  useEffect(() => {
+    const changed = () => setSettingsRevision(previous => previous + 1);
+    window.addEventListener('kafdeck:fleet-settings-changed', changed);
+    return () => window.removeEventListener('kafdeck:fleet-settings-changed', changed);
+  }, []);
   const [saved, setSaved] = useState<string | null>(null);
   const [target, setTarget] = useState<{brokerId:number|null;packages:BrokerAgentPackage[]} | null>(null);
   const [version, setVersion] = useState('');
@@ -52,7 +58,7 @@ export function BrokerAgentPanel({clusterId}: {clusterId: string}) {
       }
     }).catch(() => { /* This feature can be absent on a deployment. */ });
     return () => { abort.abort(); request.current?.abort(); };
-  }, [clusterId]);
+  }, [clusterId, settingsRevision]);
 
   async function run(task: (signal: AbortSignal) => Promise<void>) {
     if (request.current) return;

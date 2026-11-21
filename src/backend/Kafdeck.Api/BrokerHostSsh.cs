@@ -21,7 +21,12 @@ internal interface IBrokerAgentLifecycle
     Task<BrokerAgentHostResult> CallAsync(BrokerHostDraft host, BrokerAgentCommand input, CancellationToken cancellation);
 }
 
-internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProbe, IBrokerLogReader, IBrokerAgentLifecycle
+internal interface IFleetPreparationVerifier
+{
+    Task<string?> VerifyAsync(BrokerHostDraft host, string operationId, CancellationToken cancellation);
+}
+
+internal sealed class BrokerHostSsh(BrokerHostOptions options, FleetSettingsStore? fleet = null) : IBrokerHostProbe, IBrokerLogReader, IBrokerAgentLifecycle, IFleetPreparationVerifier
 {
     private readonly SemaphoreSlim _slots = new(4);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -50,6 +55,14 @@ internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProb
         return Parse<BrokerAgentHostResult>(bytes, "agent_response_invalid");
     }
 
+    public async Task<string?> VerifyAsync(BrokerHostDraft host, string operationId, CancellationToken cancellation)
+    {
+        var bytes = await RunAsync(host, "kafdeck-host-setup-v1",
+            JsonSerializer.SerializeToUtf8Bytes(new { operationId }, Json), cancellation);
+        using var result = JsonDocument.Parse(bytes);
+        return result.RootElement.TryGetProperty("proof", out var proof) ? proof.GetString() : null;
+    }
+
     private static T Parse<T>(byte[] bytes, string code)
     {
         try { return JsonSerializer.Deserialize<T>(bytes, Json) ?? throw new BrokerHostFailure(code); }
@@ -76,12 +89,14 @@ internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProb
 
     private async Task<byte[]> ConnectAsync(BrokerHostDraft host, string operation, byte[]? input, int commandSeconds, CancellationToken cancellation)
     {
-        var binding = options.Credentials.Single(value => value.Id == host.CredentialId);
+        var binding = options.Current.Credentials.SingleOrDefault(value => value.Id == host.CredentialId)
+            ?? throw new BrokerHostFailure("fleet_credential_revoked");
+        var stored = fleet?.Credential(host.CredentialId);
         var resolver = new SecretResolver();
-        var secret = resolver.ResolveBounded(SecretReference.Parse(binding.Secret), 65536).Reveal();
+        var secret = stored?.Secret ?? resolver.ResolveBounded(SecretReference.Parse(binding.Secret), 65536).Reveal();
         using var keyStream = new MemoryStream(Encoding.UTF8.GetBytes(secret));
         using var key = binding.Authentication == "privateKey"
-            ? new PrivateKeyFile(keyStream, binding.Passphrase is null ? null :
+            ? new PrivateKeyFile(keyStream, stored is not null ? stored.Passphrase : binding.Passphrase is null ? null :
                 resolver.ResolveBounded(SecretReference.Parse(binding.Passphrase), 4096).Reveal()) : null;
         using AuthenticationMethod authentication = key is null
             ? new PasswordAuthenticationMethod(host.User, secret)
@@ -126,10 +141,10 @@ internal sealed class BrokerHostSsh(BrokerHostOptions options) : IBrokerHostProb
         }
     }
 
-    private static bool ValidTarget(BrokerServiceTarget? target) => target is not null && BrokerHostValidation.Name(target.Id) &&
+    internal static bool ValidTarget(BrokerServiceTarget? target) => target is not null && BrokerHostValidation.Name(target.Id) &&
         (target.Adapter == "systemd" ? BrokerHostValidation.Name(target.Unit) && target.Unit!.EndsWith(".service", StringComparison.Ordinal) :
             target.Adapter == "compose" && BrokerHostValidation.Name(target.Project) && BrokerHostValidation.Name(target.Service)) &&
-        target.Status is "verified" or "identity_unavailable" &&
+        target.Status is "verified" or "identity_unavailable" or "unavailable" &&
         (target.Status != "verified" || target.BrokerId >= 0 && target.KafkaClusterId is { Length: > 0 and <= 128 } &&
             target.Instance is { Length: > 0 and <= 160 } && !target.KafkaClusterId.Any(char.IsControl) && !target.Instance.Any(char.IsControl));
 

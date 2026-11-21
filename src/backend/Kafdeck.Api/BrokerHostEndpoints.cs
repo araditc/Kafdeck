@@ -16,7 +16,7 @@ internal static class BrokerHostEndpoints
             var http = context.HttpContext;
             http.Response.Headers.CacheControl = "no-store";
             if (Owner(http, identity) is null) return Problem("host_access_denied", 403);
-            if (!options.Enabled) return Problem("host_management_disabled", 409);
+            if (!options.Current.Enabled && !HttpMethods.IsGet(http.Request.Method)) return Problem("host_management_disabled", 409);
             try
             {
                 await store.DrainAuditAsync(http.RequestServices.GetRequiredService<ISecurityAuditSink>(), http.RequestAborted);
@@ -35,8 +35,8 @@ internal static class BrokerHostEndpoints
         group.MapGet("/hosts", () =>
         {
             var state = store.Read();
-            return Results.Ok(new { state.Revision, state.Hosts, state.Bindings,
-                credentials = options.Credentials.Select(value => new { value.Id, value.Authentication }) });
+            return Results.Ok(new { enabled = options.Current.Enabled, state.Revision, state.Hosts, state.Bindings,
+                agentCredentials = store.AgentCredentials(), credentials = options.Current.Credentials.Select(value => new { value.Id, value.Authentication }) });
         }).WithManagedBrowserContract("managed-hosts-list");
 
         group.MapPost("/hosts", async (BrokerHostWrite input, HttpContext http, ISecurityAuditSink audit, CancellationToken cancellation) =>
@@ -47,6 +47,8 @@ internal static class BrokerHostEndpoints
             var host = new BrokerHost(Guid.NewGuid(), input.Host, DateTimeOffset.UtcNow);
             var state = store.Commit(input.ExpectedRevision, current =>
             {
+                if (!options.Current.Enabled || !BrokerHostValidation.Draft(input.Host, options))
+                    throw new BrokerHostFailure("host_configuration_invalid");
                 if (current.Hosts.Length >= 64 || current.Hosts.Any(item => item.Connection.Address == input.Host.Address &&
                         item.Connection.Port == input.Host.Port && item.Connection.User == input.Host.User))
                     throw new BrokerHostFailure("host_already_registered_or_limit");
@@ -88,6 +90,8 @@ internal static class BrokerHostEndpoints
                 target!.KafkaClusterId!, target.Instance!, DateTimeOffset.UtcNow);
             var result = store.Commit(input.ExpectedRevision, current =>
             {
+                if (!options.Current.Enabled || !BrokerHostValidation.Draft(host.Connection, options))
+                    throw new BrokerHostFailure("host_configuration_invalid");
                 if (current.Bindings.Length >= 1024 && !current.Bindings.Any(item => item.ClusterId == input.ClusterId && item.BrokerId == input.BrokerId) || current.Bindings.Any(item =>
                         item.HostId == input.HostId && item.TargetId == input.TargetId &&
                         (item.ClusterId != input.ClusterId || item.BrokerId != input.BrokerId)))
@@ -124,7 +128,7 @@ internal static class BrokerHostEndpoints
             "host_key_mismatch" => "The SSH host key differs from the trusted fingerprint. Verify the host through your administrator.",
             "host_broker_identity_mismatch" => "The running service belongs to a different cluster or broker.",
             "host_revision_conflict" => "Host settings changed. Reload Fleet and retry.",
-            "host_management_disabled" => "Configure broker host networks and server-side SSH credential bindings to enable this feature.",
+            "host_management_disabled" => "Open Fleet settings to enable host management, approve networks and add encrypted SSH credentials.",
             "host_access_denied" => "Only the installation administrator can register hosts and broker bindings.",
             _ => "The host operation could not be verified. Check the dedicated account, trusted fingerprint and approved service catalog.",
         }, code));

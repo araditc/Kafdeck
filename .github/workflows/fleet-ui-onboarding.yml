@@ -1,0 +1,66 @@
+name: fleet-ui-onboarding
+on:
+  pull_request:
+    paths:
+      - 'src/backend/Kafdeck.Api/Fleet*.cs'
+      - 'src/backend/Kafdeck.Api/BrokerHost*.cs'
+      - 'src/frontend/src/app/Fleet*.tsx'
+      - 'tools/broker-host/**'
+      - 'tests/Kafdeck.Architecture.Tests/Fleet*Tests.cs'
+      - 'deploy/dev/fleet-setup-browser.cjs'
+      - 'deploy/dev/broker-host-native.sh'
+      - '.github/workflows/fleet-ui-onboarding.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fleet-ui-onboarding-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  systemd-onboarding:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Check restricted helper boundaries
+        run: python3 -m unittest discover -s tools/broker-host -p 'test_*.py'
+      - name: Provision bare systemd Kafka brokers without Docker
+        env:
+          KAFDECK_NATIVE_BOOTSTRAP_FIXTURE: '1'
+          KAFDECK_NATIVE_LOG_FIXTURE: '1'
+        run: bash deploy/dev/broker-host-native.sh
+      - name: Build the production Fleet browser fixture
+        run: |
+          npm ci --prefix src/frontend --ignore-scripts --no-audit --no-fund
+          node src/frontend/tests/host-harness/build.mjs
+          npm ci --prefix deploy/dev/browser-g2 --ignore-scripts --no-audit --no-fund
+          deploy/dev/browser-g2/node_modules/.bin/playwright install --with-deps chromium
+          echo "KAFDECK_HOST_UI_DIST=$GITHUB_WORKSPACE/src/frontend/dist/host-harness" >> "$GITHUB_ENV"
+      - name: Verify encrypted storage and the complete rendered onboarding flow
+        run: |
+          set -euo pipefail
+          primary=$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)
+          dotnet restore tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj --locked-mode
+          dotnet test tests/Kafdeck.Architecture.Tests/Kafdeck.Architecture.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~FleetSetupTests|FullyQualifiedName~FleetSettingsStoreTests|FullyQualifiedName~FleetSetupLiveTests' --logger 'trx;LogFileName=fleet-setup.trx' --results-directory artifacts/fleet-setup
+          python3 scripts/ci/require-complete-trx.py artifacts/fleet-setup/fleet-setup.trx FleetSetupTests:7 FleetSettingsStoreTests:4 FleetSetupLiveTests:1
+          test "$primary" = "$(systemctl show --property MainPID --value kafdeck-v11-kafka.service)"
+          test "$(systemctl is-active kafdeck-v11-kafka-sibling.service)" = active
+          printf '%s\n' '{"primaryBrokerUnchanged":true,"siblingActive":true,"dockerPresent":false}' > artifacts/fleet-setup/preservation.json
+      - name: Stop only owned lab units
+        if: always()
+        run: sudo systemctl stop kafdeck-v11-kafka.service kafdeck-v11-kafka-sibling.service || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: fleet-ui-systemd-onboarding
+          path: artifacts/fleet-setup/
+          retention-days: 30
