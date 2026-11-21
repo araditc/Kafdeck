@@ -116,6 +116,30 @@ def build(args):
         with zipfile.ZipFile(io.BytesIO(files['media/' + medium])) as vendor:
             for entry in entries:
                 notices += '\n\n' + medium + ' — ' + entry + '\n' + vendor.read(entry).decode('utf-8-sig', errors='replace')
+    project = ROOT / 'deploy/windows/gui/Kafdeck.Setup.csproj'
+    subprocess.run(['dotnet', 'restore', str(project), '-r', 'win-x64', '-p:RestoreLockedMode=true'], check=True)
+    resolved = json.loads((project.parent / 'obj/project.assets.json').read_text(encoding='utf-8-sig'))
+    runtime_notices = []
+    for framework in resolved['project']['frameworks'].values():
+        for dependency in framework.get('downloadDependencies', []):
+            name = dependency['name'].lower()
+            if name not in ('microsoft.netcore.app.runtime.win-x64', 'microsoft.windowsdesktop.app.runtime.win-x64'):
+                continue
+            match = re.fullmatch(r'\[([^,]+),\s*([^\]]+)\]', dependency['version'])
+            if not match or match[1] != match[2]:
+                raise ValueError('Runtime pack version is not exact')
+            package = next((Path(folder) / name / match[1] for folder in resolved['packageFolders']
+                            if (Path(folder) / name / match[1]).is_dir()), None)
+            if package is None:
+                raise ValueError('Resolved runtime pack is missing')
+            license_files = [p for p in package.iterdir() if p.name.upper() in ('LICENSE', 'LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT')]
+            if not any(p.name.upper().startswith('LICENSE') for p in license_files):
+                raise ValueError('Runtime pack license is missing')
+            for path in sorted(license_files):
+                notices += '\n\n' + name + ' ' + match[1] + ' — ' + path.name + '\n' + path.read_text(encoding='utf-8-sig')
+            runtime_notices.append({'package': name, 'version': match[1], 'licenses': [{'file': p.name, 'sha256': sha(p)} for p in sorted(license_files)]})
+    if len(runtime_notices) != 2:
+        raise ValueError('Expected the self-contained .NET and Windows Desktop runtime licenses')
     (assets / 'notices.txt').write_text(notices, encoding='utf-8')
     with Image.open(ROOT / 'src/frontend/public/kafdeck-logo.webp') as logo:
         logo.convert('RGBA').save(assets / 'logo.png')
@@ -130,7 +154,7 @@ def build(args):
     report = {'installerSource': commit, 'version': manifest['version'], 'nativeRuntimeCommit': manifest['nativeRuntimeCommit'],
               'nativeManifestSha256': manifest['nativeManifestSha256'], 'inputArchiveSha256': args.expected_sha256,
               'exeSha256': sha(exe), 'exeBytes': exe.stat().st_size, 'payload': metadata,
-              'publisherMetadata': 'Arad ITC', 'authenticode': 'not-signed', 'languages': ['en', 'fa'], 'defaultLanguage': 'en'}
+              'publisherMetadata': 'Arad ITC', 'authenticode': 'not-signed', 'languages': ['en', 'fa'], 'defaultLanguage': 'en', 'runtimeLicenses': runtime_notices}
     (output / 'build-evidence.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     exe.with_suffix('.exe.sha256').write_text(report['exeSha256'] + '  ' + exe.name + '\n', encoding='ascii')
     print(json.dumps(report), flush=True)
