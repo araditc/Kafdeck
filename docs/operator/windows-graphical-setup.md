@@ -17,7 +17,7 @@ Publisher metadata: **Arad ITC** · [arad-itc.com](https://arad-itc.com) · [inf
 
 The code also remains in the private `C:\Kafdeck\secrets\FIRST-ADMIN.txt`. If an unused code expires, use the existing `scripts\New-SetupCode.ps1` with the installation account; do not reset the database. On another browser machine, review/import `public\server-public.cer` using your organization’s certificate procedure. Production deployments should supply an appropriate trusted certificate.
 
-All three services start automatically after reboot. The application appears in **Windows Settings → Apps → Installed apps** with publisher **Arad ITC**. PostgreSQL listens on loopback only. Configure Kafka authentication, clusters and ecosystem endpoints from the dashboard as described in the [dashboard guide](v0.9-dashboard-guide.md).
+All three services start automatically after reboot. The application appears in **Windows Settings → Apps → Installed apps** with publisher **Arad ITC**. PostgreSQL listens on loopback only. Configure Kafka authentication, clusters and ecosystem endpoints from the dashboard as described in the [dashboard guide](https://github.com/araditc/Kafdeck/blob/main/docs/operator/v0.9-dashboard-guide.md).
 
 ## Upgrade using the same EXE workflow
 
@@ -51,4 +51,4 @@ The operator needs only `publish\Kafdeck.Setup.exe`. `build-evidence.json` and i
 
 Release acceptance includes both language/layout checks, rejected license acceptance, corrupt payload/path rejection, no credential leakage, clean installation, reboot/resume, existing-installation upgrade/recovery and service removal/restore on an isolated elevated Windows environment. Reuse existing successful runtime tests for unchanged native bits; report any unexecuted elevated acceptance explicitly.
 
-[Recorded Windows acceptance](../implementation/evidence/windows-graphical-setup-acceptance-20261122.json) identifies the tested baseline and its limits. It covers actual services and vendor binaries; it does not claim a physical operating-system reboot or acceptance of a different native version.
+[Recorded Windows acceptance](https://github.com/araditc/Kafdeck/blob/main/docs/implementation/evidence/windows-graphical-setup-acceptance-20261122.json) identifies the tested baseline and its limits. It covers actual services and vendor binaries; it does not claim a physical operating-system reboot or acceptance of a different native version.
