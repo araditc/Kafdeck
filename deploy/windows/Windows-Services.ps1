@@ -61,7 +61,9 @@ function Assert-OfflineServiceOwner([object]$Service,[string]$Executable,[string
     $account=$Service.StartName
     # SCM can report local accounts as .\user. NTAccount requires the machine name.
     if($account.StartsWith('.\')){$account=$env:COMPUTERNAME+$account.Substring(1)}
-    $owner=try {([Security.Principal.NTAccount]::new($account)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{''}
+    # Win32_Service reports SYSTEM as LocalSystem, which NTAccount does not resolve.
+    # This alias must still match the exact expected SID; it never admits SYSTEM for a user-owned install.
+    $owner=if($account -eq 'LocalSystem'){'S-1-5-18'}else{try {([Security.Principal.NTAccount]::new($account)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{''}}
     if($path -ne $expectedPath){throw "Service $($Service.Name) executable does not match this installation. Expected '$expectedPath', registered '$path'. It was preserved."}
     if($owner -ne $Sid){throw "Service $($Service.Name) account '$($Service.StartName)' does not match the installation SID '$Sid'. It was preserved."}
 }

@@ -43,3 +43,5 @@ v0.9 W72 admission: #437 at `d8d9e6319b536760993d840ce084dfc832c543de`. Full W72
 [RFC-0010 — accepted v1.0 contract stability/support](0010-v1.0-contract-stability-support.md) records the owner decision of 2026-11-13. It applies to explicitly selected contracts in published v1.0.0.
 
 [RFC-0011 — v1.1 broker host management](0011-v1.1-broker-host-management.md) records the owner-approved roadmap, both required deployment environments and the five acceptance issues.
+
+[RFC-0013 — single-file offline Windows setup](0013-windows-single-file-offline-setup.md) records the accepted Arad ITC branding, English/Persian wizard and existing-engine maintenance boundaries. Windows release acceptance remains required.

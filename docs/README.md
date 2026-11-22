@@ -6,6 +6,7 @@ The [final publication record](releases/v1.0.md) and [completed checklist](relea
 
 | Task | Guide |
 | --- | --- |
+| Build/use the single-file offline Windows EXE (development supplement, English/Persian) | [Graphical setup](operator/windows-graphical-setup.md), [Persian RTL](operator/windows-graphical-setup.fa.md) |
 | Install 1.1.0 offline on a fresh Windows Server and create the first administrator | [English offline installer guide](operator/windows-offline-install.md), [Persian RTL](operator/windows-offline-install.fa.md) |
 | Upgrade an existing Windows Services installation offline | [PowerShell upgrade](operator/windows-offline-upgrade.md), [Persian RTL](operator/windows-offline-upgrade.fa.md) |
 | Install the Java 21 Kafka monitoring agent, use Docker/Windows, build its source | [Java agent guide](operator/kafka-agent.md), [agent source](../tools/kafka-agent/) |

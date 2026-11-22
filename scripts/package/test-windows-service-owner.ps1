@@ -25,12 +25,14 @@ foreach($registered in @('"C:\Kafdeck\services\Kafdeck\Kafdeck.exe" --other-conf
     $checks++
 }
 
-foreach($account in @('NT AUTHORITY\SYSTEM', 'KafdeckNonexistentDomain\NoSuchUser')){
+foreach($account in @('NT AUTHORITY\SYSTEM', 'LocalSystem', 'KafdeckNonexistentDomain\NoSuchUser')){
     $rejected=$false
     try {Assert-OfflineServiceOwner ([pscustomobject]@{Name='Kafdeck';PathName='"C:\Kafdeck\services\Kafdeck\Kafdeck.exe"';StartName=$account}) 'C:\Kafdeck\services/Kafdeck/Kafdeck.exe' $sid}catch{$rejected=$true}
     Assert $rejected 'A different or unresolvable account was accepted'
     $checks++
 }
+Assert-OfflineServiceOwner ([pscustomobject]@{Name='Kafdeck';PathName='"C:\Kafdeck\services\Kafdeck\Kafdeck.exe"';StartName='LocalSystem'}) 'C:\Kafdeck\services/Kafdeck/Kafdeck.exe' 'S-1-5-18'
+$checks++
 Assert-OfflineServiceOwner $null 'C:\Kafdeck\services/Kafdeck/Kafdeck.exe' $sid
 $checks++
 Write-Host "PASS $checks service ownership checks on Windows PowerShell $($PSVersionTable.PSVersion). No service changes."
