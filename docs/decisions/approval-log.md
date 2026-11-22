@@ -1,5 +1,13 @@
 # Project Approval Log
 
+## Windows graphical offline setup — 2026-11-21
+
+- Gate: supplementary single-file Windows installer design.
+- Status: **OWNER DESIGN ACCEPTED**; implementation, elevated Windows acceptance, specialist review and protected-main admission remain.
+- Owner explicitly approved one offline EXE embedding installation files, Arad ITC branding, the Kafdeck logo and mandatory agreement/license acceptance. Subsequent instructions supplied `https://arad-itc.com`, `info@arad-itc.org`, English and Persian languages, with English as default.
+- Accepted scope: [RFC-0013](../rfcs/0013-windows-single-file-offline-setup.md), existing installation/upgrade safety boundaries and retained-data service removal/restore.
+- This authorizes implementation. It does not authorize altering historical signed evidence, relabeling existing native releases, issuing a signing certificate or publishing a new stable asset.
+
 ## Bounded v1.0 G06 / E01 / Q01 request — 2026-11-13
 
 The owner explicitly requested resolving G06 and the still-open E01/Q01 in #469 while preserving the bounded v1.0 stabilization scope and reusing successful v0.9 evidence. [ADR-0011](../adr/0011-managed-state-format-freeze.md) records the proposed format-freeze/verified-restore policy. Its acceptance is conditional on the linked implementation PR's exact-head CI, required CODEOWNER review and protected-main admission recorded in #469. Existing authorization, mutation generation fences, signed v0.9 bytes and the 128-entry/30-minute in-memory credential limits remain. This request and technical admission authorize no v1.0 signing or publication; final RC/media and owner release decisions remain separate gates.

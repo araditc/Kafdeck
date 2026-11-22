@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>Kafdeck.Setup</AssemblyName>
+    <Company>Arad ITC</Company>
+    <Product>Kafdeck Offline Setup</Product>
+    <Copyright>Arad ITC — Apache License 2.0</Copyright>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="Exists('$(SetupAssets)/logo.ico')">$(SetupAssets)/logo.ico</ApplicationIcon>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(SetupAssets)/payload.zip" LogicalName="Setup.payload.zip" Condition="Exists('$(SetupAssets)/payload.zip')" />
+    <EmbeddedResource Include="$(SetupAssets)/metadata.json" LogicalName="Setup.metadata.json" Condition="Exists('$(SetupAssets)/metadata.json')" />
+    <EmbeddedResource Include="$(SetupAssets)/agreement.txt" LogicalName="Setup.agreement.txt" Condition="Exists('$(SetupAssets)/agreement.txt')" />
+    <EmbeddedResource Include="$(SetupAssets)/notices.txt" LogicalName="Setup.notices.txt" Condition="Exists('$(SetupAssets)/notices.txt')" />
+    <EmbeddedResource Include="$(SetupAssets)/logo.png" LogicalName="Setup.logo.png" Condition="Exists('$(SetupAssets)/logo.png')" />
+    <EmbeddedResource Include="Setup-Worker.ps1" LogicalName="Setup.worker.ps1" />
+  </ItemGroup>
+  <Target Name="RequireSetupAssets" BeforeTargets="Publish">
+    <Error Condition="!Exists('$(SetupAssets)/payload.zip')" Text="Use scripts/package/build-windows-setup.py with verified offline media." />
+  </Target>
+</Project>

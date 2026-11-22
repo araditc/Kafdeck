@@ -35,6 +35,8 @@ For a fresh Windows Server or an existing Windows Services installation, use the
 
 ![Kafdeck monitoring dashboard with CPU, GC, request queue latency, metadata response time and partition health charts](docs/images/monitoring-overview.png)
 
+Development supplement: a [single-file offline Windows setup](docs/operator/windows-graphical-setup.md) with English/Persian pages, Arad ITC branding, required license acceptance, installation/upgrade and retained-data service removal. This is source-built tooling pending elevated Windows release acceptance, not a replacement for the published signed release.
+
 *Monitoring dashboard with live observations from a three-broker Kafka cluster. Chart availability depends on the configured sources and Kafka/JVM metrics.*
 
 ## Why Kafdeck?

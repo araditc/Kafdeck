@@ -22,7 +22,7 @@ $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 if(!([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Open Windows PowerShell using Run as administrator.'}
 if(![Environment]::Is64BitProcess -or [Environment]::OSVersion.Version.Build -lt 17763){throw 'Use 64-bit Windows Server 2019 or newer and 64-bit Windows PowerShell.'}
 $InstallRoot=[IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
-if($InstallRoot -eq [IO.Path]::GetPathRoot($InstallRoot).TrimEnd('\') -or $InstallRoot.StartsWith($env:SystemRoot,[StringComparison]::OrdinalIgnoreCase) -or $InstallRoot -match '[\s\x80-\uffff]' -or $InstallRoot.StartsWith($mediaRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or $mediaRoot.StartsWith($InstallRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or $InstallRoot -eq $mediaRoot){throw 'Use a separate application directory such as C:\Kafdeck; extract this package to C:\Kafdeck-Setup. The application path must use ASCII without spaces.'}
+if($InstallRoot -eq [IO.Path]::GetPathRoot($InstallRoot).TrimEnd('\') -or $InstallRoot.StartsWith($env:SystemRoot,[StringComparison]::OrdinalIgnoreCase) -or !(Test-OfflineInstallPathCharacters $InstallRoot) -or $InstallRoot.StartsWith($mediaRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or $mediaRoot.StartsWith($InstallRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or $InstallRoot -eq $mediaRoot){throw 'Use a separate application directory such as C:\Kafdeck; extract this package to C:\Kafdeck-Setup. The application path must use ASCII without spaces.'}
 $receiptFile=Join-Path $InstallRoot 'config/offline-install.json'
 $packageHash=(Get-FileHash -LiteralPath (Join-Path $mediaRoot 'bundle-manifest.json')).Hash
 $receipt=$null
