@@ -1,0 +1,87 @@
+{
+  "observedOn": "2026-11-22",
+  "pullRequest": 515,
+  "testedPullHead": "8ded823c9953baed4c8bda372078c8c038df4303",
+  "run": "https://github.com/araditc/Kafdeck/actions/runs/44991755922",
+  "build": {
+    "installerSource": "c06a9d687a17de2e4743dde4c6f146fbb0d66fed",
+    "version": "1.1.0",
+    "nativeRuntimeCommit": "13e297d2e98e414b6e3e8c7ef520f611bf992ad4",
+    "nativeManifestSha256": "fbde2e6f65e7e4559fbe59a6d1f228abbc2355c1d6435140153326cfd37a85e5",
+    "inputArchiveSha256": "e345591a450b2840767e845daa5efe0463c18c0e97094eb43890000267fd721f",
+    "exeSha256": "a0ab1cc4165b2a5c11aa1e6ad359e85aac1007aee21773810280b3d7eacb26c5",
+    "exeBytes": 704826416,
+    "payload": {
+      "Version": "1.1.0",
+      "PayloadSha256": "e1103ac41a98db551f355c2c270eff42b5d62e66fe108edd4914bd7f16d3b366",
+      "PayloadBytes": 652774752
+    },
+    "publisherMetadata": "Arad ITC",
+    "authenticode": "not-signed",
+    "languages": [
+      "en",
+      "fa"
+    ],
+    "defaultLanguage": "en",
+    "runtimeLicenses": [
+      {
+        "package": "microsoft.netcore.app.runtime.win-x64",
+        "version": "10.0.15",
+        "licenses": [
+          {
+            "file": "LICENSE.TXT",
+            "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+          },
+          {
+            "file": "THIRD-PARTY-NOTICES.TXT",
+            "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+          }
+        ]
+      },
+      {
+        "package": "microsoft.windowsdesktop.app.runtime.win-x64",
+        "version": "10.0.15",
+        "licenses": [
+          {
+            "file": "LICENSE",
+            "sha256": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab"
+          }
+        ]
+      }
+    ]
+  },
+  "acceptance": {
+    "prerequisite3010Resume": "injected return followed by real installation",
+    "emailVerificationRequired": false,
+    "upgradeBaseline": "same native runtime, synthetic prior installer receipt",
+    "nativeVersion": "1.1.0",
+    "stage": "complete",
+    "noWindowsCredentialInFilesOrOutput": true,
+    "automaticServices": 3,
+    "actualOsReboot": false,
+    "serviceRemovalAndRestore": true,
+    "licenseRefusalNoEffects": true,
+    "verifiedColdBackup": true,
+    "languagesRecorded": [
+      "en",
+      "fa"
+    ],
+    "productionModuleCache": true,
+    "productionInstallationChanged": false,
+    "installerSource": "c06a9d687a17de2e4743dde4c6f146fbb0d66fed",
+    "authenticode": "not-signed",
+    "ownerAndEncryptedSecretsPreserved": true,
+    "firstOwnerCreatedInKeycloakPostgreSQL": true,
+    "success": true,
+    "dependencyRestartHealthy": true,
+    "payloadSha256": "e1103ac41a98db551f355c2c270eff42b5d62e66fe108edd4914bd7f16d3b366",
+    "exeSha256": "a0ab1cc4165b2a5c11aa1e6ad359e85aac1007aee21773810280b3d7eacb26c5"
+  },
+  "limitations": [
+    "No physical OS reboot was performed.",
+    "Upgrade used the unchanged native runtime with a synthetic prior installer receipt.",
+    "This is the accepted baseline before the review-driven missing-live-receipt recovery extension; that extension requires its own exact-head CI result.",
+    "The supplementary EXE is unsigned and is not an official release asset.",
+    "Unreleased Fleet onboarding is not included in the published 1.1.0 native runtime."
+  ]
+}

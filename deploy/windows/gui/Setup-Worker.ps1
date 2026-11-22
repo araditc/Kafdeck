@@ -23,7 +23,9 @@ try {
     $registration='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\AradITC.Kafdeck'
     if(Test-Path -LiteralPath $registration){$existing=Get-ItemProperty -LiteralPath $registration;if($existing.InstallLocation -ne $root){throw 'Another installation is already registered.'}}
     $receiptFile=Join-Path $root 'config/offline-install.json'
-    if(Test-Path -LiteralPath $receiptFile){
+    # Upgrade owns receipt/journal validation under its exclusive lock. During
+    # interrupted rollback the live config directory can legitimately be absent.
+    if($request.action -ne 'upgrade' -and (Test-Path -LiteralPath $receiptFile)){
         $receipt=Get-Content -LiteralPath $receiptFile -Raw|ConvertFrom-Json
         if($receipt.userSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -or $receipt.root -ne $root){throw 'Use the original installation account and directory.'}
     } else {$receipt=$null}
@@ -34,7 +36,6 @@ try {
         Send-Event @{stage='removed';root=$root};exit 0
     }
     if($request.action -eq 'upgrade'){
-        if(!$receipt -or $receipt.phase -ne 'complete'){throw 'Resume installation or removal before upgrading.'}
         & (Join-Path $media 'Upgrade-Kafdeck.ps1') -InstallRoot $root *> $null
     } else {
         if($receipt -and $receipt.phase -eq 'services-removed' -and @(Get-Service -Name 'Kafdeck','Kafdeck-Keycloak','Kafdeck-PostgreSQL' -ErrorAction SilentlyContinue).Count){throw 'Finish removing retained services before restoring them.'}

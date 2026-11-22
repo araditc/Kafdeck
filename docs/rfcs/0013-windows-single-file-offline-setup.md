@@ -1,6 +1,6 @@
 # RFC-0013: single-file offline Windows setup
 
-- Status: **Accepted design; implementation and Windows acceptance pending**
+- Status: **Implemented; isolated Windows acceptance recorded; publication pending**
 - Date: 2026-11-21
 - Owner decision: [approval log](../decisions/approval-log.md#windows-graphical-offline-setup--2026-11-21)
 - Scope: supplementary installer frontend, no native release relabeling or vendor-stack migration
@@ -31,3 +31,7 @@ Company metadata is not Authenticode identity. A verified-publisher claim requir
 - Reject changed payloads, unsafe paths, unlisted files and insecure executable caches; demonstrate no credential handoff on disk/command line.
 - On isolated elevated Windows, test installation, reboot/resume, automatic service start, first administrator, retained-state upgrade/recovery and service removal/restore.
 - Reuse successful unchanged runtime evidence. Report unexecuted elevated checks honestly. Specialist review and protected-main checks remain required.
+
+## Recorded implementation evidence
+
+[Elevated Windows acceptance](../implementation/evidence/windows-graphical-setup-acceptance-20261122.json) records the exact tested baseline, EXE identity and scope. The production worker and real vendor services passed installation, first-owner creation, automatic dependency restart, cold-backup update and retained-state service restoration. Physical OS reboot was not performed; prerequisite exit 3010 was injected. A subsequent review-driven recovery test reproduces an absent live configuration receipt and verifies journal-account refusal, rollback recovery and explicit reapplication; its exact-head result is tracked in PR #515. New release signing/publication remains separate.

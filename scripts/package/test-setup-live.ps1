@@ -119,6 +119,35 @@ try {
     Assert-True ($result.exit -eq 0 -and $result.event.stage -eq 'complete' -and !$result.event.firstAdmin) ('Upgrade failed: '+$result.event.category)
     $journal=Get-Content -LiteralPath (Join-Path $root 'offline-upgrade.json') -Raw|ConvertFrom-Json
     Assert-True ($journal.phase -eq 'complete' -and $journal.backupReady) 'Verified cold backup was not exercised.'
+    . (Join-Path $root 'scripts/Offline-Upgrade.ps1')
+    $stage='interrupted-config-restore-recovery';$proof.stage=$stage
+    # Reproduce the rollback rename gap using the real verified cold snapshot.
+    # The journal, service identities and original account remain authoritative.
+    foreach($name in @('Kafdeck','Kafdeck-Keycloak','Kafdeck-PostgreSQL')){
+        $controller=[ServiceProcess.ServiceController]::new($name)
+        try {$controller.Stop();$controller.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(120))}finally{$controller.Dispose()}
+    }
+    $journal.phase='restoring'
+    Write-UpgradeJournal (Join-Path $root 'offline-upgrade.json') $journal
+    $displaced=Join-Path (Join-Path $root $journal.backup) ('failed-config-'+[guid]::NewGuid().ToString('N'))
+    Move-Item -LiteralPath (Join-Path $root 'config') -Destination $displaced
+    Assert-True (!(Test-Path -LiteralPath $receiptPath)) 'Rollback rename gap was not reproduced.'
+    $originalSid=$journal.receipt.userSid
+    $journal.receipt.userSid='S-1-5-18'
+    Write-UpgradeJournal (Join-Path $root 'offline-upgrade.json') $journal
+    $refused=Worker $request
+    Assert-True ($refused.exit -eq 1 -and $refused.event.stage -eq 'failed' -and !(Test-Path -LiteralPath $receiptPath)) 'Foreign journal account was not refused before recovery.'
+    foreach($name in @('Kafdeck','Kafdeck-Keycloak','Kafdeck-PostgreSQL')){Assert-True ((Get-Service -Name $name).Status -eq 'Stopped') 'Foreign journal account changed service state.'}
+    $journal.receipt.userSid=$originalSid
+    Write-UpgradeJournal (Join-Path $root 'offline-upgrade.json') $journal
+    $result=Worker $request
+    Assert-True ($result.exit -eq 0 -and $result.event.stage -eq 'recovered') ('Missing-receipt recovery failed: '+$result.event.category)
+    Healthy
+    $recovered=Get-Content -LiteralPath (Join-Path $root 'offline-upgrade.json') -Raw|ConvertFrom-Json
+    Assert-True ($recovered.phase -eq 'rolled-back' -and (Owner-Count) -eq '1') 'Interrupted restore did not recover the retained owner.'
+    # Recovery must not claim application of the new installer revision.
+    $result=Worker $request
+    Assert-True ($result.exit -eq 0 -and $result.event.stage -eq 'complete') ('Post-recovery upgrade failed: '+$result.event.category)
     $stage='remove-retain-and-restore';$proof.stage=$stage
     $request.action='remove'
     [GC]::Collect();[GC]::WaitForPendingFinalizers()
@@ -142,7 +171,7 @@ try {
             Assert-True (!$content.Contains($password)) 'Windows credential was persisted in installation files.'
         }
     }
-    $proof=@{success=$true;stage='complete';nativeVersion=$build.version;installerSource=$build.installerSource;exeSha256=$build.exeSha256;payloadSha256=$build.payload.PayloadSha256;productionModuleCache=$true;licenseRefusalNoEffects=$true;prerequisite3010Resume='injected return followed by real installation';actualOsReboot=$false;automaticServices=3;dependencyRestartHealthy=$true;firstOwnerCreatedInKeycloakPostgreSQL=$true;emailVerificationRequired=$false;upgradeBaseline='same native runtime, synthetic prior installer receipt';verifiedColdBackup=$true;serviceRemovalAndRestore=$true;ownerAndEncryptedSecretsPreserved=$true;noWindowsCredentialInFilesOrOutput=$true;languagesRecorded=@('en','fa');authenticode='not-signed';productionInstallationChanged=$false}
+    $proof=@{success=$true;stage='complete';nativeVersion=$build.version;installerSource=$build.installerSource;exeSha256=$build.exeSha256;payloadSha256=$build.payload.PayloadSha256;productionModuleCache=$true;licenseRefusalNoEffects=$true;prerequisite3010Resume='injected return followed by real installation';actualOsReboot=$false;automaticServices=3;dependencyRestartHealthy=$true;firstOwnerCreatedInKeycloakPostgreSQL=$true;emailVerificationRequired=$false;upgradeBaseline='same native runtime, synthetic prior installer receipt';verifiedColdBackup=$true;missingLiveReceiptRecovery=$true;foreignJournalAccountRefusedWithoutEffects=$true;recoveredReportedBeforeReapply=$true;serviceRemovalAndRestore=$true;ownerAndEncryptedSecretsPreserved=$true;noWindowsCredentialInFilesOrOutput=$true;languagesRecorded=@('en','fa');authenticode='not-signed';productionInstallationChanged=$false}
 } catch {
     $proof.success=$false;$proof.stage=$stage;$proof.errorCategory=$_.Exception.GetType().Name;$proof.assertion=$script:assertion;$proof.lastWorker=$script:lastWorker;$proof.testLine=$_.InvocationInfo.ScriptLineNumber
     if(Test-Path -LiteralPath (Join-Path $fixture.root 'config/offline-install.json')){$proof.installPhase=(Get-Content -LiteralPath (Join-Path $fixture.root 'config/offline-install.json') -Raw|ConvertFrom-Json).phase}
