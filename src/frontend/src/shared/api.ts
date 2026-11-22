@@ -28,7 +28,7 @@ export interface BrokerAgentProgress {
     'awaitingHealth' | 'reconcile' | 'complete' | 'alreadyInstalled' | 'expired';
   version?: string | null; digest?: string; metricSeenAt?: number; dispatchedAt?: number;
   requiresRenewal?: boolean;
-  processStartedAt?: number; monitoringInstance?: string; health?: BrokerAgentHealth;
+  processStartedAt?: number; javaObservedAt?: number | null; monitoringInstance?: string; health?: BrokerAgentHealth;
   lastConfirmed?: 'DispatchAuthorized' | 'PackagePublishing' | 'RestartIntent' | 'RestartObserved' | 'KafkaHealthy' | null;
 }
 
@@ -872,9 +872,62 @@ export interface BrokerHostDraft { name: string; address: string; port: number; 
 export interface BrokerHost { id: string; connection: BrokerHostDraft; verifiedAtUtc: string }
 export interface BrokerServiceTarget { id: string; adapter: 'systemd' | 'compose'; unit: string | null; project: string | null; service: string | null; brokerId: number | null; kafkaClusterId: string | null; status: string }
 export interface BrokerHostBinding { clusterId: string; brokerId: number; hostId: string; targetId: string; verifiedAtUtc: string }
-export interface BrokerHostRegistry { revision: number; hosts: BrokerHost[]; bindings: BrokerHostBinding[]; credentials: { id: string; authentication: string }[] }
+export interface BrokerHostRegistry { agentCredentials?: {hostId: string; credentialId: string | null}[]; revision: number; hosts: BrokerHost[]; bindings: BrokerHostBinding[]; credentials: { id: string; authentication: string }[] }
+
+export interface FleetConfiguration {
+  enabled: boolean; allowedNetworks: string[]; logReaderUserIds: string[];
+  logSources: {clusterId: string; brokerId: number; monitoringInstance: string}[];
+  agentInstallerUserIds: string[];
+  agentTargets: {clusterId: string; brokerId: number; monitoringInstance: string; credentialId: string; expectedBrokers: number}[];
+  agentPackages: {version: string; digest: string}[];
+}
+export interface FleetCredential {
+  id: string; authentication: 'privateKey' | 'password'; purpose: 'probe' | 'agent';
+  revoked: boolean; revision: number; stored: boolean;
+}
+export interface FleetSettings { revision: number; configuration: FleetConfiguration; credentials: FleetCredential[] }
+
+export interface FleetBootstrapConnection {
+  address: string; port: number; user: string; fingerprint: string; authentication: 'password' | 'privateKey';
+  secret: string; passphrase: string; sudoPassword: string;
+}
+export interface FleetBootstrapInspection {
+  preview: string; targets: (BrokerServiceTarget & {instance: string})[];
+  package: {version: string; digest: string}; changes: string[]; brokerRestarted: false;
+}
+export interface FleetBootstrapProgress {
+  id: string; stage: 'complete' | 'pending' | 'failed'; code?: string;
+  targets?: BrokerServiceTarget[]; next?: string;
+}
+export interface FleetBootstrapOperation {
+  id: string; clusterId: string; name: string; address: string; stage: string; createdAtUtc: string;
+}
 
 export const kafdeckApi = {
+  inspectFleetHost(input: {clusterId: string; name: string; connection: FleetBootstrapConnection}, signal?: AbortSignal) {
+    return postJson<FleetBootstrapInspection>('/api/v1/fleet/bootstrap/inspect', input, signal);
+  },
+  prepareFleetHost(input: {preview: string; targetIds: string[]; connection: FleetBootstrapConnection; endpoint: string;
+    caPem: string | null; intervalSeconds: number; maintenanceFrom: number; maintenanceTo: number; confirmPreparation: boolean}, signal?: AbortSignal) {
+    return postJson<FleetBootstrapProgress>('/api/v1/fleet/bootstrap/prepare', input, signal);
+  },
+  fleetBootstrapOperations(signal?: AbortSignal) {
+    return readJson<{operations: FleetBootstrapOperation[]}>('/api/v1/fleet/bootstrap/operations', signal);
+  },
+  resumeFleetBootstrap(operationId: string, connection: FleetBootstrapConnection | null, confirmPreparation: boolean, signal?: AbortSignal) {
+    return postJson<FleetBootstrapProgress>('/api/v1/fleet/bootstrap/resume', {operationId, connection, confirmPreparation}, signal);
+  },
+
+  fleetPublicCertificate(signal?: AbortSignal) { return readJson<{pem: string | null}>('/api/v1/fleet/settings/public-certificate', signal); },
+  fleetSettings(signal?: AbortSignal) { return readJson<FleetSettings>('/api/v1/fleet/settings/', signal); },
+  saveFleetConfiguration(expectedRevision: number, configuration: FleetConfiguration, signal?: AbortSignal) {
+    return postJson<FleetSettings>('/api/v1/fleet/settings/configuration', {expectedRevision, configuration}, signal);
+  },
+  saveFleetCredential(input: {expectedRevision: number; id: string; authentication: string; secret?: string;
+    passphrase?: string | undefined; purpose: string; revoke?: boolean}, signal?: AbortSignal) {
+    return postJson<FleetSettings>('/api/v1/fleet/settings/credentials', input, signal);
+  },
+
   brokerHosts(signal?: AbortSignal) { return readJson<BrokerHostRegistry>('/api/v1/fleet/hosts', signal); },
   brokerLogTargets(clusterId: string, signal?: AbortSignal) {
     return readJson<BrokerLogTargets>('/api/v1/fleet/hosts/log-targets?' + new URLSearchParams({clusterId}), signal);

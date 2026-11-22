@@ -1,0 +1,88 @@
+{
+  "observedOn": "2026-11-22",
+  "pullRequest": 515,
+  "testedPullHead": "1abe803f2a0217bb2e2eab91f4e7f696c8422b78",
+  "run": "https://github.com/araditc/Kafdeck/actions/runs/44994285286",
+  "build": {
+    "installerSource": "7310d882026abdb93948bef0b76cae6965bc60a2",
+    "version": "1.1.0",
+    "nativeRuntimeCommit": "13e297d2e98e414b6e3e8c7ef520f611bf992ad4",
+    "nativeManifestSha256": "fbde2e6f65e7e4559fbe59a6d1f228abbc2355c1d6435140153326cfd37a85e5",
+    "inputArchiveSha256": "57ed9bdc5bfa1826805ab2e3d9381ac2bc982eff7b82f39ab64f13b4719564b4",
+    "exeSha256": "9be2913d85205c3912df8dc2316119ec330b5f942c8b05df3e0c74839b3059c3",
+    "exeBytes": 704828976,
+    "payload": {
+      "Version": "1.1.0",
+      "PayloadSha256": "360cace565b27fbd4e728199d57914e218aeb22524df12b52ec66d2805ad5277",
+      "PayloadBytes": 652777350
+    },
+    "publisherMetadata": "Arad ITC",
+    "authenticode": "not-signed",
+    "languages": [
+      "en",
+      "fa"
+    ],
+    "defaultLanguage": "en",
+    "runtimeLicenses": [
+      {
+        "package": "microsoft.netcore.app.runtime.win-x64",
+        "version": "10.0.15",
+        "licenses": [
+          {
+            "file": "LICENSE.TXT",
+            "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+          },
+          {
+            "file": "THIRD-PARTY-NOTICES.TXT",
+            "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+          }
+        ]
+      },
+      {
+        "package": "microsoft.windowsdesktop.app.runtime.win-x64",
+        "version": "10.0.15",
+        "licenses": [
+          {
+            "file": "LICENSE",
+            "sha256": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab"
+          }
+        ]
+      }
+    ]
+  },
+  "acceptance": {
+    "dependencyRestartHealthy": true,
+    "firstOwnerCreatedInKeycloakPostgreSQL": true,
+    "noWindowsCredentialInFilesOrOutput": true,
+    "payloadSha256": "360cace565b27fbd4e728199d57914e218aeb22524df12b52ec66d2805ad5277",
+    "emailVerificationRequired": false,
+    "nativeVersion": "1.1.0",
+    "exeSha256": "9be2913d85205c3912df8dc2316119ec330b5f942c8b05df3e0c74839b3059c3",
+    "licenseRefusalNoEffects": true,
+    "verifiedColdBackup": true,
+    "missingLiveReceiptRecovery": true,
+    "ownerAndEncryptedSecretsPreserved": true,
+    "stage": "complete",
+    "upgradeBaseline": "same native runtime, synthetic prior installer receipt",
+    "productionInstallationChanged": false,
+    "recoveredReportedBeforeReapply": true,
+    "foreignJournalAccountRefusedWithoutEffects": true,
+    "authenticode": "not-signed",
+    "automaticServices": 3,
+    "prerequisite3010Resume": "injected return followed by real installation",
+    "languagesRecorded": [
+      "en",
+      "fa"
+    ],
+    "actualOsReboot": false,
+    "success": true,
+    "serviceRemovalAndRestore": true,
+    "installerSource": "7310d882026abdb93948bef0b76cae6965bc60a2",
+    "productionModuleCache": true
+  },
+  "limitations": [
+    "The config rename gap was reproduced using the real verified cold snapshot; no physical OS reboot was performed.",
+    "Upgrade retained native 1.1.0 and used a synthetic prior installer receipt.",
+    "The supplementary EXE is unsigned and is not an official release asset."
+  ]
+}

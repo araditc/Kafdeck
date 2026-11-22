@@ -1,3 +1,6 @@
+import { FleetAgentTargetPanel } from './FleetAgentTargetPanel.js';
+import { FleetBootstrapPanel } from './FleetBootstrapPanel.js';
+import { FleetSettingsPanel } from './FleetSettingsPanel.js';
 import { useEffect, useRef, useState } from 'react';
 import { ApiProblem, kafdeckApi, type BrokerHostDraft, type BrokerHostRegistry, type BrokerServiceTarget } from '../shared/api.js';
 import { t } from '../shared/i18n.js';
@@ -28,6 +31,17 @@ export function BrokerHostsPanel({ clusterId }: { clusterId: string }) {
     }).catch(e => { if (!control.signal.aborted) report(e); });
     return () => control.abort();
   }, [clusterId]);
+  async function reloadRegistry() {
+    const signal = lifetime.current?.signal;
+    if (!signal || signal.aborted) return;
+    const state = await kafdeckApi.brokerHosts(signal);
+    if (signal.aborted) return;
+    setRegistry(state);
+    setDraft(previous => ({...previous, credentialId: state.credentials.some(item => item.id === previous.credentialId) ?
+      previous.credentialId : state.credentials[0]?.id ?? ''}));
+    setError('');
+    window.dispatchEvent(new Event('kafdeck:fleet-settings-changed'));
+  }
   async function action(work: (signal: AbortSignal) => Promise<void>) {
     const signal = lifetime.current?.signal;
     if (!signal || signal.aborted || busy) return;
@@ -44,9 +58,13 @@ export function BrokerHostsPanel({ clusterId }: { clusterId: string }) {
     {notice && <div className="alert alert-success" role="status">{notice}</div>}
     {!registry && !error && <p role="status">{t('Loading…')}</p>}
     {registry && <>
+    <FleetSettingsPanel onSaved={reloadRegistry} />
+    <FleetBootstrapPanel clusterId={clusterId} onSaved={reloadRegistry} />
+    <FleetAgentTargetPanel clusterId={clusterId} onSaved={reloadRegistry} />
+
       <details className="mb-3">
         <summary className="mb-3">{t('Register SSH host')}</summary>
-        <form onSubmit={e => { e.preventDefault(); void action(async signal => {
+        <form aria-label={t('Register SSH host')} onSubmit={e => { e.preventDefault(); void action(async signal => {
           const result = await kafdeckApi.registerBrokerHost(registry.revision, draft, signal);
           const state = await kafdeckApi.brokerHosts(signal);
           if (signal.aborted) return;

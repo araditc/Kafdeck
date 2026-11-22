@@ -12,7 +12,7 @@ internal sealed record BrokerAgentCommand(string Action, string OperationId, str
     bool? ExpectRestart = null);
 internal sealed record BrokerAgentHostResult(string Stage, string? Code, string? Version, string? Digest, string? Adapter,
     string? CurrentVersion, string? CurrentDigest, string? Instance, string? LaunchMode, bool RestartRequired,
-    long? MaintenanceFrom, long? MaintenanceTo, long? DispatchedAt, long? ProcessStartedAt);
+    long? MaintenanceFrom, long? MaintenanceTo, long? DispatchedAt, long? ProcessStartedAt, long? JavaObservedAt = null);
 internal sealed record BrokerAgentPlan(string Principal, string ClusterId, BrokerAgentTarget Target, BrokerAgentPackage Package,
     BrokerHostBinding Binding, BrokerHostDraft Connection, BrokerAgentCommand Command, long CreatedAt);
 

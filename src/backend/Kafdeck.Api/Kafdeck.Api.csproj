@@ -2,6 +2,9 @@
   <ItemGroup><Compile Include="../../shared/KafdeckReadContracts.cs" Link="Contracts/KafdeckReadContracts.cs" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../../docs/api/openapi-managed-browser.json" LogicalName="Kafdeck.ManagedBrowser.OpenApi" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../../tools/kafka-agent/kafdeck-kafka-agent.jar" LogicalName="Kafdeck.Monitoring.Agent.jar" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../../tools/broker-host/bootstrap.py;../../../tools/broker-host/probe.py;../../../tools/broker-host/ssh-entry.sh;../../../tools/broker-host/agent-lifecycle.py;../../../tools/broker-host/agent-entry.sh" LogicalName="Kafdeck.Fleet.Host.%(Filename)%(Extension)" />
+  </ItemGroup>
   <PropertyGroup>
     <AssemblyName>Kafdeck.Api</AssemblyName>
     <RootNamespace>Kafdeck.Api</RootNamespace>

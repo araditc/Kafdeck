@@ -1,5 +1,6 @@
 #!/usr/bin/python3 -I
 """Read approved broker service identities through a restricted SSH command."""
+import hashlib
 import json
 from datetime import datetime
 import os
@@ -302,10 +303,43 @@ def log_deadline(_signal, _frame):
     raise LogDeadline()
 
 
+def protected(path):
+    if not path.is_absolute():
+        raise ValueError('unsafe_setup_receipt')
+    for entry in (*reversed(path.parents), path):
+        info = entry.lstat()
+        if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+            raise ValueError('unsafe_setup_receipt')
+
+
+def setup_receipt(request):
+    operation = request.get('operationId', '')
+    if set(request) != {'operationId'} or not re.fullmatch(r'[a-f0-9]{32}', operation):
+        raise ValueError('invalid_request')
+    receipt = Path('/var/lib/kafdeck-bootstrap') / (operation + '.json')
+    protected(receipt)
+    value = json.loads(small_file(receipt))
+    if value.get('stage') != 'prepared' or not isinstance(value.get('artifacts'), dict):
+        raise ValueError('setup_incomplete')
+    for name, digest in value['artifacts'].items():
+        path = Path(name)
+        protected(path)
+        with path.open('rb') as stream:
+            data = stream.read(4 * 1024 * 1024 + 1)
+        if len(data) > 4 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError('setup_changed')
+    return {'proof': value['proof']}
+
+
 def main():
     if os.geteuid() != 0:
         raise ValueError('command_denied')
-    if sys.argv[1:] == ['--logs-v1']:
+    if sys.argv[1:] == ['--setup-v1']:
+        request = sys.stdin.buffer.read(129)
+        if len(request) > 128:
+            raise ValueError('request_limit')
+        result = setup_receipt(json.loads(request))
+    elif sys.argv[1:] == ['--logs-v1']:
         signal.signal(signal.SIGALRM, log_deadline)
         signal.alarm(10)
         request_bytes = sys.stdin.buffer.read(1025)

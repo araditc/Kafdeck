@@ -1086,12 +1086,23 @@ if (kafdeckOptions.Deployment.Mode == AccessMode.Oidc)
     {
         _ = app.Services.GetRequiredService<ManagedKeycloakUsers>();
         app.MapManagedIdentity(managedIdentity, kafdeckOptions);
-        var hostStore = new BrokerHostStore(managedIdentityOptions.StateFile! + ".hosts.json");
-        var hostSsh = new BrokerHostSsh(brokerHostOptions);
+        var legacyHostStore = new BrokerHostStore(managedIdentityOptions.StateFile! + ".hosts.json");
+        var fleetDirectory = managedIdentityOptions.StateFile! + ".fleet";
+        Directory.CreateDirectory(fleetDirectory);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(fleetDirectory,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var fleetStore = new FleetSettingsStore(Path.Combine(fleetDirectory, "settings.sqlite"),
+            FleetKeyRing.Open(Path.Combine(fleetDirectory, "keys")), brokerHostOptions, legacyHostStore.Read());
+        brokerHostOptions.Runtime = fleetStore.Options;
+        var agentRecovery = new BrokerAgentRecoveryStore(managedIdentityOptions.StateFile! + ".agent-operations.json");
+        app.MapFleetSettings(managedIdentity, fleetStore, agentRecovery);
+        var hostStore = new BrokerHostStore(managedIdentityOptions.StateFile! + ".hosts.json", fleetStore);
+        var hostSsh = new BrokerHostSsh(brokerHostOptions, fleetStore);
         app.MapBrokerHosts(managedIdentity, brokerHostOptions, hostStore, hostSsh);
         app.MapBrokerLogs(managedIdentity, brokerHostOptions, hostStore, hostSsh);
-        app.MapBrokerAgents(managedIdentity, brokerHostOptions, hostStore, hostSsh,
-            new BrokerAgentRecoveryStore(managedIdentityOptions.StateFile! + ".agent-operations.json"));
+        app.MapBrokerAgents(managedIdentity, brokerHostOptions, hostStore, hostSsh, agentRecovery);
+        app.MapFleetBootstrap(managedIdentity, brokerHostOptions, fleetStore, hostStore, hostSsh,
+            new FleetBootstrapSsh(), agentRecovery);
         if (app.Services.GetService<RegisteredHttpServiceRuntime>() is { } registered)
             app.MapRegisteredHttpServices(managedIdentity, registered);
     }

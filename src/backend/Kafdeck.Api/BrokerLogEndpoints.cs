@@ -32,7 +32,7 @@ internal static partial class BrokerLogEndpoints
             var targets = store.Read().Bindings.Where(binding => binding.ClusterId == clusterId).Select(binding => new
             {
                 binding.BrokerId,
-                monitoringInstance = options.LogSources.SingleOrDefault(source =>
+                monitoringInstance = options.Current.LogSources.SingleOrDefault(source =>
                     source.ClusterId == clusterId && source.BrokerId == binding.BrokerId)?.MonitoringInstance,
             }).OrderBy(target => target.BrokerId);
             return Results.Ok(new { allowed = true, targets });
@@ -104,8 +104,8 @@ internal static partial class BrokerLogEndpoints
 
     internal static bool MayRead(ManagedIdentityStore identity, BrokerHostOptions options,
         OperatorSessionContext? session, string clusterId) =>
-        options.Enabled && BrokerHostValidation.ClusterId(clusterId) && session is not null &&
-        identity.Find(session) is { } user && options.LogReaderUserIds.Contains(user.Id) &&
+        options.Current.Enabled && BrokerHostValidation.ClusterId(clusterId) && session is not null &&
+        identity.Find(session) is { } user && options.Current.LogReaderUserIds.Contains(user.Id) &&
         ManagedIdentityStore.SessionAllowed(user, session) &&
         (user.Role == "owner" || user.ClusterIds.Contains(clusterId, StringComparer.Ordinal));
 

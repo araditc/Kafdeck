@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "cases": [
+    "snapshot larger than 64 KiB accepted by lifecycle",
+    "serialized Unicode expansion above 256 KiB refused before write"
+  ],
+  "execution": "ordinary SSH user; mocked root writes and Docker commands; no service changes",
+  "sourceSha256": {
+    "bootstrap.py": "901b789d542c1cd5e0d777619dcaf4f7dba79b2b27b2329c30cf861fcefa257f",
+    "agent-lifecycle.py": "cd38f32f21f4d54c295748a2de7aed426091b8278d037a32c50e8acc9abc3b6d",
+    "probe.py": "f7a45196fd4fb4ef794723b1b0bc141a49607844c648ede68db78e9412066543",
+    "test_bootstrap.py": "c81b03e204731edb48a9595bea7bff53f81a270dc72a0601fa14133c0f91f373"
+  },
+  "observedOn": "2026-11-22",
+  "pullRequest": 514,
+  "scope": "Focused review regression; prior real Compose lifecycle and metric evidence is retained unchanged."
+}

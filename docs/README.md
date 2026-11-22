@@ -39,3 +39,9 @@ Versioned RFCs/ADRs, Gate decisions and intermediate test reports retain origina
 ## Managed browser API reference
 
 The [experimental managed-browser contract](api/managed-browser-contract.md) and [OpenAPI catalog](api/openapi-managed-browser.json) document first-owner setup, ordinary users, Kafka targets and registered service settings without changing the retained versioned public API families.
+
+## Fleet dashboard onboarding in newer source builds
+
+- [Encrypted credentials and guided Linux host preparation](operator/fleet-dashboard-onboarding.md)
+- [راهنمای فارسی راست‌به‌چپ](operator/fleet-dashboard-onboarding.fa.md)
+- [RFC-0012: accepted design and security/storage boundary](rfcs/0012-fleet-dashboard-onboarding.md)

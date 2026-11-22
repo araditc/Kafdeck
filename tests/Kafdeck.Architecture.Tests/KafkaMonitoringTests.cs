@@ -36,6 +36,40 @@ public sealed class KafkaMonitoringTests : IDisposable
     }
 
     [Fact]
+    public void Agent_metric_proof_accepts_delayed_exec_only_with_a_bounded_trusted_java_observation()
+    {
+        var now = _clock.GetUtcNow().ToUnixTimeSeconds();
+        var started = now - 60;
+        Assert.Equal(204, Status(Ingest(new("java.lang:Runtime/StartTime", [], (started + 40) * 1000),
+            new("kafka.server:ReplicaManager/PartitionCount/Value", [], 3))));
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", started, started - 10));
+        Assert.Equal(now, _store.AgentMetricAfter("a", "broker-1", started, started - 10, now));
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", started, started - 10, started + 30));
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", started, started - 10, now + 3));
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", started, started - 10, started - 1));
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", started, now + 10, now));
+        _clock.Advance(121);
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", started, started - 10, now));
+    }
+
+    [Fact]
+    public void Agent_metric_proof_never_uses_an_unpaired_helper_jvm_start()
+    {
+        var now = _clock.GetUtcNow().ToUnixTimeSeconds();
+        Assert.Equal(204, Status(Ingest(new JmxPoint("java.lang:Runtime/StartTime", [], (now - 20) * 1000))));
+        Assert.Null(_store.AgentMetricAfter("a", "broker-1", now - 60, now - 70, now));
+    }
+
+    [Fact]
+    public void Agent_metric_proof_remains_compatible_with_old_helpers()
+    {
+        var now = _clock.GetUtcNow().ToUnixTimeSeconds();
+        Assert.Equal(204, Status(Ingest(new("java.lang:Runtime/StartTime", [], (now - 50) * 1000),
+            new("kafka.server:ReplicaManager/PartitionCount/Value", [], 3))));
+        Assert.Equal(now, _store.AgentMetricAfter("a", "broker-1", now - 60, now - 70));
+    }
+
+    [Fact]
     public void Jmx_diagnostics_explain_unsupported_values_without_partial_and_survive_restart()
     {
         var issue=new JmxIssue("java.lang:MemoryPool/UsageThreshold","java.lang:type=MemoryPool,name=G1 Eden Space","unsupported");

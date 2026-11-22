@@ -27,12 +27,12 @@ internal static class BrokerAgentEndpoints
         group.MapGet("/targets", (string clusterId, HttpContext http) =>
         {
             var allowed = Installer(http, identity, options, clusterId);
-            var target = options.AgentTargets.SingleOrDefault(item => item.ClusterId == clusterId);
+            var target = options.Current.AgentTargets.SingleOrDefault(item => item.ClusterId == clusterId);
             if (allowed is null || target is null || !registry.Read().Bindings.Any(row =>
                     row.ClusterId == clusterId && row.BrokerId == target.BrokerId))
                 return Results.Ok(new { brokerId = (int?)null, packages = Array.Empty<BrokerAgentPackage>(), pendingPlan = (string?)null });
             var pending = recovery.Find(clusterId);
-            return Results.Ok(new { brokerId = (int?)target.BrokerId, packages = options.AgentPackages,
+            return Results.Ok(new { brokerId = (int?)target.BrokerId, packages = options.Current.AgentPackages,
                 pendingPlan = pending is { } item && item.Principal == allowed ? item.Token : null });
         }).WithManagedBrowserContract("managed-broker-agent-targets");
 
@@ -41,8 +41,8 @@ internal static class BrokerAgentEndpoints
         {
             var principal = Installer(http, identity, options, input.ClusterId);
             if (principal is null) return Problem(403, "agent_install_denied");
-            var target = options.AgentTargets.SingleOrDefault(item => item.ClusterId == input.ClusterId && item.BrokerId == input.BrokerId);
-            var package = options.AgentPackages.SingleOrDefault(item => item.Version == input.Version);
+            var target = options.Current.AgentTargets.SingleOrDefault(item => item.ClusterId == input.ClusterId && item.BrokerId == input.BrokerId);
+            var package = options.Current.AgentPackages.SingleOrDefault(item => item.Version == input.Version);
             if (target is null || package is null || !HasSource(metrics, target)) return Problem(409, "agent_target_unconfigured");
             var selected = GetTarget(registry, target);
             if (selected is null) return Problem(404, "agent_target_unbound");
@@ -95,7 +95,7 @@ internal static class BrokerAgentEndpoints
             if (plan is null || plan.Command.ExpectRestart is not { } expectRestart || plan.Command.ApplyUntil is not { } deadline)
                 return Problem(400, "agent_preview_invalid");
             bool Authorized() => Installer(http, identity, options, plan.ClusterId) == plan.Principal &&
-                options.AgentTargets.Contains(plan.Target) && options.AgentPackages.Contains(plan.Package) &&
+                options.Current.AgentTargets.Contains(plan.Target) && options.Current.AgentPackages.Contains(plan.Package) &&
                 GetTarget(registry, plan.Target) == (plan.Binding, plan.Connection);
             if (!Authorized() || !HasSource(metrics, plan.Target)) return Problem(403, "agent_install_denied");
             if (!await dispatch.WaitAsync(0, cancellation)) return Problem(429, "agent_lifecycle_busy");
@@ -130,7 +130,7 @@ internal static class BrokerAgentEndpoints
                     if (!observed.Healthy) return Results.Conflict(new { stage = "blocked", code = "agent_restart_not_safe", health = observed });
                     if (!Authorized()) return Problem(403, "agent_install_denied");
                     if (Timestamp() >= deadline) return Problem(409, "agent_preview_expired");
-                    recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan));
+                    recovery.Begin(new(plan.ClusterId, plan.Command.OperationId, plan.Principal, input.Plan), Authorized);
                     await Audit(audit, plan, SecurityAuditOutcome.Succeeded, "agent_dispatch_authorized", cancellation);
                     try { status = await host.CallAsync(plan.Connection, plan.Command with { Action = "apply" }, cancellation); }
                     catch (BrokerHostFailure e) when (UncertainResponse(e))
@@ -166,18 +166,22 @@ internal static class BrokerAgentEndpoints
                         lastConfirmed = Checkpoint(), requiresRenewal = status.Stage == "publishing" && Timestamp() >= deadline });
                 if (status.ProcessStartedAt is not { } started || status.DispatchedAt is not { } dispatched ||
                     started < dispatched - 2 || started > Timestamp() + 2 || status.Digest != plan.Package.Digest ||
+                    status.JavaObservedAt is { } javaTime && (javaTime < started || javaTime > Timestamp() + 2) ||
                     status.Version != plan.Package.Version)
                     return Problem(409, "agent_restart_evidence_invalid");
+                // A successful fixed SSH status verifies the replacement Kafka JVM before
+                // this reply arrives. Its receipt time is a trusted upper bound for old helpers.
+                var javaObservedAt = status.JavaObservedAt ?? Timestamp();
                 Advance(BrokerAgentCheckpoint.RestartObserved);
                 var recovered = await BrokerAgentHealthCheck.CheckAsync(kafka, plan.Binding, plan.Target.ExpectedBrokers, false, cancellation);
                 if (!Authorized()) return Problem(403, "agent_install_denied");
                 if (!recovered.Healthy)
-                    return Results.Ok(new { stage = "awaitingHealth", operationId, processStartedAt = started,
+                    return Results.Ok(new { stage = "awaitingHealth", operationId, processStartedAt = started, javaObservedAt,
                         dispatchedAt = dispatched, lastConfirmed = Checkpoint(), health = recovered });
                 Advance(BrokerAgentCheckpoint.KafkaHealthy);
-                var seen = metrics.AgentMetricAfter(plan.ClusterId, plan.Target.MonitoringInstance, started, plan.CreatedAt);
+                var seen = metrics.AgentMetricAfter(plan.ClusterId, plan.Target.MonitoringInstance, started, plan.CreatedAt, javaObservedAt);
                 if (seen is null)
-                    return Results.Ok(new { stage = "awaitingMetrics", operationId, processStartedAt = started,
+                    return Results.Ok(new { stage = "awaitingMetrics", operationId, processStartedAt = started, javaObservedAt,
                         dispatchedAt = dispatched, lastConfirmed = Checkpoint(),
                         monitoringInstance = plan.Target.MonitoringInstance, health = recovered });
                 if (status.Stage == "restartObserved")
@@ -189,7 +193,7 @@ internal static class BrokerAgentEndpoints
                 }
                 recovery.Finish(plan.ClusterId, plan.Command.OperationId);
                 return Results.Ok(new { stage = "complete", operationId = plan.Command.OperationId, status.Version,
-                    status.Digest, dispatchedAt = dispatched, processStartedAt = started, metricSeenAt = seen,
+                    status.Digest, dispatchedAt = dispatched, processStartedAt = started, javaObservedAt, metricSeenAt = seen,
                     monitoringInstance = plan.Target.MonitoringInstance, health = recovered });
             }
             finally { dispatch.Release(); }
@@ -211,9 +215,9 @@ internal static class BrokerAgentEndpoints
     private static long Timestamp() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     private static string? Installer(HttpContext http, ManagedIdentityStore identity, BrokerHostOptions options, string cluster) =>
-        options.Enabled && BrokerHostValidation.ClusterId(cluster) && http.User.Identity is not NonBrowserReadIdentity &&
+        options.Current.Enabled && BrokerHostValidation.ClusterId(cluster) && http.User.Identity is not NonBrowserReadIdentity &&
         OperatorSessionContextFactory.TryCreate(http.User, out var session) && session is not null &&
-        identity.Find(session) is { } user && options.AgentInstallerUserIds.Contains(user.Id) &&
+        identity.Find(session) is { } user && options.Current.AgentInstallerUserIds.Contains(user.Id) &&
         ManagedIdentityStore.SessionAllowed(user, session) && (user.Role == "owner" || user.ClusterIds.Contains(cluster, StringComparer.Ordinal))
             ? SecurityAuditPrincipal.FromOperator(session.Identity) : null;
 
