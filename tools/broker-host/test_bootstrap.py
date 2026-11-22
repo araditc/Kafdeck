@@ -101,6 +101,52 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual('/etc/kafdeck/prepared/pilot.json', command[command.index('-f') + 1])
         self.assertEqual('broker', command[-1])
 
+    def test_large_compose_snapshot_is_consumable_and_serialized_overflow_is_rejected_before_write(self):
+        self.assertEqual(bootstrap.MAX_LAUNCH_CONFIGURATION, agent.MAX_LAUNCH_CONFIGURATION)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'compose.yml'
+            source.write_text('services: {broker: {image: kafka}}')
+            observed = {'status': 'verified', 'adapter': 'compose', 'instance': 'container:123',
+                        'project': 'pilot', 'service': 'broker'}
+            details = {'State': {'Pid': 123}, 'Image': 'sha256:' + 'a' * 64, 'Config': {'Labels': {
+                'com.docker.compose.project.config_files': str(source),
+                'com.docker.compose.project.working_dir': str(root), 'com.docker.compose.config-hash': 'current'}}}
+            read_bytes = Path.read_bytes
+            read_text = Path.read_text
+            def process_bytes(path):
+                return {Path('/proc/123/environ'): b'', Path('/proc/123/cmdline'): b'java\0kafka.Kafka\0'}.get(path, b'') if str(path).startswith('/proc/') else read_bytes(path)
+            def process_text(path, *args, **kwargs):
+                return 'Gid:\t0\t0\t0\t0\n' if path == Path('/proc/123/status') else read_text(path, *args, **kwargs)
+            for character in ('x', '\u00e9'):
+                with self.subTest(character=character):
+                    resolved = {'services': {'broker': {'environment': {'LARGE': character * 70000}}}}
+                    raw = json.dumps(resolved, ensure_ascii=False)
+                    self.assertLess(len(raw.encode()), bootstrap.MAX_LAUNCH_CONFIGURATION)
+                    def command(args):
+                        if args[1] == 'inspect':
+                            return json.dumps([details])
+                        return 'broker current' if '--hash' in args else raw
+                    with patch.object(bootstrap, 'command', side_effect=command), \
+                         patch.object(bootstrap.Path, 'read_bytes', process_bytes), \
+                         patch.object(bootstrap.Path, 'read_text', process_text), \
+                         patch.object(bootstrap, 'directory', side_effect=lambda path: path), \
+                         patch.object(bootstrap, 'atomic') as write:
+                        target = dict(observed, id='large-snapshot-test')
+                        if character != 'x':
+                            with self.assertRaisesRegex(bootstrap.Rejected, 'bootstrap_launch_configuration_limit'):
+                                bootstrap.prepare_launch(target, root / 'agent', '/opt/kafdeck-agent', {'observe': lambda _: observed})
+                            write.assert_not_called()
+                            continue
+                        prepared, _ = bootstrap.prepare_launch(target, root / 'agent', '/opt/kafdeck-agent', {'observe': lambda _: observed})
+                        content = write.call_args.args[1]
+                    self.assertGreater(len(content), 65536)
+                    snapshot = root / 'snapshot.json'
+                    snapshot.write_bytes(content)
+                    prepared['configurationPath'] = str(snapshot)
+                    with patch.object(agent, 'protected', side_effect=lambda path: path):
+                        self.assertEqual(prepared, agent.pending_preparation({'bootstrap': prepared}, observed))
+
     def test_java_observation_is_emitted_only_after_the_verified_replacement_process(self):
         state = {'phase': 'intent', 'dispatchedAt': 99, 'plan': {
             'operationId': 'a'*32, 'version': '1.1.0', 'digest': 'b'*64, 'instance': 'old:10'}}

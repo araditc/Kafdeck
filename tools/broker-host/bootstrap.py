@@ -19,6 +19,7 @@ import time
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\Z')
 SHA = re.compile(r'[a-f0-9]{64}\Z')
 FILES = {'probe.py', 'ssh-entry.sh', 'agent-lifecycle.py', 'agent-entry.sh'}
+MAX_LAUNCH_CONFIGURATION = 262144
 
 
 class Rejected(ValueError):
@@ -223,9 +224,10 @@ def prepare_launch(target, host_directory, runtime, probe):
             if isinstance(value, dict):
                 return {key: literal(item) for key, item in value.items()}
             return value
+        content = json.dumps(literal(resolved), sort_keys=True).encode()
+        require(len(content) <= MAX_LAUNCH_CONFIGURATION, 'bootstrap_launch_configuration_limit')
         directory(Path('/etc/kafdeck/compose'))
         path = Path('/etc/kafdeck/compose') / (target['id'] + '.json')
-        content = json.dumps(literal(resolved), sort_keys=True).encode()
         if path.exists():
             require(path.read_bytes() == content, 'bootstrap_launch_configuration_conflict')
         atomic(path, content, 0o600)

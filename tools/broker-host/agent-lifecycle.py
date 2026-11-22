@@ -28,6 +28,7 @@ NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\Z')
 PATH = re.compile(r'(/[A-Za-z0-9_.-]+){2,32}\Z')
 OPERATION = re.compile(r'[a-f0-9]{32}\Z')
 MAX_JAR = 4 * 1024 * 1024
+MAX_LAUNCH_CONFIGURATION = 262144
 
 
 class Rejected(ValueError):
@@ -138,7 +139,7 @@ def pending_preparation(settings, observed):
     if not prepared or prepared.get('instance') != observed['instance']:
         return None
     configuration = protected(Path(prepared['configurationPath']))
-    require(sha(read_file(configuration, 65536)) == prepared['configurationSha256'],
+    require(sha(read_file(configuration, MAX_LAUNCH_CONFIGURATION)) == prepared['configurationSha256'],
             'agent_preparation_changed')
     if observed['adapter'] == 'systemd':
         require(str(configuration) == '/etc/systemd/system/' + observed['unit'] + '.d/90-kafdeck-agent.conf',
