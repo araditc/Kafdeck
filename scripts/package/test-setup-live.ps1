@@ -136,12 +136,15 @@ try {
     Assert-True ($registration.Publisher -eq 'Arad ITC' -and $registration.InstallLocation -eq $root) 'Installed apps registration is incorrect.'
     foreach($folder in @('config','secrets','logs','services')){
         foreach($file in Get-ChildItem -LiteralPath (Join-Path $root $folder) -Recurse -File|Where-Object {$_.Extension -in @('.json','.txt','.xml','.log','.conf','.ps1','.dpapi')}){
-            Assert-True (![IO.File]::ReadAllText($file.FullName).Contains($password)) 'Windows credential was persisted in installation files.'
+            # Active WinSW/Java logs remain open for writing after a healthy restore.
+            $stream=[IO.File]::Open($file.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try {$reader=[IO.StreamReader]::new($stream);try {$content=$reader.ReadToEnd()}finally{$reader.Dispose()}}finally{$stream.Dispose()}
+            Assert-True (!$content.Contains($password)) 'Windows credential was persisted in installation files.'
         }
     }
     $proof=@{success=$true;stage='complete';nativeVersion=$build.version;installerSource=$build.installerSource;exeSha256=$build.exeSha256;payloadSha256=$build.payload.PayloadSha256;productionModuleCache=$true;licenseRefusalNoEffects=$true;prerequisite3010Resume='injected return followed by real installation';actualOsReboot=$false;automaticServices=3;dependencyRestartHealthy=$true;firstOwnerCreatedInKeycloakPostgreSQL=$true;emailVerificationRequired=$false;upgradeBaseline='same native runtime, synthetic prior installer receipt';verifiedColdBackup=$true;serviceRemovalAndRestore=$true;ownerAndEncryptedSecretsPreserved=$true;noWindowsCredentialInFilesOrOutput=$true;languagesRecorded=@('en','fa');authenticode='not-signed';productionInstallationChanged=$false}
 } catch {
-    $proof.success=$false;$proof.stage=$stage;$proof.errorCategory=$_.Exception.GetType().Name;$proof.assertion=$script:assertion;$proof.lastWorker=$script:lastWorker
+    $proof.success=$false;$proof.stage=$stage;$proof.errorCategory=$_.Exception.GetType().Name;$proof.assertion=$script:assertion;$proof.lastWorker=$script:lastWorker;$proof.testLine=$_.InvocationInfo.ScriptLineNumber
     if(Test-Path -LiteralPath (Join-Path $fixture.root 'config/offline-install.json')){$proof.installPhase=(Get-Content -LiteralPath (Join-Path $fixture.root 'config/offline-install.json') -Raw|ConvertFrom-Json).phase}
 } finally {
     $password=$null
