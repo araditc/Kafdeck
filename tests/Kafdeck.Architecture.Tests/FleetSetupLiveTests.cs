@@ -21,6 +21,7 @@ using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
 
+[Collection("Fleet bootstrap global dispatch")]
 public sealed class FleetSetupLiveTests
 {
     [FleetSetupLiveFact]

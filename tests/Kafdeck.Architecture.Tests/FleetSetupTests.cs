@@ -12,6 +12,7 @@ using Xunit;
 
 namespace Kafdeck.Architecture.Tests;
 
+[Collection("Fleet bootstrap global dispatch")]
 public sealed class FleetSetupTests
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
@@ -185,3 +186,6 @@ public sealed class FleetSetupTests
         public Task<string?> VerifyAsync(BrokerHostDraft host, string operationId, CancellationToken cancellation) => Task.FromResult(ReceiptReadable ? Proof : null);
     }
 }
+
+[CollectionDefinition("Fleet bootstrap global dispatch", DisableParallelization = true)]
+public sealed class FleetBootstrapDispatchCollection { }
